@@ -21,7 +21,6 @@ Before proceeding with migration, ensure you have:
 - At least one Athena workgroup that was not created as part of SageMaker Unified Studio project creation
 - Saved queries in an Athena workgroup that you intend to use in SageMaker Unified Studio project
 - Python, [boto3](https://pypi.org/project/boto3/) and [nbformat](https://pypi.org/project/nbformat/) installed on the machine where you'll execute migration steps
-- [AWS Command Line Interface (AWS CLI)](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) installed/updated and configured on the machine where you'll execute migration steps
 - The IAM User/Role performing the steps in this guide should have the following permissions:
 
 ```json
@@ -63,61 +62,23 @@ Step 1.2 below shows how to fetch the repo for the project. While the above samp
 ### 1. Migrate saved queries to SageMaker Unified Studio's project
 This step copies all the saved queries from an existing Athena workgroup to the SageMaker Unified Studio's code repository as ``.sqlnb`` files. These files can be opened in the query editor of the project.
 1. Log into the SageMaker Unified Studio console, select your project and click on **Project Overview**.
-2. Note the project repository's name as show in the image.
-![Project Repository](img/Project's%20repository.png)
+2. Note you can find ``domain-id`` and ``project-id`` from the **Project details** section of **Project overview** page
 3. Clone the GitHub repository:
 ```
 $ git clone https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker.git
-$ cd Unified-Studio-for-Amazon-Sagemaker/migration/athena/
+$ cd Unified-Studio-for-Amazon-Sagemaker
 ```
-4. Execute the migration script. Replace ``<workgroupname>`` with the name of the workgroup where saved queries exist in Athena, ``<repo-name>`` with the project's repository name, ``<aws-account-id>`` with your AWS account ID and ``<region>`` with the desired region (for example, ``us-east-1``)
+4. Execute the migration script. Replace ``<workgroupname>`` with the name of the workgroup where saved queries exist in Athena, ``<domain-id>`` with the SageMaker Unified Studio's domain ID, ``<project-id>`` with the project's ID, ``<aws-account-id>`` with your AWS account ID and ``<region>`` with the desired region (for example, ``us-east-1``)
 ```
-$ python athena-migration.py --workgroup-name <workgroupname> --repo <repo-name> --account-id <aws-account-id> --region <region>
+$ python -m migration.athena.athena_workgroup_migration \
+--workgroup-name <workgroupname> \
+--domain-id <domain-id> \
+--project-id <project-id> \
+--account-id <aws-account-id> \
+--region <region>
 ```
-### 2. Configure the project to work with an existing Athena workgroup
-When creating a project in Sagemaker Unified Studio, a new Athena workgroup is created and used as the default workgroup for executing queries using Athena connection. In this step, you will update the project to use an existing workgroup. 
 
-**Note:** You can find ``domain-id`` and ``project-id`` from the **Project details** section of **Project overview** page
-1. Add the AmazonDataZoneProject tag to the existing Athena workgroup:
-```
-$ aws athena tag-resource --resource-arn arn:aws:athena:<region>:<aws-account-id>:workgroup/<workgroup-name> --tags Key=AmazonDataZoneProject,Value=<project-id> --region <region>
-```
-2. List existing connections. You can find ``domain-id`` and ``project-id`` from the **Project details** section of **Project overview** page
-```
-$ aws datazone list-connections --domain-identifier <domain-id> --project-identifier <project-id> --type ATHENA --region <region>
-```
-Output:
-```
-{
-    "items": [
-        {
-            "connectionId": "abcdefghijklmn",
-            ...
-            ...
-            "type": "ATHENA"
-        }
-    ]
-}
-```
-3. Note the ``connectionId`` from the output.
-4. Update the connection to use the existing Athena workgroup. Replace ``<connectionId>`` below with the actual value and ``<workgroup-to-be-used>`` with the name of the workgroup from which the queries were migrated.
-```
-$ aws datazone update-connection --domain-identifier <domain-id> --identifier <connectionId> --props "{\"athenaProperties\":{\"workgroupName\":\"<workgroup-to-be-used>\"}}"
-```
-You should see following response with ``workgroupName`` updated:
-```
-{
-    ...
-    ...
-    "props": {
-        "athenaProperties": {
-            "workgroupName": "<updated-workgroup-name>"
-        }
-    },
-    "type": "ATHENA"
-}
-```
-### 3. Update the project IAM role of SageMaker Unified Studio
+### 2. Update the project IAM role of SageMaker Unified Studio
 The migrated Athena queries will access existing databases and tables in the Glue Catalog and federated connections in the Athena catalog. The default SageMaker Unified Studio project's role will not have a) access to these catalog resources by default and b) permission to execute queries in the existing workgroup configured above. To provide the required access, you can use an existing role that you use in Athena as the project role. Please refer to [Bring your own role guide](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/tree/main/migration/bring-your-own-role) for guidance. Here, is an example CLI command for the same:
 ```
 $ python3 bring_your_own_role.py use-your-own-role \
