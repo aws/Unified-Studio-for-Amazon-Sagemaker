@@ -69,13 +69,14 @@ def sign_request(method, service, host, region, canonical_uri, target, raw_data)
         'Authorization': authorization_header,
         'Content-Type': 'application/x-amz-json-1.1',
         'X-Amz-Date': amzdate,
-        'X-Amz-Security-Token': session_token,
         'X-Amz-Target': target
     }
 
     # If session_token is not None, add it to the headers
     if session_token is not None:
         headers['X-Amz-Security-Token'] = session_token
+    else:
+        print("Session token is None")
 
     return headers
 
@@ -95,8 +96,11 @@ def get_emr_workspace_storage_location(workspace_id, region):
     )
     request_url = 'https://' + host + canonical_uri
     headers = sign_request(method, service, host, region, canonical_uri, target, raw_data)
+
+    print(f"Getting workspace storage location for workspace {workspace_id} in region {region}...")
     response = requests.request(method, request_url, headers=headers, timeout=5, data=raw_data)
     response.raise_for_status()
+    print(f"Got workspace storage location for workspace {workspace_id} in region {region}.")
 
     response_json = response.json()
     return f"{response_json['Editor']['LocationUri']}/{workspace_id}/"

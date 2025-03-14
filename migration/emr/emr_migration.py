@@ -69,7 +69,9 @@ if __name__ == '__main__':
     download_s3_directory_recursive(workspace_s3_uri, local_path)
     upload_notebooks(local_path, args.domain_id, args.project_id, args.emr_studio_id, args.emr_workspace_id, args.region)
     # Clean up the downloaded files
+    print("Cleaning up downloaded files...")
     shutil.rmtree(local_path)
+    print("Done")
 
 
 
