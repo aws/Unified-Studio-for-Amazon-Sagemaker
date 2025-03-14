@@ -48,7 +48,6 @@ Before proceeding with migration, ensure you have:
 - Understanding of [Amazon SageMaker Unified Studio](https://docs.aws.amazon.com/sagemaker-unified-studio/latest/adminguide/what-is-sagemaker-unified-studio.html)
 - Access to a [domain](https://docs.aws.amazon.com/sagemaker-unified-studio/latest/adminguide/working-with-domains.html) and a project created in SageMaker Unified Studio (Refer to [Create a new project](https://docs.aws.amazon.com/sagemaker-unified-studio/latest/userguide/create-new-project.html))
 - Python, [boto3](https://pypi.org/project/boto3/) installed on the machine where you'll execute migration steps
-- [AWS Command Line Interface (AWS CLI)](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) installed/updated and configured on the machine where you'll execute migration steps
 - The IAM User/Role performing the steps in this guide should have the following permissions:
 
 ```json
@@ -89,59 +88,6 @@ Before proceeding with migration, ensure you have:
 
 Refer to this [section](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/blob/main/migration/bring-your-own-role/README.md) for migrating your existing roles into Sagemaker Unified Studio.
 
-### Step 2: Inventory Your EMR Studio Resources
-
-- List all notebooks, workspaces, and associated data
-- Identify and Copy Necessary Artifacts for Migration to Sagemaker Unified Studio
-
-From your SM Unified Studio Project notebook terminal, perform the following steps:
-
-![Terminal](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/blob/main/migration/emr/img/terminal.png))
-
-a. Describe the EMR Studio by its ID to get the Default S3 location:
-
-```bash
-aws emr describe-studio --studio-id es-XXXXX
-```
-
-Example output:
-
-```
-{
-"Studio": {
-"StudioId": "es-XXXXX",
-"StudioArn": "arn:aws:elasticmapreduce:us-west-2:XXXXXXXXXX:studio/es-XXXXX",
-"Name": "Studio_2",
-"Description": "",
-"AuthMode": "IAM",
-"ServiceRole": "arn:aws:iam::XXXXXXXXXX:role/service-role/AmazonEMRStudio_ServiceRole_1728498237293",
-"Url": "https://es-D5G4WREET32JMJ0W90RN686KH.emrstudio-prod.us-west-2.amazonaws.com",
-"CreationTime": "2024-10-09T11:24:12.396000-07:00",
-"DefaultS3Location": "s3://aws-emr-studio-XXXXXXXXXX-us-west-2/YYYYYYYYYY",
-"Tags": [],
-"IdcUserAssignment": "null"
-}
-}
-```
-b. List S3 default path to identify workspace folders:
-
-NOTE: You might have more than one studio workspace. You have the option to migrate all notebooks across workspaces if your organization allows combining them together, or you can choose to migrate a specific workspace based on your needs. Consider your organization's policies and project requirements when deciding which workspaces to migrate.
-If you decide to migrate all workspaces, you'll need to repeat the following steps for each workspace. If you're migrating a specific workspace, choose the appropriate workspace folder in the next step.
-
-```
-aws s3 ls s3://aws-emr-studio-XXXXXXXXXX-us-west-2/YYYYYYYYYY/
-```
-
-Example output:
-```
-                           PRE e-XXXXX/
-                           PRE e-YYYYY/
-```
-c. Download an entire sub-folder to your local machine:
-
-```
-aws s3 cp --recursive s3://aws-emr-studio-XXXXXXXXXX-us-west-2/YYYYYYYYYY/e-XXXXX/ emr_workspace_files/e-XXXXX
-```
 
 ### Step 2. Migrate your notebooks
 
@@ -159,12 +105,11 @@ b. Execute the migration script:
 
 ```
 $ python3 -m migration.emr.emr_migration \
---local-path < The local path where you downloaded the EMR workspace notebooks, e.g. emr_workspace_files/e-XXXXX > \
---domain-id < The SageMaker Unified Studio domain ID > \
---project-id < The SageMaker Unified Studio project ID > \
---emr-studio-id < The EMR Studio ID, e.g. es-AAAAAAA > \
---emr-workspace-id < The EMR workspace ID, e.g. e-BBBBBB > \
---region < The desired region, e.g. us-west-2 >
+    --domain-id < The SageMaker Unified Studio domain ID > \
+    --project-id < The SageMaker Unified Studio project ID > \
+    --emr-studio-id < The EMR Studio ID, e.g. es-AAAAAAA > \
+    --emr-workspace-id < The EMR workspace ID, e.g. e-BBBBBB > \
+    --region < The desired region, e.g. us-west-2 >
 ```
 
 c. After running this script, go to the Sagemaker Unified Studio portal and perform a git pull from the UI to see the imported files from the EMR workspace:

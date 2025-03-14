@@ -1,9 +1,11 @@
-import os
-import boto3
 import argparse
+import boto3
+import os
+import shutil
 
 from migration.utils.datazone_helper import get_project_repo
-
+from migration.utils.emr_helper import get_emr_workspace_storage_location
+from migration.utils.s3_helper import download_s3_directory_recursive
 
 def upload_notebooks(local_folder, domain_id, project_id, emr_studio_id, emr_workspace_id, region):
     if not local_folder:
@@ -54,7 +56,6 @@ if __name__ == '__main__':
     # Create an ArgumentParser object
     parser = argparse.ArgumentParser(description='Migrate EMR workspace notebooks to a SageMaker Unified Studio project')
     # Add arguments
-    parser.add_argument('--local-path', type=str, help='Path to Local folder for EMR workspace')
     parser.add_argument('--domain-id', type=str, required=True, help='ID of the SageMaker Unified Studio Domain')
     parser.add_argument('--project-id', type=str, required=True, help='Project ID in the SageMaker Unified Studio Domain')
     parser.add_argument('--emr-studio-id', type=str, help='Id for EMR Studio. Format es-XXXX')
@@ -63,7 +64,12 @@ if __name__ == '__main__':
     # Parse the arguments
     args = parser.parse_args()
 
-    upload_notebooks(args.local_path, args.domain_id, args.project_id, args.emr_studio_id, args.emr_workspace_id, args.region)
+    local_path = "DELEME_ME_downloaded_emr_workspace_files"
+    workspace_s3_uri = get_emr_workspace_storage_location(args.emr_workspace_id, args.region)
+    download_s3_directory_recursive(workspace_s3_uri, local_path)
+    upload_notebooks(local_path, args.domain_id, args.project_id, args.emr_studio_id, args.emr_workspace_id, args.region)
+    # Clean up the downloaded files
+    shutil.rmtree(local_path)
 
 
 
