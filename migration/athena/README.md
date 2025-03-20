@@ -1,6 +1,6 @@
-# Migrating Amazon Athena resources to Amazon SageMaker Unified Studio (Preview)
+# Migrating Amazon Athena resources to Amazon SageMaker Unified Studio
 
-This guide helps [Amazon Athena](https://docs.aws.amazon.com/athena/latest/ug/what-is.html) users access their existing Athena resources within [Amazon SageMaker Unified Studio (Preview)](https://docs.aws.amazon.com/sagemaker-unified-studio/latest/userguide/what-is-sagemaker-unified-studio.html). It covers:
+This guide helps [Amazon Athena](https://docs.aws.amazon.com/athena/latest/ug/what-is.html) users access their existing Athena resources within [Amazon SageMaker Unified Studio](https://docs.aws.amazon.com/sagemaker-unified-studio/latest/userguide/what-is-sagemaker-unified-studio.html). It covers:
 1. Migrating Athena's [saved queries](https://docs.aws.amazon.com/athena/latest/ug/saved-queries.html) from a single [workgroup](https://docs.aws.amazon.com/athena/latest/ug/workgroups-manage-queries-control-costs.html) of Athena to a SageMaker Unified Studio [project](https://docs.aws.amazon.com/sagemaker-unified-studio/latest/userguide/projects.html)
 2. Configuring a project to work with an existing Athena workgroup
 3. Updating the project's AWS [Identity and Access Management](https://docs.aws.amazon.com/IAM/latest/UserGuide/introduction.html) (IAM) role with an existing IAM role that has permissions to access the Athena workgroup and catalog resources (databases and tables) used by the saved queries
