@@ -538,92 +538,94 @@ def _update_s3_lakeformation_registration(lakeformation, old_role_arn, new_role_
         else:
             print(f"Skipping updating LakeFormation Resource: `{resource['ResourceArn']}` by updating RoleArn to `{new_role_arn}`, set --execute flag to True to do the actual update.\n")
 
-def _update_smus_provisioning_role(iam_client, byor_role_arn, execute_flag):
-    print(f"Updating SageMaker Unified Studio Provisioning Role to have necessary permissions to {byor_role_arn}...\n")
-    account_id = byor_role_arn.split(':')[4]
-    provisioning_role = iam_client.get_role(
-        RoleName=f"AmazonSageMakerProvisioning-{account_id}"
+def _ensure_list(value):
+    return [value] if not isinstance(value, list) else value
+
+def _update_smus_provisioning_role(datazone_client, iam_client, domain_id, byor_role_arn, execute_flag):
+    # Find Provisioning Role of current SMUS Domain
+    tooling_blueprint = datazone_client.list_environment_blueprints(
+        domainIdentifier=domain_id,
+        managed=True,
+        name="Tooling"
+    )['items'][0]
+    tooling_blueprint_config = datazone_client.get_environment_blueprint_configuration(
+        domainIdentifier=domain_id,
+        environmentBlueprintIdentifier=tooling_blueprint['id']
     )
+    provisioning_role_name = tooling_blueprint_config['provisioningRoleArn'].split('/')[2]
+    print(f"Updating SageMaker Unified Studio Provisioning Role \"{provisioning_role_name}\" to have necessary permissions to {byor_role_arn}...\n")
     # Get AWS managed policy "SageMakerStudioProjectProvisioningRolePolicy"
-    aws_managed_policy_arn = "arn:aws:iam::aws:policy/service-role/SageMakerStudioProjectProvisioningRolePolicy"
-    managed_policy = iam_client.get_policy(
-        PolicyArn=aws_managed_policy_arn
+    managed_policies = iam_client.list_attached_role_policies(
+        RoleName=provisioning_role_name
     )
-    policy_version = iam_client.get_policy_version(
-        PolicyArn=aws_managed_policy_arn,
-        VersionId=managed_policy['Policy']['DefaultVersionId']
-    )
-    relevant_actions = set()
-    for statement in policy_version['PolicyVersion']['Document']['Statement']:
-        if 'Resource' in statement:
-            resources = statement['Resource'] if isinstance(statement['Resource'], list) else [statement['Resource']]
-            if any('arn:aws:iam::*:role/datazone_usr_role_*' in resource for resource in resources):
-                actions = statement['Action'] if isinstance(statement['Action'], list) else [statement['Action']]
-                relevant_actions.update(actions)
-    print("relevant_actions: ", relevant_actions)
-    # Define the policy document
-    new_statement = {
-        "Effect": "Allow",
-        "Action": list(relevant_actions),
-        "Resource": byor_role_arn
-    }
-    new_policy_document = {
-        "Version": "2012-10-17",
-        "Statement": [
-            new_statement
-        ]
-    }
+    new_policy_statements_to_append = []
+    # Traverse all statements in SMUS Provisioning Role's AWS managed policies
+    for managed_policy in managed_policies['AttachedPolicies']:
+        if managed_policy['PolicyArn'].startswith('arn:aws:iam::aws:policy/'):
+            policy = iam_client.get_policy(PolicyArn=managed_policy['PolicyArn'])
+            policy_version = iam_client.get_policy_version(
+                PolicyArn=policy['Policy']['Arn'],
+                VersionId=policy['Policy']['DefaultVersionId']
+            )
+            for statement in policy_version['PolicyVersion']['Document']['Statement']:
+                if 'Resource' in statement:
+                    resources = statement['Resource'] if isinstance(statement['Resource'], list) else [statement['Resource']]
+                    # Copy policy statement granting permission to datazone_usr_role_*
+                    if any('arn:aws:iam::*:role/datazone_usr_role_*' in resource for resource in resources):
+                        new_policy_statements_to_append.append(statement)
+    # Define the policy document, replace resource to "byor_role_arn"
+    for statement_to_append in new_policy_statements_to_append:
+        statement_to_append['Resource'] = [byor_role_arn]
     try:
-        # Try to get existing policy to check if it exists
-        existing_policy = iam_client.get_role_policy(
-            RoleName=provisioning_role['Role']['RoleName'],
+        # Get existing inline policy and combine it with "policy_statements_to_copy"
+        current_inline_policy = iam_client.get_role_policy(
+            RoleName=provisioning_role_name,
             PolicyName='byoInlinePolicy'
         )
         # Get the existing policy document
-        existing_policy_doc = existing_policy['PolicyDocument']
-        print("existing_policy_doc: ", existing_policy_doc)
-
-        # Check if the statement already exists to avoid duplicates
-        if 'Statement' in existing_policy_doc:
-            # Convert single statement to list if necessary
-            if isinstance(existing_policy_doc['Statement'], dict):
-                existing_policy_doc['Statement'] = [existing_policy_doc['Statement']]
-
-            # Check if similar statement already exists
-            statement_exists = False
-            for statement in existing_policy_doc['Statement']:
-                if (set(statement.get('Action', [])) == set(new_statement['Action']) and 
-                    statement.get('Resource') == new_statement['Resource']):
-                    statement_exists = True
-                    break
-
-            # Only append if statement doesn't exist
-            if not statement_exists:
-                existing_policy_doc['Statement'].append(new_statement)
-        else:
-            existing_policy_doc['Statement'] = [new_statement]
-
-        # If policy exists, update it
+        current_inline_policy_doc = current_inline_policy['PolicyDocument']
+        current_inline_policy_doc['Statement'] = _ensure_list(current_inline_policy_doc['Statement'])
+        new_policy_statements_to_append_sids = {item['Sid']: item for item in new_policy_statements_to_append}
+        for statement in current_inline_policy_doc['Statement']:
+            sid = statement['Sid']
+            if sid in new_policy_statements_to_append_sids:
+                resources1 = set(new_policy_statements_to_append_sids[sid]['Resource'])
+                resources2 = set(statement['Resource'])
+                new_policy_statements_to_append_sids[sid]['Resource'] = list(resources1.union(resources2))
+            else:
+                new_policy_statements_to_append_sids[sid] = statement
+        new_policy_statements_to_append = list(new_policy_statements_to_append_sids.values())
+        new_policy_document = {
+            "Version": "2012-10-17",
+            "Statement": new_policy_statements_to_append
+        }
+        # Policy exists, update it
         if execute_flag:
             iam_client.put_role_policy(
-                RoleName=provisioning_role['Role']['RoleName'],
-                PolicyName='byoInlinePolicy',
-                PolicyDocument=json.dumps(existing_policy_doc)
-            )
-            print(f"Updated existing inline policy 'byoInlinePolicy' for role {provisioning_role['Role']['RoleName']}\n")
-
-    except iam_client.exceptions.NoSuchEntityException:
-        # If policy doesn't exist, create new one
-        if execute_flag:
-            iam_client.put_role_policy(
-                RoleName=provisioning_role['Role']['RoleName'],
+                RoleName=provisioning_role_name,
                 PolicyName='byoInlinePolicy',
                 PolicyDocument=json.dumps(new_policy_document)
             )
-            print(f"Created new inline policy 'byoInlinePolicy' for role {provisioning_role['Role']['RoleName']}\n")
+            print(f"Updated existing inline policy 'byoInlinePolicy' for role {provisioning_role_name}, new policy:\n")
+            pprint(new_policy_statements_to_append)
+
+    except iam_client.exceptions.NoSuchEntityException:
+        # Policy doesn't exist, create new one
+        new_policy_document = {
+            "Version": "2012-10-17",
+            "Statement": new_policy_statements_to_append
+        }
+        if execute_flag:
+            iam_client.put_role_policy(
+                RoleName=provisioning_role_name,
+                PolicyName='byoInlinePolicy',
+                PolicyDocument=json.dumps(new_policy_document)
+            )
+            print(f"Created new inline policy 'byoInlinePolicy' for role {provisioning_role_name}, new policy:\n")
+            pprint(new_policy_document)
 
     if not execute_flag:
-        print(f"Skipping update/create inline policy 'byoInlinePolicy' for role {provisioning_role['Role']['RoleName']}, set --execute flag to True to do the actual update.\n")
+        print(f"Skipping update/create inline policy 'byoInlinePolicy' for role {provisioning_role_name}, set --execute flag to True to do the actual update.\n")
 
 def _add_common_arguments(parser):
     parser.add_argument('--domain-id',
@@ -769,7 +771,7 @@ def byor_main():
         # Update LakeFormation Data lake locations resources with the new Role
         _update_s3_lakeformation_registration(lakeformation, project_role['Role']['Arn'], args.bring_in_role_arn, args.execute)
         # Create or update SMUS Provisioning Role's inline policy
-        _update_smus_provisioning_role(iam_client, args.bring_in_role_arn, args.execute)
+        _update_smus_provisioning_role(datazone, iam_client, args.domain_id, args.bring_in_role_arn, args.execute)
                 
         if args.execute:
             print(f"Successfully replace Project {args.project_id} user role with your own role: {byor_role['Role']['Arn']}")
