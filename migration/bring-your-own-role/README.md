@@ -30,7 +30,9 @@ Please review this section carefully before proceeding to execute the script.
                 "datazone:GetEnvironment",
                 "datazone:CreateSubscriptionGrant",
                 "datazone:DeleteSubscriptionGrant",
-                "datazone:GetSubscriptionGrant"
+                "datazone:GetSubscriptionGrant",
+                "datazone:ListEnvironmentBlueprints",
+                "datazone:GetEnvironmentBlueprintConfiguration"
             ],
             "Resource": [
                 "*"
