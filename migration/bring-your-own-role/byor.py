@@ -5,6 +5,7 @@ import json
 from pprint import pprint
 
 from botocore.exceptions import ClientError
+import json
 
 ROLE_REPLACEMENT = 'use-your-own-role'
 ROLE_ENHANCEMENT = 'enhance-project-role'
@@ -20,6 +21,27 @@ def _find_project_execution_role(args, iam_client):
                     RoleName=role['RoleName'],
                 )
     raise Exception(f"Could not find execution IAM role for Project {args.project_id}")
+
+
+# Find all attached(managed) policies for the project's EMR Instance Role
+def _find_emr_instance_role_policies(args, iam_client):
+    paginator = iam_client.get_paginator('list_roles')
+    instance_role_name = None
+    for page in paginator.paginate():
+        for role in page['Roles']:
+            if f"datazone_emr_ec2_instance_role_{args.project_id}" in role['RoleName']:
+                print(f"Found Project's EMR Instance Role: {role['RoleName']}\n")
+                instance_role_name = role['RoleName']
+    if not instance_role_name:
+        return None
+
+    paginator = iam_client.get_paginator('list_attached_role_policies')
+    policies_to_update = []
+    for page in paginator.paginate(RoleName=instance_role_name):
+        for policy in page['AttachedPolicies']:
+            policies_to_update.append(policy['PolicyArn'])
+    print(f"Found {len(policies_to_update)} policies attached to Project's EMR Instance Role\n")
+    return policies_to_update
 
 def _get_role_name_from_arn(role_arn):
     return role_arn.split('/')[-1]
@@ -62,40 +84,41 @@ def _update_trust_policy(role_name, new_trust_policy, iam_client, execute_flag):
         pprint(new_trust_policy)
         print(f"Trust policy update skipped for role: `{role_name}`, set --execute flag to True to do the actual update.\n")
 
-# Customer managed Policy may contain project user role's Arn, we need to update policy content with BYOR role when necessary
-# We will only do the change for both
-#   case 1: Role Replacement
-#   case 2: Role Enhancement
-# so basically just check all source role's inline policies, and update any source role arn string to dest role arn
-def _copy_managed_policies_arn(source_role, dest_role, environment_id_list, iam_client, execute_flag):
-    paginator = iam_client.get_paginator('list_attached_role_policies')
-    policies_to_attach = []
-    for page in paginator.paginate(RoleName=source_role['Role']['RoleName']):
-        for policy in page['AttachedPolicies']:
-            policies_to_attach.append(policy['PolicyArn'])
-    
-    for policy_arn in policies_to_attach:
+def _replace_role_arn_in_policies(policies_to_update, iam_client, old_role_arn, new_role_arn, execute_flag):
+    for policy_arn in policies_to_update:
         policy = iam_client.get_policy(PolicyArn=policy_arn)['Policy']
         policy_document = iam_client.get_policy_version(
             PolicyArn=policy_arn,
             VersionId=policy['DefaultVersionId']
         )['PolicyVersion']['Document']
         # Replace the role ARN if source_role is present in customer managed policy
-        for env_id in environment_id_list:
-            if env_id in policy['PolicyName']:
-                policy_str = json.dumps(policy_document)
-                if source_role['Role']['Arn'] in policy_str:
-                    update_policy_str = policy_str.replace(source_role['Role']['Arn'], dest_role['Role']['Arn'])
-                    print(f"Updated policy doc for {policy['PolicyName']}: {update_policy_str}")
-                    if execute_flag:
-                        iam_client.create_policy_version(
-                            PolicyArn=policy_arn,
-                            PolicyDocument=update_policy_str,
-                            SetAsDefault=True
-                        )
-                        print(f"Successfully updated policy {policy['PolicyName']} with new version after replacing execution role content.")
-                    else:
-                        print(f"Policy {policy['PolicyName']} update skipped, set --execute flag to True to do the actual update.\n")
+        policy_str = json.dumps(policy_document)
+        if old_role_arn in policy_str:
+            update_policy_str = policy_str.replace(old_role_arn, new_role_arn)
+            print(f"Updated policy doc for {policy['PolicyName']}: {update_policy_str}\n")
+            if execute_flag:
+                iam_client.create_policy_version(
+                    PolicyArn=policy_arn,
+                    PolicyDocument=update_policy_str,
+                    SetAsDefault=True
+                )
+                print(f"Successfully updated policy {policy['PolicyName']} with new version after replacing execution role content.")
+            else:
+                print(f"Policy {policy['PolicyName']} update skipped, set --execute flag to True to do the actual update.\n")
+
+# Customer managed Policy may contain project user role's Arn, we need to update policy content with BYOR role when necessary
+# We will do the change for both
+#   case 1: Role Replacement
+#   case 2: Role Enhancement
+# so basically just check all source role's managed policies, and update any source role arn string to dest role arn
+def _copy_managed_policies_arn(source_role, dest_role, iam_client, execute_flag):
+    paginator = iam_client.get_paginator('list_attached_role_policies')
+    policies_to_attach = []
+    for page in paginator.paginate(RoleName=source_role['Role']['RoleName']):
+        for policy in page['AttachedPolicies']:
+            policies_to_attach.append(policy['PolicyArn'])
+    
+    _replace_role_arn_in_policies(policies_to_attach, iam_client, source_role['Role']['Arn'], dest_role['Role']['Arn'], execute_flag)
 
     if execute_flag:
         for policy_arn in policies_to_attach:
@@ -514,7 +537,94 @@ def _update_s3_lakeformation_registration(lakeformation, old_role_arn, new_role_
             print(f"Successfully updated LakeFormation Resource: `{resource['ResourceArn']}` by updating RoleArn to `{new_role_arn}` successfully\n")
         else:
             print(f"Skipping updating LakeFormation Resource: `{resource['ResourceArn']}` by updating RoleArn to `{new_role_arn}`, set --execute flag to True to do the actual update.\n")
-    
+
+def _update_smus_provisioning_role(iam_client, byor_role_arn, execute_flag):
+    print(f"Updating SageMaker Unified Studio Provisioning Role to have necessary permissions to {byor_role_arn}...\n")
+    account_id = byor_role_arn.split(':')[4]
+    provisioning_role = iam_client.get_role(
+        RoleName=f"AmazonSageMakerProvisioning-{account_id}"
+    )
+    # Get AWS managed policy "SageMakerStudioProjectProvisioningRolePolicy"
+    aws_managed_policy_arn = "arn:aws:iam::aws:policy/service-role/SageMakerStudioProjectProvisioningRolePolicy"
+    managed_policy = iam_client.get_policy(
+        PolicyArn=aws_managed_policy_arn
+    )
+    policy_version = iam_client.get_policy_version(
+        PolicyArn=aws_managed_policy_arn,
+        VersionId=managed_policy['Policy']['DefaultVersionId']
+    )
+    relevant_actions = set()
+    for statement in policy_version['PolicyVersion']['Document']['Statement']:
+        if 'Resource' in statement:
+            resources = statement['Resource'] if isinstance(statement['Resource'], list) else [statement['Resource']]
+            if any('arn:aws:iam::*:role/datazone_usr_role_*' in resource for resource in resources):
+                actions = statement['Action'] if isinstance(statement['Action'], list) else [statement['Action']]
+                relevant_actions.update(actions)
+    print("relevant_actions: ", relevant_actions)
+    # Define the policy document
+    new_statement = {
+        "Effect": "Allow",
+        "Action": list(relevant_actions),
+        "Resource": byor_role_arn
+    }
+    new_policy_document = {
+        "Version": "2012-10-17",
+        "Statement": [
+            new_statement
+        ]
+    }
+    try:
+        # Try to get existing policy to check if it exists
+        existing_policy = iam_client.get_role_policy(
+            RoleName=provisioning_role['Role']['RoleName'],
+            PolicyName='byoInlinePolicy'
+        )
+        # Get the existing policy document
+        existing_policy_doc = existing_policy['PolicyDocument']
+        print("existing_policy_doc: ", existing_policy_doc)
+
+        # Check if the statement already exists to avoid duplicates
+        if 'Statement' in existing_policy_doc:
+            # Convert single statement to list if necessary
+            if isinstance(existing_policy_doc['Statement'], dict):
+                existing_policy_doc['Statement'] = [existing_policy_doc['Statement']]
+
+            # Check if similar statement already exists
+            statement_exists = False
+            for statement in existing_policy_doc['Statement']:
+                if (set(statement.get('Action', [])) == set(new_statement['Action']) and 
+                    statement.get('Resource') == new_statement['Resource']):
+                    statement_exists = True
+                    break
+
+            # Only append if statement doesn't exist
+            if not statement_exists:
+                existing_policy_doc['Statement'].append(new_statement)
+        else:
+            existing_policy_doc['Statement'] = [new_statement]
+
+        # If policy exists, update it
+        if execute_flag:
+            iam_client.put_role_policy(
+                RoleName=provisioning_role['Role']['RoleName'],
+                PolicyName='byoInlinePolicy',
+                PolicyDocument=json.dumps(existing_policy_doc)
+            )
+            print(f"Updated existing inline policy 'byoInlinePolicy' for role {provisioning_role['Role']['RoleName']}\n")
+
+    except iam_client.exceptions.NoSuchEntityException:
+        # If policy doesn't exist, create new one
+        if execute_flag:
+            iam_client.put_role_policy(
+                RoleName=provisioning_role['Role']['RoleName'],
+                PolicyName='byoInlinePolicy',
+                PolicyDocument=json.dumps(new_policy_document)
+            )
+            print(f"Created new inline policy 'byoInlinePolicy' for role {provisioning_role['Role']['RoleName']}\n")
+
+    if not execute_flag:
+        print(f"Skipping update/create inline policy 'byoInlinePolicy' for role {provisioning_role['Role']['RoleName']}, set --execute flag to True to do the actual update.\n")
+
 def _add_common_arguments(parser):
     parser.add_argument('--domain-id',
                     help='Your Project\'s Domain Id', 
@@ -530,7 +640,10 @@ def _add_common_arguments(parser):
                         action='store_true',
                         default=False)
     parser.add_argument('--region',
-                        help='Region where you have your Project',
+                        help='The AWS region. If not specified, the default region from your AWS credentials will be used',
+                        required=False)
+    parser.add_argument('--endpoint',
+                        help='Endpoint where you have your Project',
                         required=False)
 
 def _parse_args():
@@ -560,6 +673,8 @@ def byor_main():
     datazone = session.client('datazone')
     lakeformation = session.client('lakeformation')
     sagemaker = session.client('sagemaker')
+    if args.endpoint:
+        datazone = session.client('datazone', endpoint_url=args.endpoint)
         
     if args.command == ROLE_REPLACEMENT:
         print(f"Use bring in Role: {args.bring_in_role_arn} as Project Role...")
@@ -567,50 +682,15 @@ def byor_main():
         project_role = _find_project_execution_role(args, iam_client)
         # Get Execution Role's trust policy
         project_role_trust_policy = project_role['Role']['AssumeRolePolicyDocument']
-
-        environment_with_role_lists = _get_enviroments_with_role_from_project(datazone, args, project_role['Role']['Arn'])
-        environment_id_list = [env.id for env in environment_with_role_lists]
-        # Get BYOR Role's trust policy
         byor_role = iam_client.get_role(
             RoleName=_get_role_name_from_arn(args.bring_in_role_arn),
         )
-        byor_role_trust_policy = byor_role['Role']['AssumeRolePolicyDocument']
 
-        # Combine trust policy and update BYOR Role's trust policy
-        new_trust_policy = _combine_trust_policy(project_role_trust_policy, byor_role_trust_policy)
-        _update_trust_policy(byor_role['Role']['RoleName'], new_trust_policy, iam_client, args.execute)
-
-        # Copy Project Execution Role's managed policies to BYOR Role
-        _copy_managed_policies_arn(project_role, byor_role, environment_id_list, iam_client, args.execute)
-
-        # Copy Project Execution Role's inline policies to BYOR Role
-        _copy_inline_policies_arn(project_role, byor_role, iam_client, args.execute)
-
-        # Copy Project Execution Role's Tags to BYOR Role
-        _copy_tags(project_role['Role']['RoleName'], byor_role['Role']['RoleName'], iam_client, args.execute)
-        
-        # Replace SageMaker Domain Execution Role
-        sagemaker_domain_id = _find_sagemaker_domain_id(sagemaker, args)
-        if sagemaker_domain_id:
-            if args.force_update:
-                _stop_apps_under_domain(sagemaker, sagemaker_domain_id, args.execute)
-            else:
-                print(f"WARNING: Updating SageMaker Domain without deleting existing apps. The script execution may fail if there are running apps. Set --force-update flag if you accept app deletion to ensure successful script execution.")
-            _update_domain_execution_role(sagemaker, sagemaker_domain_id, args.bring_in_role_arn, args.execute)
-
-        # Update LakeFormation Data lake locations resources with the new Role
-        _update_s3_lakeformation_registration(lakeformation, project_role['Role']['Arn'], args.bring_in_role_arn, args.execute)
+        environment_with_role_lists = _get_enviroments_with_role_from_project(datazone, args, project_role['Role']['Arn'])
         # Replace Project Execution Role with BYOR Role
         # Role is attached with environment, and one Project contains multiple environments, so 
         # we need to replace role for each environment within a project
         for environment in environment_with_role_lists:
-            # Copy DataZone Subscriptions
-            if not environment.name == 'RedshiftServerless' and not environment.name == 'Redshift Serverless':
-                _copy_datazone_subscriptions(args.domain_id, environment.id, datazone, byor_role, args.execute)
-            # Copy LakeFormation Permissions and Opt-Ins
-            _copy_lakeformation_grants(lakeformation, environment.user_role_arn, args.bring_in_role_arn, args.execute, args.command)
-            _copy_lakeformation_opt_ins(lakeformation, environment.user_role_arn, args.bring_in_role_arn, args.execute)
-            
             print(f"Will replace IAM role {environment.user_role_arn} attached to environment name: {environment.name}, id: {environment.id} with new role {args.bring_in_role_arn}...\n")
             if args.execute:
                 try:
@@ -645,6 +725,51 @@ def byor_main():
                     raise e
             else:
                 print(f"Skipping disassociate and associate role operations, set --execute flag to True to do the actual update. environment {environment.name} still use {environment.user_role_arn} as its role.\n")
+            # Copy DataZone Subscriptions
+            if not environment.name == 'RedshiftServerless' and not environment.name == 'Redshift Serverless':
+                _copy_datazone_subscriptions(args.domain_id, environment.id, datazone, byor_role, args.execute)
+            # Copy LakeFormation Permissions and Opt-Ins
+            _copy_lakeformation_grants(lakeformation, environment.user_role_arn, args.bring_in_role_arn, args.execute, args.command)
+            _copy_lakeformation_opt_ins(lakeformation, environment.user_role_arn, args.bring_in_role_arn, args.execute)
+
+        # Get BYOR Role's trust policy
+        byor_role_trust_policy = byor_role['Role']['AssumeRolePolicyDocument']
+
+        # Combine trust policy and update BYOR Role's trust policy
+        new_trust_policy = _combine_trust_policy(project_role_trust_policy, byor_role_trust_policy)
+        _update_trust_policy(byor_role['Role']['RoleName'], new_trust_policy, iam_client, args.execute)
+
+        # Copy Project Execution Role's managed policies to BYOR Role
+        _copy_managed_policies_arn(project_role, byor_role, iam_client, args.execute)
+
+        # Copy Project Execution Role's inline policies to BYOR Role
+        _copy_inline_policies_arn(project_role, byor_role, iam_client, args.execute)
+
+        # Copy Project Execution Role's Tags to BYOR Role
+        _copy_tags(project_role['Role']['RoleName'], byor_role['Role']['RoleName'], iam_client, args.execute)
+        
+        # Update associated EMR Instance Role's policies
+        emr_instance_role_policies = _find_emr_instance_role_policies(args, iam_client)
+        if emr_instance_role_policies is not None:
+            _replace_role_arn_in_policies(emr_instance_role_policies,
+                                        iam_client,
+                                        project_role['Role']['Arn'],
+                                        args.bring_in_role_arn,
+                                        args.execute)
+        
+        # Replace SageMaker Domain Execution Role
+        sagemaker_domain_id = _find_sagemaker_domain_id(sagemaker, args)
+        if sagemaker_domain_id:
+            if args.force_update:
+                _stop_apps_under_domain(sagemaker, sagemaker_domain_id, args.execute)
+            else:
+                raise Exception(f"Updating SageMaker Domain without deleting running apps is failing this script execution. Set --force-update flag if you accept app deletion to ensure successful script execution.")
+            _update_domain_execution_role(sagemaker, sagemaker_domain_id, args.bring_in_role_arn, args.execute)
+
+        # Update LakeFormation Data lake locations resources with the new Role
+        _update_s3_lakeformation_registration(lakeformation, project_role['Role']['Arn'], args.bring_in_role_arn, args.execute)
+        # Create or update SMUS Provisioning Role's inline policy
+        _update_smus_provisioning_role(iam_client, args.bring_in_role_arn, args.execute)
                 
         if args.execute:
             print(f"Successfully replace Project {args.project_id} user role with your own role: {byor_role['Role']['Arn']}")
@@ -667,7 +792,7 @@ def byor_main():
         _update_trust_policy(project_role['Role']['RoleName'], new_trust_policy, iam_client, args.execute)
 
         # Copy BYOR Role's managed policies to Project Role
-        _copy_managed_policies_arn(byor_role, project_role, [], iam_client, args.execute)
+        _copy_managed_policies_arn(byor_role, project_role, iam_client, args.execute)
 
         # Copy BYOR Role's inline policies to Project Role
         _copy_inline_policies_arn(byor_role, project_role, iam_client, args.execute)
