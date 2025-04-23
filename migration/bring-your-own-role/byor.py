@@ -11,16 +11,27 @@ ROLE_REPLACEMENT = 'use-your-own-role'
 ROLE_ENHANCEMENT = 'enhance-project-role'
 
 # There should only one Role found per Project
-def _find_project_execution_role(args, iam_client):
-    paginator = iam_client.get_paginator('list_roles')
-    for page in paginator.paginate():
-        for role in page['Roles']:
-            if f"datazone_usr_role_{args.project_id}" in role['RoleName']:
-                print(f"Found Project Role: {role['RoleName']}\n")
-                return iam_client.get_role(
-                    RoleName=role['RoleName'],
-                )
-    raise Exception(f"Could not find execution IAM role for Project {args.project_id}")
+def _find_project_execution_role(args, iam_client, datazone):
+    tooling_env_id = datazone.list_environments(
+        domainIdentifier=args.domain_id,
+        projectIdentifier=args.project_id,
+        name="Tooling"
+    )['items'][0]['id']
+    tooling_env_resources = datazone.get_environment(
+        domainIdentifier=args.domain_id,
+        identifier=tooling_env_id
+    )['provisionedResources']
+    try:
+        user_role = [resource for resource in tooling_env_resources if resource['name'] == 'userRoleArn'][0]
+        role_arn = user_role['value']
+    except:
+        raise Exception(f"Could not find execution IAM role from Project {args.project_id} tooling environment")
+    try:
+        return iam_client.get_role(
+            RoleName=_get_role_name_from_arn(role_arn),
+        )
+    except:
+        raise Exception(f"Could not find execution IAM role {role_arn} from IAM, please make sure the role exists")
 
 
 # Find all attached(managed) policies for the project's EMR Instance Role
@@ -681,7 +692,7 @@ def byor_main():
     if args.command == ROLE_REPLACEMENT:
         print(f"Use bring in Role: {args.bring_in_role_arn} as Project Role...")
         # Get Project's Auto Generated Execution Role, there should be one role per project
-        project_role = _find_project_execution_role(args, iam_client)
+        project_role = _find_project_execution_role(args, iam_client, datazone)
         # Get Execution Role's trust policy
         project_role_trust_policy = project_role['Role']['AssumeRolePolicyDocument']
         byor_role = iam_client.get_role(
@@ -778,7 +789,7 @@ def byor_main():
     elif args.command == ROLE_ENHANCEMENT:
         print(f"Enhance Project Role...")
         # Get Project's Auto Generated Role
-        project_role = _find_project_execution_role(args, iam_client)
+        project_role = _find_project_execution_role(args, iam_client, datazone)
         # Get Project Role's trust policy
         project_role_trust_policy = project_role['Role']['AssumeRolePolicyDocument']
 
