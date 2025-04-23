@@ -588,7 +588,7 @@ def _update_smus_provisioning_role(datazone_client, iam_client, domain_id, byor_
     for statement_to_append in new_policy_statements_to_append:
         statement_to_append['Resource'] = [byor_role_arn]
     try:
-        # Get existing inline policy and combine it with "policy_statements_to_copy"
+        # Get existing inline policy and combine its Resource with "new_policy_statements_to_append"
         current_inline_policy = iam_client.get_role_policy(
             RoleName=provisioning_role_name,
             PolicyName='byoInlinePolicy'
@@ -596,22 +596,17 @@ def _update_smus_provisioning_role(datazone_client, iam_client, domain_id, byor_
         # Get the existing policy document
         current_inline_policy_doc = current_inline_policy['PolicyDocument']
         current_inline_policy_doc['Statement'] = _ensure_list(current_inline_policy_doc['Statement'])
-        new_policy_statements_to_append_sids = {item['Sid']: item for item in new_policy_statements_to_append}
-        for statement in current_inline_policy_doc['Statement']:
-            sid = statement['Sid']
-            if sid in new_policy_statements_to_append_sids:
-                resources1 = set(new_policy_statements_to_append_sids[sid]['Resource'])
-                resources2 = set(statement['Resource'])
-                new_policy_statements_to_append_sids[sid]['Resource'] = list(resources1.union(resources2))
-            else:
-                new_policy_statements_to_append_sids[sid] = statement
-        new_policy_statements_to_append = list(new_policy_statements_to_append_sids.values())
-        new_policy_document = {
-            "Version": "2012-10-17",
-            "Statement": new_policy_statements_to_append
-        }
-        # Policy exists, update it
+        # Find old BYOR roles by checking existing inline policy
+        # Combine old BYOR roles with new BYOR role, use combined Resource list as new inline policy's Resource
+        old_byor_roles = set(_ensure_list(current_inline_policy_doc['Statement'][0]['Resource']))
+        for statement_to_append in new_policy_statements_to_append:
+            statement_to_append['Resource'] = list(set([byor_role_arn]).union(old_byor_roles))
+        # Update existing inline policy
         if execute_flag:
+            new_policy_document = {
+                "Version": "2012-10-17",
+                "Statement": new_policy_statements_to_append
+            }
             iam_client.put_role_policy(
                 RoleName=provisioning_role_name,
                 PolicyName='byoInlinePolicy',
@@ -621,7 +616,7 @@ def _update_smus_provisioning_role(datazone_client, iam_client, domain_id, byor_
             pprint(new_policy_statements_to_append)
 
     except iam_client.exceptions.NoSuchEntityException:
-        # Policy doesn't exist, create new one
+        # Create new inline policy
         new_policy_document = {
             "Version": "2012-10-17",
             "Statement": new_policy_statements_to_append
