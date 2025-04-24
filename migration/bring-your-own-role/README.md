@@ -132,7 +132,7 @@ In your CLI, navigate to the directory containing `bring_your_own_role.py`
 #### Use Case 1: Replace SageMaker Unified Studio Project Role with your own Role
 Replace the default project role with your custom role:
 ```
-python3 bring_your_own_role.py use-your-own-role \
+python3 byor.py use-your-own-role \
     --domain-id <SageMaker-Unified-Studio-Domain-Id> \
     --project-id <SageMaker-Unified-Studio-Project-Id> \
     --bring-in-role-arn <Custom-IAM-Role-Arn> \
@@ -140,7 +140,7 @@ python3 bring_your_own_role.py use-your-own-role \
 ```
 #### Use Case 2: Enhance SageMaker Unified Studio Project Role using your own Role
 ```
-python3 bring_your_own_role.py enhance-project-role \
+python3 byor.py enhance-project-role \
     --domain-id <SageMaker-Unified-Studio-Domain-Id> \
     --project-id <SageMaker-Unified-Studio-Project-Id> \
     --bring-in-role-arn <Custom-IAM-Role-Arn> \
