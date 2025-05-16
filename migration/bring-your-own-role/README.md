@@ -136,7 +136,8 @@ python3 byor.py use-your-own-role \
     --domain-id <SageMaker-Unified-Studio-Domain-Id> \
     --project-id <SageMaker-Unified-Studio-Project-Id> \
     --bring-in-role-arn <Custom-IAM-Role-Arn> \
-    --region <region-code>
+    --region <region-code> \
+    --iam-profile <aws-credentials-profile-name>
 ```
 #### Use Case 2: Enhance SageMaker Unified Studio Project Role using your own Role
 ```
@@ -144,9 +145,11 @@ python3 byor.py enhance-project-role \
     --domain-id <SageMaker-Unified-Studio-Domain-Id> \
     --project-id <SageMaker-Unified-Studio-Project-Id> \
     --bring-in-role-arn <Custom-IAM-Role-Arn> \
-    --region <region-code>
+    --region <region-code> \
+    --iam-profile <aws-credentials-profile-name>
 ```
 ### Important Notes
 - Both commands will display a preview of proposed changes by default. To apply the changes for `use-your-own-role`, add the `--execute` `--force-update` flag. To apply the changes for `enhance-project-role`, add the `--execute` flag
 - The `--region` parameter is optional and only required when necessary. If not specified, it defaults to AWS region specified in the CLI credentials config
+- The `--iam-profile` parameter is optional. When provided, uses credentials from the specified AWS profile. Otherwise, falls back to default AWS credential resolution (environment variables, default profile, or instance role).
 - In `use-your-own-role` case, the role you bring in must not be used as the project User Role in another SageMaker Unified Studio Project

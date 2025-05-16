@@ -653,6 +653,10 @@ def _add_common_arguments(parser):
     parser.add_argument('--endpoint',
                         help='Endpoint where you have your Project',
                         required=False)
+    parser.add_argument("--iam-profile", type=str,
+                        required=False,
+                        help="AWS Credentials profile to use."
+                        )
 
 def _parse_args():
     parser = argparse.ArgumentParser(description='Tool which grant your role ability to work for specified Project.')
@@ -675,8 +679,12 @@ def _parse_args():
 def byor_main():
     args = _parse_args()
     session = boto3.Session()
-    if (args.region):
+    if args.region and args.iam_profile:
+        session = boto3.Session(profile_name=args.iam_profile, region_name=args.region)
+    elif args.region:
         session = boto3.Session(region_name=args.region)
+    elif args.iam_profile:
+        session = boto3.Session(profile_name=args.iam_profile)
     iam_client = session.client('iam')
     datazone = session.client('datazone')
     lakeformation = session.client('lakeformation')
