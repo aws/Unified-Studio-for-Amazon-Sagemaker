@@ -1,0 +1,81 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Lists active AWS organization account IDs
+
+Resources:
+  GetActiveOrgAccountIdsLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: |
+          import logging
+          import boto3
+          import cfnresponse
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+
+          def list_org_accounts():
+              client = boto3.client("organizations")
+              paginator = client.get_paginator("list_accounts")
+              accounts = []
+              for page in paginator.paginate():
+                  for account in page["Accounts"]:
+                      accounts.append(account)
+              return accounts
+
+
+          def handler(event, context):
+              try:
+                  accounts = list_org_accounts()
+                  account_ids = [account['Id'] for account in accounts if account["Status"] == "ACTIVE"]
+
+                  logger.info(f"Account IDs in the organization: {account_ids}")
+                  account_ids_str = '|'.join(account_ids)
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {'AccountIds': account_ids_str}, 'CustomResourcePhysicalID')
+
+              except Exception as e:
+                  logger.error(f"Error: {str(e)}")
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {}, 'CustomResourcePhysicalID')
+                  raise
+      Runtime: python3.9
+      Handler: index.handler
+      Role: !GetAtt LambdaRole.Arn
+      Timeout: 30
+
+  GetActiveOrgAccountIds:
+    Type: Custom::ComponentUri
+    DependsOn: GetActiveOrgAccountIdsLambda
+    Properties:
+      ServiceToken: !GetAtt GetActiveOrgAccountIdsLambda.Arn
+
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - 'cloudformation.amazonaws.com'
+                - 'lambda.amazonaws.com'
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: ListActiveOrgAccountsPolicy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - organizations:ListAccounts
+                Resource: '*'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSLambda_FullAccess
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+Outputs:
+  AccountIds:
+    Value: !Join [ ",", !Split [ "|" , !GetAtt GetActiveOrgAccountIds.AccountIds ]]
+    Export:
+      Name: OrgAccountIds
+
