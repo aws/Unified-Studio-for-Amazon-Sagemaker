@@ -1,4 +1,4 @@
-# AWS SMUS Domain Setup
+# AWS SageMaker Unified Studio Domain Setup
 
 ## Table of Contents
 1. [Overview](#overview)
@@ -18,7 +18,7 @@
 
 ## Overview
 
-This repository contains a set of AWS CloudFormation templates for setting up and configuring an AWS SMUS domain with various resources and capabilities. The setup includes creating a domain, enabling blueprints, setting up project profiles, and configuring necessary permissions (grants).
+This repository contains a set of AWS CloudFormation templates for setting up and configuring an AWS SageMaker Unified Studio domain with various resources and capabilities. The setup includes creating a domain, enabling blueprints, setting up project profiles, and configuring necessary permissions (grants).
 
 ## Templates
 
@@ -31,7 +31,7 @@ The primary template that orchestrates the entire setup process.
 Parameters:
   DomainName:
     Type: String
-    Description: Name of the SMUS domain
+    Description: Name of the SageMaker Unified Studio domain
 
   OrganizationId:
     Type: String
@@ -67,7 +67,7 @@ Parameters:
 ```
 
 #### Resources:
-- `Domain`: Creates the AWS SMUS domain
+- `Domain`: Creates the AWS SageMaker Unified Studio domain
 - `FetchOrganisationAccountIdsStack`: Nested stack for fetching organization accounts
 - `TestResourceShareStack`: Nested stack for resource sharing
 - `EnableBlueprintsStack`: Nested stack for enabling blueprints
@@ -103,7 +103,7 @@ Outputs:
 
 ### 3. create_resource_share.yaml
 
-Sets up AWS RAM resource sharing for the SMUS domain.
+Sets up AWS RAM resource sharing for the SageMaker Unified Studio domain.
 
 #### Parameters:
 ```yaml
@@ -131,7 +131,7 @@ Resources:
 
 ### 4. enable_all_blueprints.yaml
 
-Enables various blueprints for the SMUS domain.
+Enables various blueprints for the SageMaker Unified Studio domain.
 
 #### Parameters:
 ```yaml
@@ -255,7 +255,7 @@ Parameters:
 
 2. IAM Roles:
     - Domain Execution Role with permissions:
-        - SMUS domain management
+        - SageMaker Unified Studio domain management
         - SageMaker operations
         - S3 access
     - Service Role with permissions:

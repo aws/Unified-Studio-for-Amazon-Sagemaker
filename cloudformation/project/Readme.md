@@ -1,8 +1,8 @@
-# AWS SMUS Project Creation Template
+# AWS SageMaker Unified Studio Project Creation Template
 
 ## Overview
 
-This CloudFormation template creates a SMUS project and assigns project memberships to specified users. The template uses AWS::LanguageExtensions transform to iterate through a list of users and create project memberships.
+This CloudFormation template creates a SageMaker Unified Studio project and assigns project memberships to specified users. The template uses AWS::LanguageExtensions transform to iterate through a list of users and create project memberships.
 
 
 ## Parameters
@@ -57,7 +57,7 @@ Resources:
 ## Usage
 
 ### Prerequisites
-- Existing AWS SMUS domain
+- Existing AWS SageMaker Unified Studio domain
 - Valid Project Profile ID
 - List of valid user identifiers
 - Necessary IAM permissions
