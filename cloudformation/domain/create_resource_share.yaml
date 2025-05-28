@@ -1,0 +1,32 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Create resource share for domain
+Transform: AWS::LanguageExtensions
+
+Parameters:
+    DomainId:
+        Description: Domain for which blueprint needs to be enabled
+        Type: String
+    DomainName:
+        Description: Name of the Domain
+        Type: String
+    DomainARN:
+        Description: Name of the Domain
+        Type: String
+    AccountsForResourceShare:
+        Description: Owner AccountId for domain
+        Type: CommaDelimitedList
+
+Resources:
+    "Fn::ForEach::Accounts":
+        - AccountId
+        - !Ref AccountsForResourceShare
+        - "RAMResourceShare${AccountId}":
+            Type: "AWS::RAM::ResourceShare"
+            Properties:
+                Name: !Sub "DataZone-${DomainName}-${DomainId}"
+                ResourceArns:
+                    - !Ref DomainARN
+                PermissionArns: 
+                    - "arn:aws:ram::aws:permission/AWSRAMPermissionsAmazonDatazoneDomainExtendedServiceAccess"
+                Principals:
+                    - !Ref AccountId
