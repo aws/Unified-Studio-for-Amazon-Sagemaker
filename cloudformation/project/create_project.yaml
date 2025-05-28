@@ -1,0 +1,38 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Create Project profile for SMUS Domain
+Transform: AWS::LanguageExtensions
+
+Parameters:
+  DomainId:
+    Description: Domain for which blueprint needs to be enabled
+    Type: String
+  ProjectProfileId:
+    Description: Project Profile id for which we need to create project
+    Type: String
+  Name:
+    Description: Name of the project
+    Type: String
+  UsersList:
+    Description: Users for the project
+    Type: CommaDelimitedList
+
+Resources:
+  Project:
+    Type: AWS::DataZone::Project
+    Properties:
+      Description: "Testing CFN Project"
+      DomainIdentifier: !Ref DomainId
+      Name: !Ref Name
+      ProjectProfileId: !Ref ProjectProfileId
+
+  "Fn::ForEach::Users":
+    - User
+    - !Ref UsersList
+    - "${User}ProjectMembership":
+        Type: "AWS::DataZone::ProjectMembership"
+        Properties:
+          DomainIdentifier: !Ref DomainId
+          ProjectIdentifier: !GetAtt Project.Id
+          Member:
+            UserIdentifier: !Ref User
+          Designation: "PROJECT_OWNER"
