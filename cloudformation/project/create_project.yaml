@@ -24,6 +24,15 @@ Resources:
       DomainIdentifier: !Ref DomainId
       Name: !Ref Name
       ProjectProfileId: !Ref ProjectProfileId
+      UserParameters:
+        - EnvironmentConfigurationName: Lakehouse Database
+          EnvironmentParameters:
+            - Name: glueDbName
+              Value: glue_override
+        - EnvironmentConfigurationName: Redshift Serverless
+          EnvironmentParameters:
+            - Name: redshiftDbName
+              Value: rs_db_override
 
   "Fn::ForEach::Users":
     - User
