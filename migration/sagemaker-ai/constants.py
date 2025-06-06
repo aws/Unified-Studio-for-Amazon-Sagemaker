@@ -1,0 +1,10 @@
+DZ_PROJECT_PROFILE_NAME = "SageMaker AI Migration Tooling Capabilities"
+DZ_PROJECT_SCOPE_NAME = "dev"
+SAGEMAKER_AI_DOMAIN_NAME = 'SageMakerAIDomainName'
+SAGEMAKER_AI_DOMAIN_ID = 'SageMakerAIDomainId'
+MIGRATION_STATUS = 'MigrationStatus'
+SMUS_USER_NAME = 'SMUSUserName'
+SMUS_USER_ROLE = 'SMUSUserRole'
+SMUS_PROJECT_NAME = 'SMUSProjectName'
+SMUS_DOMAIN_NAME = 'SMUSDomainName'
+SAGEMAKER_AI_USER_PROFILE_NAME = 'SageMakerAIUserProfileName'
