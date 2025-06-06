@@ -1,9 +1,14 @@
 ## Amazon SageMaker Unified Studio
 
 This repository contains utilities for Amazon SageMaker Unified Studio. It is structured as follows:
+- Cloudformation
+    - [Templates](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/tree/main/cloudformation) to setup and Create a new Amazon SageMaker Unified domain and project
 - Migration 
     - Migrate [Amazon Athena](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/tree/main/migration/athena) and [Amazon EMR](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/tree/main/migration/emr) resources to SageMaker Unified Studio project. 
-    - [Bring your own AWS Identity and Access Management (IAM) role](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/tree/main/migration/bring-your-own-role) in SageMaker Unified Studio project
+    - [Bring your own AWS Identity and Access Management (IAM) role](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/tree/main/migration/bring-your-own-role) in SageMaker Unified Studio project.
+    - [Bring your own Glue Data Catalog assets](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/tree/main/migration/bring-your-own-gdc-assets) in SageMaker Unified Studio project.
+    - [Bring your own S3 tables](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/tree/main/migration/bring-your-own-s3-tables) in SageMaker Unified Studio project.
+    - Migrate [Amazon SageMaker AI](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/tree/main/migration/sagemaker-ai) resources to SageMaker Unified Studio project. 
 
 To read more about Amazon SageMaker Unified Studio, please refer to:
 - [Administrator Guide](https://docs.aws.amazon.com/sagemaker-unified-studio/latest/adminguide/what-is-sagemaker-unified-studio.html)
