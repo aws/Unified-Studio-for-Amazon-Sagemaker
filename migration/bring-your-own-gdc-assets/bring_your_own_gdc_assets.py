@@ -233,6 +233,8 @@ def _check_and_register_location(tables, role_arn, lf_client):
     for table in tables:
         # Remove trailing '/' if present
         s3_location = table['StorageDescriptor']['Location'].rstrip('/')
+        if s3_location == '':
+            continue        
         s3_subpaths = _get_s3_subpaths(s3_location)
         s3_registration = False
         for s3_path in s3_subpaths:
