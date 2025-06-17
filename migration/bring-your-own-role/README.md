@@ -32,7 +32,11 @@ Please review this section carefully before proceeding to execute the script.
                 "datazone:DeleteSubscriptionGrant",
                 "datazone:GetSubscriptionGrant",
                 "datazone:ListEnvironmentBlueprints",
-                "datazone:GetEnvironmentBlueprintConfiguration"
+                "datazone:GetEnvironmentBlueprintConfiguration",
+				"datazone:CreateUserProfile",
+				"datazone:CreateProjectMembership",
+				"datazone:UpdateUserProfile",
+				"datazone:SearchUserProfiles"
             ],
             "Resource": [
                 "*"

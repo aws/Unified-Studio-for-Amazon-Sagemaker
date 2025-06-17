@@ -633,6 +633,51 @@ def _update_smus_provisioning_role(datazone_client, iam_client, domain_id, byor_
     if not execute_flag:
         print(f"Skipping update/create inline policy 'byoInlinePolicy' for role {provisioning_role_name}, set --execute flag to True to do the actual update.\n")
 
+# Add new role as project's contributor member
+def _add_role_as_project_contributor_member(datazone, domain_id, project_id, bring_in_role_arn, execute_flag):
+    if execute_flag:
+        try:
+            userId = datazone.create_user_profile(
+                domainIdentifier=domain_id,
+                userIdentifier=bring_in_role_arn,
+                userType='IAM_ROLE'
+            )['id']
+            print(f"Created UserProfile for role {bring_in_role_arn} in Domain {domain_id}...\n")
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'ValidationException':
+                print(f"Role {bring_in_role_arn} already has UserProfile created in Domain {domain_id}, skipping...\n")
+                userId = datazone.search_user_profiles(
+                    domainIdentifier=domain_id,
+                    searchText=bring_in_role_arn,
+                    userType='DATAZONE_IAM_USER'
+                )['items'][0]['id']
+            else:
+                raise e
+        
+        try:
+            # Make sure the UserProfile associated with new Role is ACTIVE
+            datazone.update_user_profile(
+                domainIdentifier=domain_id,
+                status='ACTIVATED',
+                type='IAM',
+                userIdentifier=userId
+            )
+            # Add new Role as project's contributor member
+            datazone.create_project_membership(
+                designation='PROJECT_CONTRIBUTOR',
+                domainIdentifier=domain_id,
+                member={
+                    'userIdentifier': userId
+                },
+                projectIdentifier=project_id
+            )
+            print(f"Added role {bring_in_role_arn} as project's contributor member in Project {project_id}...\n")
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'ValidationException':
+                print(f"Role {bring_in_role_arn} already has project's contributor member in Project {project_id}, skipping...\n")
+    else:
+        print(f"Skipping add role {bring_in_role_arn} as project's contributor member in Project {project_id}, set --execute flag to True to do the actual update.\n")
+
 def _add_common_arguments(parser):
     parser.add_argument('--domain-id',
                     help='Your Project\'s Domain Id', 
@@ -693,7 +738,7 @@ def byor_main():
         datazone = session.client('datazone', endpoint_url=args.endpoint)
         
     if args.command == ROLE_REPLACEMENT:
-        print(f"Use bring in Role: {args.bring_in_role_arn} as Project Role...")
+        print(f"Use bring in Role: {args.bring_in_role_arn} as Project Role...\n")
         # Get Project's Auto Generated Execution Role, there should be one role per project
         project_role = _find_project_execution_role(args, iam_client, datazone)
         # Get Execution Role's trust policy
@@ -786,6 +831,8 @@ def byor_main():
         _update_s3_lakeformation_registration(lakeformation, project_role['Role']['Arn'], args.bring_in_role_arn, args.execute)
         # Create or update SMUS Provisioning Role's inline policy
         _update_smus_provisioning_role(datazone, iam_client, args.domain_id, args.bring_in_role_arn, args.execute)
+        # Add new Role as Proejct contributor member
+        _add_role_as_project_contributor_member(datazone, args.domain_id, args.project_id, args.bring_in_role_arn, args.execute)
                 
         if args.execute:
             print(f"Successfully replace Project {args.project_id} user role with your own role: {byor_role['Role']['Arn']}")
