@@ -44,6 +44,8 @@ Parameters:
         Type: String
     EmrOnEc2Id:
         Type: String
+    QuickSightId:
+        Type: String
 
     SQLAnalyticsProfileId:
         Type: String
@@ -317,9 +319,19 @@ Resources:
             AccountId: !Ref AccountId
             BlueprintId: !Ref EmrOnEc2Id
 
-    AddPolicyGrantForSQLAnalyticsProfile:
+    AddPolicyGrantForQuickSight:
         Type: Custom::DataZoneGrant
         DependsOn: AddPolicyGrantForEmrOnEc2
+        Properties:
+            ServiceToken: !GetAtt DataZoneGrantPolicyFunction.Arn
+            DomainId: !Ref DomainId
+            RootDomainUnitId: !Ref DomainUnitId
+            AccountId: !Ref AccountId
+            BlueprintId: !Ref QuickSightId
+
+    AddPolicyGrantForSQLAnalyticsProfile:
+        Type: Custom::DataZoneGrant
+        DependsOn: AddPolicyGrantForQuickSight
         Properties:
             ServiceToken: !GetAtt DataZoneGrantPolicyFunction.Arn
             DomainId: !Ref DomainId

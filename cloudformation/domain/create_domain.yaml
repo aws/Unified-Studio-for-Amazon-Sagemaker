@@ -108,6 +108,7 @@ Resources:
         AmazonBedrockFunctionId: !GetAtt EnableBlueprintsStack.Outputs.AmazonBedrockFunctionId
         AmazonBedrockFlowId: !GetAtt EnableBlueprintsStack.Outputs.AmazonBedrockFlowId
         EmrOnEc2Id: !GetAtt EnableBlueprintsStack.Outputs.EmrOnEc2Id
+        QuickSightId: !GetAtt EnableBlueprintsStack.Outputs.QuickSightId
 
   PolicyGrantStack:
     Type: AWS::CloudFormation::Stack
@@ -134,6 +135,7 @@ Resources:
         AmazonBedrockFunctionId: !GetAtt EnableBlueprintsStack.Outputs.AmazonBedrockFunctionId
         AmazonBedrockFlowId: !GetAtt EnableBlueprintsStack.Outputs.AmazonBedrockFlowId
         EmrOnEc2Id: !GetAtt EnableBlueprintsStack.Outputs.EmrOnEc2Id
+        QuickSightId: !GetAtt EnableBlueprintsStack.Outputs.QuickSightId
 
         SQLAnalyticsProfileId: !GetAtt ProjectProfileStack.Outputs.SQLAnalyticsProfileId
         AllCapabilitiesProjectProfileId: !GetAtt ProjectProfileStack.Outputs.AllCapabilitiesProjectProfileId

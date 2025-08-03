@@ -297,6 +297,26 @@ Resources:
       EnabledRegions: [ !Ref 'AWS::Region' ]
 
 
+  QuickSight:
+    Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EnvironmentBlueprintIdentifier: "QuickSight"
+      ManageAccessRoleArn: !Ref AmazonSageMakerManageAccessRole
+      ProvisioningRoleArn: !Ref AmazonSageMakerProvisioningRole
+      RegionalParameters: [
+        {
+          Region: !Ref 'AWS::Region',
+          Parameters: {
+            "S3Location": !Ref DZS3Bucket,
+            "Subnets": !Ref SageMakerSubnets,
+            "VpcId": !Ref AmazonSageMakerVpcId
+          }
+        }
+      ]
+      EnabledRegions: [ !Ref 'AWS::Region' ]
+
+
   AmazonBedrockFlow:
     Type: AWS::DataZone::EnvironmentBlueprintConfiguration
     Properties:
@@ -384,3 +404,6 @@ Outputs:
 
   EmrOnEc2Id:
     Value: !GetAtt EmrOnEc2.EnvironmentBlueprintId
+
+  QuickSightId:
+    Value: !GetAtt QuickSight.EnvironmentBlueprintId

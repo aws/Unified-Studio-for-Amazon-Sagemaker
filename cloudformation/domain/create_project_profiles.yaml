@@ -46,6 +46,8 @@ Parameters:
     Type: String
   EmrOnEc2Id:
     Type: String
+  QuickSightId:
+    Type: String
 
 Resources:
   SQLAnalytics:
@@ -157,6 +159,14 @@ Resources:
               - Name: "catalogDescription"
                 Value: "RMS catalog"
                 IsEditable: true
+        - Name: "OnDemand QuickSight"
+          EnvironmentBlueprintId: !Ref QuickSightId
+          Description: "Amazon QuickSight for data visualization"
+          DeploymentMode: "ON_DEMAND"
+          AwsAccount:
+            AwsAccountId: !Ref AccountId
+          AwsRegion:
+            RegionName: !Ref Region
 
 
   AllCapabilitiesProjectProfile:
@@ -440,6 +450,15 @@ Resources:
         - Name: 'Amazon Bedrock Evaluation'
           EnvironmentBlueprintId: !Ref AmazonBedrockEvaluationId
           Description: 'Enables evaluation features to compare Bedrock models'
+          DeploymentMode: 'ON_DEMAND'
+          AwsAccount:
+            AwsAccountId: !Ref AccountId
+          AwsRegion:
+            RegionName: !Ref Region
+
+        - Name: 'QuickSight'
+          EnvironmentBlueprintId: !Ref QuickSightId
+          Description: 'Amazon QuickSight for data visualization and business intelligence'
           DeploymentMode: 'ON_DEMAND'
           AwsAccount:
             AwsAccountId: !Ref AccountId
