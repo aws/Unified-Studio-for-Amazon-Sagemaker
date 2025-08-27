@@ -1,0 +1,370 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Enable blueprints and create project profiles for DataZone domain'
+
+Parameters:
+  DomainStackName:
+    Type: String
+    Default: 'sagemaker-domain-stack'
+    Description: 'Name of the domain stack to import values from'
+  VpcId:
+    Type: String
+    Description: 'VPC ID for environment configurations'
+  Subnets:
+    Type: String
+    Description: 'Comma-separated list of subnet IDs'
+  AvailabilityZones:
+    Type: String
+    Description: 'Comma-separated list of availability zones'
+  S3BucketName:
+    Type: String
+    Description: 'S3 bucket name for DataZone environments'
+  LakehouseCatalogBlueprintId:
+    Type: String
+    Description: 'Environment Blueprint ID for LakehouseCatalog environments'
+  DataLakeBlueprintId:
+    Type: String
+    Description: 'Environment Blueprint ID for DataLake environments'
+  ToolingBlueprintId:
+    Type: String
+    Description: 'Environment Blueprint ID for Tooling environments'
+  WorkflowBlueprintId:
+    Type: String
+    Description: 'Environment Blueprint ID for Workflow environments'
+
+Resources:
+  # Lambda Role for Policy Grants
+  DataZoneGrantPolicyLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: DataZoneGrantPolicyLambdaRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: DataZoneGrantPolicyPermissions
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - datazone:AddPolicyGrant
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+
+  # Lambda Function for Policy Grants
+  DataZoneGrantPolicyFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: DataZoneGrantPolicyFunction
+      Handler: index.handler
+      Role: !GetAtt DataZoneGrantPolicyLambdaRole.Arn
+      Runtime: python3.9
+      Timeout: 60
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+          import traceback
+          
+          def handler(event, context):
+              print("Received event:", event)
+              props = event['ResourceProperties']
+              domain_id = props['DomainId']
+              root_domain_unit_id = props['RootDomainUnitId']
+              account_id = props['AccountId']
+              blueprint_id = props.get('BlueprintId', '').strip()
+              project_profile_id = props.get('ProjectProfileId', '').strip()
+          
+              try:
+                  if event['RequestType'] in ['Create', 'Update']:
+                      datazone = boto3.client('datazone')
+          
+                      if blueprint_id:
+                          print(f"Granting CREATE_ENVIRONMENT_FROM_BLUEPRINT for {blueprint_id}")
+                          datazone.add_policy_grant(
+                              domainIdentifier=domain_id,
+                              entityType="EnvironmentBlueprintConfiguration",
+                              entityIdentifier=f"{account_id}:{blueprint_id}",
+                              policyType="CREATE_ENVIRONMENT_FROM_BLUEPRINT",
+                              principal={
+                                  "project": {
+                                      "projectGrantFilter": {
+                                          "domainUnitFilter": {
+                                              "domainUnit": root_domain_unit_id,
+                                              "includeChildDomainUnits": True
+                                          }
+                                      },
+                                      "projectDesignation": "CONTRIBUTOR"
+                                  }
+                              },
+                              detail={
+                                  "createEnvironmentFromBlueprint": {}
+                              }
+                          )
+          
+                      if project_profile_id:
+                          print(f"Granting CREATE_PROJECT_FROM_PROJECT_PROFILE for {project_profile_id}")
+                          datazone.add_policy_grant(
+                              domainIdentifier=domain_id,
+                              entityType="DomainUnit",
+                              entityIdentifier=root_domain_unit_id,
+                              policyType="CREATE_PROJECT_FROM_PROJECT_PROFILE",
+                              principal={
+                                  "user": {
+                                      "allUsersGrantFilter": {}
+                                  }
+                              },
+                              detail={
+                                  "createProjectFromProjectProfile": {
+                                      "includeChildDomainUnits": True,
+                                      "projectProfiles": [project_profile_id]
+                                  }
+                              }
+                          )
+          
+                  # Always send SUCCESS on Delete or successful create/update
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+          
+              except Exception as e:
+                  print("Exception occurred:", str(e))
+                  traceback.print_exc()
+                  cfnresponse.send(event, context, cfnresponse.FAILED, {}, str(e))
+  # Enable Blueprints
+  LakehouseCatalog:
+    Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    Properties:
+      DomainIdentifier:
+        Fn::ImportValue: !Sub '${DomainStackName}-DomainId'
+      EnvironmentBlueprintIdentifier: "LakehouseCatalog"
+      ManageAccessRoleArn:
+        Fn::ImportValue: !Sub '${DomainStackName}-SageMakerManageAccessRole'
+      ProvisioningRoleArn:
+        Fn::ImportValue: !Sub '${DomainStackName}-SageMakerProvisioningRole'
+      RegionalParameters:
+        - Region: !Ref 'AWS::Region'
+          Parameters: {}
+      EnabledRegions: [!Ref 'AWS::Region']
+
+  DataLake:
+    Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    Properties:
+      DomainIdentifier:
+        Fn::ImportValue: !Sub '${DomainStackName}-DomainId'
+      EnvironmentBlueprintIdentifier: "DataLake"
+      ManageAccessRoleArn:
+        Fn::ImportValue: !Sub '${DomainStackName}-SageMakerManageAccessRole'
+      ProvisioningRoleArn:
+        Fn::ImportValue: !Sub '${DomainStackName}-SageMakerProvisioningRole'
+      RegionalParameters:
+        - Region: !Ref 'AWS::Region'
+          Parameters:
+            VpcId: !Ref VpcId
+            Subnets: !Ref Subnets
+            AZs: !Ref AvailabilityZones
+            S3Location: !Sub 's3://${S3BucketName}'
+      EnabledRegions: [!Ref 'AWS::Region']
+
+  Tooling:
+    Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    Properties:
+      DomainIdentifier:
+        Fn::ImportValue: !Sub '${DomainStackName}-DomainId'
+      EnvironmentBlueprintIdentifier: "Tooling"
+      ManageAccessRoleArn:
+        Fn::ImportValue: !Sub '${DomainStackName}-SageMakerManageAccessRole'
+      ProvisioningRoleArn:
+        Fn::ImportValue: !Sub '${DomainStackName}-SageMakerProvisioningRole'
+      RegionalParameters:
+        - Region: !Ref 'AWS::Region'
+          Parameters:
+            VpcId: !Ref VpcId
+            Subnets: !Ref Subnets
+            AZs: !Ref AvailabilityZones
+            S3Location: !Sub 's3://${S3BucketName}'
+      EnabledRegions: [!Ref 'AWS::Region']
+
+  Workflows:
+    Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    Properties:
+      DomainIdentifier:
+        Fn::ImportValue: !Sub '${DomainStackName}-DomainId'
+      EnvironmentBlueprintIdentifier: "Workflows"
+      ManageAccessRoleArn:
+        Fn::ImportValue: !Sub '${DomainStackName}-SageMakerManageAccessRole'
+      ProvisioningRoleArn:
+        Fn::ImportValue: !Sub '${DomainStackName}-SageMakerProvisioningRole'
+      RegionalParameters:
+        - Region: !Ref 'AWS::Region'
+          Parameters:
+            VpcId: !Ref VpcId
+            Subnets: !Ref Subnets
+            AZs: !Ref AvailabilityZones
+            S3Location: !Sub 's3://${S3BucketName}'
+      EnabledRegions: [!Ref 'AWS::Region']
+
+  # All Capabilities Project Profile
+  AllCapabilitiesProjectProfile:
+    Type: AWS::DataZone::ProjectProfile
+    DependsOn: 
+      - DataLake
+      - LakehouseCatalog
+      - Tooling
+      - Workflows
+    Properties:
+      Name: 'All capabilities'
+      Description: 'Analyze data and build machine learning models with all capabilities'
+      Status: 'ENABLED'
+      DomainIdentifier:
+        Fn::ImportValue: !Sub '${DomainStackName}-DomainId'
+      DomainUnitIdentifier:
+        Fn::ImportValue: !Sub '${DomainStackName}-RootDomainUnitId'
+      EnvironmentConfigurations:
+        - Name: 'Tooling'
+          EnvironmentBlueprintId: !Ref ToolingBlueprintId
+          Description: 'Configuration for the Tooling environment'
+          DeploymentOrder: 0
+          DeploymentMode: 'ON_CREATE'
+          AwsAccount:
+            AwsAccountId: !Ref AWS::AccountId
+          AwsRegion:
+            RegionName: !Ref AWS::Region
+          ConfigurationParameters:
+            ParameterOverrides:
+              - Name: 'enableSpaces'
+                Value: 'true'
+                IsEditable: false
+              - Name: 'enableAmazonBedrockPermissions'
+                Value: 'true'
+                IsEditable: false
+        - Name: 'Lakehouse Database'
+          EnvironmentBlueprintId: !Ref DataLakeBlueprintId
+          Description: 'Creates databases for storing tables in S3 and Athena resources'
+          DeploymentOrder: 1
+          DeploymentMode: 'ON_CREATE'
+          AwsAccount:
+            AwsAccountId: !Ref AWS::AccountId
+          AwsRegion:
+            RegionName: !Ref AWS::Region
+          ConfigurationParameters:
+            ParameterOverrides:
+              - Name: 'glueDbName'
+                Value: 'marketing_db'
+                IsEditable: true
+        - Name: 'Lakehouse Catalog'
+          EnvironmentBlueprintId: !Ref LakehouseCatalogBlueprintId
+          Description: 'Configuration for data cataloging'
+          DeploymentOrder: 1
+          DeploymentMode: 'ON_CREATE'
+          AwsAccount:
+            AwsAccountId: !Ref AWS::AccountId
+          AwsRegion:
+            RegionName: !Ref AWS::Region
+        - Name: 'OnDemand Workflows'
+          EnvironmentBlueprintId: !Ref WorkflowBlueprintId
+          Description: 'Enables you to create Airflow workflows'
+          DeploymentMode: 'ON_DEMAND'
+          AwsAccount:
+            AwsAccountId: !Ref AWS::AccountId
+          AwsRegion:
+            RegionName: !Ref AWS::Region
+
+  # Policy Grants for Blueprints
+  AddPolicyGrantForTooling:
+    Type: Custom::DataZoneGrant
+    Properties:
+      ServiceToken: !GetAtt DataZoneGrantPolicyFunction.Arn
+      DomainId:
+        Fn::ImportValue: !Sub '${DomainStackName}-DomainId'
+      RootDomainUnitId:
+        Fn::ImportValue: !Sub '${DomainStackName}-RootDomainUnitId'
+      AccountId: !Ref AWS::AccountId
+      BlueprintId: !Ref ToolingBlueprintId
+
+  AddPolicyGrantForDataLake:
+    Type: Custom::DataZoneGrant
+    DependsOn: AddPolicyGrantForTooling
+    Properties:
+      ServiceToken: !GetAtt DataZoneGrantPolicyFunction.Arn
+      DomainId:
+        Fn::ImportValue: !Sub '${DomainStackName}-DomainId'
+      RootDomainUnitId:
+        Fn::ImportValue: !Sub '${DomainStackName}-RootDomainUnitId'
+      AccountId: !Ref AWS::AccountId
+      BlueprintId: !Ref DataLakeBlueprintId
+
+  AddPolicyGrantForLakehouseCatalog:
+    Type: Custom::DataZoneGrant
+    DependsOn: AddPolicyGrantForDataLake
+    Properties:
+      ServiceToken: !GetAtt DataZoneGrantPolicyFunction.Arn
+      DomainId:
+        Fn::ImportValue: !Sub '${DomainStackName}-DomainId'
+      RootDomainUnitId:
+        Fn::ImportValue: !Sub '${DomainStackName}-RootDomainUnitId'
+      AccountId: !Ref AWS::AccountId
+      BlueprintId: !Ref LakehouseCatalogBlueprintId
+
+  AddPolicyGrantForWorkflows:
+    Type: Custom::DataZoneGrant
+    DependsOn: AddPolicyGrantForLakehouseCatalog
+    Properties:
+      ServiceToken: !GetAtt DataZoneGrantPolicyFunction.Arn
+      DomainId:
+        Fn::ImportValue: !Sub '${DomainStackName}-DomainId'
+      RootDomainUnitId:
+        Fn::ImportValue: !Sub '${DomainStackName}-RootDomainUnitId'
+      AccountId: !Ref AWS::AccountId
+      BlueprintId: !Ref WorkflowBlueprintId
+
+  # Policy Grant for Project Profile
+  AddPolicyGrantForAllCapabilitiesProfile:
+    Type: Custom::DataZoneGrant
+    DependsOn: AddPolicyGrantForWorkflows
+    Properties:
+      ServiceToken: !GetAtt DataZoneGrantPolicyFunction.Arn
+      DomainId:
+        Fn::ImportValue: !Sub '${DomainStackName}-DomainId'
+      RootDomainUnitId:
+        Fn::ImportValue: !Sub '${DomainStackName}-RootDomainUnitId'
+      AccountId: !Ref AWS::AccountId
+      ProjectProfileId: !GetAtt AllCapabilitiesProjectProfile.Id
+
+Outputs:
+  AllCapabilitiesProfileId:
+    Description: 'All Capabilities Project Profile ID'
+    Value: !GetAtt AllCapabilitiesProjectProfile.Id
+    Export:
+      Name: !Sub '${AWS::StackName}-AllCapabilitiesProfile'
+
+  LakehouseCatalogId:
+    Description: 'Lakehouse Catalog Blueprint ID'
+    Value: !Ref LakehouseCatalog
+    Export:
+      Name: !Sub '${AWS::StackName}-LakehouseCatalog'
+
+  DataLakeId:
+    Description: 'Data Lake Blueprint ID'
+    Value: !Ref DataLake
+    Export:
+      Name: !Sub '${AWS::StackName}-DataLake'
+
+  ToolingId:
+    Description: 'Tooling Blueprint ID'
+    Value: !Ref Tooling
+    Export:
+      Name: !Sub '${AWS::StackName}-Tooling'
+
+  WorkflowsId:
+    Description: 'Workflows Blueprint ID'
+    Value: !Ref Workflows
+    Export:
+      Name: !Sub '${AWS::StackName}-Workflows'

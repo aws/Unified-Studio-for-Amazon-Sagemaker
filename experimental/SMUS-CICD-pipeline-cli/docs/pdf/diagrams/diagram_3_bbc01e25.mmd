@@ -1,0 +1,33 @@
+graph TB
+    subgraph "Prod Target Environment"
+        T3[Target: prod]
+        
+        subgraph "SageMaker Unified Studio"
+            P3[SageMaker Unified Studio Project<br/>prod-marketing]
+        end
+        
+        subgraph "Connections"
+            SC3[Storage Connection<br/>default.s3_shared]
+            WC3[Workflow Connection<br/>project.workflow_mwaa]
+            AC3[Analytics Connection<br/>project.athena]
+            LC3[Lakehouse Connection<br/>project.default_lakehouse]
+        end
+        
+        subgraph "AWS Resources"
+            S33[S3 Bucket<br/>sagemaker-unified-studio-...-shared/]
+            MWAA3[MWAA Environment<br/>SageMaker Unified StudioMWAAEnv-...-prod]
+            ATHENA3[Athena Workgroup<br/>workgroup-...-prod]
+            GLUE3[Glue Database<br/>sagemaker_unified_studio_..._prod]
+        end
+    end
+    
+    T3 --> P3
+    P3 --> SC3
+    P3 --> WC3
+    P3 --> AC3
+    P3 --> LC3
+    
+    SC3 --> S33
+    WC3 --> MWAA3
+    AC3 --> ATHENA3
+    LC3 --> GLUE3
