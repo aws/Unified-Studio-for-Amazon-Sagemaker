@@ -1,0 +1,39 @@
+# Integration Test Configuration
+# Copy this to config.local.yaml and customize for your environment
+
+aws:
+  profile: default  # AWS profile to use for tests
+  region: us-east-1  # AWS region for tests
+  # Alternative: use access keys (not recommended for local development)
+  # access_key_id: YOUR_ACCESS_KEY
+  # secret_access_key: YOUR_SECRET_KEY
+
+# Test environment settings
+test_environment:
+  domain_name: cicd-test-domain  # DataZone domain for tests
+  project_prefix: integration-test      # Prefix for test projects
+  cleanup_after_tests: true            # Whether to clean up resources after tests
+
+# Test scenarios - each will have its own pipeline file
+test_scenarios:
+  basic_pipeline:
+    enabled: true
+    description: "Basic pipeline with single target"
+    pipeline_file: "basic_pipeline.yaml"
+    
+  multi_target_pipeline:
+    enabled: true
+    description: "Pipeline with multiple targets (dev, test, prod)"
+    pipeline_file: "multi_target_pipeline.yaml"
+    
+  workflow_pipeline:
+    enabled: false  # Requires MWAA environment
+    description: "Pipeline with workflow integration"
+    pipeline_file: "workflow_pipeline.yaml"
+
+# Timeouts (in seconds)
+timeouts:
+  project_creation: 300
+  environment_creation: 600
+  bundle_creation: 120
+  deployment: 180

@@ -1,0 +1,51 @@
+# SMUS CI/CD Pipeline Manifest
+# Generated template with required fields and optional field examples
+
+pipelineName: TestPipeline
+
+domain:
+  name: your-domain-name  # PLACEHOLDER: Replace with your SageMaker Unified Studio domain name
+  region: us-east-1       # PLACEHOLDER: Replace with your AWS region
+
+# Bundle configuration (optional)
+bundle:
+  bundlesDirectory: ./bundles
+  # workflow:
+  #   - connectionName: project.workflow_connection
+  #     append: true
+  #     include: ['workflows/']
+  # storage:
+  #   - connectionName: project.storage_connection
+  #     append: false
+  #     include: ['notebooks/', 'data/']
+
+targets:
+  dev:
+    project:
+      name: dev-project-name  # PLACEHOLDER: Replace with your dev project name
+    # default: true  # Uncomment to make this the default target
+  
+  test:
+    project:
+      name: test-project-name  # PLACEHOLDER: Replace with your test project name
+  
+  prod:
+    project:
+      name: prod-project-name  # PLACEHOLDER: Replace with your prod project name
+
+# Workflows configuration (optional)
+# workflows:
+#   - workflowName: your_workflow_name
+#     connectionName: project.workflow_mwaa
+#     triggerPostDeployment: true
+#     logging: console
+#     engine: MWAA
+#     # parameters:
+#     #   env: production
+#     #   timeout: 3600
+#   
+#   - workflowName: another_workflow
+#     connectionName: project.workflow_mwaa
+#     triggerPostDeployment: false
+#     logging: none
+#     engine: MWAA
