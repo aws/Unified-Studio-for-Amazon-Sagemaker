@@ -94,7 +94,8 @@ def test_monitor_single_target(mock_from_file, mock_get_project_info, mock_load_
         'connections': {
             'project.workflow_connection': {
                 'connectionId': 'conn-123',
-                'type': 'WORKFLOWS'
+                'type': 'MWAA',
+                'environmentName': 'test-env'
             }
         }
     }
@@ -132,7 +133,7 @@ def test_monitor_inactive_project(mock_from_file, mock_get_project_info, mock_lo
     
     with patch("builtins.open", mock_open(read_data=sample_manifest)):
         result = runner.invoke(app, ["monitor", "--pipeline", "test.yaml", "--targets", "dev"])
-        assert result.exit_code == 0
+        assert result.exit_code == 1  # Should fail when no workflow connections
         assert "Pipeline: TestPipeline" in result.stdout
         assert "Status: INACTIVE" in result.stdout
 
