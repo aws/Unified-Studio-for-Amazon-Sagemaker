@@ -34,6 +34,15 @@ def check_aws_setup():
     
     return False
 
+def clean_reports_directory():
+    """Clean the reports directory before running tests."""
+    reports_dir = Path("tests/reports")
+    if reports_dir.exists():
+        import shutil
+        shutil.rmtree(reports_dir)
+        print("🧹 Cleaned reports directory")
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
 def run_unit_tests(coverage=True, html_report=False):
     """Run unit tests with coverage."""
     cmd = ["python", "-m", "pytest", "tests/unit/", "-v"]
@@ -136,6 +145,10 @@ def main():
     
     coverage = not args.no_coverage
     html_report = not args.no_html_report  # Default to True unless --no-html-report is specified
+    
+    # Clean reports directory before running tests
+    if html_report:
+        clean_reports_directory()
     
     # Run tests based on type
     if args.type == "unit":
