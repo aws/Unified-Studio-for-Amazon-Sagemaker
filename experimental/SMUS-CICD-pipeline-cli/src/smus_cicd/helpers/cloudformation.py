@@ -203,16 +203,33 @@ def create_project_via_cloudformation(project_name, profile_name, domain_name, r
         typer.echo(f"Profile: {profile_name}")
         
         # Create the stack
-        response = cf_client.create_stack(
-            StackName=stack_name,
-            TemplateBody=template_body,
-            Parameters=parameters,
-            Capabilities=['CAPABILITY_IAM', 'CAPABILITY_AUTO_EXPAND'],
-            Tags=tags
-        )
-        
-        stack_id = response['StackId']
-        typer.echo(f"Stack creation initiated: {stack_id}")
+        try:
+            response = cf_client.create_stack(
+                StackName=stack_name,
+                TemplateBody=template_body,
+                Parameters=parameters,
+                Capabilities=['CAPABILITY_IAM', 'CAPABILITY_AUTO_EXPAND'],
+                Tags=tags
+            )
+            
+            stack_id = response['StackId']
+            typer.echo(f"Stack creation initiated: {stack_id}")
+            
+        except cf_client.exceptions.AlreadyExistsException:
+            # Stack already exists - check if project exists in DataZone
+            typer.echo(f"CloudFormation stack {stack_name} already exists")
+            
+            # Check if the project actually exists in DataZone
+            domain_id = datazone.get_domain_id_by_name(domain_name, region)
+            if domain_id:
+                project_id = datazone.get_project_id_by_name(project_name, domain_id, region)
+                if project_id:
+                    typer.echo(f"✅ Project {project_name} already exists and is ready")
+                    return True
+            
+            # Stack exists but project doesn't - this is an error state
+            typer.echo(f"❌ Stack exists but project {project_name} not found in DataZone")
+            return False
         
         # Wait for stack creation to complete
         typer.echo("Waiting for stack creation to complete...")

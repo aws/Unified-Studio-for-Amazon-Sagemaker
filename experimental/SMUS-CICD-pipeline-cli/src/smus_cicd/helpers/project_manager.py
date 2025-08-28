@@ -20,10 +20,12 @@ class ProjectManager:
         """Ensure project exists, create if needed and configured to do so."""
         project_name = target_config.project.name
         
-        # Check if project exists
+        # Check if project exists in DataZone first
         project_info = get_datazone_project_info(project_name, self.config)
         
         if 'error' not in project_info:
+            # Project exists - no need to create anything
+            handle_success(f"✅ Project '{project_name}' already exists")
             self._update_existing_project(target_name, target_config, project_name)
             return project_info
         
@@ -31,7 +33,8 @@ class ProjectManager:
         if self._should_create_project(target_config):
             return self._create_new_project(target_name, target_config, project_name)
         
-        handle_success(f"Project '{project_name}' exists")
+        # Project doesn't exist and we're not configured to create it
+        handle_error(f"Project '{project_name}' not found and create=false")
         return project_info
     
     def _should_create_project(self, target_config) -> bool:
@@ -44,6 +47,12 @@ class ProjectManager:
     def _create_new_project(self, target_name: str, target_config, project_name: str) -> Dict[str, Any]:
         """Create a new project via CloudFormation."""
         typer.echo("🔧 Auto-initializing target infrastructure...")
+        
+        # Double-check project doesn't exist (race condition protection)
+        project_info = get_datazone_project_info(project_name, self.config)
+        if 'error' not in project_info:
+            handle_success(f"✅ Project '{project_name}' was created by another process")
+            return project_info
         
         # Get domain ID
         domain_id = datazone.get_domain_id_by_name(self.domain_name, self.region)

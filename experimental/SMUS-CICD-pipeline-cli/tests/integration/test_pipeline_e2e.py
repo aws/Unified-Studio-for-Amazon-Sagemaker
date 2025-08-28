@@ -98,36 +98,21 @@ class TestPipelineE2E:
         assert "integration_test_dag" in result.stdout
     
     def test_bundle_creation_flow(self, test_manifest, aws_credentials):
-        """Test bundle creation with real AWS resources (if available)."""
-        # This test will only run if the AWS resources exist
-        # Otherwise it will fail gracefully with appropriate error messages
+        """Test bundle creation with real AWS resources."""
+        # Bundle should succeed - if AWS resources aren't available, that's a test failure
         result = runner.invoke(app, ["bundle", "--pipeline", test_manifest])
         
-        # Accept both success and expected failure cases
-        assert result.exit_code in [0, 1]
-        
-        if result.exit_code == 0:
-            assert "Bundle created" in result.stdout
-        else:
-            # Expected failures for missing resources
-            assert any(msg in result.stdout for msg in [
-                "Project", "not found", "Error", "Domain"
-            ])
+        # Expect success - any failure is a real failure
+        assert result.exit_code == 0, f"Bundle command failed: {result.stdout}"
+        assert "Bundle created" in result.stdout
     
     def test_monitor_flow(self, test_manifest, aws_credentials):
-        """Test monitoring workflow with real AWS resources (if available)."""
+        """Test monitoring workflow with real AWS resources."""
         result = runner.invoke(app, ["monitor", "--pipeline", test_manifest])
         
-        # Accept both success and expected failure cases
-        assert result.exit_code in [0, 1]
-        
-        if result.exit_code == 0:
-            assert "Pipeline: IntegrationTestPipeline" in result.stdout
-        else:
-            # Expected failures for missing resources
-            assert any(msg in result.stdout for msg in [
-                "Domain", "not found", "Error"
-            ])
+        # Expect success - any failure is a real failure
+        assert result.exit_code == 0, f"Monitor command failed: {result.stdout}"
+        assert "Pipeline: IntegrationTestPipeline" in result.stdout
 
 class TestPipelineValidation:
     """Pipeline validation tests."""
