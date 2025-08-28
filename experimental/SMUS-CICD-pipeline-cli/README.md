@@ -268,22 +268,22 @@ The project includes comprehensive unit and integration tests with coverage anal
 
 ```bash
 # Run all tests with coverage
-python run_tests.py
+python scripts/run_tests.py
 
 # Run only unit tests
-python run_tests.py --type unit
+python scripts/run_tests.py --type unit
 
 # Run only integration tests
-python run_tests.py --type integration
+python scripts/run_tests.py --type integration
 
 # Run tests with HTML coverage report
-python run_tests.py --html-report
+python scripts/run_tests.py --html-report
 
 # Skip slow tests (useful for CI)
-python run_tests.py --skip-slow
+python scripts/run_tests.py --skip-slow
 
 # Run without coverage (faster)
-python run_tests.py --no-coverage
+python scripts/run_tests.py --no-coverage
 ```
 
 ### Direct pytest Commands
