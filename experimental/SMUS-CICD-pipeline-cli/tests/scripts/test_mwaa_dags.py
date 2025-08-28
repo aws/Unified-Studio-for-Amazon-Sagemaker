@@ -3,6 +3,7 @@
 Test script to check MWAA DAG detection and details in test environment.
 """
 
+import pytest
 import sys
 import os
 
@@ -11,6 +12,17 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from smus_cicd.helpers import mwaa
 
+@pytest.fixture
+def mwaa_env_name():
+    """Fixture providing MWAA environment name for testing."""
+    return "DataZoneMWAAEnv-test-env"
+
+@pytest.fixture  
+def dag_names():
+    """Fixture providing DAG names for testing."""
+    return ['test_dag', 'sample_dag']
+
+@pytest.mark.skip(reason="Requires real MWAA environment - integration test only")
 def test_dag_details(mwaa_env_name, dag_names, region='us-east-1'):
     """Test detailed DAG information retrieval."""
     print(f"🔍 Testing DAG Details in: {mwaa_env_name}")

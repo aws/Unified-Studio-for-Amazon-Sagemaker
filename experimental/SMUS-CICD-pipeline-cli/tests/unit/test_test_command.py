@@ -74,7 +74,7 @@ workflows:
                 
                 result = runner.invoke(app, ["test", "--pipeline", manifest_file])
                 
-                assert result.exit_code == 0
+                assert result.exit_code == 1  # Should fail when no tests configured
                 assert "No tests configured" in result.stdout
                 assert "TestPipeline" in result.stdout
         finally:
@@ -139,9 +139,9 @@ def test_simple():
                 
                 result = runner.invoke(app, ["test", "--pipeline", manifest_file, "--output", "JSON"])
                 
-                assert result.exit_code == 0
+                assert result.exit_code == 1  # Should fail when no tests configured
                 assert '"pipeline": "TestPipeline"' in result.stdout
-                assert '"status": "skipped"' in result.stdout
+                assert '"status": "error"' in result.stdout
         finally:
             os.unlink(manifest_file)
     
@@ -156,7 +156,7 @@ def test_simple():
                 
                 result = runner.invoke(app, ["test", "--pipeline", manifest_file, "--targets", "dev"])
                 
-                assert result.exit_code == 0
+                assert result.exit_code == 1  # Should fail when no tests configured
                 assert "Target: dev" in result.stdout
         finally:
             os.unlink(manifest_file)
@@ -188,7 +188,7 @@ def test_simple():
                 
                 result = runner.invoke(app, ["test", "--pipeline", manifest_file, "--verbose"])
                 
-                assert result.exit_code == 0
+                assert result.exit_code == 1  # Should fail when no tests configured
                 assert "TestPipeline" in result.stdout
         finally:
             os.unlink(manifest_file)

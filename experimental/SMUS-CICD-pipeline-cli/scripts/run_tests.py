@@ -34,6 +34,15 @@ def check_aws_setup():
     
     return False
 
+def clean_reports_directory():
+    """Clean the reports directory before running tests."""
+    reports_dir = Path("tests/reports")
+    if reports_dir.exists():
+        import shutil
+        shutil.rmtree(reports_dir)
+        print("🧹 Cleaned reports directory")
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
 def run_unit_tests(coverage=True, html_report=False):
     """Run unit tests with coverage."""
     cmd = ["python", "-m", "pytest", "tests/unit/", "-v"]
@@ -118,8 +127,8 @@ def main():
                        help="Type of tests to run")
     parser.add_argument("--no-coverage", action="store_true", 
                        help="Skip coverage analysis")
-    parser.add_argument("--html-report", action="store_true",
-                       help="Generate HTML test results and coverage reports")
+    parser.add_argument("--no-html-report", action="store_true",
+                       help="Skip HTML test results and coverage reports generation")
     parser.add_argument("--skip-slow", action="store_true",
                        help="Skip slow tests (marked with @pytest.mark.slow)")
     parser.add_argument("--coverage-only", action="store_true",
@@ -135,22 +144,27 @@ def main():
         return 0
     
     coverage = not args.no_coverage
+    html_report = not args.no_html_report  # Default to True unless --no-html-report is specified
+    
+    # Clean reports directory before running tests
+    if html_report:
+        clean_reports_directory()
     
     # Run tests based on type
     if args.type == "unit":
-        exit_code = run_unit_tests(coverage=coverage, html_report=args.html_report)
+        exit_code = run_unit_tests(coverage=coverage, html_report=html_report)
     elif args.type == "integration":
-        exit_code = run_integration_tests(coverage=coverage, html_report=args.html_report, skip_slow=args.skip_slow)
+        exit_code = run_integration_tests(coverage=coverage, html_report=html_report, skip_slow=args.skip_slow)
     else:  # all
-        exit_code = run_all_tests(coverage=coverage, html_report=args.html_report, skip_slow=args.skip_slow)
+        exit_code = run_all_tests(coverage=coverage, html_report=html_report, skip_slow=args.skip_slow)
     
     # Generate coverage report if requested
-    if coverage and args.html_report:
+    if coverage and html_report:
         generate_coverage_report()
     
     if exit_code == 0:
         print("✅ All tests passed!")
-        if args.html_report:
+        if html_report:
             print(f"📁 Test results available in: tests/reports/")
             if args.type == "unit":
                 print(f"📊 Unit test results: tests/reports/unit-test-results.html")

@@ -267,7 +267,7 @@ The project includes comprehensive unit and integration tests with coverage anal
 ### Quick Testing Commands
 
 ```bash
-# Run all tests with coverage
+# Run all tests with coverage and HTML reports (default)
 python scripts/run_tests.py
 
 # Run only unit tests
@@ -276,8 +276,8 @@ python scripts/run_tests.py --type unit
 # Run only integration tests
 python scripts/run_tests.py --type integration
 
-# Run tests with HTML coverage report
-python scripts/run_tests.py --html-report
+# Skip HTML report generation
+python scripts/run_tests.py --no-html-report
 
 # Skip slow tests (useful for CI)
 python scripts/run_tests.py --skip-slow
