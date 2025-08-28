@@ -5,6 +5,10 @@
 
 set -e  # Exit on any error
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG_FILE="$SCRIPT_DIR/full-pipeline-example.log"
+
 # Default values
 DOMAIN_NAME="cicd-test-domain"
 PROJECT_NAME="dev-marketing"
@@ -31,6 +35,9 @@ while [[ $# -gt 0 ]]; do
             echo "  --domain DOMAIN_NAME    Domain name (default: cicd-test-domain)"
             echo "  --project PROJECT_NAME  Project name (default: dev-marketing)"
             echo "  --pause                 Pause after each step for demo purposes"
+            echo ""
+            echo "To capture output to log file:"
+            echo "  $0 [options] 2>&1 | tee \"$SCRIPT_DIR/full-pipeline-example.log\""
             exit 0
             ;;
         *)
@@ -182,3 +189,9 @@ if [ "$PAUSE_MODE" = true ]; then
     echo ""
     read -p "Demo complete. Press Enter to finish..." -r
 fi
+
+echo ""
+echo "💡 To capture output to log file, run:"
+echo "   $0 [options] 2>&1 | tee \"$LOG_FILE\""
+echo ""
+echo "📄 Log file will be saved to: $LOG_FILE"

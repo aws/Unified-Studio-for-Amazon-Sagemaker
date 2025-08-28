@@ -1,0 +1,591 @@
+smus-cli create --name "DemoMarketingPipeline" --domain-id "dzd_6je2k8b63qse07" --dev-project-id "aodxxgjzro6k2v" --output "DemoMarketingPipeline.yaml"
+✅ Found domain: cicd-test-domain (dzd_6je2k8b63qse07)
+✅ Found dev project: dev-marketing (aodxxgjzro6k2v)
+✅ Pipeline manifest created: DemoMarketingPipeline.yaml
+📝 Pipeline name: DemoMarketingPipeline
+🌐 Domain: cicd-test-domain
+📁 Output file: /Users/amirbo/code/smus/experimental/SMUS-CICD-pipeline-cli/DemoMarketingPipeline.yaml
+🎯 Stages: dev, test, prod
+
+🔍 Testing created manifest...
+Pipeline: DemoMarketingPipeline
+Domain: cicd-test-domain (us-east-1)
+
+Targets:
+  - dev: dev-marketing
+  - test: dev-marketing-test
+  - prod: dev-marketing-prod
+✅ Manifest validation successful!
+
+📋 Next steps:
+1. Review and adjust target project names if needed
+2. Set create: true for projects that need to be created
+4. Add workflows if needed
+5. Validate with: smus-cli describe --pipeline <manifest-file>
+smus-cli describe --pipeline "DemoMarketingPipeline.yaml" --workflows --connections --connect --output TEXT
+Pipeline: DemoMarketingPipeline
+Domain: cicd-test-domain (us-east-1)
+
+Targets:
+  - dev: dev-marketing
+    Project ID: aodxxgjzro6k2v
+    Status: ACTIVE
+    Owners: Admin, eng1
+    Connections:
+      default.s3_shared:
+        connectionId: dqbxjn28zehzjb
+        type: S3
+        region: us-east-1
+        awsAccountId: 058264284947
+        description: This is the connection to interact with s3 shared storage location if enabled in the project.
+        s3Uri: s3://datazone-058264284947-us-east-1-cicd-test-domain/dzd_6je2k8b63qse07/aodxxgjzro6k2v/shared/
+        physicalEndpoints: [{'awsLocation': {'awsAccountId': '058264284947', 'awsRegion': 'us-east-1'}}]
+        status: READY
+      project.default_lakehouse:
+        connectionId: 5o77fov6by4f1j
+        type: LAKEHOUSE
+        region: us-east-1
+        awsAccountId: 058264284947
+        description: This is the default connection to interact with project Lakehouse.
+        physicalEndpoints: [{'awsLocation': {'awsAccountId': '058264284947', 'awsRegion': 'us-east-1'}}]
+      project.spark.compatibility:
+        connectionId: 6236xbz8cowo4n
+        type: SPARK
+        region: us-east-1
+        awsAccountId: 058264284947
+        description: Glue-ETL compute with Permission Mode set to compatibility. (Auto-created by project).
+        physicalEndpoints: [{'awsLocation': {'awsAccountId': '058264284947', 'awsRegion': 'us-east-1'}, 'glueConnectionName': 'datazone-glue-network-connection-aodxxgjzro6k2v-dev'}]
+        glueVersion: 5.0
+        workerType: G.1X
+        numberOfWorkers: 10
+      project.iam:
+        connectionId: aw4yreoq2hmy07
+        type: IAM
+        region: us-east-1
+        awsAccountId: 058264284947
+        description: This is a default IAM connection.
+        physicalEndpoints: [{'awsLocation': {'awsAccountId': '058264284947', 'awsRegion': 'us-east-1'}}]
+        glueLineageSyncEnabled: True
+      project.spark.fineGrained:
+        connectionId: 5td579crbxsk6f
+        type: SPARK
+        region: us-east-1
+        awsAccountId: 058264284947
+        description: Glue-ETL compute with Permission Mode set to fine-grained. (Auto-created by project).
+        physicalEndpoints: [{'awsLocation': {'awsAccountId': '058264284947', 'awsRegion': 'us-east-1'}, 'glueConnectionName': 'datazone-glue-network-connection-aodxxgjzro6k2v-dev'}]
+        glueVersion: 5.0
+        workerType: G.1X
+        numberOfWorkers: 10
+      project.athena:
+        connectionId: amp1omxvjo3kiv
+        type: ATHENA
+        region: us-east-1
+        awsAccountId: 058264284947
+        description: This is a default ATHENA connection.
+        workgroup: workgroup-aodxxgjzro6k2v-ajgjdmeh9vrfaf
+        physicalEndpoints: [{'awsLocation': {'awsAccountId': '058264284947', 'awsRegion': 'us-east-1'}}]
+      project.s3_default_folder:
+        connectionId: 40nl3auuni0j6v
+        type: S3
+        region: us-east-1
+        awsAccountId: 058264284947
+        description: This is the default connection to interact with project s3 folder.
+        s3Uri: s3://datazone-058264284947-us-east-1-cicd-test-domain/dzd_6je2k8b63qse07/aodxxgjzro6k2v/
+        physicalEndpoints: [{'awsLocation': {'awsAccountId': '058264284947', 'awsRegion': 'us-east-1'}}]
+        status: READY
+      project.workflow_mwaa:
+        connectionId: d5jq3vs4ol9s13
+        type: WORKFLOWS_MWAA
+        region: us-east-1
+        awsAccountId: 058264284947
+        description: Connection for MWAA environment
+        environmentName: DataZoneMWAAEnv-dzd_6je2k8b63qse07-aodxxgjzro6k2v-dev
+        physicalEndpoints: [{'awsLocation': {'awsAccountId': '058264284947', 'awsRegion': 'us-east-1'}}]
+  - test: dev-marketing-test
+    ℹ️  Project will be created during deployment (create: true)
+  - prod: dev-marketing-prod
+    ℹ️  Project will be created during deployment (create: true)
+smus-cli bundle --pipeline "DemoMarketingPipeline.yaml" --targets dev --output JSON
+Creating bundle for target: dev
+Project: dev-marketing
+Downloading workflows from S3: default.s3_shared (append: True)
+  Downloaded: workflows/.visual/runGettingStartedNotebook.wf
+  Downloaded: workflows/config-files/requirements.txt
+  Downloaded: workflows/config-files/startup.sh
+  Downloaded: workflows/config/requirements.txt
+  Downloaded: workflows/dags/.airflowignore
+  Downloaded: workflows/dags/generated_test_dag_1755977688_2372.py
+  Downloaded: workflows/dags/.ipynb_checkpoints/test_dag-checkpoint.py
+  Downloaded: workflows/config/startup.sh
+  Downloaded: workflows/dags/generated_test_dag_1755976838_2112.py
+  Downloaded: workflows/dags/generated_test_dag_1756150538_7115.py
+  Downloaded: workflows/dags/generated_test_dag_1756151393_1178.py
+  Downloaded: workflows/dags/generated_test_dag_1755979099_7659.py
+  Downloaded: workflows/dags/generated_test_dag_1756150799_5947.py
+  Downloaded: workflows/dags/generated_test_dag_1756151664_1376.py
+  Downloaded: workflows/dags/generated_test_dag_1756151897_6668.py
+  Downloaded: workflows/dags/generated_test_dag_1756152234_7415.py
+  Downloaded: workflows/dags/generated_test_dag_1756152471_5814.py
+  Downloaded: workflows/dags/generated_test_dag_1756154760_4649.py
+  Downloaded: workflows/dags/generated_test_dag_1756154998_7978.py
+  Downloaded: workflows/dags/generated_test_dag_1756155543_1668.py
+  Downloaded: workflows/dags/generated_test_dag_1756156175_7376.py
+  Downloaded: workflows/dags/generated_test_dag_1756155937_1239.py
+  Downloaded: workflows/dags/generated_test_dag_1756156478_7219.py
+  Downloaded: workflows/dags/generated_test_dag_1756156712_7711.py
+  Downloaded: workflows/dags/generated_test_dag_1756156851_7973.py
+  Downloaded: workflows/dags/generated_test_dag_1756157124_3505.py
+  Downloaded: workflows/dags/generated_test_dag_1756157317_3389.py
+  Downloaded: workflows/dags/generated_test_dag_1756157195_3788.py
+  Downloaded: workflows/config-files/plugins.zip
+  Downloaded: workflows/dags/generated_test_dag_1756157454_8490.py
+  Downloaded: workflows/dags/generated_test_dag_1756157052_8101.py
+  Downloaded: workflows/dags/generated_test_dag_1756157853_9228.py
+  Downloaded: workflows/dags/generated_test_dag_1756158159_8477.py
+  Downloaded: workflows/dags/generated_test_dag_1756157564_7582.py
+  Downloaded: workflows/dags/generated_test_dag_1756158645_1791.py
+  Downloaded: workflows/dags/generated_test_dag_1756170184_6447.py
+  Downloaded: workflows/dags/generated_test_dag_1756170527_9155.py
+  Downloaded: workflows/dags/generated_test_dag_1756159132_1987.py
+  Downloaded: workflows/dags/generated_test_dag_1756170981_5842.py
+  Downloaded: workflows/dags/generated_test_dag_1756222526_7621.py
+  Downloaded: workflows/dags/generated_test_dag_1756160244_5735.py
+  Downloaded: workflows/dags/generated_test_dag_1756226668_6812.py
+  Downloaded: workflows/dags/generated_test_dag_1756159456_7542.py
+  Downloaded: workflows/dags/generated_test_dag_1756155269_9048.py
+  Downloaded: workflows/dags/generated_test_dag_1756229318_3278.py
+  Downloaded: workflows/dags/generated_test_dag_1756223852_3071.py
+  Downloaded: workflows/dags/generated_test_dag_1756236137_3207.py
+  Downloaded: workflows/dags/generated_test_dag_1756235313_6225.py
+  Downloaded: workflows/dags/generated_test_dag_1756236996_8295.py
+  Downloaded: workflows/dags/generated_test_dag_1756228268_4429.py
+  Downloaded: workflows/dags/generated_test_dag_1756238063_4886.py
+  Downloaded: workflows/dags/generated_test_dag_1756242735_3076.py
+  Downloaded: workflows/dags/generated_test_dag_1756240239_1044.py
+  Downloaded: workflows/dags/generated_test_dag_1756252517_5429.py
+  Downloaded: workflows/dags/generated_test_dag_1756239367_3381.py
+  Downloaded: workflows/dags/generated_test_dag_1756304248_5073.py
+  Downloaded: workflows/dags/generated_test_dag_1756243477_6693.py
+  Downloaded: workflows/dags/generated_test_dag_1756306239_1443.py
+  Downloaded: workflows/dags/generated_test_dag_1756305383_6223.py
+  Downloaded: workflows/dags/generated_test_dag_1756329849_6332.py
+  Downloaded: workflows/dags/generated_test_dag_1756256858_6522.py
+  Downloaded: workflows/dags/test_dag-not-mentioned.dag
+  Downloaded: workflows/dags/generated_test_dag_1756257690_7377.py
+  Downloaded: workflows/dags/test_dag-not-mentioned.py
+  Downloaded: workflows/dags/test_dag.py
+  Downloaded: workflows/dags/test_dag.py.dag
+  Downloaded: workflows/dags/generated_test_dag_1756241704_6236.py
+  Downloaded: workflows/test_dag.py
+  Downloaded: workflows/dags/visual/runGettingStartedNotebook.py
+  Downloaded: workflows/sample_dag.py
+  Downloaded: workflows/dags/sample_dag.py
+  Downloaded 71 workflow files from S3
+Downloading storage from S3: default.s3_shared (append: False)
+  Downloaded: src/test-notebook1.ipynb
+  Downloaded 1 storage files from S3
+Creating archive: DemoMarketingPipeline.zip
+✅ Bundle created: ./bundles/DemoMarketingPipeline.zip (312446 bytes)
+Bundle creation complete for target: dev
+smus-cli deploy --pipeline "DemoMarketingPipeline.yaml" --targets test
+Deploying to target: test
+Project: dev-marketing-test
+Domain: cicd-test-domain
+Region: us-east-1
+🔧 Auto-initializing target infrastructure...
+Creating project 'dev-marketing-test' via CloudFormation...
+Creating CloudFormation stack: SMUS-demomarketingpipeline-test-dev-marketing-test-project
+Pipeline: DemoMarketingPipeline
+Project: dev-marketing-test
+Profile: All capabilities
+Stack creation initiated: arn:aws:cloudformation:us-east-1:058264284947:stack/SMUS-demomarketingpipeline-test-dev-marketing-test-project/18d54080-8395-11f0-94b9-0affeb389133
+Waiting for stack creation to complete...
+✅ Stack SMUS-demomarketingpipeline-test-dev-marketing-test-project created successfully
+Waiting for project deployment to complete...
+Project status: ACTIVE, Deployment status: None (attempt 1/120)
+✅ Project dev-marketing-test is fully deployed and ready
+✅ Target infrastructure ready
+Bundle file: ./bundles/DemoMarketingPipeline.zip
+Deploying storage files...
+  S3 Location: s3://datazone-058264284947-us-east-1-cicd-test-domain/dzd_6je2k8b63qse07/4mrjv291cs7hrb/shared//
+    Synced: test-notebook1.ipynb
+Deploying workflow files...
+  S3 Location: s3://datazone-058264284947-us-east-1-cicd-test-domain/dzd_6je2k8b63qse07/4mrjv291cs7hrb/shared//
+    Synced: runGettingStartedNotebook.wf
+    Synced: generated_test_dag_1755979099_7659.py
+    Synced: requirements.txt
+    Synced: startup.sh
+    Synced: test_dag-checkpoint.py
+    Synced: generated_test_dag_1755977688_2372.py
+    Synced: requirements.txt
+    Synced: .airflowignore
+    Synced: generated_test_dag_1756150538_7115.py
+    Synced: startup.sh
+    Synced: generated_test_dag_1755976838_2112.py
+    Synced: generated_test_dag_1756151393_1178.py
+    Synced: generated_test_dag_1756150799_5947.py
+    Synced: generated_test_dag_1756151664_1376.py
+    Synced: generated_test_dag_1756152234_7415.py
+    Synced: generated_test_dag_1756151897_6668.py
+    Synced: generated_test_dag_1756154998_7978.py
+    Synced: generated_test_dag_1756152471_5814.py
+    Synced: generated_test_dag_1756154760_4649.py
+    Synced: generated_test_dag_1756155543_1668.py
+    Synced: generated_test_dag_1756155937_1239.py
+    Synced: plugins.zip
+    Synced: generated_test_dag_1756156175_7376.py
+    Synced: generated_test_dag_1756157052_8101.py
+    Synced: generated_test_dag_1756155269_9048.py
+    Synced: generated_test_dag_1756156712_7711.py
+    Synced: generated_test_dag_1756156851_7973.py
+    Synced: generated_test_dag_1756157195_3788.py
+    Synced: generated_test_dag_1756157317_3389.py
+    Synced: generated_test_dag_1756156478_7219.py
+    Synced: generated_test_dag_1756157124_3505.py
+    Synced: generated_test_dag_1756157564_7582.py
+    Synced: generated_test_dag_1756159456_7542.py
+    Synced: generated_test_dag_1756159132_1987.py
+    Synced: generated_test_dag_1756158645_1791.py
+    Synced: generated_test_dag_1756158159_8477.py
+    Synced: generated_test_dag_1756157454_8490.py
+    Synced: generated_test_dag_1756157853_9228.py
+    Synced: generated_test_dag_1756170184_6447.py
+    Synced: generated_test_dag_1756160244_5735.py
+    Synced: generated_test_dag_1756170527_9155.py
+    Synced: generated_test_dag_1756228268_4429.py
+    Synced: generated_test_dag_1756226668_6812.py
+    Synced: generated_test_dag_1756223852_3071.py
+    Synced: generated_test_dag_1756235313_6225.py
+    Synced: generated_test_dag_1756236996_8295.py
+    Synced: generated_test_dag_1756236137_3207.py
+    Synced: generated_test_dag_1756222526_7621.py
+    Synced: generated_test_dag_1756170981_5842.py
+    Synced: generated_test_dag_1756229318_3278.py
+    Synced: generated_test_dag_1756238063_4886.py
+    Synced: generated_test_dag_1756239367_3381.py
+    Synced: generated_test_dag_1756240239_1044.py
+    Synced: generated_test_dag_1756241704_6236.py
+    Synced: generated_test_dag_1756243477_6693.py
+    Synced: generated_test_dag_1756252517_5429.py
+    Synced: generated_test_dag_1756256858_6522.py
+    Synced: generated_test_dag_1756242735_3076.py
+    Synced: generated_test_dag_1756257690_7377.py
+    Synced: generated_test_dag_1756304248_5073.py
+    Synced: generated_test_dag_1756305383_6223.py
+    Synced: test_dag-not-mentioned.dag
+    Synced: generated_test_dag_1756329849_6332.py
+    Synced: sample_dag.py
+    Synced: test_dag-not-mentioned.py
+    Synced: test_dag.py
+    Synced: test_dag.py.dag
+    Synced: runGettingStartedNotebook.py
+    Synced: generated_test_dag_1756306239_1443.py
+    Synced: sample_dag.py
+    Synced: test_dag.py
+
+📦 Deployment Summary:
+==================================================
+├── 📁 Storage Files
+│   └── 📍 s3://datazone-058264284947-us-east-1-cicd-test-domain/dzd_6je2k8b63qse07/4mrjv291cs7hrb/shared/
+│       └── src
+│           └── test-notebook1.ipynb
+└── ⚙️ Workflow Files
+    └── 📍 s3://datazone-058264284947-us-east-1-cicd-test-domain/dzd_6je2k8b63qse07/4mrjv291cs7hrb/shared/
+        ├── .visual
+        │   └── runGettingStartedNotebook.wf
+        ├── config-files
+        │   ├── plugins.zip
+        │   ├── requirements.txt
+        │   └── startup.sh
+        ├── config
+        │   ├── requirements.txt
+        │   └── startup.sh
+        ├── dags
+        │   ├── .airflowignore
+        │   ├── .ipynb_checkpoints
+        │   │   └── test_dag-checkpoint.py
+        │   ├── generated_test_dag_1755976838_2112.py
+        │   ├── generated_test_dag_1755977688_2372.py
+        │   ├── generated_test_dag_1755979099_7659.py
+        │   ├── generated_test_dag_1756150538_7115.py
+        │   ├── generated_test_dag_1756150799_5947.py
+        │   ├── generated_test_dag_1756151393_1178.py
+        │   ├── generated_test_dag_1756151664_1376.py
+        │   ├── generated_test_dag_1756151897_6668.py
+        │   ├── generated_test_dag_1756152234_7415.py
+        │   ├── generated_test_dag_1756152471_5814.py
+        │   ├── generated_test_dag_1756154760_4649.py
+        │   ├── generated_test_dag_1756154998_7978.py
+        │   ├── generated_test_dag_1756155269_9048.py
+        │   ├── generated_test_dag_1756155543_1668.py
+        │   ├── generated_test_dag_1756155937_1239.py
+        │   ├── generated_test_dag_1756156175_7376.py
+        │   ├── generated_test_dag_1756156478_7219.py
+        │   ├── generated_test_dag_1756156712_7711.py
+        │   ├── generated_test_dag_1756156851_7973.py
+        │   ├── generated_test_dag_1756157052_8101.py
+        │   ├── generated_test_dag_1756157124_3505.py
+        │   ├── generated_test_dag_1756157195_3788.py
+        │   ├── generated_test_dag_1756157317_3389.py
+        │   ├── generated_test_dag_1756157454_8490.py
+        │   ├── generated_test_dag_1756157564_7582.py
+        │   ├── generated_test_dag_1756157853_9228.py
+        │   ├── generated_test_dag_1756158159_8477.py
+        │   ├── generated_test_dag_1756158645_1791.py
+        │   ├── generated_test_dag_1756159132_1987.py
+        │   ├── generated_test_dag_1756159456_7542.py
+        │   ├── generated_test_dag_1756160244_5735.py
+        │   ├── generated_test_dag_1756170184_6447.py
+        │   ├── generated_test_dag_1756170527_9155.py
+        │   ├── generated_test_dag_1756170981_5842.py
+        │   ├── generated_test_dag_1756222526_7621.py
+        │   ├── generated_test_dag_1756223852_3071.py
+        │   ├── generated_test_dag_1756226668_6812.py
+        │   ├── generated_test_dag_1756228268_4429.py
+        │   ├── generated_test_dag_1756229318_3278.py
+        │   ├── generated_test_dag_1756235313_6225.py
+        │   ├── generated_test_dag_1756236137_3207.py
+        │   ├── generated_test_dag_1756236996_8295.py
+        │   ├── generated_test_dag_1756238063_4886.py
+        │   ├── generated_test_dag_1756239367_3381.py
+        │   ├── generated_test_dag_1756240239_1044.py
+        │   ├── generated_test_dag_1756241704_6236.py
+        │   ├── generated_test_dag_1756242735_3076.py
+        │   ├── generated_test_dag_1756243477_6693.py
+        │   ├── generated_test_dag_1756252517_5429.py
+        │   ├── generated_test_dag_1756256858_6522.py
+        │   ├── generated_test_dag_1756257690_7377.py
+        │   ├── generated_test_dag_1756304248_5073.py
+        │   ├── generated_test_dag_1756305383_6223.py
+        │   ├── generated_test_dag_1756306239_1443.py
+        │   ├── generated_test_dag_1756329849_6332.py
+        │   ├── sample_dag.py
+        │   ├── test_dag-not-mentioned.dag
+        │   ├── test_dag-not-mentioned.py
+        │   ├── test_dag.py
+        │   ├── test_dag.py.dag
+        │   └── visual
+        │       └── runGettingStartedNotebook.py
+        ├── sample_dag.py
+        └── test_dag.py
+==================================================
+📊 Total files deployed: 72
+🚀 Starting workflow validation...
+✅ Workflow validation completed
+✅ Deployment completed successfully!
+smus-cli test --pipeline "DemoMarketingPipeline.yaml" --targets test
+Pipeline: DemoMarketingPipeline
+Domain: cicd-test-domain (us-east-1)
+
+🎯 Target: test
+  ⚠️  No tests configured for target 'test'
+  📊 Target Summary: ⚠️  Skipped (no tests configured)
+
+🎯 Overall Summary:
+  📊 Total targets: 1
+  ⚠️  Targets skipped: 1
+smus-cli monitor --pipeline "DemoMarketingPipeline.yaml" --output TEXT
+Pipeline: DemoMarketingPipeline
+Domain: cicd-test-domain (us-east-1)
+
+🔍 Monitoring Status:
+
+🎯 Target: dev
+   Project: dev-marketing
+   Project ID: aodxxgjzro6k2v
+   Status: ACTIVE
+   Owners: Admin, eng1
+
+   📊 Workflow Status:
+      🔧 project.workflow_mwaa (DataZoneMWAAEnv-dzd_6je2k8b63qse07-aodxxgjzro6k2v-dev)
+         🌐 Airflow UI: ]8;;https://257a5a8d-3e2d-4790-95cd-202744a3450e.c3.airflow.us-east-1.on.aws\https://257a5a8d-3e2d-4790-95cd-202744a3450e.c3.airflow.us-east-1.on.aws]8;;\
+         🔄 - generated_test_dag_1755976838_2112
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1755977688_2372
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1755979099_7659
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756150538_7115
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756150799_5947
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756151393_1178
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756151664_1376
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756151897_6668
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756152234_7415
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756152471_5814
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756154760_4649
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756154998_7978
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756155269_9048
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756155543_1668
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756155937_1239
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756156175_7376
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756156478_7219
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756156712_7711
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756156851_7973
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756157052_8101
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756157124_3505
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756157195_3788
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756157317_3389
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756157454_8490
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756157564_7582
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756157853_9228
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756158159_8477
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756158645_1791
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756159132_1987
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756159456_7542
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756160244_5735
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756170184_6447
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756170527_9155
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756170981_5842
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756222526_7621
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756223852_3071
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756226668_6812
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756228268_4429
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756229318_3278
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756235313_6225
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756236137_3207
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756236996_8295
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756238063_4886
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756239367_3381
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756240239_1044
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756241704_6236
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756242735_3076
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756243477_6693
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756252517_5429
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756256858_6522
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756257690_7377
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756304248_5073
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756305383_6223
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756306239_1443
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - generated_test_dag_1756329849_6332
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - runGettingStartedNotebook
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - sample_dag
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - test_dag
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+         🔄 - test_dag_not_mentioned
+            Schedule: Manual | Status: ACTIVE | Recent: Unknown
+
+🎯 Target: test
+   Project: dev-marketing-test
+   Project ID: 4mrjv291cs7hrb
+   Status: ACTIVE
+   Owners: Admin
+   ⚠️  No workflow connections found
+
+🎯 Target: prod
+   Project: dev-marketing-prod
+   ❌ Error getting project info: Project dev-marketing-prod not found
+smus-cli run --pipeline "DemoMarketingPipeline.yaml" --targets dev --workflow test_dag --command "dags trigger test_dag"
+🎯 Target: dev
+🔧 Connection: project.workflow_mwaa (DataZoneMWAAEnv-dzd_6je2k8b63qse07-aodxxgjzro6k2v-dev)
+📋 Command: dags trigger test_dag
+✅ Command executed successfully
+📤 Output:
+     |          |                       |                        |                       |          |                  | last_scheduling_decisi |                       |          |            |       
+conf | dag_id   | dag_run_id            | data_interval_start    | data_interval_end     | end_date | external_trigger | on                     | logical_date          | run_type | start_date | state 
+=====+==========+=======================+========================+=======================+==========+==================+========================+=======================+==========+============+=======
+{}   | test_dag | manual__2025-08-27T22 | 2025-08-26             | 2025-08-27            | None     | True             | None                   | 2025-08-27            | manual   | None       | queued
+     |          | :33:16+00:00          | 22:33:16+00:00         | 22:33:16+00:00        |          |                  |                        | 22:33:16+00:00        |          |            |       
+                                                                                                                                                                                                        
+
+
+smus-cli run --pipeline "DemoMarketingPipeline.yaml" --targets dev --workflow test_dag --command "tasks list test_dag"
+🎯 Target: dev
+🔧 Connection: project.workflow_mwaa (DataZoneMWAAEnv-dzd_6je2k8b63qse07-aodxxgjzro6k2v-dev)
+📋 Command: tasks list test_dag
+✅ Command executed successfully
+📤 Output:
+hello_world
+
+
+smus-cli run --pipeline "DemoMarketingPipeline.yaml" --targets dev --workflow test_dag --command "tasks state test_dag hello_world $(date -u +'manual__%Y-%m-%dT%H:%M:%S+00:00')"
+🎯 Target: dev
+🔧 Connection: project.workflow_mwaa (DataZoneMWAAEnv-dzd_6je2k8b63qse07-aodxxgjzro6k2v-dev)
+📋 Command: tasks state test_dag hello_world manual__2025-08-27T22:33:26+00:00
+✅ Command executed successfully
+
+smus-cli delete --targets test --pipeline "DemoMarketingPipeline.yaml" --force
+Pipeline: DemoMarketingPipeline
+Domain: cicd-test-domain (us-east-1)
+
+Targets to delete:
+  - test: dev-marketing-test
+
+🗑️  Deleting target: test
+Deleting project environments...
+Deleted environment: Tooling
+Deleted environment: Lakehouse Database
+Deleted environment: Lakehouse Catalog
+Waiting for environments to be deleted...
+Waiting for 3 environments to finish deleting...
+Waiting for 3 environments to finish deleting...
+Waiting for 1 environments to finish deleting...
+Waiting for 1 environments to finish deleting...
+Waiting for 1 environments to finish deleting...
+Waiting for 1 environments to finish deleting...
+All environments deleted successfully
+Deleted environments: Tooling, Lakehouse Database, Lakehouse Catalog
+Deleting data sources...
+Warning: Failed to delete form type SageMakerUnifiedStudioScheduleFormType_4mrjv291cs7hrb: An error occurred (ValidationException) when calling the DeleteFormType operation: FormType SageMakerUnifiedStudioScheduleFormType_4mrjv291cs7hrb should be disabled to Delete
+✅ Successfully deleted project 4mrjv291cs7hrb (forced deletion)
+Deleting CloudFormation stack: SMUS-demomarketingpipeline-test-dev-marketing-test-project
+Waiting for stack deletion to complete...
+❌ Error deleting CloudFormation stack: Waiter StackDeleteComplete failed: Waiter encountered a terminal failure state: For expression "Stacks[].StackStatus" we matched expected path: "DELETE_FAILED" at least once
+⠏ Deleting dev-marketing-test...
+✅ Successfully deleted dev-marketing-test
+
+🎯 Deletion Summary
+  ✅ test: Successfully deleted
