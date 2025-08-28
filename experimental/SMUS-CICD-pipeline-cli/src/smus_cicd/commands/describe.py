@@ -116,6 +116,14 @@ def describe_command(
                                 typer.echo(f"    Connections:")
                                 for conn_name, conn_info in project_connections.items():
                                     typer.echo(f"      {conn_name}:")
+                                    # Handle error case where conn_info might be a string
+                                    if isinstance(conn_info, str):
+                                        typer.echo(f"        error: {conn_info}")
+                                        continue
+                                    elif isinstance(conn_info, dict) and 'error' in conn_info:
+                                        typer.echo(f"        error: {conn_info['error']}")
+                                        continue
+                                    
                                     typer.echo(f"        connectionId: {conn_info.get('connectionId', 'N/A')}")
                                     typer.echo(f"        type: {conn_info.get('type', 'N/A')}")
                                     typer.echo(f"        region: {conn_info.get('region', 'N/A')}")
