@@ -1,7 +1,7 @@
 # SMUS CI/CD Pipeline Manifest
 # Generated template with required fields and optional field examples
 
-pipelineName: DemoMarketingPipeline
+pipelineName: TestPipeline
 
 domain:
   name: cicd-test-domain
@@ -33,7 +33,7 @@ targets:
   dev:
     stage: DEV
     project:
-      name: sales-dev
+      name: dev-marketing
       create: false  # Use existing project
     default: true  # Default target for operations
     
@@ -49,7 +49,7 @@ targets:
   test:
     stage: TEST
     project:
-      name: sales-test
+      name: dev-marketing-test
       create: true  # Auto-create project
     # default: true  # Uncomment to make this the default target
     
@@ -65,7 +65,7 @@ targets:
   prod:
     stage: PROD
     project:
-      name: sales-prod
+      name: dev-marketing-prod
       create: true  # Auto-create project
     # default: true  # Uncomment to make this the default target
     

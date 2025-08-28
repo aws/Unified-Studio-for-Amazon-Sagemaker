@@ -3,7 +3,7 @@
 # SMUS CI/CD Pipeline Full Lifecycle Demo Script
 # Clean demo version - shows only commands and their outputs
 
-set -e  # Exit on any error
+set +e  # Don't exit on error - we want to handle them ourselves
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,6 +13,23 @@ LOG_FILE="$SCRIPT_DIR/full-pipeline-example.log"
 DOMAIN_NAME="cicd-test-domain"
 PROJECT_NAME="dev-marketing"
 PAUSE_MODE=false
+
+# Function to run command and check exit code
+run_command() {
+    local cmd="$1"
+    echo "$cmd"
+    eval "$cmd"
+    local exit_code=$?
+    
+    if [ $exit_code -eq 0 ]; then
+        echo "✅ SUCCESS: Command completed successfully"
+    else
+        echo "❌ FAILURE: Command failed with exit code $exit_code"
+        return $exit_code
+    fi
+    echo ""
+    return 0
+}
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -97,93 +114,50 @@ PIPELINE_NAME="DemoMarketingPipeline"
 PIPELINE_FILE="${PIPELINE_NAME}.yaml"
 
 # Step 1: Create pipeline manifest
-echo "smus-cli create --name \"$PIPELINE_NAME\" --domain-id \"$DOMAIN_ID\" --dev-project-id \"$DEV_PROJECT_ID\" --output \"$PIPELINE_FILE\""
-smus-cli create \
-    --name "$PIPELINE_NAME" \
-    --domain-id "$DOMAIN_ID" \
-    --dev-project-id "$DEV_PROJECT_ID" \
-    --output "$PIPELINE_FILE"
+run_command "smus-cli create --name \"$PIPELINE_NAME\" --domain-id \"$DOMAIN_ID\" --dev-project-id \"$DEV_PROJECT_ID\" --output \"$PIPELINE_FILE\""
 
 pause_if_needed
 
 # Step 2: Validate pipeline configuration
-echo "smus-cli describe --pipeline \"$PIPELINE_FILE\" --workflows --connections --connect --output TEXT"
-smus-cli describe \
-    --pipeline "$PIPELINE_FILE" \
-    --workflows \
-    --connections \
-    --connect \
-    --output TEXT
+run_command "smus-cli describe --pipeline \"$PIPELINE_FILE\" --workflows --connections --connect --output TEXT"
 
 pause_if_needed
 
 # Step 3: Create deployment bundle
-echo "smus-cli bundle --pipeline \"$PIPELINE_FILE\" --targets dev --output JSON"
-smus-cli bundle \
-    --pipeline "$PIPELINE_FILE" \
-    --targets dev \
-    --output JSON
+run_command "smus-cli bundle --pipeline \"$PIPELINE_FILE\" --targets dev --output JSON"
 
 pause_if_needed
 
 # Step 4: Deploy to test environment
-echo "smus-cli deploy --pipeline \"$PIPELINE_FILE\" --targets test"
-smus-cli deploy \
-    --pipeline "$PIPELINE_FILE" \
-    --targets test
+run_command "smus-cli deploy --pipeline \"$PIPELINE_FILE\" --targets test"
 
 pause_if_needed
 
 # Step 5: Run tests
-echo "smus-cli test --pipeline \"$PIPELINE_FILE\" --targets test"
-smus-cli test \
-    --pipeline "$PIPELINE_FILE" \
-    --targets test
+run_command "smus-cli test --pipeline \"$PIPELINE_FILE\" --targets test"
 
 pause_if_needed
 
 # Step 6: Monitor pipeline
-echo "smus-cli monitor --pipeline \"$PIPELINE_FILE\" --output TEXT"
-smus-cli monitor \
-    --pipeline "$PIPELINE_FILE" \
-    --output TEXT
+run_command "smus-cli monitor --pipeline \"$PIPELINE_FILE\" --output TEXT"
 
 pause_if_needed
 
 # Step 7: Execute workflow commands
-echo "smus-cli run --pipeline \"$PIPELINE_FILE\" --targets dev --workflow test_dag --command \"dags trigger test_dag\""
-smus-cli run \
-    --pipeline "$PIPELINE_FILE" \
-    --targets dev \
-    --workflow test_dag \
-    --command "dags trigger test_dag"
+run_command "smus-cli run --pipeline \"$PIPELINE_FILE\" --targets dev --workflow test_dag --command \"dags trigger test_dag\""
 
 pause_if_needed
 
-echo "smus-cli run --pipeline \"$PIPELINE_FILE\" --targets dev --workflow test_dag --command \"tasks list test_dag\""
-smus-cli run \
-    --pipeline "$PIPELINE_FILE" \
-    --targets dev \
-    --workflow test_dag \
-    --command "tasks list test_dag"
+run_command "smus-cli run --pipeline \"$PIPELINE_FILE\" --targets dev --workflow test_dag --command \"tasks list test_dag\""
 
 pause_if_needed
 
-echo "smus-cli run --pipeline \"$PIPELINE_FILE\" --targets dev --workflow test_dag --command \"tasks state test_dag hello_world \$(date -u +'manual__%Y-%m-%dT%H:%M:%S+00:00')\""
-smus-cli run \
-    --pipeline "$PIPELINE_FILE" \
-    --targets dev \
-    --workflow test_dag \
-    --command "tasks state test_dag hello_world $(date -u +'manual__%Y-%m-%dT%H:%M:%S+00:00')"
+run_command "smus-cli run --pipeline \"$PIPELINE_FILE\" --targets dev --workflow test_dag --command \"tasks state test_dag hello_world \$(date -u +'manual__%Y-%m-%dT%H:%M:%S+00:00')\""
 
 pause_if_needed
 
 # Step 8: Cleanup
-echo "smus-cli delete --targets test --pipeline \"$PIPELINE_FILE\" --force"
-smus-cli delete \
-    --targets test \
-    --pipeline "$PIPELINE_FILE" \
-    --force
+run_command "smus-cli delete --targets test --pipeline \"$PIPELINE_FILE\" --force"
 
 if [ "$PAUSE_MODE" = true ]; then
     echo ""

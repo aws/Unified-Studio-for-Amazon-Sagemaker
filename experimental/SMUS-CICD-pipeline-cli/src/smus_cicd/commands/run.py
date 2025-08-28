@@ -153,8 +153,7 @@ def _execute_commands_on_targets(
             
         except Exception as e:
             error_result = _create_error_result(target_name, str(e), output)
-            if error_result:
-                results.append(error_result)
+            results.append(error_result)
     
     return results
 
@@ -187,14 +186,14 @@ def _execute_command_on_target(
     if 'error' in project_info or not project_info.get('project_id'):
         error_msg = f"Failed to get project info: {project_info.get('error', 'Unknown error')}"
         error_result = _create_error_result(target_name, error_msg, output)
-        return [error_result] if error_result else []
+        return [error_result]
     
     workflow_connections = _get_workflow_connections(project_info)
     
     if not workflow_connections:
         error_msg = "No workflow connections found"
         error_result = _create_error_result(target_name, error_msg, output)
-        return [error_result] if error_result else []
+        return [error_result]
     
     return _execute_on_workflow_connections(
         target_name, workflow_connections, command, manifest.domain.region, output
@@ -355,7 +354,7 @@ def _display_command_result(result: Dict[str, Any]) -> None:
     typer.echo()
 
 
-def _create_error_result(target_name: str, error_msg: str, output: str) -> Optional[Dict[str, Any]]:
+def _create_error_result(target_name: str, error_msg: str, output: str) -> Dict[str, Any]:
     """
     Create error result based on output format.
     
@@ -365,17 +364,16 @@ def _create_error_result(target_name: str, error_msg: str, output: str) -> Optio
         output: Output format
         
     Returns:
-        Error result dictionary for JSON output, None for text output
+        Error result dictionary
     """
-    if output.upper() == "JSON":
-        return {
-            "target": target_name,
-            "success": False,
-            "error": error_msg
-        }
-    else:
+    if output.upper() != "JSON":
         typer.echo(f"❌ {error_msg}")
-        return None
+    
+    return {
+        "target": target_name,
+        "success": False,
+        "error": error_msg
+    }
 
 
 def _output_results(
@@ -399,6 +397,11 @@ def _output_results(
             "command": command,
             "results": results
         }, indent=2))
+    
+    # Check for failures and exit with error code
+    failed_results = [r for r in results if not r.get('success', True)]
+    if failed_results:
+        raise typer.Exit(1)
 
 
 def _handle_execution_error(

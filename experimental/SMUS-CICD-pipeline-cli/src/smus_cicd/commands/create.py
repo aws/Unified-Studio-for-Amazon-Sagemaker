@@ -239,7 +239,7 @@ bundle:
   storage:
     - connectionName: default.s3_shared
       include: 
-        - 'src'
+        - '*'
       exclude: 
         - '.ipynb_checkpoints/'
         - '__pycache__/'

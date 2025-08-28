@@ -193,7 +193,7 @@ def monitor_command(
                     else:
                         target_data["status"] = "no_workflows"
                         if output.upper() != "JSON":
-                            typer.echo(f"   ⚠️  No workflow connections found")
+                            typer.echo(f"   ❌ No workflow connections found")
                 else:
                     target_data["status"] = "error"
                     target_data["error"] = project_info.get('error', 'Unknown error')
@@ -231,6 +231,15 @@ def monitor_command(
                     output_data["manifest_workflows"].append(workflow_data)
             
             typer.echo(json.dumps(output_data, indent=2))
+        
+        # Check if any targets have no workflow connections and fail
+        targets_with_no_workflows = [name for name, data in output_data["targets"].items() 
+                                   if data.get("status") == "no_workflows"]
+        
+        if targets_with_no_workflows:
+            if output.upper() != "JSON":
+                typer.echo(f"\n❌ Error: No workflow connections found in targets: {', '.join(targets_with_no_workflows)}")
+            raise typer.Exit(1)
             
     except Exception as e:
         if output.upper() == "JSON":
