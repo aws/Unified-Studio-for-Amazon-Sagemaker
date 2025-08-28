@@ -425,14 +425,9 @@ def _handle_execution_error(
     Raises:
         typer.Exit: Always exits with code 1
     """
-    if output.upper() == "JSON":
-        typer.echo(json.dumps({
-            "workflow": workflow,
-            "command": command,
-            "error": str(error),
-            "success": False
-        }, indent=2))
-    else:
+    # Only output error message for text format
+    # JSON format is handled by _output_results
+    if output.upper() != "JSON":
         typer.echo(f"❌ Error: {str(error)}", err=True)
     
     raise typer.Exit(1)
