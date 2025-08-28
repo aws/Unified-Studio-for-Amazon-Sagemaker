@@ -62,6 +62,12 @@ chmod +x examples/full-pipeline-lifecycle.sh
 
 # Example:
 ./examples/full-pipeline-lifecycle.sh <domain-id> <dev-project-id>
+
+# To capture complete output to log file:
+./examples/full-pipeline-lifecycle.sh [options] 2>&1 | tee examples/full-pipeline-example.log
+
+# Run with pause mode for interactive demo:
+./examples/full-pipeline-lifecycle.sh --pause
 ```
 
 ### Prerequisites
@@ -88,6 +94,7 @@ chmod +x examples/full-pipeline-lifecycle.sh
 
 - `demo-pipeline.yaml`: Complete pipeline manifest with advanced configuration
 - `pipeline-status-report.json`: Final status report in JSON format
+- `full-pipeline-example.log`: Complete execution log with all command outputs (when using tee)
 
 ### Advanced Configuration Examples
 

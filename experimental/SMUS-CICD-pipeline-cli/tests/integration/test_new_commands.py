@@ -194,8 +194,8 @@ class TestNewCommandsIntegration(IntegrationTestBase):
                     "--targets", "dev"
                 ])
                 
-                # Command should not crash (may fail due to no AWS connectivity)
-                assert result.exit_code in [0, 1]
+                # Command should succeed - any failure is a real test failure
+                assert result.exit_code == 0, f"Airflow command {command} failed: {result.stdout}"
                 
                 # Test JSON output
                 json_result = runner.invoke(app, [

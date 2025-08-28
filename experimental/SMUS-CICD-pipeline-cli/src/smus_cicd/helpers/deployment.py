@@ -101,6 +101,85 @@ def deploy_files(temp_dir, connection, target_directory, region, source_folder, 
     return files_synced
 
 
+def list_s3_contents(s3_client, s3_uri, section_name=""):
+    """List S3 contents in a tree structure."""
+    import boto3
+    from botocore.exceptions import ClientError
+    
+    # Parse S3 URI
+    s3_parts = s3_uri.replace('s3://', '').split('/')
+    bucket_name = s3_parts[0]
+    s3_prefix = '/'.join(s3_parts[1:]) if len(s3_parts) > 1 else ''
+    
+    if not s3_prefix.endswith('/') and s3_prefix:
+        s3_prefix += '/'
+    
+    try:
+        # List objects in S3
+        paginator = s3_client.get_paginator('list_objects_v2')
+        pages = paginator.paginate(Bucket=bucket_name, Prefix=s3_prefix)
+        
+        files = []
+        for page in pages:
+            if 'Contents' in page:
+                for obj in page['Contents']:
+                    # Remove the prefix to get relative path
+                    relative_path = obj['Key'][len(s3_prefix):]
+                    if relative_path:  # Skip empty paths
+                        files.append(relative_path)
+        
+        if files:
+            typer.echo(f"\n📂 S3 Source Content ({section_name}):")
+            typer.echo(f"📍 Location: {s3_uri}")
+            typer.echo("=" * 50)
+            
+            # Build tree structure
+            tree = {}
+            for file_path in sorted(files):
+                parts = file_path.split('/')
+                current = tree
+                for part in parts[:-1]:  # directories
+                    if part not in current:
+                        current[part] = {}
+                    current = current[part]
+                # Add file
+                if parts[-1]:  # not empty
+                    current[parts[-1]] = None
+            
+            # Print tree
+            _print_tree(tree)
+            typer.echo("=" * 50)
+            typer.echo(f"📊 Total files found: {len(files)}\n")
+        else:
+            typer.echo(f"\n📂 S3 Source Content ({section_name}):")
+            typer.echo(f"📍 Location: {s3_uri}")
+            typer.echo("=" * 50)
+            typer.echo("❌ No files found in S3 location")
+            typer.echo("=" * 50)
+            typer.echo("📊 Total files found: 0\n")
+            
+        return len(files)
+        
+    except ClientError as e:
+        typer.echo(f"❌ Error accessing S3: {e}")
+        return 0
+
+
+def _print_tree(node, prefix="", is_last=True):
+    """Print tree structure recursively."""
+    items = list(node.items()) if isinstance(node, dict) else []
+    for i, (name, subtree) in enumerate(items):
+        is_last_item = i == len(items) - 1
+        current_prefix = "└── " if is_last_item else "├── "
+        
+        if subtree is None:  # It's a file
+            typer.echo(f"{prefix}{current_prefix}📄 {name}")
+        else:  # It's a directory
+            typer.echo(f"{prefix}{current_prefix}📁 {name}/")
+            extension = "    " if is_last_item else "│   "
+            _print_tree(subtree, prefix + extension, is_last_item)
+
+
 def download_s3_files(s3_client, s3_uri, include_patterns, temp_bundle_dir, section_type):
     """Helper method to download S3 files based on patterns using AWS CLI."""
     import subprocess
@@ -120,15 +199,13 @@ def download_s3_files(s3_client, s3_uri, include_patterns, temp_bundle_dir, sect
         
         # Build AWS CLI sync command
         if include_patterns:
-            for pattern in include_patterns:
-                pattern_clean = pattern.rstrip('/')
-                source_s3_uri = f"s3://{bucket_name}/{s3_prefix}{pattern_clean}/"
-                target_path = target_dir / pattern_clean
-                target_path.mkdir(parents=True, exist_ok=True)
+            # Check if we have a wildcard pattern
+            if '*' in include_patterns or include_patterns == ['*']:
+                # Wildcard - sync everything from root
+                source_s3_uri = f"s3://{bucket_name}/{s3_prefix}"
                 
-                # Use AWS CLI sync
                 cmd = [
-                    'aws', 's3', 'sync', source_s3_uri, str(target_path),
+                    'aws', 's3', 'sync', source_s3_uri, str(target_dir),
                     '--exclude', '*.pyc',
                     '--exclude', '__pycache__/*', 
                     '--exclude', '.ipynb_checkpoints/*'
@@ -137,22 +214,54 @@ def download_s3_files(s3_client, s3_uri, include_patterns, temp_bundle_dir, sect
                 result = subprocess.run(cmd, capture_output=True, text=True)
                 
                 if result.returncode == 0:
-                    # Count downloaded files from output
                     lines = result.stdout.strip().split('\n') if result.stdout.strip() else []
-                    pattern_files = len([line for line in lines if 'download:' in line])
-                    downloaded_files += pattern_files
+                    downloaded_files = len([line for line in lines if 'download:' in line])
                     
                     # Show downloaded files
                     for line in lines:
                         if 'download:' in line:
-                            # Extract relative path from AWS CLI output
                             parts = line.split(' to ')
                             if len(parts) > 1:
                                 local_path = parts[1]
                                 relative_path = os.path.relpath(local_path, str(target_dir))
                                 typer.echo(f"  Downloaded: {relative_path}")
                 else:
-                    typer.echo(f"  Error syncing {pattern_clean}: {result.stderr}", err=True)
+                    typer.echo(f"  Error syncing: {result.stderr}", err=True)
+            else:
+                # Specific patterns - sync each directory
+                for pattern in include_patterns:
+                    pattern_clean = pattern.rstrip('/')
+                    source_s3_uri = f"s3://{bucket_name}/{s3_prefix}{pattern_clean}/"
+                    target_path = target_dir / pattern_clean
+                    target_path.mkdir(parents=True, exist_ok=True)
+                    
+                    # Use AWS CLI sync
+                    cmd = [
+                        'aws', 's3', 'sync', source_s3_uri, str(target_path),
+                        '--exclude', '*.pyc',
+                        '--exclude', '__pycache__/*', 
+                        '--exclude', '.ipynb_checkpoints/*'
+                    ]
+                    
+                    result = subprocess.run(cmd, capture_output=True, text=True)
+                    
+                    if result.returncode == 0:
+                        # Count downloaded files from output
+                        lines = result.stdout.strip().split('\n') if result.stdout.strip() else []
+                        pattern_files = len([line for line in lines if 'download:' in line])
+                        downloaded_files += pattern_files
+                        
+                        # Show downloaded files
+                        for line in lines:
+                            if 'download:' in line:
+                                # Extract relative path from AWS CLI output
+                                parts = line.split(' to ')
+                                if len(parts) > 1:
+                                    local_path = parts[1]
+                                    relative_path = os.path.relpath(local_path, str(target_dir))
+                                    typer.echo(f"  Downloaded: {relative_path}")
+                    else:
+                        typer.echo(f"  Error syncing {pattern_clean}: {result.stderr}", err=True)
         else:
             # No include patterns - sync everything
             source_s3_uri = f"s3://{bucket_name}/{s3_prefix}"

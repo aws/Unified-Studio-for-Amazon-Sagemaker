@@ -174,6 +174,9 @@ def bundle_command(
                 
                 typer.echo(f"Downloading workflows from S3: {connection_name} (append: {append_flag})")
                 
+                # List S3 contents first
+                deployment.list_s3_contents(s3_client, s3_uri, "Workflows")
+                
                 files_added = deployment.download_s3_files(s3_client, s3_uri, include_patterns, temp_bundle_dir, "")
                 total_files_added += files_added
                 typer.echo(f"  Downloaded {files_added} workflow files from S3")
@@ -199,6 +202,9 @@ def bundle_command(
                     continue
                 
                 typer.echo(f"Downloading storage from S3: {connection_name} (append: {append_flag})")
+                
+                # List S3 contents first
+                deployment.list_s3_contents(s3_client, s3_uri, "Storage")
                 
                 files_added = deployment.download_s3_files(s3_client, s3_uri, include_patterns, temp_bundle_dir, "storage")
                 total_files_added += files_added

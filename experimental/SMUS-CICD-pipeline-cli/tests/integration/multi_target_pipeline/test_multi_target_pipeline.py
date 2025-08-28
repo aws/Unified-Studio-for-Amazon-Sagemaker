@@ -170,24 +170,22 @@ task = PythonOperator(
     
     @pytest.mark.integration
     def test_describe_connect_after_deploy(self):
-        """Test describe --connect after deployment attempt (may fail due to existing infrastructure)."""
+        """Test describe --connect after deployment (should be idempotent)."""
         if not self.verify_aws_connectivity():
             pytest.skip("AWS connectivity not available")
         
         pipeline_file = self.get_pipeline_file()
         
-        # Attempt to deploy test target (may fail if infrastructure already exists)
+        # Deploy test target (should be idempotent)
         deploy_result = self.run_cli_command(["deploy", "--pipeline", pipeline_file, "--targets", "test"])
         
-        # Don't skip if deployment fails due to existing infrastructure
-        if not deploy_result['success']:
-            if 'AlreadyExistsException' not in deploy_result['output'] and 'already exists' not in deploy_result['output']:
-                pytest.skip(f"Deploy failed for unexpected reason: {deploy_result['output']}")
-            else:
-                print("⚠️ Deploy failed due to existing infrastructure (expected)")
+        # Deploy should succeed (idempotent behavior)
+        assert deploy_result['success'], f"Deploy should be idempotent but failed: {deploy_result['output']}"
         
-        # Test describe --connect regardless of deployment result
+        # Test describe --connect after successful deployment
         result = self.run_cli_command(["describe", "--pipeline", pipeline_file, "--workflows", "--connect"])
+        
+        assert result['success'], f"Describe --connect failed: {result['output']}"
         
         assert result['success'], f"Describe --connect failed: {result['output']}"
         
@@ -673,21 +671,18 @@ workflows:
                 # Fallback validation
                 assert "Bundle created" in result['output'] or "bundling" in result['output'].lower(), f"Bundle output missing success indicator: {result['output']}"
         else:
-            print(f"❌ Bundle command failed: {result['output']}")
-            # Bundle may fail if AWS resources don't exist - that's still a valid integration test
-            assert "error" in result['output'].lower() or "failed" in result['output'].lower(), f"Bundle should show error message: {result['output']}"
+            # Bundle should succeed - any failure is a real test failure
+            pytest.fail(f"Bundle command failed: {result['output']}")
 
         # Step 5: Deploy to test target (auto-initializes if needed)
         print("\n=== Step 5: Deploy to Test Target ===")
         result = self.run_cli_command(["deploy", "--pipeline", pipeline_file, "--targets", "test"])
         results.append(result)
 
-        if result['success']:
-            print("✅ Deploy command successful")
-            print(f"Deploy output: {result['output']}")
-        else:
-            print(f"⚠️  Deploy command failed: {result['output']}")
-            # Deploy may fail if CloudFormation stack already exists - that's expected in tests
+        # Deploy should be idempotent and succeed
+        assert result['success'], f"Deploy should be idempotent but failed: {result['output']}"
+        print("✅ Deploy command successful (idempotent)")
+        print(f"Deploy output: {result['output']}")
 
         # Step 6: Deploy command (test target)
         print("\n=== Step 6: Deploy Command (test) ===")
@@ -772,8 +767,8 @@ workflows:
             except Exception as e:
                 print(f"⚠️  S3 validation error: {e}")
         else:
-            print(f"⚠️  Deploy command failed: {result['output']}")
-            # Deploy may fail if test project doesn't exist - that's expected
+            # Deploy should be idempotent and succeed
+            assert False, f"Deploy to test should be idempotent but failed: {result['output']}"
 
         # Step 7: Deploy command (prod target)
         print("\n=== Step 7: Deploy Command (prod) ===")
@@ -788,8 +783,8 @@ workflows:
             assert "✅ Deployment completed successfully!" in result['output'], f"Deploy output missing completion: {result['output']}"
             assert "Total files synced:" in result['output'], f"Deploy output missing sync count: {result['output']}"
         else:
-            print(f"⚠️  Deploy to prod failed: {result['output']}")
-            # Deploy may fail if prod project doesn't exist - that's expected
+            # Deploy should be idempotent and succeed
+            assert False, f"Deploy to prod should be idempotent but failed: {result['output']}"
 
         # Step 8: Describe with Connect (after deployment)
         print("\n=== Step 8: Describe with Connect ===")
@@ -861,8 +856,8 @@ workflows:
             print("✅ Monitor command successful")
             print(f"Monitor output: {result['output']}")
         else:
-            print(f"⚠️  Monitor command failed: {result['output']}")
-            # Monitor may fail if no deployments exist - that's expected
+            # Monitor should handle empty state gracefully and succeed
+            assert False, f"Monitor should succeed even with no deployments but failed: {result['output']}"
 
         print(f"\n✅ All CLI commands tested successfully!")
 
@@ -877,22 +872,16 @@ workflows:
         print(f"Overall success: {'✅' if report['overall_success'] else '❌'}")
 
         # Parse, S3 upload, bundle commands must succeed
-        # Deploy commands can fail if infrastructure already exists
+        # Deploy commands should also succeed (idempotent behavior)
         critical_commands = results[:4]  # First 4 are critical (parse, parse targets, S3 upload, bundle)
         critical_success = all(r['success'] for r in critical_commands)
         
-        # Check if deployment failures are due to existing infrastructure
+        # All deploy commands should succeed due to idempotent behavior
         deploy_commands = [r for r in results if r.get('command') and 'deploy' in r['command']]
-        acceptable_deploy_failures = all(
-            'AlreadyExistsException' in r['output'] or 'already exists' in r['output'] 
-            for r in deploy_commands if not r['success']
-        )
+        deploy_success = all(r['success'] for r in deploy_commands)
 
         assert critical_success, f"Critical commands must succeed: {[r for r in critical_commands if not r['success']]}"
-        
-        if not acceptable_deploy_failures and any(not r['success'] for r in deploy_commands):
-            failed_deploys = [r for r in deploy_commands if not r['success']]
-            assert False, f"Deploy commands failed for unexpected reasons: {failed_deploys}"
+        assert deploy_success, f"Deploy commands should be idempotent and succeed: {[r for r in deploy_commands if not r['success']]}"
         assert len(results) == 9, f"Expected 9 commands (2 describe + 1 S3 upload + 1 bundle + 3 deploy + 1 describe + 1 monitor), got {len(results)}"
         
         # Cleanup after successful test completion

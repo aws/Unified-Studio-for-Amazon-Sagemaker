@@ -18,9 +18,13 @@ def _display_target_summary(target_name: str, test_results: dict, output: str):
     status = target_result.get('status', 'unknown')
     
     if status == 'skipped':
-        typer.echo(f"  📊 Target Summary: ⚠️  Skipped (no tests configured)")
+        typer.echo(f"  📊 Target Summary: ⚠️  Skipped")
     elif status == 'error':
-        typer.echo(f"  📊 Target Summary: 🚫 Error")
+        reason = target_result.get('reason', '')
+        if reason == 'no_tests_configured':
+            typer.echo(f"  📊 Target Summary: ❌ Failed (no tests configured)")
+        else:
+            typer.echo(f"  📊 Target Summary: ❌ Error")
     elif status == 'passed':
         typer.echo(f"  📊 Target Summary: ✅ Passed")
     elif status == 'failed':
@@ -79,8 +83,9 @@ def test_command(
             # Check if target has tests configured
             if not target_config.tests:
                 if output.upper() != "JSON":
-                    typer.echo(f"  ⚠️  No tests configured for target '{target_name}'")
-                test_results[target_name] = {"status": "skipped", "reason": "no_tests_configured"}
+                    typer.echo(f"  ❌ No tests configured for target '{target_name}'")
+                test_results[target_name] = {"status": "error", "reason": "no_tests_configured"}
+                overall_success = False
                 _display_target_summary(target_name, test_results, output)
                 continue
             
