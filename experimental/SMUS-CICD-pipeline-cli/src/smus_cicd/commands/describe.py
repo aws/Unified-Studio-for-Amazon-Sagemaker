@@ -118,10 +118,37 @@ def describe_command(
                                     typer.echo(f"      {conn_name}:")
                                     # Handle error case where conn_info might be a string
                                     if isinstance(conn_info, str):
-                                        typer.echo(f"        error: {conn_info}")
+                                        # Check for AccessDeniedException and provide helpful message
+                                        if "AccessDeniedException" in conn_info and "ListConnections" in conn_info:
+                                            try:
+                                                import boto3
+                                                sts_client = boto3.client('sts')
+                                                identity = sts_client.get_caller_identity()
+                                                current_role = identity.get('Arn', 'Unknown')
+                                                typer.echo(f"        ❌ Access denied: Current role '{current_role}' is not a member of project '{target_config.project.name}'")
+                                                typer.echo(f"        💡 Suggestion: Add this role as an owner to the project to perform operations")
+                                            except Exception:
+                                                typer.echo(f"        ❌ Access denied: Current role is not a member of project '{target_config.project.name}'")
+                                                typer.echo(f"        💡 Suggestion: Add your role as an owner to the project to perform operations")
+                                        else:
+                                            typer.echo(f"        error: {conn_info}")
                                         continue
                                     elif isinstance(conn_info, dict) and 'error' in conn_info:
-                                        typer.echo(f"        error: {conn_info['error']}")
+                                        error_msg = conn_info['error']
+                                        # Check for AccessDeniedException and provide helpful message
+                                        if "AccessDeniedException" in error_msg and "ListConnections" in error_msg:
+                                            try:
+                                                import boto3
+                                                sts_client = boto3.client('sts')
+                                                identity = sts_client.get_caller_identity()
+                                                current_role = identity.get('Arn', 'Unknown')
+                                                typer.echo(f"        ❌ Access denied: Current role '{current_role}' is not a member of project '{target_config.project.name}'")
+                                                typer.echo(f"        💡 Suggestion: Add this role as an owner to the project to perform operations")
+                                            except Exception:
+                                                typer.echo(f"        ❌ Access denied: Current role is not a member of project '{target_config.project.name}'")
+                                                typer.echo(f"        💡 Suggestion: Add your role as an owner to the project to perform operations")
+                                        else:
+                                            typer.echo(f"        error: {error_msg}")
                                         continue
                                     
                                     typer.echo(f"        connectionId: {conn_info.get('connectionId', 'N/A')}")
