@@ -391,15 +391,18 @@ def _output_results(
         command: Command that was executed
         output: Output format
     """
+    # Check for failures first
+    failed_results = [r for r in results if not r.get('success', True)]
+    
     if output.upper() == "JSON":
         typer.echo(json.dumps({
             "workflow": workflow,
             "command": command,
-            "results": results
+            "results": results,
+            "success": len(failed_results) == 0
         }, indent=2))
     
-    # Check for failures and exit with error code
-    failed_results = [r for r in results if not r.get('success', True)]
+    # Exit with error code if there were failures
     if failed_results:
         raise typer.Exit(1)
 

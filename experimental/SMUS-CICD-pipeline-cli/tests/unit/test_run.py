@@ -181,7 +181,7 @@ workflows:
                 "--targets", "dev"
             ])
             
-            assert result.exit_code == 0  # Command completes but shows error
+            assert result.exit_code == 1  # Command fails with project info error
             assert "Failed to get project info" in result.stdout
         finally:
             import os
