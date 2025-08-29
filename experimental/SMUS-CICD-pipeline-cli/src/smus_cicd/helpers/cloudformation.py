@@ -363,6 +363,7 @@ def delete_project_stack(project_name, domain_name, region, pipeline_name, targe
         return False
 
 
+def update_project_stack_tags(pipeline_name, target_name, project_name, region, target_stage=None):
     """Update existing project stack with tags."""
     try:
         cf_client = boto3.client('cloudformation', region_name=region)

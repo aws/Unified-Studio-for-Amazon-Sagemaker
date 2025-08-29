@@ -330,6 +330,7 @@ def validate_workflows_in_mwaa(workflows_config, project_name, config):
         return False
 
 
+def trigger_dag_run(mwaa_client, mwaa_env_name, dag_id, parameters=None):
     """Trigger a DAG run in MWAA environment."""
     try:
         import json
