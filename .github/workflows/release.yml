@@ -18,14 +18,19 @@ jobs:
     
     - name: Install dependencies
       run: |
+        cd experimental/SMUS-CICD-pipeline-cli
         python -m pip install --upgrade pip
         pip install build twine
     
     - name: Build package
-      run: python -m build
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli
+        python -m build
     
     - name: Publish to PyPI
       env:
         TWINE_USERNAME: __token__
         TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-      run: twine upload dist/*
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli
+        twine upload dist/*
