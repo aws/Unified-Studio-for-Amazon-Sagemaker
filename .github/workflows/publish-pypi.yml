@@ -20,11 +20,16 @@ jobs:
     
     - name: Install build dependencies
       run: |
+        cd experimental/SMUS-CICD-pipeline-cli
         python -m pip install --upgrade pip
         pip install build
     
     - name: Build package
-      run: python -m build
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli
+        python -m build
     
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        packages-dir: experimental/SMUS-CICD-pipeline-cli/dist/
