@@ -190,6 +190,11 @@ Each project contains:
 
 ## Installation
 
+### From PyPI (Recommended)
+```bash
+pip install smus-cicd-cli
+```
+
 ### From Source
 ```bash
 # Clone the repository
