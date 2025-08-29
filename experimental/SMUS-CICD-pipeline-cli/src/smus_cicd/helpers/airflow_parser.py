@@ -1,4 +1,5 @@
 """Parser for Airflow CLI command outputs."""
+
 import re
 from typing import Dict, List, Any
 
@@ -6,40 +7,42 @@ from typing import Dict, List, Any
 def parse_dags_list(stdout: str) -> List[Dict[str, Any]]:
     """Parse 'dags list' command output into structured data."""
     dags = []
-    lines = stdout.strip().split('\n')
-    
+    lines = stdout.strip().split("\n")
+
     # Skip header lines and find data rows
     data_started = False
     for line in lines:
-        if '===' in line:  # Header separator
+        if "===" in line:  # Header separator
             data_started = True
             continue
         if not data_started or not line.strip():
             continue
-            
+
         # Parse DAG row: dag_id | fileloc | owners | is_paused
-        parts = [part.strip() for part in line.split('|')]
+        parts = [part.strip() for part in line.split("|")]
         if len(parts) >= 4:
-            dags.append({
-                "dag_id": parts[0],
-                "fileloc": parts[1],
-                "owners": parts[2],
-                "is_paused": parts[3].lower() == 'true'
-            })
-    
+            dags.append(
+                {
+                    "dag_id": parts[0],
+                    "fileloc": parts[1],
+                    "owners": parts[2],
+                    "is_paused": parts[3].lower() == "true",
+                }
+            )
+
     return dags
 
 
 def parse_tasks_list(stdout: str) -> List[str]:
     """Parse 'tasks list' command output into list of task names."""
     tasks = []
-    lines = stdout.strip().split('\n')
-    
+    lines = stdout.strip().split("\n")
+
     for line in lines:
         line = line.strip()
-        if line and not line.startswith('Task') and '=' not in line:
+        if line and not line.startswith("Task") and "=" not in line:
             tasks.append(line)
-    
+
     return tasks
 
 
@@ -57,12 +60,8 @@ def parse_dag_state(stdout: str) -> Dict[str, str]:
 
 def parse_airflow_output(command: str, stdout: str, stderr: str) -> Dict[str, Any]:
     """Parse Airflow command output into structured JSON."""
-    result = {
-        "command": command,
-        "raw_stdout": stdout,
-        "raw_stderr": stderr
-    }
-    
+    result = {"command": command, "raw_stdout": stdout, "raw_stderr": stderr}
+
     # Parse based on command type
     if command.startswith("dags list"):
         result["dags"] = parse_dags_list(stdout)
@@ -75,5 +74,5 @@ def parse_airflow_output(command: str, stdout: str, stderr: str) -> Dict[str, An
     else:
         # For unknown commands, just return raw output
         result["output"] = stdout.strip() if stdout.strip() else None
-    
+
     return result
