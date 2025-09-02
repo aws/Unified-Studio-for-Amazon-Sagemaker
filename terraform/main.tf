@@ -41,6 +41,14 @@ resource "awscc_datazone_domain" "domain" {
   ]
 }
 
+// add SSO users to domain
+resource "aws_datazone_user_profile" "sso_users" {
+  for_each = toset(var.sso_users)
+  domain_identifier = awscc_datazone_domain.domain.domain_id
+  user_identifier = each.key
+  user_type = "SSO_USER"
+}
+
 // create RAM share from primary account
 resource "awscc_ram_resource_share" "domain_share" {
   provider                  = awscc
@@ -207,3 +215,13 @@ module "project_profile_policy_grant" {
     aws_cloudformation_stack.project_profiles.outputs["AllCapabilitiesProjectProfileId"]
   ]
 }
+
+/*
+module "sample_project" {
+  source = "./constructs/create_project"
+  domain_id = awscc_datazone_domain.domain.domain_id
+  project_profile_id = aws_cloudformation_stack.project_profiles.outputs["AllCapabilitiesProjectProfileId"]
+  name = "SampleProject"
+  users = toset([for user in aws_datazone_user_profile.sso_users: user.id])
+}
+*/

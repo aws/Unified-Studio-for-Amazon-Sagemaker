@@ -1,5 +1,5 @@
 /*
- * Enables all blueprints for SMUS domain
+ * Create policy grants for all project profiles in a domain or associated domain
  */
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
