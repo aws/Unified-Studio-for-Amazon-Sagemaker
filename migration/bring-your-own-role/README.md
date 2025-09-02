@@ -21,18 +21,23 @@ Please review this section carefully before proceeding to execute the script.
             "Action": [
                 "datazone:ListSubscriptions",
                 "datazone:ListSubscriptionGrants",
-                "datazone:UpdateSubscriptionTarget",
-                "datazone:ListEnvironments",
-                "datazone:DisassociateEnvironmentRole",
                 "datazone:ListSubscriptionTargets",
-                "datazone:AssociateEnvironmentRole",
-                "datazone:ListSubscriptionRequests",
+                "datazone:UpdateSubscriptionTarget",
                 "datazone:GetEnvironment",
+                "datazone:ListEnvironments",
+                "datazone:AssociateEnvironmentRole",
+                "datazone:DisassociateEnvironmentRole",
+                "datazone:ListSubscriptionRequests",
                 "datazone:CreateSubscriptionGrant",
                 "datazone:DeleteSubscriptionGrant",
                 "datazone:GetSubscriptionGrant",
                 "datazone:ListEnvironmentBlueprints",
-                "datazone:GetEnvironmentBlueprintConfiguration"
+                "datazone:GetEnvironmentBlueprintConfiguration",
+				"datazone:CreateProjectMembership",
+				"datazone:DeleteProjectMembership",
+				"datazone:CreateUserProfile",
+				"datazone:SearchUserProfiles",
+				"datazone:UpdateUserProfile"
             ],
             "Resource": [
                 "*"

@@ -44,6 +44,8 @@ Parameters:
         Type: String
     EmrOnEc2Id:
         Type: String
+    QuickSightId:
+        Type: String
 
     SQLAnalyticsProfileId:
         Type: String
@@ -87,8 +89,8 @@ Resources:
                               DomainUnitFilter:
                                   DomainUnit: !Ref DomainUnitId
                                   IncludeChildDomainUnits: true
-
-    AddPolicyGrantForSQLAnalyticsProfile:
+                                  
+    AddPolicyGrantForProfiles:
         Type: AWS::DataZone::PolicyGrant
         Properties:
             DomainIdentifier: !Ref DomainId
@@ -104,4 +106,3 @@ Resources:
             Principal:
                 User:
                     AllUsersGrantFilter: {}
-

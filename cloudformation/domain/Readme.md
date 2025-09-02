@@ -168,6 +168,7 @@ Enables the following blueprints:
 - AmazonBedrockFunction
 - AmazonBedrockFlow
 - EmrOnEc2
+- QuickSight
 
 #### Outputs:
 - IDs for all enabled blueprints
@@ -198,6 +199,7 @@ Parameters:
     - Redshift Serverless
     - OnDemand Redshift Serverless
     - OnDemand Catalog for RMS
+    - OnDemand QuickSight
 
 2. All Capabilities Profile:
     - All SQL Analytics capabilities
@@ -205,6 +207,7 @@ Parameters:
     - OnDemand MLExperiments
     - OnDemand EMR configurations
     - Amazon Bedrock capabilities
+    - QuickSight
     - Additional analytics tools
 
 #### Outputs:
