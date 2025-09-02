@@ -20,7 +20,7 @@ module "domain_service_roles" {
 
 // avoid race condition by forcing domain to be created in series
 resource "time_sleep" "wait_after_role_creation" {
-  depends_on = [module.domain_service_roles]
+  depends_on      = [module.domain_service_roles]
   create_duration = "10s"
 }
 
@@ -112,23 +112,23 @@ module "blueprint_policy_grants" {
   domain_unit_id = awscc_datazone_domain.domain.root_domain_unit_id
 
   blueprint_ids = tomap({
-    lakehouse_catalog_id=module.blueprints.lakehouse_catalog_id,
-    amazon_bedrock_guardrail_id=module.blueprints.amazon_bedrock_guardrail_id,
-    ml_experiments_id=module.blueprints.ml_experiments_id,
-    tooling_id=module.blueprints.tooling_id,
-    redshift_serverless_id=module.blueprints.redshift_serverless_id,
-    emr_serverless_id=module.blueprints.emr_serverless_id,
-    workflows_id=module.blueprints.workflows_id,
-    amazon_bedrock_prompt_id=module.blueprints.amazon_bedrock_prompt_id,
-    data_lake_id=module.blueprints.data_lake_id,
-    amazon_bedrock_evaluation_id=module.blueprints.amazon_bedrock_evaluation_id,
-    amazon_bedrock_knowledge_base_id=module.blueprints.amazon_bedrock_knowledge_base_id,
-    partner_apps_id=module.blueprints.partner_apps_id,
-    amazon_bedrock_chat_agent_id=module.blueprints.amazon_bedrock_chat_agent_id,
-    amazon_bedrock_function_id=module.blueprints.amazon_bedrock_function_id,
-    amazon_bedrock_flow_id=module.blueprints.amazon_bedrock_flow_id,
-    emr_on_ec2_id=module.blueprints.emr_on_ec2_id,
-    quick_sight_id=module.blueprints.quick_sight_id,
+    lakehouse_catalog_id             = module.blueprints.lakehouse_catalog_id,
+    amazon_bedrock_guardrail_id      = module.blueprints.amazon_bedrock_guardrail_id,
+    ml_experiments_id                = module.blueprints.ml_experiments_id,
+    tooling_id                       = module.blueprints.tooling_id,
+    redshift_serverless_id           = module.blueprints.redshift_serverless_id,
+    emr_serverless_id                = module.blueprints.emr_serverless_id,
+    workflows_id                     = module.blueprints.workflows_id,
+    amazon_bedrock_prompt_id         = module.blueprints.amazon_bedrock_prompt_id,
+    data_lake_id                     = module.blueprints.data_lake_id,
+    amazon_bedrock_evaluation_id     = module.blueprints.amazon_bedrock_evaluation_id,
+    amazon_bedrock_knowledge_base_id = module.blueprints.amazon_bedrock_knowledge_base_id,
+    partner_apps_id                  = module.blueprints.partner_apps_id,
+    amazon_bedrock_chat_agent_id     = module.blueprints.amazon_bedrock_chat_agent_id,
+    amazon_bedrock_function_id       = module.blueprints.amazon_bedrock_function_id,
+    amazon_bedrock_flow_id           = module.blueprints.amazon_bedrock_flow_id,
+    emr_on_ec2_id                    = module.blueprints.emr_on_ec2_id,
+    quick_sight_id                   = module.blueprints.quick_sight_id,
   })
   // deploy in associated account
   providers = {
@@ -147,7 +147,7 @@ module "project_profiles" {
   domain_unit_id = awscc_datazone_domain.domain.root_domain_unit_id
   // account where blueprints are deployed
   account_id = data.aws_caller_identity.alternate.account_id
-  region = data.aws_region.alternate.name
+  region = data.aws_region.alternate.region
   // blueprint identifiers
   lakehouse_catalog_id = module.blueprints.lakehouse_catalog_id
   amazon_bedrock_guardrail_id = module.blueprints.amazon_bedrock_guardrail_id
@@ -168,3 +168,42 @@ module "project_profiles" {
   quick_sight_id = module.blueprints.quick_sight_id
 }
 */
+
+// temporary workaround to use cloudformation
+resource "aws_cloudformation_stack" "project_profiles" {
+  name = "ProjectProfiles${var.domain_name}"
+  parameters = {
+    DomainId                     = awscc_datazone_domain.domain.domain_id
+    DomainUnitId                 = awscc_datazone_domain.domain.root_domain_unit_id
+    AccountId                    = data.aws_caller_identity.alternate.account_id
+    Region                       = data.aws_region.alternate.region
+    LakehouseCatalogId           = module.blueprints.lakehouse_catalog_id
+    AmazonBedrockGuardrailId     = module.blueprints.amazon_bedrock_guardrail_id
+    MLExperimentsId              = module.blueprints.ml_experiments_id
+    ToolingId                    = module.blueprints.tooling_id
+    RedshiftServerlessId         = module.blueprints.redshift_serverless_id
+    EmrServerlessId              = module.blueprints.emr_serverless_id
+    WorkflowsId                  = module.blueprints.workflows_id
+    AmazonBedrockPromptId        = module.blueprints.amazon_bedrock_prompt_id
+    DataLakeId                   = module.blueprints.data_lake_id
+    AmazonBedrockEvaluationId    = module.blueprints.amazon_bedrock_evaluation_id
+    AmazonBedrockKnowledgeBaseId = module.blueprints.amazon_bedrock_knowledge_base_id
+    PartnerAppsId                = module.blueprints.partner_apps_id
+    AmazonBedrockChatAgentId     = module.blueprints.amazon_bedrock_chat_agent_id
+    AmazonBedrockFunctionId      = module.blueprints.amazon_bedrock_function_id
+    AmazonBedrockFlowId          = module.blueprints.amazon_bedrock_flow_id
+    EmrOnEc2Id                   = module.blueprints.emr_on_ec2_id
+    QuickSightId                 = module.blueprints.quick_sight_id
+  }
+  template_body = file("../cloudformation/domain/create_project_profiles.yaml")
+}
+
+module "project_profile_policy_grant" {
+  source         = "./constructs/create-project-profile-policy-grant"
+  domain_id      = awscc_datazone_domain.domain.domain_id
+  domain_unit_id = awscc_datazone_domain.domain.root_domain_unit_id
+  project_profile_ids = [
+    aws_cloudformation_stack.project_profiles.outputs["SQLAnalyticsProfileId"],
+    aws_cloudformation_stack.project_profiles.outputs["AllCapabilitiesProjectProfileId"]
+  ]
+}
