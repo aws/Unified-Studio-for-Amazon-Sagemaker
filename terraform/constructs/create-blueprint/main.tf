@@ -15,7 +15,7 @@ resource "aws_datazone_environment_blueprint_configuration" "amazon_bedrock_chat
   manage_access_role_arn = var.amazon_sage_maker_manage_access_role
   provisioning_role_arn = var.amazon_sage_maker_provisioning_role
   regional_parameters = {
-      "${data.aws_region.current.name}" = {
+      "${data.aws_region.current.region}" = {
         S3Location = var.dzs3_bucket
         Subnets = var.sage_maker_subnets
         VpcId = var.amazon_sage_maker_vpc_id
@@ -23,7 +23,7 @@ resource "aws_datazone_environment_blueprint_configuration" "amazon_bedrock_chat
   }
   
   enabled_regions = [
-    data.aws_region.current.name
+    data.aws_region.current.region
   ]
 }
 
@@ -38,7 +38,7 @@ resource "aws_datazone_environment_blueprint_configuration" "amazon_bedrock_eval
   manage_access_role_arn = var.amazon_sage_maker_manage_access_role
   provisioning_role_arn = var.amazon_sage_maker_provisioning_role
   regional_parameters = {
-      "${data.aws_region.current.name}" = {
+      "${data.aws_region.current.region}" = {
         S3Location = var.dzs3_bucket
         Subnets = var.sage_maker_subnets
         VpcId = var.amazon_sage_maker_vpc_id
@@ -46,7 +46,7 @@ resource "aws_datazone_environment_blueprint_configuration" "amazon_bedrock_eval
   }
   
   enabled_regions = [
-    data.aws_region.current.name
+    data.aws_region.current.region
   ]
   // enable sequentially to avoid service limit
   depends_on = [
@@ -65,7 +65,7 @@ resource "aws_datazone_environment_blueprint_configuration" "amazon_bedrock_flow
   manage_access_role_arn = var.amazon_sage_maker_manage_access_role
   provisioning_role_arn = var.amazon_sage_maker_provisioning_role
   regional_parameters = {
-      "${data.aws_region.current.name}" = {
+      "${data.aws_region.current.region}" = {
         S3Location = var.dzs3_bucket
         Subnets = var.sage_maker_subnets
         VpcId = var.amazon_sage_maker_vpc_id
@@ -73,7 +73,7 @@ resource "aws_datazone_environment_blueprint_configuration" "amazon_bedrock_flow
   }
   
   enabled_regions = [
-    data.aws_region.current.name
+    data.aws_region.current.region
   ]
   // enable sequentially to avoid service limit
   depends_on = [
@@ -92,7 +92,7 @@ resource "aws_datazone_environment_blueprint_configuration" "amazon_bedrock_func
   manage_access_role_arn = var.amazon_sage_maker_manage_access_role
   provisioning_role_arn = var.amazon_sage_maker_provisioning_role
   regional_parameters = {
-      "${data.aws_region.current.name}" = {
+      "${data.aws_region.current.region}" = {
         S3Location = var.dzs3_bucket
         Subnets = var.sage_maker_subnets
         VpcId = var.amazon_sage_maker_vpc_id
@@ -100,7 +100,7 @@ resource "aws_datazone_environment_blueprint_configuration" "amazon_bedrock_func
   }
   
   enabled_regions = [
-    data.aws_region.current.name
+    data.aws_region.current.region
   ]
   // enable sequentially to avoid service limit
   depends_on = [
@@ -119,7 +119,7 @@ resource "aws_datazone_environment_blueprint_configuration" "amazon_bedrock_guar
   manage_access_role_arn = var.amazon_sage_maker_manage_access_role
   provisioning_role_arn = var.amazon_sage_maker_provisioning_role
   regional_parameters = {
-      "${data.aws_region.current.name}" = {
+      "${data.aws_region.current.region}" = {
         S3Location = var.dzs3_bucket
         Subnets = var.sage_maker_subnets
         VpcId = var.amazon_sage_maker_vpc_id
@@ -127,7 +127,7 @@ resource "aws_datazone_environment_blueprint_configuration" "amazon_bedrock_guar
   }
   
   enabled_regions = [
-    data.aws_region.current.name
+    data.aws_region.current.region
   ]
   // enable sequentially to avoid service limit
   depends_on = [
@@ -146,7 +146,7 @@ resource "aws_datazone_environment_blueprint_configuration" "amazon_bedrock_know
   manage_access_role_arn = var.amazon_sage_maker_manage_access_role
   provisioning_role_arn = var.amazon_sage_maker_provisioning_role
   regional_parameters = {
-      "${data.aws_region.current.name}" = {
+      "${data.aws_region.current.region}" = {
         S3Location = var.dzs3_bucket
         Subnets = var.sage_maker_subnets
         VpcId = var.amazon_sage_maker_vpc_id
@@ -154,7 +154,7 @@ resource "aws_datazone_environment_blueprint_configuration" "amazon_bedrock_know
   }
   
   enabled_regions = [
-    data.aws_region.current.name
+    data.aws_region.current.region
   ]
   // enable sequentially to avoid service limit
   depends_on = [
@@ -173,7 +173,7 @@ resource "aws_datazone_environment_blueprint_configuration" "amazon_bedrock_prom
   manage_access_role_arn = var.amazon_sage_maker_manage_access_role
   provisioning_role_arn = var.amazon_sage_maker_provisioning_role
   regional_parameters = {
-      "${data.aws_region.current.name}" = {
+      "${data.aws_region.current.region}" = {
         S3Location = var.dzs3_bucket
         Subnets = var.sage_maker_subnets
         VpcId = var.amazon_sage_maker_vpc_id
@@ -181,7 +181,7 @@ resource "aws_datazone_environment_blueprint_configuration" "amazon_bedrock_prom
   }
   
   enabled_regions = [
-    data.aws_region.current.name
+    data.aws_region.current.region
   ]
   // enable sequentially to avoid service limit
   depends_on = [
@@ -200,7 +200,7 @@ resource "aws_datazone_environment_blueprint_configuration" "data_lake" {
   manage_access_role_arn = var.amazon_sage_maker_manage_access_role
   provisioning_role_arn = var.amazon_sage_maker_provisioning_role
   regional_parameters = {
-      "${data.aws_region.current.name}" = {
+      "${data.aws_region.current.region}" = {
         S3Location = var.dzs3_bucket
         Subnets = var.sage_maker_subnets
         VpcId = var.amazon_sage_maker_vpc_id
@@ -208,7 +208,7 @@ resource "aws_datazone_environment_blueprint_configuration" "data_lake" {
   }
   
   enabled_regions = [
-    data.aws_region.current.name
+    data.aws_region.current.region
   ]
   // enable sequentially to avoid service limit
   depends_on = [
@@ -227,7 +227,7 @@ resource "aws_datazone_environment_blueprint_configuration" "emr_on_ec2" {
   manage_access_role_arn = var.amazon_sage_maker_manage_access_role
   provisioning_role_arn = var.amazon_sage_maker_provisioning_role
   regional_parameters = {
-      "${data.aws_region.current.name}" = {
+      "${data.aws_region.current.region}" = {
         S3Location = var.dzs3_bucket
         Subnets = var.sage_maker_subnets
         VpcId = var.amazon_sage_maker_vpc_id
@@ -235,7 +235,7 @@ resource "aws_datazone_environment_blueprint_configuration" "emr_on_ec2" {
   }
   
   enabled_regions = [
-    data.aws_region.current.name
+    data.aws_region.current.region
   ]
   // enable sequentially to avoid service limit
   depends_on = [
@@ -254,7 +254,7 @@ resource "aws_datazone_environment_blueprint_configuration" "emr_serverless" {
   manage_access_role_arn = var.amazon_sage_maker_manage_access_role
   provisioning_role_arn = var.amazon_sage_maker_provisioning_role
   regional_parameters = {
-      "${data.aws_region.current.name}" = {
+      "${data.aws_region.current.region}" = {
         S3Location = var.dzs3_bucket
         Subnets = var.sage_maker_subnets
         VpcId = var.amazon_sage_maker_vpc_id
@@ -262,7 +262,7 @@ resource "aws_datazone_environment_blueprint_configuration" "emr_serverless" {
   }
   
   enabled_regions = [
-    data.aws_region.current.name
+    data.aws_region.current.region
   ]
   // enable sequentially to avoid service limit
   depends_on = [
@@ -281,12 +281,12 @@ resource "aws_datazone_environment_blueprint_configuration" "lakehouse_catalog" 
   manage_access_role_arn = var.amazon_sage_maker_manage_access_role
   provisioning_role_arn = var.amazon_sage_maker_provisioning_role
   regional_parameters = {
-      "${data.aws_region.current.name}" = {
+      "${data.aws_region.current.region}" = {
       }
   }
   
   enabled_regions = [
-    data.aws_region.current.name
+    data.aws_region.current.region
   ]
     // enable sequentially to avoid service limit
   depends_on = [
@@ -305,7 +305,7 @@ resource "aws_datazone_environment_blueprint_configuration" "ml_experiments" {
   manage_access_role_arn = var.amazon_sage_maker_manage_access_role
   provisioning_role_arn = var.amazon_sage_maker_provisioning_role
   regional_parameters = {
-      "${data.aws_region.current.name}" = {
+      "${data.aws_region.current.region}" = {
         S3Location = var.dzs3_bucket
         Subnets = var.sage_maker_subnets
         VpcId = var.amazon_sage_maker_vpc_id
@@ -313,7 +313,7 @@ resource "aws_datazone_environment_blueprint_configuration" "ml_experiments" {
   }
   
   enabled_regions = [
-    data.aws_region.current.name
+    data.aws_region.current.region
   ]
   // enable sequentially to avoid service limit
   depends_on = [
@@ -332,7 +332,7 @@ resource "aws_datazone_environment_blueprint_configuration" "partner_apps" {
   manage_access_role_arn = var.amazon_sage_maker_manage_access_role
   provisioning_role_arn = var.amazon_sage_maker_provisioning_role
   regional_parameters = {
-      "${data.aws_region.current.name}" = {
+      "${data.aws_region.current.region}" = {
         S3Location = var.dzs3_bucket
         Subnets = var.sage_maker_subnets
         VpcId = var.amazon_sage_maker_vpc_id
@@ -340,7 +340,7 @@ resource "aws_datazone_environment_blueprint_configuration" "partner_apps" {
   }
   
   enabled_regions = [
-    data.aws_region.current.name
+    data.aws_region.current.region
   ]
   // enable sequentially to avoid service limit
   depends_on = [
@@ -359,7 +359,7 @@ resource "aws_datazone_environment_blueprint_configuration" "quick_sight" {
   manage_access_role_arn = var.amazon_sage_maker_manage_access_role
   provisioning_role_arn = var.amazon_sage_maker_provisioning_role
   regional_parameters = {
-      "${data.aws_region.current.name}" = {
+      "${data.aws_region.current.region}" = {
         S3Location = var.dzs3_bucket
         Subnets = var.sage_maker_subnets
         VpcId = var.amazon_sage_maker_vpc_id
@@ -367,7 +367,7 @@ resource "aws_datazone_environment_blueprint_configuration" "quick_sight" {
   }
   
   enabled_regions = [
-    data.aws_region.current.name
+    data.aws_region.current.region
   ]
   // enable sequentially to avoid service limit
   depends_on = [
@@ -386,7 +386,7 @@ resource "aws_datazone_environment_blueprint_configuration" "redshift_serverless
   manage_access_role_arn = var.amazon_sage_maker_manage_access_role
   provisioning_role_arn = var.amazon_sage_maker_provisioning_role
   regional_parameters = {
-      "${data.aws_region.current.name}" = {
+      "${data.aws_region.current.region}" = {
         S3Location = var.dzs3_bucket
         Subnets = var.sage_maker_subnets
         VpcId = var.amazon_sage_maker_vpc_id
@@ -394,7 +394,7 @@ resource "aws_datazone_environment_blueprint_configuration" "redshift_serverless
   }
   
   enabled_regions = [
-    data.aws_region.current.name
+    data.aws_region.current.region
   ]
   // enable sequentially to avoid service limit
   depends_on = [
@@ -413,7 +413,7 @@ resource "aws_datazone_environment_blueprint_configuration" "tooling" {
   manage_access_role_arn = var.amazon_sage_maker_manage_access_role
   provisioning_role_arn = var.amazon_sage_maker_provisioning_role
   regional_parameters = {
-      "${data.aws_region.current.name}" = {
+      "${data.aws_region.current.region}" = {
         S3Location = var.dzs3_bucket
         Subnets = var.sage_maker_subnets
         VpcId = var.amazon_sage_maker_vpc_id
@@ -421,7 +421,7 @@ resource "aws_datazone_environment_blueprint_configuration" "tooling" {
   }
   
   enabled_regions = [
-    data.aws_region.current.name
+    data.aws_region.current.region
   ]
   // enable sequentially to avoid service limit
   depends_on = [
@@ -440,7 +440,7 @@ resource "aws_datazone_environment_blueprint_configuration" "workflows" {
   manage_access_role_arn = var.amazon_sage_maker_manage_access_role
   provisioning_role_arn = var.amazon_sage_maker_provisioning_role
   regional_parameters = {
-      "${data.aws_region.current.name}" = {
+      "${data.aws_region.current.region}" = {
         S3Location = var.dzs3_bucket
         Subnets = var.sage_maker_subnets
         VpcId = var.amazon_sage_maker_vpc_id
@@ -448,7 +448,7 @@ resource "aws_datazone_environment_blueprint_configuration" "workflows" {
   }
   
   enabled_regions = [
-    data.aws_region.current.name
+    data.aws_region.current.region
   ]
   // enable sequentially to avoid service limit
   depends_on = [
