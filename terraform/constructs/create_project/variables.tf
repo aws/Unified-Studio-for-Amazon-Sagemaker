@@ -2,7 +2,6 @@ variable domain_id {
   description = "Domain for which blueprint needs to be enabled"
   type = string
 }
-
 variable project_profile_id {
   description = "Project Profile id for which we need to create project"
   type = string

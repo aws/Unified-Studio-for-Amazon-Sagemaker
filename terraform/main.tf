@@ -216,12 +216,13 @@ module "project_profile_policy_grant" {
   ]
 }
 
-/*
+
+/* Project creation is currently disabled pending API updates
 module "sample_project" {
   source = "./constructs/create_project"
   domain_id = awscc_datazone_domain.domain.domain_id
   project_profile_id = aws_cloudformation_stack.project_profiles.outputs["AllCapabilitiesProjectProfileId"]
-  name = "SampleProject"
-  users = toset([for user in aws_datazone_user_profile.sso_users: user.id])
+  name = "DeployedProjectV2"
+  users = toset([for user in aws_datazone_user_profile.sso_users: user.user_identifier])
 }
 */

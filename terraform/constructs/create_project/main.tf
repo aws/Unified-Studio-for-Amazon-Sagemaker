@@ -4,10 +4,10 @@
  */
 
 resource "awscc_datazone_project" "project" {
-  description        = "Testing CFN Project"
-  domain_identifier  = var.domain_id
-  name               = var.name
-  project_profile_id = var.project_profile_id
+  description             = "Testing CFN Project"
+  domain_identifier       = var.domain_id
+  name                    = var.name
+  project_profile_id      = var.project_profile_id
   user_parameters = [
     {
       environment_configuration_name = "Lakehouse Database"
@@ -38,4 +38,5 @@ resource "awscc_datazone_project_membership" "project_membership" {
     user_identifier = each.key
   }
   designation = "PROJECT_OWNER"
+  depends_on = [ awscc_datazone_project.project ]
 }
