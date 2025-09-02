@@ -53,10 +53,16 @@ resource "aws_iam_role" "sagemaker_domain_execution_role" {
 resource "aws_iam_role_policy_attachment" "domain-execution-attach-studio-execution-policy" {
   role       = aws_iam_role.sagemaker_domain_execution_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/SageMakerStudioDomainExecutionRolePolicy"
+  depends_on = [ 
+    aws_iam_role.sagemaker_domain_execution_role
+  ]
 }
 resource "aws_iam_role_policy_attachment" "domain-execution-attach-datazone-execution-policy" {
   role       = aws_iam_role.sagemaker_domain_execution_role.name
   policy_arn =  "arn:aws:iam::aws:policy/service-role/AmazonDataZoneDomainExecutionRolePolicy"
+  depends_on = [ 
+    aws_iam_role_policy_attachment.domain-execution-attach-studio-execution-policy
+  ]
 }
 
 resource "aws_iam_role" "sagemaker_service_role" {
@@ -79,9 +85,15 @@ resource "aws_iam_role" "sagemaker_service_role" {
     Version = "2012-10-17"
   })
   path = "/service-role/"
+  depends_on = [ 
+    aws_iam_role_policy_attachment.domain-execution-attach-datazone-execution-policy
+  ]
 }
 
 resource "aws_iam_role_policy_attachment" "service-attach-service-policy" {
   role       = aws_iam_role.sagemaker_service_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/SageMakerStudioDomainServiceRolePolicy"
+  depends_on = [ 
+    aws_iam_role.sagemaker_service_role
+  ]
 }
