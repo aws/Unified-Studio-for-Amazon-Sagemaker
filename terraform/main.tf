@@ -106,6 +106,37 @@ module "blueprints" {
   ]
 }
 
+module "blueprint_policy_grants" {
+  source         = "./constructs/create-blueprint-policy-grant"
+  domain_id      = awscc_datazone_domain.domain.domain_id
+  domain_unit_id = awscc_datazone_domain.domain.root_domain_unit_id
+
+  blueprint_ids = tomap({
+    lakehouse_catalog_id=module.blueprints.lakehouse_catalog_id,
+    amazon_bedrock_guardrail_id=module.blueprints.amazon_bedrock_guardrail_id,
+    ml_experiments_id=module.blueprints.ml_experiments_id,
+    tooling_id=module.blueprints.tooling_id,
+    redshift_serverless_id=module.blueprints.redshift_serverless_id,
+    emr_serverless_id=module.blueprints.emr_serverless_id,
+    workflows_id=module.blueprints.workflows_id,
+    amazon_bedrock_prompt_id=module.blueprints.amazon_bedrock_prompt_id,
+    data_lake_id=module.blueprints.data_lake_id,
+    amazon_bedrock_evaluation_id=module.blueprints.amazon_bedrock_evaluation_id,
+    amazon_bedrock_knowledge_base_id=module.blueprints.amazon_bedrock_knowledge_base_id,
+    partner_apps_id=module.blueprints.partner_apps_id,
+    amazon_bedrock_chat_agent_id=module.blueprints.amazon_bedrock_chat_agent_id,
+    amazon_bedrock_function_id=module.blueprints.amazon_bedrock_function_id,
+    amazon_bedrock_flow_id=module.blueprints.amazon_bedrock_flow_id,
+    emr_on_ec2_id=module.blueprints.emr_on_ec2_id,
+    quick_sight_id=module.blueprints.quick_sight_id,
+  })
+  // deploy in associated account
+  providers = {
+    "aws"   = aws.alternate
+    "awscc" = awscc.alternate
+  }
+}
+
 // project profiles are created in primary account and reference the account where blueprints are located
 // in a multi-account configuration, the project profiles are created in the primary account and reference blueprints created in the associated account
 /*
