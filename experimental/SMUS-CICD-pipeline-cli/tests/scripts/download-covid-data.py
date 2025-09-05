@@ -61,7 +61,7 @@ def download_covid_data(output_dir):
 
 def main():
     parser = argparse.ArgumentParser(description='Download COVID-19 dataset')
-    parser.add_argument('--output', default='/Users/amirbo/code/covid-19', help='Output directory')
+    parser.add_argument('--output', default='.', help='Output directory')
     
     args = parser.parse_args()
     

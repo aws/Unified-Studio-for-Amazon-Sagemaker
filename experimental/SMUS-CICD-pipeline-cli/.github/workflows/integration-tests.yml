@@ -2,7 +2,7 @@ name: Integration Tests
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, amirbo_feature_branch ]
   pull_request:
     branches: [ main ]
 
@@ -13,6 +13,7 @@ permissions:
 jobs:
   integration-test:
     runs-on: ubuntu-latest
+    environment: aws-env
     
     steps:
     - name: Checkout code

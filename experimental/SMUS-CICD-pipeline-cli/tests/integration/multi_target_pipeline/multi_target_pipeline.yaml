@@ -41,6 +41,9 @@ targets:
         contributors: []                     
       environments: 
         - EnvironmentConfigurationName: 'OnDemand Workflows'
+      data:
+        subscriptions: 
+          all: true 
     bundle_target_configuration:
       storage:
         connectionName: default.s3_shared
@@ -61,6 +64,9 @@ targets:
         contributors: []                     
       environments: 
         - EnvironmentConfigurationName: 'OnDemand Workflows'
+      data:
+        subscriptions: 
+          all: true         
     bundle_target_configuration:
       storage:
         connectionName: default.s3_shared
