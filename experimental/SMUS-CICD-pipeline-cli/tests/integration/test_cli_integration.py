@@ -27,7 +27,7 @@ class TestCLIIntegration:
             text=True
         )
         assert result.returncode == 0
-        assert "Create a new pipeline" in result.stdout
+        assert "Create new pipeline manifest" in result.stdout
 
     @pytest.mark.skipif(
         not os.getenv("AWS_ROLE_ARN"),

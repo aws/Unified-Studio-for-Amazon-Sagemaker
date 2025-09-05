@@ -40,10 +40,7 @@ targets:
         owners: [Eng1]
         contributors: []                     
       environments: 
-        - EnvironmentConfigurationName: 'OnDemand Workflows'
-      data:
-        subscriptions: 
-          all: true 
+        - EnvironmentConfigurationName: 'OnDemand Workflows' 
     bundle_target_configuration:
       storage:
         connectionName: default.s3_shared
@@ -63,10 +60,7 @@ targets:
         owners: [Eng1]
         contributors: []                     
       environments: 
-        - EnvironmentConfigurationName: 'OnDemand Workflows'
-      data:
-        subscriptions: 
-          all: true         
+        - EnvironmentConfigurationName: 'OnDemand Workflows'         
     bundle_target_configuration:
       storage:
         connectionName: default.s3_shared
