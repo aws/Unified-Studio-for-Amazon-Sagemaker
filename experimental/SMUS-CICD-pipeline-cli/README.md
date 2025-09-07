@@ -2,6 +2,8 @@
 
 A CLI tool for managing CI/CD pipelines in SageMaker Unified Studio (SMUS), enabling automated deployment of data science workflows and assets across multiple environments.
 
+<!-- Trigger integration tests -->
+
 ## Pipeline Manifest Reference
 See **[Pipeline Manifest Reference](docs/pipeline-manifest.md)** for complete guide to pipeline configuration.
 
