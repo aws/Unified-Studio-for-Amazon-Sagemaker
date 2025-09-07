@@ -242,8 +242,6 @@ def test_command(
 
     except Exception as e:
         if output.upper() == "JSON":
-            import json
-
             error_data = {"error": str(e)}
             typer.echo(json.dumps(error_data, indent=2))
         else:
