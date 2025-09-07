@@ -185,7 +185,9 @@ class ProjectManager:
     def _build_user_parameters(self, yaml_user_params: List) -> List:
         """Build user parameters from YAML data."""
         from smus_cicd.pipeline.pipeline_manifest import (
-            EnvironmentUserParameters, UserParameter)
+            EnvironmentUserParameters,
+            UserParameter,
+        )
 
         user_parameters = []
         for env_config in yaml_user_params:

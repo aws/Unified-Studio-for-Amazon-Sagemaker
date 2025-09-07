@@ -133,8 +133,11 @@ def bundle_command(
         bundles_directory = bundle_config.get("bundlesDirectory", "./bundles")
 
         # Import bundle storage helper
-        from ..helpers.bundle_storage import (ensure_bundle_directory_exists,
-                                              is_s3_url, upload_bundle)
+        from ..helpers.bundle_storage import (
+            ensure_bundle_directory_exists,
+            is_s3_url,
+            upload_bundle,
+        )
 
         # Ensure bundle directory exists (create local or validate S3)
         ensure_bundle_directory_exists(bundles_directory, region)
