@@ -1,7 +1,8 @@
 """Connection extraction and handling module."""
 
+from typing import Any, Dict
+
 import boto3
-from typing import Dict, Any, Optional
 
 
 def extract_connection_properties(connection_detail: Dict[str, Any]) -> Dict[str, Any]:

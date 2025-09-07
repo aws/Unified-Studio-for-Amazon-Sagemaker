@@ -1,6 +1,7 @@
 """MWAA (Managed Workflows for Apache Airflow) helper functions."""
 
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List
+
 from . import boto3_client
 
 
@@ -38,8 +39,9 @@ def get_all_dag_details(
         cli_token = token_response["CliToken"]
         web_server_hostname = token_response["WebServerHostname"]
 
-        import requests
         import base64
+
+        import requests
 
         headers = {"Authorization": f"Bearer {cli_token}", "Content-Type": "text/plain"}
 
@@ -81,7 +83,7 @@ def get_all_dag_details(
 
         return dag_details
 
-    except Exception as e:
+    except Exception:
         return {}
 
 
@@ -100,8 +102,9 @@ def run_airflow_command(
         cli_token = token_response["CliToken"]
         web_server_hostname = token_response["WebServerHostname"]
 
-        import requests
         import base64
+
+        import requests
 
         headers = {"Authorization": f"Bearer {cli_token}", "Content-Type": "text/plain"}
 
@@ -161,8 +164,9 @@ def delete_dag_from_history(
         cli_token = token_response["CliToken"]
         web_server_hostname = token_response["WebServerHostname"]
 
-        import requests
         import base64
+
+        import requests
 
         headers = {"Authorization": f"Bearer {cli_token}", "Content-Type": "text/plain"}
 
@@ -191,7 +195,7 @@ def delete_dag_from_history(
 
         return False
 
-    except Exception as e:
+    except Exception:
         return False
 
 
@@ -228,7 +232,7 @@ def get_airflow_ui_url(
 
         return None
 
-    except Exception as e:
+    except Exception:
         return None
 
 
@@ -247,8 +251,9 @@ def get_dag_details(
         cli_token = token_response["CliToken"]
         web_server_hostname = token_response["WebServerHostname"]
 
-        import requests
         import base64
+
+        import requests
 
         headers = {"Authorization": f"Bearer {cli_token}", "Content-Type": "text/plain"}
 
@@ -347,8 +352,9 @@ def list_dags(
         web_server_hostname = token_response["WebServerHostname"]
 
         # Use the CLI token to execute 'dags list' command
-        import requests
         import base64
+
+        import requests
 
         headers = {"Authorization": f"Bearer {cli_token}", "Content-Type": "text/plain"}
 
@@ -396,7 +402,7 @@ def list_dags(
                 return sorted(dag_names)
 
         return []
-    except Exception as e:
+    except Exception:
         # If listing fails, return empty list
         return []
 

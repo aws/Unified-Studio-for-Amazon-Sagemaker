@@ -5,14 +5,14 @@ Contains pipeline manifest and validation functionality.
 """
 
 from .pipeline_manifest import (
-    PipelineManifest,
-    DomainConfig,
-    TargetConfig,
     BundleConfig,
-    WorkflowConfig,
-    ProjectConfig,
-    InitializationConfig,
     BundleTargetConfig,
+    DomainConfig,
+    InitializationConfig,
+    PipelineManifest,
+    ProjectConfig,
+    TargetConfig,
+    WorkflowConfig,
 )
 from .validation import (
     validate_manifest_file,

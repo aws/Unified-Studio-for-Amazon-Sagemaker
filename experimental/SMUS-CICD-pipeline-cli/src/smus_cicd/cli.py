@@ -4,17 +4,17 @@ SMUS CI/CD CLI - Command Line Interface for SageMaker Unified Studio CI/CD Pipel
 """
 
 import typer
-from typing import Optional
 from rich.console import Console
+
+from .commands.bundle import bundle_command
+from .commands.create import create_command_with_output
+from .commands.delete import delete_command
+from .commands.deploy import deploy_command
 
 # Import command functions
 from .commands.describe import describe_command
-from .commands.bundle import bundle_command
-from .commands.deploy import deploy_command
 from .commands.monitor import monitor_command
-from .commands.create import create_command, create_command_with_output
 from .commands.run import run_command
-from .commands.delete import delete_command
 from .commands.test import test_command
 
 console = Console()
@@ -27,12 +27,12 @@ def show_help_suggestion():
     console.print("   [cyan]smus-cli monitor -p my-pipeline.yaml --output JSON[/cyan]")
     console.print("   [cyan]smus-cli deploy -p my-pipeline.yaml -t prod[/cyan]")
 
-    console.print(f"\n[yellow]🔧 Universal switches (work on all commands):[/yellow]")
+    console.print("\n[yellow]🔧 Universal switches (work on all commands):[/yellow]")
     console.print("   [green]--pipeline/-p[/green]  - Path to pipeline manifest")
     console.print("   [green]--target/-t[/green]    - Target environment")
     console.print("   [green]--output[/green]       - Output format (TEXT/JSON)")
 
-    console.print(f"\n[yellow]📖 For detailed help:[/yellow]")
+    console.print("\n[yellow]📖 For detailed help:[/yellow]")
     console.print("   [cyan]smus-cli --help[/cyan]")
     console.print("   [cyan]smus-cli <command> --help[/cyan]")
 

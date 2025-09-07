@@ -1,16 +1,18 @@
 """Bundle command implementation."""
 
+import json
 import os
+import shutil
+import subprocess
 import tempfile
 import zipfile
-import subprocess
-import shutil
-import typer
-import json
-import boto3
 from typing import Optional
+
+import boto3
+import typer
+
 from ..helpers import deployment
-from ..helpers.utils import load_yaml, load_config, get_datazone_project_info
+from ..helpers.utils import get_datazone_project_info, load_config, load_yaml
 
 
 def display_bundle_tree(zip_path: str, output: str):
@@ -25,7 +27,7 @@ def display_bundle_tree(zip_path: str, output: str):
         if not file_list:
             return
 
-        typer.echo(f"\n📦 Bundle Contents:")
+        typer.echo("\n📦 Bundle Contents:")
         typer.echo("=" * 50)
 
         # Build tree structure
@@ -133,8 +135,8 @@ def bundle_command(
         # Import bundle storage helper
         from ..helpers.bundle_storage import (
             ensure_bundle_directory_exists,
-            upload_bundle,
             is_s3_url,
+            upload_bundle,
         )
 
         # Ensure bundle directory exists (create local or validate S3)
@@ -242,7 +244,7 @@ def bundle_command(
                         )
                         os.makedirs(os.path.dirname(clone_path), exist_ok=True)
 
-                        result = subprocess.run(
+                        subprocess.run(
                             ["git", "clone", "--depth", "1", url, clone_path],
                             check=True,
                             capture_output=True,
@@ -267,7 +269,7 @@ def bundle_command(
 
                     except subprocess.TimeoutExpired:
                         typer.echo(
-                            f"Error: Git clone timed out after 60 seconds", err=True
+                            "Error: Git clone timed out after 60 seconds", err=True
                         )
                     except Exception as e:
                         typer.echo(f"Error cloning Git repository: {str(e)}", err=True)
@@ -306,7 +308,7 @@ def bundle_command(
 
                     shutil.rmtree(os.path.dirname(zip_path))
             else:
-                typer.echo(f"❌ No files found", err=True)
+                typer.echo("❌ No files found", err=True)
                 raise typer.Exit(1)
 
         typer.echo(f"Bundle creation complete for target: {target_name}")

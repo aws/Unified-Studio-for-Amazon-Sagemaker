@@ -1,10 +1,12 @@
 """Utility functions for SMUS CLI."""
 
 import os
-import yaml
-import boto3
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
+
+import boto3
+import yaml
+
 from . import datazone
 
 

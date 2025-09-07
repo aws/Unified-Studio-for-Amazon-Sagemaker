@@ -3,10 +3,9 @@ Deployment and S3 functions for SMUS CI/CD CLI.
 """
 
 import os
-import tempfile
-import typer
-import boto3
 from pathlib import Path
+
+import typer
 
 
 def deploy_files(
@@ -54,7 +53,7 @@ def deploy_files(
                 if success:
                     typer.echo(f"    Cleared {len(object_keys)} existing files")
                 else:
-                    typer.echo(f"    Warning: Could not clear directory")
+                    typer.echo("    Warning: Could not clear directory")
         except Exception as e:
             typer.echo(f"    Warning: Could not clear directory: {str(e)}")
 
@@ -125,7 +124,6 @@ def deploy_files(
 
 def list_s3_contents(s3_client, s3_uri, section_name=""):
     """List S3 contents in a tree structure."""
-    import boto3
     from botocore.exceptions import ClientError
 
     # Parse S3 URI
@@ -206,8 +204,8 @@ def download_s3_files(
     s3_client, s3_uri, include_patterns, temp_bundle_dir, section_type
 ):
     """Helper method to download S3 files based on patterns using AWS CLI."""
-    import subprocess
     import os
+    import subprocess
 
     # Parse S3 URI
     s3_parts = s3_uri.replace("s3://", "").split("/")
@@ -364,7 +362,6 @@ def download_s3_files(
 def clone_git_repository(git_config, temp_bundle_dir):
     """Clone Git repository with timeout protection."""
     import subprocess
-    import signal
 
     repository_name = git_config.get("repository", "unknown")
     git_url = git_config.get("url")

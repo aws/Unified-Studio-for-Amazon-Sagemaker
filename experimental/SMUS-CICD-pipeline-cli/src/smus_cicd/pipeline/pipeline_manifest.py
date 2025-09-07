@@ -1,9 +1,7 @@
 """Centralized pipeline manifest parsing and data model."""
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
-import yaml
-import os
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -26,14 +24,6 @@ class BundleConfig:
 @dataclass
 class UserParameter:
     """User parameter for project configuration."""
-
-    name: str
-    value: str
-
-
-@dataclass
-class UserParameter:
-    """User parameter for environment configuration."""
 
     name: str
     value: str

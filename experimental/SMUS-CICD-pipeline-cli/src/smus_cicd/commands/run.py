@@ -1,13 +1,14 @@
 """Run command for SMUS CI/CD CLI."""
 
-import typer
 import json
-from typing import Dict, Any, List, Optional, Tuple
-from ..pipeline import PipelineManifest
-from ..helpers.utils import load_config, get_datazone_project_info
-from ..helpers.connections import get_project_connections
+from typing import Any, Dict, List, Optional
+
+import typer
+
 from ..helpers import mwaa
 from ..helpers.airflow_parser import parse_airflow_output
+from ..helpers.utils import get_datazone_project_info, load_config
+from ..pipeline import PipelineManifest
 
 
 def run_command(
@@ -348,12 +349,12 @@ def _display_command_result(result: Dict[str, Any]) -> None:
         result: Command execution result
     """
     if result["success"]:
-        typer.echo(f"✅ Command executed successfully")
+        typer.echo("✅ Command executed successfully")
         if result["stdout"]:
             typer.echo("📤 Output:")
             typer.echo(result["stdout"])
     else:
-        typer.echo(f"❌ Command failed")
+        typer.echo("❌ Command failed")
         if result["stderr"]:
             typer.echo("📤 Error:")
             typer.echo(result["stderr"])

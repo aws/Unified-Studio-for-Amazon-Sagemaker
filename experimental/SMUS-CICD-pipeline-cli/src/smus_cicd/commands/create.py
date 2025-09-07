@@ -1,9 +1,10 @@
 """Create command for SMUS CI/CD CLI."""
 
-import typer
 from pathlib import Path
 from typing import List, Optional, Tuple
+
 import boto3
+import typer
 from botocore.exceptions import ClientError
 
 
@@ -229,18 +230,18 @@ bundle:
   bundlesDirectory: ./bundles
   workflow:
     - connectionName: default.s3_shared
-      include: 
+      include:
         - 'workflows'
-      exclude: 
+      exclude:
         - '.ipynb_checkpoints/'
         - '__pycache__/'
         - '*.pyc'
-        - '.libs.json'    
+        - '.libs.json'
   storage:
     - connectionName: default.s3_shared
-      include: 
+      include:
         - '*'
-      exclude: 
+      exclude:
         - '.ipynb_checkpoints/'
         - '__pycache__/'
         - '*.pyc'
@@ -258,7 +259,7 @@ targets:
 #     # parameters:
 #     #   env: production
 #     #   timeout: 3600
-#   
+#
 #   - workflowName: another_workflow
 #     connectionName: project.workflow_mwaa
 #     triggerPostDeployment: false
@@ -293,16 +294,16 @@ def _generate_targets_section(stages: List[str], dev_project_name: str) -> str:
       name: {project_name}
       create: {str(create_project).lower()}  # {'Auto-create project' if create_project else 'Use existing project'}
 {default_comment}
-    
+
     # Bundle target configuration
     bundle_target_configuration:
       storage:
         connectionName: default.s3_shared
-        directory: 'src'        
+        directory: 'src'
       workflows:
         connectionName: default.s3_shared
         directory: 'workflows'
-  
+
 """
 
     return targets_config

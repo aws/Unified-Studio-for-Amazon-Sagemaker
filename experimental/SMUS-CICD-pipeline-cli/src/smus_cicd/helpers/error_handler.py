@@ -1,7 +1,6 @@
 """Error handling utilities for SMUS CLI."""
 
 import typer
-from typing import Optional
 
 
 def handle_error(message: str, exit_code: int = 1) -> None:
