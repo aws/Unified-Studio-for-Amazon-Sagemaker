@@ -14,7 +14,7 @@ workflows:
   logging: console 
 
 bundle:
-  bundlesDirectory: ./tests/integration/bundles
+  bundlesDirectory: /tmp/bundles
   workflow:
     - connectionName: default.s3_shared
       include: 

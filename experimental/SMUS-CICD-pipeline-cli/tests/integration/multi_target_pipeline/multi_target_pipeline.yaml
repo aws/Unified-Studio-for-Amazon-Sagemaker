@@ -7,7 +7,7 @@ domain:
 
 # What to include in deployment bundles
 bundle:
-  bundlesDirectory: ./tests/integration/bundles
+  bundlesDirectory: /tmp/bundles
   workflow:
     - connectionName: default.s3_shared
       append: true

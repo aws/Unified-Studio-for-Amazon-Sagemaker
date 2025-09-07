@@ -42,7 +42,7 @@ workflows:
     triggerPostDeployment: false
 
 bundle:
-  bundlesDirectory: ./tests/integration/bundles
+  bundlesDirectory: /tmp/bundles
   workflow:
     - connectionName: default.s3_shared
       append: true
