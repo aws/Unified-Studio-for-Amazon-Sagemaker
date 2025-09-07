@@ -304,8 +304,6 @@ def bundle_command(
 
                 # Clean up temporary directory if we used one for S3
                 if is_s3_url(bundles_directory):
-                    import shutil
-
                     shutil.rmtree(os.path.dirname(zip_path))
             else:
                 typer.echo("❌ No files found", err=True)
