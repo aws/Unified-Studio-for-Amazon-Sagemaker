@@ -32,10 +32,14 @@ class ProjectManager:
 
         # Project doesn't exist - check if we should create it
         if self._should_create_project(target_config):
-            project_info = self._create_new_project(target_name, target_config, project_name)
+            project_info = self._create_new_project(
+                target_name, target_config, project_name
+            )
             if "error" not in project_info:
                 # After creating project, ensure environments exist
-                self._ensure_environments_exist(target_name, target_config, project_info)
+                self._ensure_environments_exist(
+                    target_name, target_config, project_info
+                )
             return project_info
 
         # Project doesn't exist and we're not configured to create it
@@ -129,7 +133,9 @@ class ProjectManager:
         print(f"🔍 DEBUG: Extracting user parameters for target: {target_name}")
 
         if not (target_config.initialization and target_config.initialization.project):
-            print(f"🔍 DEBUG: No initialization.project found for target: {target_name}")
+            print(
+                f"🔍 DEBUG: No initialization.project found for target: {target_name}"
+            )
             return None
 
         # Parse userParameters directly from YAML since dataclass parsing doesn't handle nested structure
@@ -161,7 +167,9 @@ class ProjectManager:
                 if isinstance(env, dict) and "EnvironmentConfigurationName" in env:
                     yaml_user_params.append(env)
                 elif isinstance(env, str):
-                    yaml_user_params.append({"EnvironmentConfigurationName": env, "parameters": []})
+                    yaml_user_params.append(
+                        {"EnvironmentConfigurationName": env, "parameters": []}
+                    )
                 else:
                     print(f"🔍 DEBUG: Unknown environment format: {env}")
             print(f"🔍 DEBUG: Converted userParameters: {yaml_user_params}")
@@ -195,17 +203,24 @@ class ProjectManager:
 
         return user_parameters
 
-    def _ensure_environments_exist(self, target_name: str, target_config, project_info: Dict[str, Any]) -> None:
+    def _ensure_environments_exist(
+        self, target_name: str, target_config, project_info: Dict[str, Any]
+    ) -> None:
         """Ensure required environments exist in the project."""
-        if not (target_config.initialization and hasattr(target_config.initialization, 'environments')):
+        if not (
+            target_config.initialization
+            and hasattr(target_config.initialization, "environments")
+        ):
             print(f"🔍 DEBUG: No environments specified for target: {target_name}")
             return
 
-        project_id = project_info.get('project_id')
-        domain_id = project_info.get('domain_id')
+        project_id = project_info.get("project_id")
+        domain_id = project_info.get("domain_id")
 
         if not project_id or not domain_id:
-            print(f"🔍 DEBUG: Missing project_id or domain_id: {project_id}, {domain_id}")
+            print(
+                f"🔍 DEBUG: Missing project_id or domain_id: {project_id}, {domain_id}"
+            )
             return
 
         print(f"🔍 DEBUG: Checking environments for project {project_id}")
@@ -213,13 +228,15 @@ class ProjectManager:
         # Get existing environments in the project
         try:
             import boto3
+
             datazone_client = boto3.client("datazone", region_name=self.region)
 
             existing_envs_response = datazone_client.list_environments(
-                domainIdentifier=domain_id,
-                projectIdentifier=project_id
+                domainIdentifier=domain_id, projectIdentifier=project_id
             )
-            existing_env_names = [env['name'] for env in existing_envs_response.get('items', [])]
+            existing_env_names = [
+                env["name"] for env in existing_envs_response.get("items", [])
+            ]
             print(f"🔍 DEBUG: Existing environments: {existing_env_names}")
 
         except Exception as e:
@@ -228,7 +245,11 @@ class ProjectManager:
 
         # Check each required environment
         for env_config in target_config.initialization.environments:
-            env_name = env_config.get('EnvironmentConfigurationName') if isinstance(env_config, dict) else env_config
+            env_name = (
+                env_config.get("EnvironmentConfigurationName")
+                if isinstance(env_config, dict)
+                else env_config
+            )
             print(f"🔍 DEBUG: Checking required environment: {env_name}")
 
             if env_name in existing_env_names:
@@ -242,28 +263,30 @@ class ProjectManager:
             if success:
                 print(f"✅ Environment '{env_name}' created successfully")
                 # Check if this is a workflow environment and validate MWAA
-                if 'workflow' in env_name.lower() or 'mwaa' in env_name.lower():
+                if "workflow" in env_name.lower() or "mwaa" in env_name.lower():
                     self._validate_mwaa_environment(project_id, domain_id)
             else:
                 print(f"❌ Failed to create environment: {env_name}")
 
-    def _create_environment(self, domain_id: str, project_id: str, env_name: str) -> bool:
+    def _create_environment(
+        self, domain_id: str, project_id: str, env_name: str
+    ) -> bool:
         """Create a DataZone environment."""
         try:
             import boto3
+
             datazone_client = boto3.client("datazone", region_name=self.region)
 
             # Get available environment profiles to find the right one
             profiles_response = datazone_client.list_environment_profiles(
-                domainIdentifier=domain_id,
-                projectIdentifier=project_id
+                domainIdentifier=domain_id, projectIdentifier=project_id
             )
 
             # Find matching profile
             profile_id = None
-            for profile in profiles_response.get('items', []):
-                if profile['name'] == env_name:
-                    profile_id = profile['id']
+            for profile in profiles_response.get("items", []):
+                if profile["name"] == env_name:
+                    profile_id = profile["id"]
                     break
 
             if not profile_id:
@@ -276,7 +299,7 @@ class ProjectManager:
                 projectIdentifier=project_id,
                 environmentProfileIdentifier=profile_id,
                 name=env_name,
-                description=f"Auto-created environment for {env_name}"
+                description=f"Auto-created environment for {env_name}",
             )
 
             print(f"🔍 DEBUG: Environment creation initiated: {response.get('id')}")
@@ -299,13 +322,12 @@ class ProjectManager:
 
             # Get project connections to find MWAA connection
             connections_response = datazone_client.list_project_data_sources(
-                domainIdentifier=domain_id,
-                projectIdentifier=project_id
+                domainIdentifier=domain_id, projectIdentifier=project_id
             )
 
             mwaa_connection = None
-            for conn in connections_response.get('items', []):
-                if 'mwaa' in conn.get('type', '').lower():
+            for conn in connections_response.get("items", []):
+                if "mwaa" in conn.get("type", "").lower():
                     mwaa_connection = conn
                     break
 

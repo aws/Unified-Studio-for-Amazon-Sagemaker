@@ -293,7 +293,9 @@ def get_dag_status(mwaa_client, mwaa_env_name, dag_id):
         dags = response.get("Dags", [])
 
         # DEBUG: Print all DAGs found in MWAA environment
-        print(f"🔍 DEBUG: Found {len(dags)} DAGs in MWAA environment '{mwaa_env_name}':")
+        print(
+            f"🔍 DEBUG: Found {len(dags)} DAGs in MWAA environment '{mwaa_env_name}':"
+        )
         for dag in dags[:10]:  # Show first 10 DAGs
             dag_id_found = dag.get("DagId", "Unknown")
             is_paused = dag.get("IsPaused", True)
@@ -328,7 +330,9 @@ def get_dag_status(mwaa_client, mwaa_env_name, dag_id):
         }
 
     except Exception as e:
-        print(f"🔍 DEBUG: Error listing DAGs in MWAA environment '{mwaa_env_name}': {str(e)}")
+        print(
+            f"🔍 DEBUG: Error listing DAGs in MWAA environment '{mwaa_env_name}': {str(e)}"
+        )
         return {
             "dag_id": dag_id,
             "is_active": False,
