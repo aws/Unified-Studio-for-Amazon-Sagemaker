@@ -2,10 +2,8 @@
 
 import os
 import tempfile
-from pathlib import Path
 from typing import Optional, Tuple
 from urllib.parse import urlparse
-import boto3
 from .s3 import create_s3_client
 
 

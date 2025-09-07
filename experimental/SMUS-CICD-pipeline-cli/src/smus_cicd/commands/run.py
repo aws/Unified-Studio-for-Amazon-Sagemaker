@@ -2,10 +2,9 @@
 
 import typer
 import json
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Optional, Dict, Any, List
 from ..pipeline import PipelineManifest
 from ..helpers.utils import load_config, get_datazone_project_info
-from ..helpers.connections import get_project_connections
 from ..helpers import mwaa
 from ..helpers.airflow_parser import parse_airflow_output
 
@@ -348,12 +347,12 @@ def _display_command_result(result: Dict[str, Any]) -> None:
         result: Command execution result
     """
     if result["success"]:
-        typer.echo(f"✅ Command executed successfully")
+        typer.echo("✅ Command executed successfully")
         if result["stdout"]:
             typer.echo("📤 Output:")
             typer.echo(result["stdout"])
     else:
-        typer.echo(f"❌ Command failed")
+        typer.echo("❌ Command failed")
         if result["stderr"]:
             typer.echo("📤 Error:")
             typer.echo(result["stderr"])

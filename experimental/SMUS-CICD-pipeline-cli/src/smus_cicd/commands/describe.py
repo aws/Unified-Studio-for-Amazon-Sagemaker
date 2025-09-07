@@ -4,7 +4,6 @@ import typer
 import json
 from ..helpers.utils import load_config, get_datazone_project_info
 from ..pipeline import PipelineManifest
-from ..helpers.connections import get_project_connections
 
 
 def describe_command(
@@ -65,7 +64,7 @@ def describe_command(
         if output.upper() != "JSON":
             typer.echo(f"Pipeline: {manifest.pipeline_name}")
             typer.echo(f"Domain: {manifest.domain.name} ({manifest.domain.region})")
-            typer.echo(f"\nTargets:")
+            typer.echo("\nTargets:")
 
         # Process targets
         for target_name, target_config in targets_to_show.items():
@@ -147,7 +146,7 @@ def describe_command(
                                 typer.echo(f"    Owners: {owners_str}")
 
                             if connections or connect:
-                                typer.echo(f"    Connections:")
+                                typer.echo("    Connections:")
                                 for conn_name, conn_info in project_connections.items():
                                     typer.echo(f"      {conn_name}:")
                                     # Handle error case where conn_info might be a string
@@ -171,14 +170,14 @@ def describe_command(
                                                     f"        ❌ Access denied: Current role '{current_role}' is not a member of project '{target_config.project.name}'"
                                                 )
                                                 typer.echo(
-                                                    f"        💡 Suggestion: Add this role as an owner to the project to perform operations"
+                                                    "        💡 Suggestion: Add this role as an owner to the project to perform operations"
                                                 )
                                             except Exception:
                                                 typer.echo(
                                                     f"        ❌ Access denied: Current role is not a member of project '{target_config.project.name}'"
                                                 )
                                                 typer.echo(
-                                                    f"        💡 Suggestion: Add your role as an owner to the project to perform operations"
+                                                    "        💡 Suggestion: Add your role as an owner to the project to perform operations"
                                                 )
                                         else:
                                             typer.echo(f"        error: {conn_info}")
@@ -207,14 +206,14 @@ def describe_command(
                                                     f"        ❌ Access denied: Current role '{current_role}' is not a member of project '{target_config.project.name}'"
                                                 )
                                                 typer.echo(
-                                                    f"        💡 Suggestion: Add this role as an owner to the project to perform operations"
+                                                    "        💡 Suggestion: Add this role as an owner to the project to perform operations"
                                                 )
                                             except Exception:
                                                 typer.echo(
                                                     f"        ❌ Access denied: Current role is not a member of project '{target_config.project.name}'"
                                                 )
                                                 typer.echo(
-                                                    f"        💡 Suggestion: Add your role as an owner to the project to perform operations"
+                                                    "        💡 Suggestion: Add your role as an owner to the project to perform operations"
                                                 )
                                         else:
                                             typer.echo(f"        error: {error_msg}")
@@ -301,7 +300,7 @@ def describe_command(
                             )
                             if should_create:
                                 typer.echo(
-                                    f"    ℹ️  Project will be created during deployment (create: true)"
+                                    "    ℹ️  Project will be created during deployment (create: true)"
                                 )
                             else:
                                 typer.echo(
@@ -320,7 +319,7 @@ def describe_command(
             and manifest.workflows
             and output.upper() != "JSON"
         ):
-            typer.echo(f"\nManifest Workflows:")
+            typer.echo("\nManifest Workflows:")
             for workflow in manifest.workflows:
                 typer.echo(f"  - {workflow.workflow_name}")
                 typer.echo(f"    Connection: {workflow.connection_name}")

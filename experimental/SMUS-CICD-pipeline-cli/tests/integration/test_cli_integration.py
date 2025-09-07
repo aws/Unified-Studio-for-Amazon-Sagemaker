@@ -29,16 +29,12 @@ class TestCLIIntegration:
         assert result.returncode == 0
         assert "Create new pipeline manifest" in result.stdout
 
-    @pytest.mark.skipif(
-        not os.getenv("AWS_ROLE_ARN"),
-        reason="AWS credentials not configured for integration testing"
-    )
     def test_create_command_basic(self):
         """Test basic create command functionality."""
         pipeline_name = f"test-pipeline-{os.getenv('GITHUB_RUN_NUMBER', '1')}"
         
         result = subprocess.run(
-            ["smus-cli", "create", pipeline_name, "--region", "us-east-1"],
+            ["smus-cli", "create", "--name", pipeline_name, "--region", "us-east-1"],
             capture_output=True,
             text=True
         )
@@ -48,7 +44,7 @@ class TestCLIIntegration:
         assert result.returncode in [0, 1]  # Allow for expected failures in test env
         
         # Check that a manifest file was created if successful
-        manifest_file = Path(f"{pipeline_name}.yaml")
+        manifest_file = Path("pipeline.yaml")
         if result.returncode == 0:
             assert manifest_file.exists()
             # Clean up

@@ -13,7 +13,7 @@ def capture_workflow_logs(mwaa_client, mwaa_env_name, dag_id, run_id, timeout=30
     import json
     import base64
 
-    typer.echo(f"   📋 Verifying workflow execution...")
+    typer.echo("   📋 Verifying workflow execution...")
 
     # Get CLI token
     cli_response = mwaa_client.create_cli_token(Name=mwaa_env_name)
@@ -37,7 +37,7 @@ def capture_workflow_logs(mwaa_client, mwaa_env_name, dag_id, run_id, timeout=30
                     if stdout_b64:
                         runs_output = base64.b64decode(stdout_b64).decode("utf-8")
                         return runs_output
-                except:
+                except Exception:
                     # If JSON parsing fails, try direct text
                     return response.text
             return None
@@ -55,24 +55,24 @@ def capture_workflow_logs(mwaa_client, mwaa_env_name, dag_id, run_id, timeout=30
             for line in lines:
                 if run_id in line:
                     if "success" in line.lower():
-                        typer.echo(f"   🎉 Workflow completed successfully")
+                        typer.echo("   🎉 Workflow completed successfully")
                     elif "running" in line.lower():
-                        typer.echo(f"   🔄 Workflow is running...")
+                        typer.echo("   🔄 Workflow is running...")
                     elif "failed" in line.lower():
-                        typer.echo(f"   ❌ Workflow failed")
+                        typer.echo("   ❌ Workflow failed")
                     else:
-                        typer.echo(f"   📋 Workflow triggered and queued")
+                        typer.echo("   📋 Workflow triggered and queued")
                     return True
 
             # If we found the run but couldn't parse status
-            typer.echo(f"   📋 Workflow run created successfully")
+            typer.echo("   📋 Workflow run created successfully")
             return True
 
         typer.echo(f"   ⏳ Checking for new run... (attempt {attempt + 1}/6)")
         time.sleep(5)
 
     typer.echo(
-        f"   ⚠️  Could not verify new DAG run in list (but trigger was successful)"
+        "   ⚠️  Could not verify new DAG run in list (but trigger was successful)"
     )
     return False
 
@@ -151,7 +151,7 @@ def get_task_logs(mwaa_client, mwaa_env_name, dag_id, run_id):
                         ):
                             break
 
-            except Exception as e:
+            except Exception:
                 continue
 
         if all_logs:
@@ -216,7 +216,7 @@ def wait_for_dag_reparsing(mwaa_client, mwaa_env_name, workflows_config, max_wai
                 )
 
         if all_updated:
-            typer.echo(f"✅ All DAGs have been re-parsed with updated code")
+            typer.echo("✅ All DAGs have been re-parsed with updated code")
             return True
 
         time.sleep(10)  # Wait 10 seconds before checking again
@@ -292,6 +292,17 @@ def get_dag_status(mwaa_client, mwaa_env_name, dag_id):
         response = mwaa_client.list_dags(EnvironmentName=mwaa_env_name)
         dags = response.get("Dags", [])
 
+        # DEBUG: Print all DAGs found in MWAA environment
+        print(f"🔍 DEBUG: Found {len(dags)} DAGs in MWAA environment '{mwaa_env_name}':")
+        for dag in dags[:10]:  # Show first 10 DAGs
+            dag_id_found = dag.get("DagId", "Unknown")
+            is_paused = dag.get("IsPaused", True)
+            status = "Active" if not is_paused else "Paused"
+            print(f"   - {dag_id_found} ({status})")
+        if len(dags) > 10:
+            print(f"   ... and {len(dags) - 10} more DAGs")
+        print(f"🔍 DEBUG: Looking for DAG: '{dag_id}'")
+
         # Check if our DAG exists in the list
         dag_exists = any(dag.get("DagId") == dag_id for dag in dags)
 
@@ -317,6 +328,7 @@ def get_dag_status(mwaa_client, mwaa_env_name, dag_id):
         }
 
     except Exception as e:
+        print(f"🔍 DEBUG: Error listing DAGs in MWAA environment '{mwaa_env_name}': {str(e)}")
         return {
             "dag_id": dag_id,
             "is_active": False,

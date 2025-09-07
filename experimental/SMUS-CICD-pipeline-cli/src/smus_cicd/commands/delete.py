@@ -1,19 +1,14 @@
 """Delete command for SMUS CI/CD CLI."""
 
 import typer
-from typing import Optional, List
+from typing import Optional
 from rich.console import Console
 from rich.prompt import Confirm
 from rich.progress import Progress, SpinnerColumn, TextColumn
 import time
 
 from ..pipeline import PipelineManifest
-from ..helpers.datazone import (
-    get_domain_id_by_name,
-    get_project_id_by_name,
-    delete_project,
-    get_project_status,
-)
+from ..helpers.datazone import get_domain_id_by_name
 from ..helpers.cloudformation import delete_project_stack
 
 console = Console()
@@ -102,24 +97,8 @@ def delete_command(
                 console.print(f"\n[blue]🗑️  Deleting target: {target_name}[/blue]")
 
             try:
-                # Check if project exists
-                project_id = get_project_id_by_name(
-                    target.project.name, domain_id, manifest.domain.region
-                )
-
-                if project_id:
-                    # Delete project first
-                    delete_project(
-                        manifest.domain.name, project_id, manifest.domain.region
-                    )
-                else:
-                    if output.upper() != "JSON":
-                        console.print(
-                            f"[yellow]⚠️  Project {target.project.name} not found - skipping project deletion[/yellow]"
-                        )
-
-                # Always try to delete CloudFormation stack (even if project was not found)
-                delete_project_stack(
+                # Only delete CloudFormation stack - this will delete the project automatically
+                stack_deleted = delete_project_stack(
                     target.project.name,
                     manifest.domain.name,
                     manifest.domain.region,
@@ -128,13 +107,13 @@ def delete_command(
                     output,
                 )
 
-                if not project_id:
+                if not stack_deleted:
                     results.append(
                         {
                             "target": target_name,
                             "project_name": target.project.name,
-                            "status": "stack_cleanup_only",
-                            "message": "Project not found, cleaned up CloudFormation stack",
+                            "status": "error",
+                            "message": "Failed to delete CloudFormation stack",
                         }
                     )
                     continue
@@ -142,68 +121,28 @@ def delete_command(
                 if async_mode:
                     if output.upper() != "JSON":
                         console.print(
-                            f"[green]✅ Deletion initiated for {target.project.name}[/green]"
+                            f"[green]✅ Stack deletion initiated for {target.project.name}[/green]"
                         )
                     results.append(
                         {
                             "target": target_name,
                             "project_name": target.project.name,
-                            "project_id": project_id,
                             "status": "deletion_initiated",
-                            "message": "Deletion started (async mode)",
+                            "message": "Stack deletion started (async mode)",
                         }
                     )
                 else:
-                    # Delete and wait for completion
-                    if output.upper() != "JSON":
-                        with Progress(
-                            SpinnerColumn(),
-                            TextColumn("[progress.description]{task.description}"),
-                            console=console,
-                        ) as progress:
-                            task = progress.add_task(
-                                f"Deleting {target.project.name}...", total=None
-                            )
-
-                            # Wait for deletion to complete
-                            while True:
-                                status = get_project_status(
-                                    manifest.domain.name,
-                                    project_id,
-                                    manifest.domain.region,
-                                )
-                                if status is None:  # Project no longer exists
-                                    break
-                                if status in ["DELETE_FAILED"]:
-                                    raise Exception(
-                                        f"Project deletion failed with status: {status}"
-                                    )
-                                time.sleep(10)
-                    else:
-                        # Wait for deletion without progress bar for JSON output
-                        while True:
-                            status = get_project_status(
-                                manifest.domain.name, project_id, manifest.domain.region
-                            )
-                            if status is None:  # Project no longer exists
-                                break
-                            if status in ["DELETE_FAILED"]:
-                                raise Exception(
-                                    f"Project deletion failed with status: {status}"
-                                )
-                            time.sleep(10)
-
+                    # Stack deletion already waits for completion in delete_project_stack
                     if output.upper() != "JSON":
                         console.print(
-                            f"[green]✅ Successfully deleted {target.project.name}[/green]"
+                            f"[green]✅ Successfully deleted stack for {target.project.name}[/green]"
                         )
                     results.append(
                         {
                             "target": target_name,
                             "project_name": target.project.name,
-                            "project_id": project_id,
                             "status": "deleted",
-                            "message": "Successfully deleted",
+                            "message": "Successfully deleted via CloudFormation stack",
                         }
                     )
 
@@ -236,7 +175,7 @@ def delete_command(
                 )
             )
         else:
-            console.print(f"\n[blue]🎯 Deletion Summary[/blue]")
+            console.print("\n[blue]🎯 Deletion Summary[/blue]")
             for result in results:
                 status_icon = {
                     "deleted": "✅",

@@ -1,6 +1,5 @@
 """Parser for Airflow CLI command outputs."""
 
-import re
 from typing import Dict, List, Any
 
 

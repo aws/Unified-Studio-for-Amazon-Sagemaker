@@ -3,9 +3,9 @@ Manifest validation utilities for SMUS CI/CD pipeline manifests.
 """
 
 import yaml
+import jsonschema
 from pathlib import Path
 from typing import Dict, Any, List, Tuple
-from jsonschema import validate, ValidationError, Draft7Validator
 
 
 def load_schema() -> Dict[str, Any]:
@@ -57,7 +57,7 @@ def validate_manifest_schema(
             return False, [f"Failed to load schema: {e}"]
 
     try:
-        validator = Draft7Validator(schema)
+        validator = jsonschema.Draft7Validator(schema)
         errors = list(validator.iter_errors(manifest_data))
 
         if not errors:

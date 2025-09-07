@@ -1,11 +1,11 @@
+import time
+from time import sleep
 """
 DataZone integration functions for SMUS CI/CD CLI.
 """
 
 import boto3
 import typer
-import time
-
 
 def get_domain_id_by_name(domain_name, region):
     """Get DataZone domain ID by searching domains by name."""
@@ -25,7 +25,6 @@ def get_domain_id_by_name(domain_name, region):
         typer.echo(f"Error finding domain by name {domain_name}: {str(e)}", err=True)
         return None
 
-
 def get_project_id_by_name(project_name, domain_id, region):
     """Get DataZone project ID by searching projects by name."""
     try:
@@ -44,7 +43,6 @@ def get_project_id_by_name(project_name, domain_id, region):
         typer.echo(f"Error finding project by name {project_name}: {str(e)}", err=True)
         return None
 
-
 def wait_for_data_source_runs_completion(
     domain_name, project_id, region, max_wait_seconds=300
 ):
@@ -61,8 +59,7 @@ def wait_for_data_source_runs_completion(
             domainIdentifier=domain_id, projectIdentifier=project_id
         )
 
-        import time
-
+    
         start_time = time.time()
 
         while time.time() - start_time < max_wait_seconds:
@@ -86,7 +83,7 @@ def wait_for_data_source_runs_completion(
                 return
 
             print(f"Waiting for {len(running_runs)} data source runs to complete...")
-            time.sleep(10)
+            sleep(10)
 
         print(
             f"Warning: Some data source runs still running after {max_wait_seconds} seconds"
@@ -94,7 +91,6 @@ def wait_for_data_source_runs_completion(
 
     except Exception as e:
         print(f"Warning: Error waiting for data source runs: {str(e)}")
-
 
 def delete_project_custom_form_types(domain_name, project_id, region):
     """Delete custom form types owned by a project that start with SageMakerUnifiedStudioScheduleFormType."""
@@ -106,7 +102,7 @@ def delete_project_custom_form_types(domain_name, project_id, region):
         datazone_client = boto3.client("datazone", region_name=region)
 
         # Search for custom form types owned by this project
-        response = datazone_client.search_types(
+        response = datazone_client.search(
             domainIdentifier=domain_id,
             searchScope="FORM_TYPE",
             managed=False,  # Only custom form types
@@ -141,7 +137,6 @@ def delete_project_custom_form_types(domain_name, project_id, region):
             f"Warning: Error cleaning up custom form types for project {project_id}: {str(e)}"
         )
         return []
-
 
 def delete_project_data_sources(domain_name, project_id, region):
     """Delete all data sources in a project."""
@@ -181,7 +176,6 @@ def delete_project_data_sources(domain_name, project_id, region):
         )
         return []
 
-
 def delete_project_environments(domain_name, project_id, region):
     """Delete all environments in a project and wait for completion."""
     try:
@@ -213,8 +207,7 @@ def delete_project_environments(domain_name, project_id, region):
         # Wait for environments to be deleted
         if deleted_environments:
             print("Waiting for environments to be deleted...")
-            import time
-
+        
             max_wait = 300  # 5 minutes
             start_time = time.time()
 
@@ -230,7 +223,7 @@ def delete_project_environments(domain_name, project_id, region):
                 print(
                     f"Waiting for {len(remaining_envs)} environments to finish deleting..."
                 )
-                time.sleep(10)
+                sleep(10)
             else:
                 print(
                     f"Warning: Some environments still exist after {max_wait} seconds"
@@ -243,7 +236,6 @@ def delete_project_environments(domain_name, project_id, region):
             f"Warning: Error deleting environments for project {project_id}: {str(e)}"
         )
         return []
-
 
 def delete_project(domain_name, project_id, region):
     """Delete a DataZone project."""
@@ -266,10 +258,9 @@ def delete_project(domain_name, project_id, region):
         if deleted_sources:
             print(f"Deleted data sources: {', '.join(deleted_sources)}")
             # Wait for data sources to be deleted
-            import time
-
+        
             print("Waiting for data sources to be deleted...")
-            time.sleep(30)
+            sleep(30)
 
         # Try to delete any custom form types owned by this project
         deleted_forms = delete_project_custom_form_types(
@@ -287,7 +278,7 @@ def delete_project(domain_name, project_id, region):
         try:
             # FIXME: Using skipDeletionCheck=True to bypass form type validation
             # This is necessary because enabled form types cannot be deleted via API
-            response = datazone_client.delete_project(
+            datazone_client.delete_project(
                 domainIdentifier=domain_id,
                 identifier=project_id,
                 skipDeletionCheck=True,
@@ -310,7 +301,6 @@ def delete_project(domain_name, project_id, region):
     except Exception as e:
         raise Exception(f"Error deleting project {project_id}: {str(e)}")
 
-
 def get_project_status(domain_name, project_id, region):
     """Get the status of a DataZone project. Returns None if project doesn't exist."""
     try:
@@ -319,7 +309,6 @@ def get_project_status(domain_name, project_id, region):
             return None
 
         datazone_client = boto3.client("datazone", region_name=region)
-
         response = datazone_client.get_project(
             domainIdentifier=domain_id, identifier=project_id
         )
@@ -330,7 +319,6 @@ def get_project_status(domain_name, project_id, region):
         return None
     except Exception as e:
         raise Exception(f"Error getting project status: {str(e)}")
-
 
 def get_project_details(project_name, region, domain_name):
     """Get detailed project information from DataZone using names."""
@@ -389,7 +377,6 @@ def get_project_details(project_name, region, domain_name):
 
     except Exception as e:
         return {"status": f"Error: {str(e)}", "owners": "N/A", "projectId": "N/A"}
-
 
 def get_project_connections(project_id, domain_id, region):
     """Get project connections from DataZone."""
@@ -452,7 +439,6 @@ def get_project_connections(project_id, domain_id, region):
         typer.echo(f"Error getting project connections: {str(e)}", err=True)
         return {}
 
-
 def resolve_connection_details(connection_name, target_config, region, domain_name):
     """Resolve connection details for a target configuration."""
     project = target_config.get("project", {})
@@ -474,7 +460,6 @@ def resolve_connection_details(connection_name, target_config, region, domain_na
     # Get project connections
     connections = get_project_connections(project_id, domain_id, region)
     return connections.get(connection_name)
-
 
 def get_user_id_by_username(username, domain_id, region):
     """Get IDC user identifier by username using Identity Center APIs."""
@@ -524,7 +509,6 @@ def get_user_id_by_username(username, domain_id, region):
         print(f"Error getting user ID for {username}: {str(e)}")
         return None
 
-
 def resolve_usernames_to_ids(usernames, domain_id, region):
     """Resolve list of usernames to IDC user identifiers."""
     user_ids = []
@@ -537,3 +521,15 @@ def resolve_usernames_to_ids(usernames, domain_id, region):
             print(f"Warning: Could not resolve username '{username}' to user ID")
 
     return user_ids
+
+def get_project_environments(project_id, domain_id, region):
+    """Get all environments for a project."""
+    try:
+        datazone_client = boto3.client("datazone", region_name=region)
+        response = datazone_client.list_environments(
+            domainIdentifier=domain_id, projectIdentifier=project_id
+        )
+        return response.get("items", [])
+    except Exception as e:
+        print(f"Error getting project environments: {str(e)}")
+        return []

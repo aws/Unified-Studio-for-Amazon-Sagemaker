@@ -3,9 +3,7 @@
 import os
 import sys
 import subprocess
-import tempfile
 import typer
-from pathlib import Path
 from ..helpers.utils import load_config, get_datazone_project_info
 from ..pipeline import PipelineManifest
 
@@ -19,19 +17,19 @@ def _display_target_summary(target_name: str, test_results: dict, output: str):
     status = target_result.get("status", "unknown")
 
     if status == "skipped":
-        typer.echo(f"  📊 Target Summary: ⚠️  Skipped")
+        typer.echo("  📊 Target Summary: ⚠️  Skipped")
     elif status == "error":
         reason = target_result.get("reason", "")
         if reason == "no_tests_configured":
-            typer.echo(f"  📊 Target Summary: ❌ Failed (no tests configured)")
+            typer.echo("  📊 Target Summary: ❌ Failed (no tests configured)")
         else:
-            typer.echo(f"  📊 Target Summary: ❌ Error")
+            typer.echo("  📊 Target Summary: ❌ Error")
     elif status == "passed":
-        typer.echo(f"  📊 Target Summary: ✅ Passed")
+        typer.echo("  📊 Target Summary: ✅ Passed")
     elif status == "failed":
-        typer.echo(f"  📊 Target Summary: ❌ Failed")
+        typer.echo("  📊 Target Summary: ❌ Failed")
     else:
-        typer.echo(f"  📊 Target Summary: ❓ Unknown")
+        typer.echo("  📊 Target Summary: ❓ Unknown")
     typer.echo()  # Add blank line between targets
 
 
@@ -158,7 +156,7 @@ def test_command(
                     cmd.extend(["-q", "--tb=short"])
 
                 if output.upper() != "JSON":
-                    typer.echo(f"  🧪 Running tests...")
+                    typer.echo("  🧪 Running tests...")
 
                 result = subprocess.run(
                     cmd, env=test_env, capture_output=True, text=True, cwd=os.getcwd()
@@ -168,7 +166,7 @@ def test_command(
 
                 if result.returncode == 0:
                     if output.upper() != "JSON":
-                        typer.echo(f"  ✅ Tests passed")
+                        typer.echo("  ✅ Tests passed")
                         if verbose and test_output:
                             typer.echo(f"  Output:\n{test_output}")
                     test_results[target_name] = {
@@ -179,7 +177,7 @@ def test_command(
                     }
                 else:
                     if output.upper() != "JSON":
-                        typer.echo(f"  ❌ Tests failed")
+                        typer.echo("  ❌ Tests failed")
                         if test_output:
                             typer.echo(f"  Output:\n{test_output}")
                     test_results[target_name] = {
@@ -227,7 +225,7 @@ def test_command(
                 1 for r in test_results.values() if r.get("status") == "error"
             )
 
-            typer.echo(f"🎯 Overall Summary:")
+            typer.echo("🎯 Overall Summary:")
             typer.echo(f"  📊 Total targets: {total_targets}")
             if passed_targets > 0:
                 typer.echo(f"  ✅ Targets passed: {passed_targets}")

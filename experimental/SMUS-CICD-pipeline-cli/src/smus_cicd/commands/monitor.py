@@ -54,7 +54,7 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
         if output.upper() != "JSON":
             typer.echo(f"Pipeline: {manifest.pipeline_name}")
             typer.echo(f"Domain: {manifest.domain.name} ({manifest.domain.region})")
-            typer.echo(f"\n🔍 Monitoring Status:")
+            typer.echo("\n🔍 Monitoring Status:")
 
         # Add timestamp
         import datetime
@@ -122,7 +122,7 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
 
                     if workflow_connections:
                         if output.upper() != "JSON":
-                            typer.echo(f"\n   📊 Workflow Status:")
+                            typer.echo("\n   📊 Workflow Status:")
 
                         for conn_name, conn_info in workflow_connections.items():
                             env_name = conn_info.get("environmentName")
@@ -203,7 +203,7 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
                                                 recent_status = recent_run.get(
                                                     "state", "Unknown"
                                                 )
-                                        except:
+                                        except Exception:
                                             dag_runs = []
                                             recent_status = "Unknown"
 
@@ -258,7 +258,7 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
                     else:
                         target_data["status"] = "no_workflows"
                         if output.upper() != "JSON":
-                            typer.echo(f"   ❌ No workflow connections found")
+                            typer.echo("   ❌ No workflow connections found")
                 else:
                     target_data["status"] = "error"
                     target_data["error"] = project_info.get("error", "Unknown error")
@@ -281,7 +281,7 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
             and manifest.workflows
             and output.upper() != "JSON"
         ):
-            typer.echo(f"\n📋 Manifest Workflows:")
+            typer.echo("\n📋 Manifest Workflows:")
             for workflow in manifest.workflows:
                 typer.echo(
                     f"   - {workflow.workflow_name} (Connection: {workflow.connection_name})"

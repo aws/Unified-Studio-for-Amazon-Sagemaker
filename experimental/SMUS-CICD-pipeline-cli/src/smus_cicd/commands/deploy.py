@@ -5,10 +5,10 @@ import tempfile
 import zipfile
 import typer
 from typing import Optional, Tuple, List, Dict, Any
-from ..helpers import deployment, airflow, datazone, cloudformation
+from ..helpers import deployment
 from ..helpers.utils import load_config, get_datazone_project_info
 from ..helpers.project_manager import ProjectManager
-from ..helpers.error_handler import handle_error, handle_success, handle_info
+from ..helpers.error_handler import handle_error, handle_success
 from ..pipeline import PipelineManifest
 
 
@@ -31,7 +31,7 @@ def deploy_command(targets: Optional[str], manifest_file: str) -> None:
 
         # Initialize project if needed
         project_manager = ProjectManager(manifest, config)
-        project_info = project_manager.ensure_project_exists(target_name, target_config)
+        project_manager.ensure_project_exists(target_name, target_config)
 
         # Deploy bundle and track errors
         deployment_success = _deploy_bundle_to_target(target_config, manifest, config)
@@ -287,8 +287,11 @@ def _deploy_files_from_bundle(
                 # Get list of files to deploy
                 deployed_files = _get_files_list(files_path)
 
+                # Get target directory from file configuration
+                target_directory = file_config.get("directory", "")
+
                 success = deployment.deploy_files(
-                    files_path, connection, "", region, files_path
+                    files_path, connection, target_directory, region, files_path
                 )
                 s3_uri = connection.get("s3Uri", "")
 
@@ -363,7 +366,7 @@ def _display_deployment_summary(
     workflow_files, workflow_s3_uri = workflow_result
 
     try:
-        typer.echo(f"\n📦 Deployment Summary:")
+        typer.echo("\n📦 Deployment Summary:")
         typer.echo("=" * 50)
 
         # Build tree structure organized by destination

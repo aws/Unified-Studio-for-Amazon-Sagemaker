@@ -1,6 +1,6 @@
 """MWAA (Managed Workflows for Apache Airflow) helper functions."""
 
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, List
 from . import boto3_client
 
 
@@ -81,7 +81,7 @@ def get_all_dag_details(
 
         return dag_details
 
-    except Exception as e:
+    except Exception:
         return {}
 
 
@@ -191,7 +191,7 @@ def delete_dag_from_history(
 
         return False
 
-    except Exception as e:
+    except Exception:
         return False
 
 
@@ -228,7 +228,7 @@ def get_airflow_ui_url(
 
         return None
 
-    except Exception as e:
+    except Exception:
         return None
 
 
@@ -396,7 +396,7 @@ def list_dags(
                 return sorted(dag_names)
 
         return []
-    except Exception as e:
+    except Exception:
         # If listing fails, return empty list
         return []
 
