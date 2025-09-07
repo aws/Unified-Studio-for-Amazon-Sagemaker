@@ -1,3 +1,4 @@
 .DS_Store
 *__pycache__*
 .idea
+experimental/SMUS-CICD-pipeline-cli/tests/integration/multi_target_pipeline/code/workflows/dags/generated_test_dag_*.py
