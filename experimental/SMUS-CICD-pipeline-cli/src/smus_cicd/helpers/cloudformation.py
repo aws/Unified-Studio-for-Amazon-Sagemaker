@@ -2,10 +2,12 @@
 CloudFormation utility functions for SMUS CI/CD CLI.
 """
 
-import boto3
-import typer
 import time
 from pathlib import Path
+
+import boto3
+import typer
+
 from . import datazone
 
 
@@ -624,8 +626,9 @@ def _get_environment_configuration_id(
 def _validate_mwaa_environment(project_id: str, domain_id: str, region: str) -> None:
     """Validate MWAA environment is available."""
     try:
-        import boto3
         import time
+
+        import boto3
 
         # Wait a bit for environment to be ready
         time.sleep(5)
@@ -678,7 +681,7 @@ def _create_environment_stack(
         typer.echo(f"🔍 DEBUG: Generated environment name: {environment_name}")
 
         # Check if environment already exists
-        typer.echo(f"🔍 DEBUG: Checking if environment already exists...")
+        typer.echo("🔍 DEBUG: Checking if environment already exists...")
         try:
             environments_response = datazone_client.list_environments(
                 domainIdentifier=domain_id, projectIdentifier=project_id
@@ -699,10 +702,10 @@ def _create_environment_stack(
         except Exception as list_error:
             typer.echo(f"🔍 DEBUG: Could not check existing environments: {list_error}")
 
-        typer.echo(f"🔍 DEBUG: Environment doesn't exist, proceeding with creation")
+        typer.echo("🔍 DEBUG: Environment doesn't exist, proceeding with creation")
 
         # Get the correct environment configuration ID
-        typer.echo(f"🔍 DEBUG: Getting environment configuration ID...")
+        typer.echo("🔍 DEBUG: Getting environment configuration ID...")
         config_id = _get_environment_configuration_id(
             domain_id, project_id, env_name, region
         )
@@ -716,7 +719,7 @@ def _create_environment_stack(
         typer.echo(f"🔍 DEBUG: Using configuration ID: {config_id}")
 
         # Create environment directly using DataZone API
-        typer.echo(f"🔍 DEBUG: Calling create_environment API...")
+        typer.echo("🔍 DEBUG: Calling create_environment API...")
         response = datazone_client.create_environment(
             domainIdentifier=domain_id,
             projectIdentifier=project_id,
@@ -728,7 +731,7 @@ def _create_environment_stack(
         environment_id = response.get("id")
         typer.echo(f"✅ Environment created successfully: {environment_id}")
         typer.echo(f"🔍 DEBUG: Environment status: {response.get('status')}")
-        typer.echo(f"🔍 DEBUG: Environment creation completed successfully")
+        typer.echo("🔍 DEBUG: Environment creation completed successfully")
 
         return True
 

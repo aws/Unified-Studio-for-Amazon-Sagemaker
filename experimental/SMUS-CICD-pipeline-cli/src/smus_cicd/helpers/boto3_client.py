@@ -1,7 +1,8 @@
 """Centralized boto3 client creation helper."""
 
+from typing import Any, Dict, Optional
+
 import boto3
-from typing import Dict, Any, Optional
 
 
 def create_client(

@@ -3,15 +3,17 @@ Airflow/MWAA integration functions for SMUS CI/CD CLI.
 """
 
 import time
-import typer
+
 import boto3
+import typer
 
 
 def capture_workflow_logs(mwaa_client, mwaa_env_name, dag_id, run_id, timeout=300):
     """Verify workflow execution by checking DAG runs before and after trigger."""
-    import requests
-    import json
     import base64
+    import json
+
+    import requests
 
     typer.echo("   📋 Verifying workflow execution...")
 
@@ -372,8 +374,9 @@ def trigger_dag_run(mwaa_client, mwaa_env_name, dag_id, parameters=None):
     """Trigger a DAG run in MWAA environment."""
     try:
         import json
-        import requests
         from datetime import datetime
+
+        import requests
 
         # Create unique run ID
         run_id = f"deploy_{datetime.now().strftime('%Y%m%d_%H%M%S')}"

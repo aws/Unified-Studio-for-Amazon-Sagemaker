@@ -6,14 +6,14 @@ SMUS CI/CD CLI - Command Line Interface for SageMaker Unified Studio CI/CD Pipel
 import typer
 from rich.console import Console
 
+from .commands.bundle import bundle_command
+from .commands.create import create_command_with_output
+from .commands.delete import delete_command
+from .commands.deploy import deploy_command
 # Import command functions
 from .commands.describe import describe_command
-from .commands.bundle import bundle_command
-from .commands.deploy import deploy_command
 from .commands.monitor import monitor_command
-from .commands.create import create_command_with_output
 from .commands.run import run_command
-from .commands.delete import delete_command
 from .commands.test import test_command
 
 console = Console()

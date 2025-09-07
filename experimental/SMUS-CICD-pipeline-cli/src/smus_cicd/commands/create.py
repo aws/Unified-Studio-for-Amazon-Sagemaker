@@ -1,9 +1,10 @@
 """Create command for SMUS CI/CD CLI."""
 
-import typer
 from pathlib import Path
 from typing import List, Optional, Tuple
+
 import boto3
+import typer
 from botocore.exceptions import ClientError
 
 

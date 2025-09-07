@@ -1,6 +1,7 @@
 """S3 helper functions."""
 
-from typing import List, Dict, Any
+from typing import Any, Dict, List
+
 from . import boto3_client
 
 

@@ -1,12 +1,14 @@
 """Run command for SMUS CI/CD CLI."""
 
-import typer
 import json
-from typing import Optional, Dict, Any, List
-from ..pipeline import PipelineManifest
-from ..helpers.utils import load_config, get_datazone_project_info
+from typing import Any, Dict, List, Optional
+
+import typer
+
 from ..helpers import mwaa
 from ..helpers.airflow_parser import parse_airflow_output
+from ..helpers.utils import get_datazone_project_info, load_config
+from ..pipeline import PipelineManifest
 
 
 def run_command(

@@ -1,10 +1,12 @@
 """Project management utilities for SMUS CLI."""
 
+from typing import Any, Dict, List, Optional
+
 import typer
-from typing import Dict, Any, List, Optional
-from . import datazone, cloudformation
-from .utils import get_datazone_project_info
+
+from . import cloudformation, datazone
 from .error_handler import handle_error, handle_success
+from .utils import get_datazone_project_info
 
 
 class ProjectManager:
@@ -183,9 +185,7 @@ class ProjectManager:
     def _build_user_parameters(self, yaml_user_params: List) -> List:
         """Build user parameters from YAML data."""
         from smus_cicd.pipeline.pipeline_manifest import (
-            EnvironmentUserParameters,
-            UserParameter,
-        )
+            EnvironmentUserParameters, UserParameter)
 
         user_parameters = []
         for env_config in yaml_user_params:
@@ -312,8 +312,9 @@ class ProjectManager:
     def _validate_mwaa_environment(self, project_id: str, domain_id: str) -> None:
         """Validate MWAA environment is available."""
         try:
-            import boto3
             import time
+
+            import boto3
 
             # Wait a bit for environment to be ready
             time.sleep(5)

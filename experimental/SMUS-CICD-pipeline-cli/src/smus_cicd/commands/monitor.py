@@ -1,10 +1,12 @@
 """Monitor command implementation."""
 
-import typer
 import json
 from typing import Optional
+
+import typer
+
+from ..helpers.utils import get_datazone_project_info, load_config
 from ..pipeline import PipelineManifest
-from ..helpers.utils import load_config, get_datazone_project_info
 
 
 def monitor_command(targets: Optional[str], manifest_file: str, output: str):

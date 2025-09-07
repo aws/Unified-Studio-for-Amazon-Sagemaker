@@ -1,15 +1,14 @@
 """Delete command for SMUS CI/CD CLI."""
 
-import typer
 from typing import Optional
+
+import typer
 from rich.console import Console
 from rich.prompt import Confirm
-from rich.progress import Progress, SpinnerColumn, TextColumn
-import time
 
-from ..pipeline import PipelineManifest
-from ..helpers.datazone import get_domain_id_by_name
 from ..helpers.cloudformation import delete_project_stack
+from ..helpers.datazone import get_domain_id_by_name
+from ..pipeline import PipelineManifest
 
 console = Console()
 

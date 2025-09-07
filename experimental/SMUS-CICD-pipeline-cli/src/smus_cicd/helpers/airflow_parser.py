@@ -1,6 +1,6 @@
 """Parser for Airflow CLI command outputs."""
 
-from typing import Dict, List, Any
+from typing import Any, Dict, List
 
 
 def parse_dags_list(stdout: str) -> List[Dict[str, Any]]:

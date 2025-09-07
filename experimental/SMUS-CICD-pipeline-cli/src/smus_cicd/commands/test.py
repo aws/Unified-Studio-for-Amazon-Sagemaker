@@ -1,10 +1,12 @@
 """Test command implementation."""
 
 import os
-import sys
 import subprocess
+import sys
+
 import typer
-from ..helpers.utils import load_config, get_datazone_project_info
+
+from ..helpers.utils import get_datazone_project_info, load_config
 from ..pipeline import PipelineManifest
 
 

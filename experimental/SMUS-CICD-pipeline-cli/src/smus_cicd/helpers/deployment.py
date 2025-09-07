@@ -3,8 +3,9 @@ Deployment and S3 functions for SMUS CI/CD CLI.
 """
 
 import os
-import typer
 from pathlib import Path
+
+import typer
 
 
 def deploy_files(
@@ -203,8 +204,8 @@ def download_s3_files(
     s3_client, s3_uri, include_patterns, temp_bundle_dir, section_type
 ):
     """Helper method to download S3 files based on patterns using AWS CLI."""
-    import subprocess
     import os
+    import subprocess
 
     # Parse S3 URI
     s3_parts = s3_uri.replace("s3://", "").split("/")

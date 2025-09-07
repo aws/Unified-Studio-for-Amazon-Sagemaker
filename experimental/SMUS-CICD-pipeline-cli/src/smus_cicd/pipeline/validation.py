@@ -2,10 +2,11 @@
 Manifest validation utilities for SMUS CI/CD pipeline manifests.
 """
 
-import yaml
-import jsonschema
 from pathlib import Path
-from typing import Dict, Any, List, Tuple
+from typing import Any, Dict, List, Tuple
+
+import jsonschema
+import yaml
 
 
 def load_schema() -> Dict[str, Any]:
