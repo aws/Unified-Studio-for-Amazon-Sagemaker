@@ -2,9 +2,16 @@
 import os
 import tempfile
 import pytest
+import re
 from unittest.mock import patch, MagicMock
 from typer.testing import CliRunner
 from smus_cicd.cli import app
+
+
+def strip_ansi_codes(text):
+    """Remove ANSI escape sequences from text."""
+    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+    return ansi_escape.sub('', text)
 
 
 class TestCreateCommand:
@@ -321,13 +328,14 @@ class TestCreateCommand:
         result = runner.invoke(app, ["create", "--help"])
         
         assert result.exit_code == 0
-        assert "Create new pipeline manifest" in result.stdout
-        assert "--output" in result.stdout
-        assert "--name" in result.stdout
-        assert "--domain-id" in result.stdout
-        assert "--dev-project-id" in result.stdout
-        assert "--stages" in result.stdout
-        assert "--region" in result.stdout
+        clean_output = strip_ansi_codes(result.stdout)
+        assert "Create new pipeline manifest" in clean_output
+        assert "--output" in clean_output
+        assert "--name" in clean_output
+        assert "--domain-id" in clean_output
+        assert "--dev-project-id" in clean_output
+        assert "--stages" in clean_output
+        assert "--region" in clean_output
 
     def test_create_default_stages(self):
         """Test that default stages are dev,test,prod."""
