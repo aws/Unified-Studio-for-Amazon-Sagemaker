@@ -1,10 +1,111 @@
 # GitHub Actions CI/CD Integration
 
-The SMUS CLI can be integrated with GitHub Actions to create automated CI/CD pipelines that deploy your data science workflows across multiple environments.
+The SMUS CLI includes comprehensive GitHub Actions integration with three pre-built workflows for automated testing, validation, and demonstration.
 
-## Example GitHub Actions Workflow
+## Available Workflows
 
-Create `.github/workflows/smus-cicd.yml` in your repository:
+### 1. CI Workflow (`.github/workflows/ci.yml`)
+
+**Purpose**: Comprehensive code quality and testing validation
+
+**Triggers**: 
+- Pull requests to main/master branches
+- Pushes to main/master branches
+- Path filter: `experimental/SMUS-CICD-pipeline-cli/**`
+
+**Jobs**:
+- **Linting**: flake8 syntax checks, black formatting, isort import sorting
+- **Unit Tests**: 147 unit tests with coverage reporting and Codecov integration
+- **Security**: safety vulnerability scanning and bandit security analysis
+
+**Features**:
+- Runs in parallel with dependency management
+- Uploads test results and coverage reports as artifacts
+- Integrates with Codecov for coverage tracking
+
+### 2. PR Integration Tests (`.github/workflows/pr-tests.yml`)
+
+**Purpose**: Integration testing against real AWS resources
+
+**Triggers**: 
+- Pull requests to main/master branches
+- Path filter: `experimental/SMUS-CICD-pipeline-cli/**`
+
+**Authentication**: 
+- Uses AWS OIDC with GitHub environment `aws-env`
+- Assumes IAM role from `smus-cli-github-integration` CloudFormation stack
+
+**Jobs**:
+- **Integration Tests**: Full integration test suite with AWS credentials
+- **Artifact Upload**: Test results and reports for debugging
+
+**Setup Requirements**:
+1. Deploy the GitHub OIDC integration stack (see [tests/integration/github/README.md](../tests/integration/github/README.md))
+2. Configure `AWS_ROLE_ARN` secret in GitHub environment `aws-env`
+
+### 3. Full Pipeline Lifecycle Demo (`.github/workflows/full-pipeline-lifecycle.yml`)
+
+**Purpose**: End-to-end demonstration of SMUS CLI capabilities
+
+**Triggers**: 
+- Manual workflow dispatch only
+- Customizable inputs for domain, project, and pipeline names
+
+**Jobs** (Sequential execution):
+1. **Setup**: Resolve domain and project IDs from names
+2. **Create Manifest**: Generate pipeline YAML configuration  
+3. **Validate Configuration**: Check pipeline setup with workflows/connections
+4. **Create Bundle**: Package deployment artifacts for dev target
+5. **Deploy Test**: Deploy pipeline to test environment
+6. **Run Tests**: Execute test suite on test target
+7. **Monitor Pipeline**: Check pipeline status and health
+8. **Execute Workflows**: Run Airflow commands (trigger DAG, list tasks, check state)
+9. **Cleanup**: Remove test resources (runs even if previous jobs fail)
+
+**Features**:
+- Artifact sharing for pipeline manifest between jobs
+- Proper error handling and cleanup
+- Customizable inputs with sensible defaults
+- Follows the exact sequence from `examples/full-pipeline-lifecycle.sh`
+
+## Setup Instructions
+
+### 1. AWS OIDC Integration
+
+Deploy the GitHub OIDC integration to enable AWS authentication:
+
+```bash
+cd tests/integration/github
+./deploy-github-integration.sh
+```
+
+This creates:
+- OIDC identity provider for GitHub Actions
+- IAM role with appropriate permissions
+- CloudFormation stack `smus-cli-github-integration`
+
+### 2. GitHub Environment Configuration
+
+1. Go to repository Settings → Environments
+2. Create environment named `aws-env`
+3. Add secret `AWS_ROLE_ARN` with the role ARN from CloudFormation output
+
+### 3. Running Workflows
+
+**CI Workflow**: Runs automatically on PRs and pushes
+
+**PR Integration Tests**: Runs automatically on PRs affecting SMUS CLI code
+
+**Full Pipeline Lifecycle Demo**: 
+1. Go to Actions tab in GitHub
+2. Select "Full Pipeline Lifecycle Demo"
+3. Click "Run workflow"
+4. Enter custom domain/project/pipeline names or use defaults
+5. Click "Run workflow" to start
+
+## Example Custom GitHub Actions Workflow
+
+For your own projects, create `.github/workflows/smus-cicd.yml`:
 
 ```yaml
 name: SMUS CI/CD Pipeline

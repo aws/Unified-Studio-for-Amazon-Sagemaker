@@ -4,14 +4,34 @@ A CLI tool for managing CI/CD pipelines in SageMaker Unified Studio (SMUS), enab
 
 <!-- Trigger integration tests -->
 
-## Pipeline Manifest Reference
+## Quick Reference
+
 See **[Pipeline Manifest Reference](docs/pipeline-manifest.md)** for complete guide to pipeline configuration.
 
-## CLI Commands Reference
 See **[CLI Commands Reference](docs/cli-commands.md)** for detailed command documentation and examples.
 
+See **[Development Guide](docs/development.md)** for development workflows, testing, and contribution guidelines.
+
 ## GitHub Actions Integration
-See **[GitHub Actions Integration](docs/github-actions-integration.md)** for automated CI/CD pipeline setup.
+
+The repository includes three GitHub Actions workflows for automated testing and demonstration:
+
+### 1. CI Workflow (`.github/workflows/ci.yml`)
+- **Triggers**: Pull requests and pushes to main/master
+- **Features**: Code linting, unit tests with coverage, security scans
+- **Purpose**: Comprehensive code quality validation
+
+### 2. PR Integration Tests (`.github/workflows/pr-tests.yml`)  
+- **Triggers**: Pull requests affecting SMUS CLI code
+- **Features**: Integration tests with real AWS resources using OIDC authentication
+- **Purpose**: Validate CLI functionality against live AWS services
+
+### 3. Full Pipeline Lifecycle Demo (`.github/workflows/full-pipeline-lifecycle.yml`)
+- **Triggers**: Manual workflow dispatch
+- **Features**: Complete 8-step pipeline demonstration with customizable inputs
+- **Purpose**: End-to-end showcase of SMUS CLI capabilities
+
+See **[GitHub Actions Integration](docs/github-actions-integration.md)** for setup instructions and **[tests/integration/github/README.md](tests/integration/github/README.md)** for AWS OIDC configuration.
 
 ## What is a CI/CD Pipeline?
 
@@ -245,13 +265,6 @@ smus-cli delete --targets marketing-test-stage --pipeline pipeline.yaml --force
 
 ## Common Workflows
 
-### Development Workflow
-1. **Update code** in dev environment S3 location
-2. **Create bundle**: `smus-cli bundle` (downloads latest from dev)
-3. **Deploy to test**: `smus-cli deploy --targets test` (deploys and triggers workflows)
-4. **Verify execution**: Check workflow runs in SageMaker Unified Studio console
-5. **Deploy to prod**: `smus-cli deploy --targets prod` (when ready)
-
 ### Complete CI/CD Flow
 ```bash
 # 1. Analyze pipeline configuration
@@ -267,70 +280,4 @@ smus-cli deploy --targets staging
 smus-cli deploy --targets prod
 ```
 
-## Testing
-
-The project includes comprehensive unit and integration tests with coverage analysis.
-
-### Quick Testing Commands
-
-```bash
-# Run all tests with coverage and HTML reports (default)
-python scripts/run_tests.py
-
-# Run only unit tests
-python scripts/run_tests.py --type unit
-
-# Run only integration tests
-python scripts/run_tests.py --type integration
-
-# Skip HTML report generation
-python scripts/run_tests.py --no-html-report
-
-# Skip slow tests (useful for CI)
-python scripts/run_tests.py --skip-slow
-
-# Run without coverage (faster)
-python scripts/run_tests.py --no-coverage
-```
-
-### Direct pytest Commands
-
-```bash
-# Run all tests with coverage
-pytest --cov=src/smus_cicd --cov-report=html
-
-# Run only unit tests
-pytest tests/unit/
-
-# Run only integration tests
-pytest tests/integration/
-
-# Run tests excluding slow ones
-pytest -m "not slow"
-
-# Run specific test file
-pytest tests/integration/test_new_commands.py -v
-```
-
-### Coverage Reports
-
-Coverage reports are automatically generated:
-- **Terminal**: Shows coverage summary in terminal
-- **HTML**: Detailed report in `htmlcov/index.html` (use `--html-report`)
-- **XML**: Machine-readable report in `coverage.xml` for CI systems
-
-### Test Categories
-
-- **Unit Tests**: Fast tests that don't require AWS resources (`tests/unit/`)
-- **Integration Tests**: Tests that interact with AWS services (`tests/integration/`)
-- **Slow Tests**: Long-running tests marked with `@pytest.mark.slow`
-
-### AWS Configuration for Integration Tests
-
-Integration tests require AWS credentials. Configure using:
-
-1. **AWS Profile**: `export AWS_PROFILE=your-profile`
-2. **Environment Variables**: `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`
-3. **Config File**: `tests/integration/config.local.yaml`
-
-See [tests/README.md](tests/README.md) for detailed testing documentation.
+For detailed development workflows, testing procedures, and contribution guidelines, see the **[Development Guide](docs/development.md)**.
