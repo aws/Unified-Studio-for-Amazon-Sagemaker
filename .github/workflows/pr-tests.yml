@@ -1,32 +1,33 @@
-name: PR Quick Checks
+# Temporarily disabled - using CI workflow only
+# name: PR Quick Checks
 
-on:
-  pull_request:
-    branches: [ main, master ]
-    paths:
-      - 'experimental/SMUS-CICD-pipeline-cli/**'
+# on:
+#   pull_request:
+#     branches: [ main, master ]
+#     paths:
+#       - 'experimental/SMUS-CICD-pipeline-cli/**'
 
-jobs:
-  quick-lint:
-    runs-on: ubuntu-latest
+# jobs:
+#   quick-lint:
+#     runs-on: ubuntu-latest
     
-    steps:
-    - uses: actions/checkout@v4
+#     steps:
+#     - uses: actions/checkout@v4
     
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
+#     - name: Set up Python
+#       uses: actions/setup-python@v4
+#       with:
+#         python-version: '3.12'
     
-    - name: Install dependencies
-      run: |
-        cd experimental/SMUS-CICD-pipeline-cli
-        python -m pip install --upgrade pip
-        pip install flake8 black isort
+#     - name: Install dependencies
+#       run: |
+#         cd experimental/SMUS-CICD-pipeline-cli
+#         python -m pip install --upgrade pip
+#         pip install flake8 black isort
     
-    - name: Quick lint check
-      run: |
-        cd experimental/SMUS-CICD-pipeline-cli
-        black --check src/
-        isort --check-only src/
-        flake8 src/ --count --select=E9,F63,F7,F82 --show-source --statistics
+#     - name: Quick lint check
+#       run: |
+#         cd experimental/SMUS-CICD-pipeline-cli
+#         black --check src/
+#         isort --check-only src/
+#         flake8 src/ --count --select=E9,F63,F7,F82 --show-source --statistics
