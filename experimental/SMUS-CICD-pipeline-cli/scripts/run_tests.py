@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Comprehensive test runner for SMUS CLI with coverage analysis."""
 
-import sys
-import subprocess
 import argparse
+import os
+import shutil
+import subprocess
+import sys
 import yaml
 from pathlib import Path
 
@@ -20,8 +22,6 @@ def load_test_config():
 
 def check_aws_setup():
     """Check if AWS credentials are configured."""
-    import os
-    
     if os.getenv('AWS_PROFILE') or (os.getenv('AWS_ACCESS_KEY_ID') and os.getenv('AWS_SECRET_ACCESS_KEY')):
         return True
     
@@ -38,7 +38,6 @@ def clean_reports_directory():
     """Clean the reports directory before running tests."""
     reports_dir = Path("tests/reports")
     if reports_dir.exists():
-        import shutil
         shutil.rmtree(reports_dir)
         print("🧹 Cleaned reports directory")
     reports_dir.mkdir(parents=True, exist_ok=True)
