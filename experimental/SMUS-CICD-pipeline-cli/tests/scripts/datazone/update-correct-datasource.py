@@ -7,7 +7,7 @@ import boto3
 import time
 
 def update_and_run_data_source():
-    domain_id = "dzd_6je2k8b63qse07"
+    domain_id = "<DOMAIN_ID>"
     data_source_id = "b1s9jn2dfgi8tj"  # The one with catalogName = account number
     region = "us-east-1"
     

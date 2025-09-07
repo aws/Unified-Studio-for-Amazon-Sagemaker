@@ -126,7 +126,7 @@ def create_subscription_grant(domain_id, subscription, target_id, dev_env_id, re
 
 def main():
     # Configuration
-    domain_id = "dzd_6je2k8b63qse07"
+    domain_id = "<DOMAIN_ID>"
     dev_project_id = "aodxxgjzro6k2v"  # dev-marketing
     target_project_id = "5oq8m1d1qn1lev"  # integration-test-test
     region = "us-east-1"

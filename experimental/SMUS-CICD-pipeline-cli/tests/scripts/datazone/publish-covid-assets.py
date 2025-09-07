@@ -6,7 +6,7 @@ Publish all COVID-19 DataZone assets.
 import boto3
 
 def publish_covid_assets():
-    domain_id = "dzd_6je2k8b63qse07"
+    domain_id = "<DOMAIN_ID>"
     project_id = "d8ipo2t2p8oalj"
     region = "us-east-1"
     

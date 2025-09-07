@@ -6,7 +6,7 @@ Set all COVID-19 DataZone assets to approval not required.
 import boto3
 
 def set_covid_assets_no_approval():
-    domain_id = "dzd_6je2k8b63qse07"
+    domain_id = "<DOMAIN_ID>"
     project_id = "d8ipo2t2p8oalj"
     region = "us-east-1"
     

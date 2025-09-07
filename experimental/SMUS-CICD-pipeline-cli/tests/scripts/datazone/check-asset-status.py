@@ -7,7 +7,7 @@ import boto3
 import json
 
 def check_asset_status():
-    domain_id = "dzd_6je2k8b63qse07"
+    domain_id = "<DOMAIN_ID>"
     project_id = "d8ipo2t2p8oalj"
     region = "us-east-1"
     

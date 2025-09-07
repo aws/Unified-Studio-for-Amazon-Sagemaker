@@ -6,7 +6,7 @@ Verify all COVID-19 tables are published by searching with different terms.
 import boto3
 
 def verify_all_covid_listings():
-    domain_id = "dzd_6je2k8b63qse07"
+    domain_id = "<DOMAIN_ID>"
     region = "us-east-1"
     
     datazone = boto3.client('datazone', region_name=region)
