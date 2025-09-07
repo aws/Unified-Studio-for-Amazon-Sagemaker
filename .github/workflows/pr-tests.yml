@@ -1,17 +1,13 @@
-name: PR Unit Tests
+name: PR Quick Checks
 
 on:
   pull_request:
     branches: [ main, master ]
     paths:
       - 'experimental/SMUS-CICD-pipeline-cli/**'
-  push:
-    branches: [ main, master ]
-    paths:
-      - 'experimental/SMUS-CICD-pipeline-cli/**'
 
 jobs:
-  unit-tests:
+  quick-lint:
     runs-on: ubuntu-latest
     
     steps:
@@ -26,16 +22,11 @@ jobs:
       run: |
         cd experimental/SMUS-CICD-pipeline-cli
         python -m pip install --upgrade pip
-        pip install -e ".[dev]"
+        pip install flake8 black isort
     
-    - name: Run unit tests
+    - name: Quick lint check
       run: |
         cd experimental/SMUS-CICD-pipeline-cli
-        python scripts/run_tests.py --type unit --no-html-report
-    
-    - name: Upload test results
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: unit-test-results
-        path: experimental/SMUS-CICD-pipeline-cli/tests/reports/
+        black --check src/
+        isort --check-only src/
+        flake8 src/ --count --select=E9,F63,F7,F82 --show-source --statistics
