@@ -142,7 +142,7 @@ config.local.yaml
 *.local.yaml
 
 # Bundle files
-bundles/
+tests/integration/bundles/*.zip
 *.zip
 
 # Temporary files and scripts
