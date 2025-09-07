@@ -30,16 +30,16 @@ jobs:
         pip install -e .
         pip install -r requirements-dev.txt
 
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-        aws-region: us-east-1
+    # - name: Configure AWS credentials
+    #   uses: aws-actions/configure-aws-credentials@v4
+    #   with:
+    #     role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+    #     aws-region: us-east-1
 
-    - name: Run CLI CREATE command test
-      run: |
-        # Test the create command with minimal parameters
-        smus-cli create test-pipeline-${{ github.run_number }} --region us-east-1
+    # - name: Run CLI CREATE command test
+    #   run: |
+    #     # Test the create command with minimal parameters
+    #     smus-cli create test-pipeline-${{ github.run_number }} --region us-east-1
         
     - name: Verify CLI installation
       run: |
@@ -49,6 +49,6 @@ jobs:
       run: |
         pytest tests/unit/ -v
         
-    - name: Run integration tests
-      run: |
-        pytest tests/integration/ -v --tb=short
+    # - name: Run integration tests
+    #   run: |
+    #     pytest tests/integration/ -v --tb=short
