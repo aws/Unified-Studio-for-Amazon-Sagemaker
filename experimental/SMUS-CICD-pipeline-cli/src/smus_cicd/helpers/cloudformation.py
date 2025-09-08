@@ -29,10 +29,15 @@ def _get_existing_memberships(
                 user_id = member_details["user"]["userIdentifier"]
                 designation = member.get("designation")
                 existing_memberships[user_id] = designation
+                typer.echo(
+                    f"🔍 DEBUG: Found existing membership: {user_id} -> {designation}"
+                )
 
+        typer.echo(f"🔍 DEBUG: Total existing memberships: {len(existing_memberships)}")
         return existing_memberships
     except Exception as e:
         typer.echo(f"🔍 DEBUG: Error getting existing memberships: {e}")
+        return {}
         return {}
 
 
@@ -191,6 +196,39 @@ def create_project_via_cloudformation(
             typer.echo(
                 f"🔍 Will add {len(owner_ids)} new owners and {len(contributor_ids)} new contributors"
             )
+        else:
+            # For new projects, the creating role will be automatically added as owner
+            # So we need to filter it out from the CloudFormation template to avoid conflicts
+            try:
+                # Get current role ARN
+                sts_client = boto3.client("sts", region_name=region)
+                caller_identity = sts_client.get_caller_identity()
+                current_role_arn = caller_identity.get("Arn", "")
+
+                if current_role_arn:
+                    # Extract role name from ARN (arn:aws:iam::account:role/RoleName)
+                    current_role_name = (
+                        current_role_arn.split("/")[-1]
+                        if "/" in current_role_arn
+                        else ""
+                    )
+
+                    # Try to resolve current role to DataZone user ID
+                    if current_role_name:
+                        current_role_ids = datazone.resolve_usernames_to_ids(
+                            [current_role_name], domain_id, region
+                        )
+                        if current_role_ids:
+                            current_role_id = current_role_ids[0]
+                            # Filter out current role from owners to avoid duplicate
+                            if current_role_id in owner_ids:
+                                owner_ids.remove(current_role_id)
+                                typer.echo(
+                                    f"🔍 Filtered out creating role {current_role_name} from owners (will be auto-added)"
+                                )
+
+            except Exception as e:
+                typer.echo(f"🔍 DEBUG: Could not determine current role: {e}")
 
         # Generate CloudFormation template dynamically
         template_dict = {
