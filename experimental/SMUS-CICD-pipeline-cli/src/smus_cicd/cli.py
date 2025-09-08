@@ -303,18 +303,27 @@ def main():
 
 def cli_error_handler():
     """Handle CLI errors and provide helpful suggestions."""
-    # Always print version for debugging
-    console.print(f"[dim]SMUS CI/CD CLI v{__version__}[/dim]")
-
     try:
         app()
     except typer.Exit as e:
         if e.exit_code != 0:
-            show_help_suggestion()
+            # Check if JSON output was requested
+            import sys
+
+            is_json_output = "--output" in sys.argv and "JSON" in sys.argv
+            if not is_json_output:
+                console.print(f"[dim]SMUS CI/CD CLI v{__version__}[/dim]")
+                show_help_suggestion()
         raise
     except Exception as e:
-        console.print(f"\n[red]❌ Error: {e}[/red]")
-        show_help_suggestion()
+        # Check if JSON output was requested
+        import sys
+
+        is_json_output = "--output" in sys.argv and "JSON" in sys.argv
+        if not is_json_output:
+            console.print(f"[dim]SMUS CI/CD CLI v{__version__}[/dim]")
+            console.print(f"\n[red]❌ Error: {e}[/red]")
+            show_help_suggestion()
         raise typer.Exit(1)
 
 

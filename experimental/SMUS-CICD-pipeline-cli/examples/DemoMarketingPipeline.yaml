@@ -45,6 +45,10 @@ targets:
       workflows:
         connectionName: default.s3_shared
         directory: 'workflows'
+    
+    # Test configuration
+    tests:
+      folder: ./tests
   
   test:
     stage: TEST
@@ -59,7 +63,8 @@ targets:
         profileName: 'All capabilities'
         owners: [arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests]
         contributors: []
-    
+      environments: 
+        - EnvironmentConfigurationName: 'OnDemand Workflows'     
     # Bundle target configuration
     bundle_target_configuration:
       storage:
@@ -68,6 +73,10 @@ targets:
       workflows:
         connectionName: default.s3_shared
         directory: 'workflows'
+    
+    # Test configuration
+    tests:
+      folder: ./tests
   
   prod:
     stage: PROD
@@ -91,6 +100,10 @@ targets:
       workflows:
         connectionName: default.s3_shared
         directory: 'workflows'
+    
+    # Test configuration
+    tests:
+      folder: ./tests
   
 
 # Workflows configuration (optional)
