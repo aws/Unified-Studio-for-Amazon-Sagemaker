@@ -306,7 +306,7 @@ def _generate_targets_section(stages: List[str], dev_project_name: str) -> str:
 
     # Test configuration (optional)
     tests:
-      folder: examples/tests
+      folder: ./tests
 
 """
 
