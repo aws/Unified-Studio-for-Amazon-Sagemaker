@@ -166,10 +166,18 @@ def create_project_via_cloudformation(
             current_role_arn = caller_identity.get("Arn", "")
 
             if current_role_arn:
-                # Extract role name from ARN (arn:aws:iam::account:role/RoleName)
-                current_role_name = (
-                    current_role_arn.split("/")[-1] if "/" in current_role_arn else ""
-                )
+                # Extract role name from ARN
+                # For assumed roles: arn:aws:sts::account:assumed-role/RoleName/SessionName
+                # For regular roles: arn:aws:iam::account:role/RoleName
+                if "assumed-role" in current_role_arn:
+                    # For assumed roles, get the role name (second to last part)
+                    parts = current_role_arn.split("/")
+                    current_role_name = parts[-2] if len(parts) >= 2 else ""
+                else:
+                    # For regular roles, get the last part
+                    current_role_name = (
+                        current_role_arn.split("/")[-1] if "/" in current_role_arn else ""
+                    )
 
                 # Try to resolve current role to DataZone user ID
                 if current_role_name:
