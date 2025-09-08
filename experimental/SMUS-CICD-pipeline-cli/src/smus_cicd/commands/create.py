@@ -304,6 +304,10 @@ def _generate_targets_section(stages: List[str], dev_project_name: str) -> str:
         connectionName: default.s3_shared
         directory: 'workflows'
 
+    # Test configuration (optional)
+    tests:
+      folder: examples/tests
+
 """
 
     return targets_config
