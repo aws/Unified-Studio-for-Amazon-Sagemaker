@@ -54,7 +54,7 @@ jobs:
     
     - name: Install dependencies
       run: |
-        cd experimental/SMUS-CICD-pipeline-cli
+        cd experimental/SMUS-CICD-pipeline-cli/examples
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
     
@@ -125,13 +125,13 @@ jobs:
     
     - name: Install dependencies
       run: |
-        cd experimental/SMUS-CICD-pipeline-cli
+        cd experimental/SMUS-CICD-pipeline-cli/examples
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
     
     - name: Create pipeline manifest
       run: |
-        cd experimental/SMUS-CICD-pipeline-cli
+        cd experimental/SMUS-CICD-pipeline-cli/examples
         smus-cli create \
           --name "${{ needs.setup.outputs.pipeline-name }}" \
           --domain-id "${{ needs.setup.outputs.domain-id }}" \
@@ -145,7 +145,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: pipeline-manifest
-        path: experimental/SMUS-CICD-pipeline-cli/${{ needs.setup.outputs.pipeline-file }}
+        path: experimental/SMUS-CICD-pipeline-cli/examples/${{ needs.setup.outputs.pipeline-file }}
 
   validate-configuration:
     name: "Step 2 - Validate Pipeline Configuration"
@@ -170,7 +170,7 @@ jobs:
     
     - name: Install dependencies
       run: |
-        cd experimental/SMUS-CICD-pipeline-cli
+        cd experimental/SMUS-CICD-pipeline-cli/examples
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
     
@@ -178,11 +178,11 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: pipeline-manifest
-        path: experimental/SMUS-CICD-pipeline-cli/
+        path: experimental/SMUS-CICD-pipeline-cli/examples/
     
     - name: Validate pipeline configuration
       run: |
-        cd experimental/SMUS-CICD-pipeline-cli
+        cd experimental/SMUS-CICD-pipeline-cli/examples
         smus-cli describe \
           --pipeline "${{ needs.setup.outputs.pipeline-file }}" \
           --workflows --connections --connect --output TEXT
@@ -212,7 +212,7 @@ jobs:
     
     - name: Install dependencies
       run: |
-        cd experimental/SMUS-CICD-pipeline-cli
+        cd experimental/SMUS-CICD-pipeline-cli/examples
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
     
@@ -220,11 +220,11 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: pipeline-manifest
-        path: experimental/SMUS-CICD-pipeline-cli/
+        path: experimental/SMUS-CICD-pipeline-cli/examples/
     
     - name: Create deployment bundle
       run: |
-        cd experimental/SMUS-CICD-pipeline-cli
+        cd experimental/SMUS-CICD-pipeline-cli/examples
         smus-cli bundle \
           --pipeline "${{ needs.setup.outputs.pipeline-file }}" \
           --targets dev --output JSON
@@ -235,7 +235,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: deployment-bundle
-        path: experimental/SMUS-CICD-pipeline-cli/bundles/${{ needs.setup.outputs.pipeline-name }}.zip
+        path: experimental/SMUS-CICD-pipeline-cli/examples/bundles/${{ needs.setup.outputs.pipeline-name }}.zip
 
   deploy-test:
     name: "Step 4 - Deploy to Test Environment"
@@ -260,7 +260,7 @@ jobs:
     
     - name: Install dependencies
       run: |
-        cd experimental/SMUS-CICD-pipeline-cli
+        cd experimental/SMUS-CICD-pipeline-cli/examples
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
     
@@ -268,17 +268,17 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: pipeline-manifest
-        path: experimental/SMUS-CICD-pipeline-cli/
+        path: experimental/SMUS-CICD-pipeline-cli/examples/
     
     - name: Download deployment bundle
       uses: actions/download-artifact@v4
       with:
         name: deployment-bundle
-        path: experimental/SMUS-CICD-pipeline-cli/bundles/
+        path: experimental/SMUS-CICD-pipeline-cli/examples/bundles/
     
     - name: Deploy to test environment
       run: |
-        cd experimental/SMUS-CICD-pipeline-cli
+        cd experimental/SMUS-CICD-pipeline-cli/examples
         smus-cli deploy \
           --pipeline "${{ needs.setup.outputs.pipeline-file }}" \
           --targets test
@@ -308,7 +308,7 @@ jobs:
     
     - name: Install dependencies
       run: |
-        cd experimental/SMUS-CICD-pipeline-cli
+        cd experimental/SMUS-CICD-pipeline-cli/examples
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
     
@@ -316,11 +316,11 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: pipeline-manifest
-        path: experimental/SMUS-CICD-pipeline-cli/
+        path: experimental/SMUS-CICD-pipeline-cli/examples/
     
     - name: Run tests
       run: |
-        cd experimental/SMUS-CICD-pipeline-cli
+        cd experimental/SMUS-CICD-pipeline-cli/examples
         smus-cli test \
           --pipeline "${{ needs.setup.outputs.pipeline-file }}" \
           --targets test
@@ -350,7 +350,7 @@ jobs:
     
     - name: Install dependencies
       run: |
-        cd experimental/SMUS-CICD-pipeline-cli
+        cd experimental/SMUS-CICD-pipeline-cli/examples
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
     
@@ -358,11 +358,11 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: pipeline-manifest
-        path: experimental/SMUS-CICD-pipeline-cli/
+        path: experimental/SMUS-CICD-pipeline-cli/examples/
     
     - name: Monitor pipeline status
       run: |
-        cd experimental/SMUS-CICD-pipeline-cli
+        cd experimental/SMUS-CICD-pipeline-cli/examples
         smus-cli monitor \
           --pipeline "${{ needs.setup.outputs.pipeline-file }}" \
           --output TEXT
@@ -392,7 +392,7 @@ jobs:
     
     - name: Install dependencies
       run: |
-        cd experimental/SMUS-CICD-pipeline-cli
+        cd experimental/SMUS-CICD-pipeline-cli/examples
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
     
@@ -400,11 +400,11 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: pipeline-manifest
-        path: experimental/SMUS-CICD-pipeline-cli/
+        path: experimental/SMUS-CICD-pipeline-cli/examples/
     
     - name: Trigger DAG
       run: |
-        cd experimental/SMUS-CICD-pipeline-cli
+        cd experimental/SMUS-CICD-pipeline-cli/examples
         smus-cli run \
           --pipeline "${{ needs.setup.outputs.pipeline-file }}" \
           --targets dev --workflow test_dag \
@@ -414,7 +414,7 @@ jobs:
     
     - name: List DAG tasks
       run: |
-        cd experimental/SMUS-CICD-pipeline-cli
+        cd experimental/SMUS-CICD-pipeline-cli/examples
         smus-cli run \
           --pipeline "${{ needs.setup.outputs.pipeline-file }}" \
           --targets dev --workflow test_dag \
@@ -424,7 +424,7 @@ jobs:
     
     - name: Check task state
       run: |
-        cd experimental/SMUS-CICD-pipeline-cli
+        cd experimental/SMUS-CICD-pipeline-cli/examples
         EXECUTION_DATE=$(date -u +'manual__%Y-%m-%dT%H:%M:%S+00:00')
         smus-cli run \
           --pipeline "${{ needs.setup.outputs.pipeline-file }}" \
@@ -457,7 +457,7 @@ jobs:
     
     - name: Install dependencies
       run: |
-        cd experimental/SMUS-CICD-pipeline-cli
+        cd experimental/SMUS-CICD-pipeline-cli/examples
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
     
@@ -465,12 +465,12 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: pipeline-manifest
-        path: experimental/SMUS-CICD-pipeline-cli/
+        path: experimental/SMUS-CICD-pipeline-cli/examples/
       continue-on-error: true
     
     - name: Cleanup test resources
       run: |
-        cd experimental/SMUS-CICD-pipeline-cli
+        cd experimental/SMUS-CICD-pipeline-cli/examples
         smus-cli delete \
           --targets test \
           --pipeline "${{ needs.setup.outputs.pipeline-file }}" \
