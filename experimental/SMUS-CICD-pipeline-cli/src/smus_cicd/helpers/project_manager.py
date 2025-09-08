@@ -78,6 +78,12 @@ class ProjectManager:
         profile_name = self._get_profile_name(target_config)
         user_parameters = self._extract_user_parameters(target_config, target_name)
         owners, contributors = self._extract_memberships(target_config)
+        
+        # Extract environments for environment creation
+        environments = None
+        if (target_config.initialization 
+            and hasattr(target_config.initialization, "environments")):
+            environments = target_config.initialization.environments
 
         typer.echo(f"Creating project '{project_name}' via CloudFormation...")
         success = cloudformation.create_project_via_cloudformation(
@@ -91,6 +97,7 @@ class ProjectManager:
             user_parameters,
             owners,
             contributors,
+            environments,
         )
 
         if not success:

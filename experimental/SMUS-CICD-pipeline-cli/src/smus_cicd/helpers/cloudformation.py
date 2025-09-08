@@ -54,6 +54,7 @@ def create_project_via_cloudformation(
     user_parameters=None,
     owners=None,
     contributors=None,
+    environments=None,
 ):
     """Create DataZone project with memberships using dynamically generated CloudFormation template."""
     try:
@@ -472,15 +473,28 @@ def create_project_via_cloudformation(
                 if project_id:
                     typer.echo(f"✅ Project {project_name} is ready")
 
-                    # Check and create missing environments from user_parameters
-                    if user_parameters:
+                    # Check and create missing environments from user_parameters or environments
+                    env_params_to_check = user_parameters or []
+                    
+                    # If no user_parameters but environments exist, convert environments to user_parameters format
+                    if not user_parameters and environments:
+                        typer.echo("🔍 Converting environments to user parameters for environment creation")
+                        env_params_to_check = []
+                        for env in environments:
+                            if isinstance(env, dict) and "EnvironmentConfigurationName" in env:
+                                env_params_to_check.append(env)
+                            elif isinstance(env, str):
+                                env_params_to_check.append({"EnvironmentConfigurationName": env})
+                        typer.echo(f"🔍 Environment parameters to check: {env_params_to_check}")
+                    
+                    if env_params_to_check:
                         env_success = _create_missing_environments_via_cloudformation(
                             project_name,
                             domain_name,
                             region,
                             pipeline_name,
                             target_name,
-                            user_parameters,
+                            env_params_to_check,
                             domain_id,
                             project_id,
                         )
