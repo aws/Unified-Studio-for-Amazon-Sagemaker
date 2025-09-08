@@ -54,7 +54,7 @@ jobs:
     
     - name: Install dependencies
       run: |
-        cd experimental/SMUS-CICD-pipeline-cli/examples
+        cd experimental/SMUS-CICD-pipeline-cli
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
     
@@ -125,7 +125,7 @@ jobs:
     
     - name: Install dependencies
       run: |
-        cd experimental/SMUS-CICD-pipeline-cli/examples
+        cd experimental/SMUS-CICD-pipeline-cli
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
     
@@ -170,7 +170,7 @@ jobs:
     
     - name: Install dependencies
       run: |
-        cd experimental/SMUS-CICD-pipeline-cli/examples
+        cd experimental/SMUS-CICD-pipeline-cli
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
     
@@ -212,7 +212,7 @@ jobs:
     
     - name: Install dependencies
       run: |
-        cd experimental/SMUS-CICD-pipeline-cli/examples
+        cd experimental/SMUS-CICD-pipeline-cli
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
     
@@ -260,7 +260,7 @@ jobs:
     
     - name: Install dependencies
       run: |
-        cd experimental/SMUS-CICD-pipeline-cli/examples
+        cd experimental/SMUS-CICD-pipeline-cli
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
     
@@ -308,7 +308,7 @@ jobs:
     
     - name: Install dependencies
       run: |
-        cd experimental/SMUS-CICD-pipeline-cli/examples
+        cd experimental/SMUS-CICD-pipeline-cli
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
     
@@ -350,7 +350,7 @@ jobs:
     
     - name: Install dependencies
       run: |
-        cd experimental/SMUS-CICD-pipeline-cli/examples
+        cd experimental/SMUS-CICD-pipeline-cli
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
     
@@ -392,7 +392,7 @@ jobs:
     
     - name: Install dependencies
       run: |
-        cd experimental/SMUS-CICD-pipeline-cli/examples
+        cd experimental/SMUS-CICD-pipeline-cli
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
     
@@ -457,7 +457,7 @@ jobs:
     
     - name: Install dependencies
       run: |
-        cd experimental/SMUS-CICD-pipeline-cli/examples
+        cd experimental/SMUS-CICD-pipeline-cli
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
     
