@@ -1,6 +1,10 @@
 name: Full Pipeline Lifecycle Demo
 
 on:
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'experimental/SMUS-CICD-pipeline-cli/**'
   workflow_dispatch:
     inputs:
       domain_name:
@@ -45,14 +49,11 @@ jobs:
       with:
         python-version: '3.12'
     
-    - name: Install SMUS CLI
+    - name: Install dependencies
       run: |
         cd experimental/SMUS-CICD-pipeline-cli
         python -m pip install --upgrade pip
-        # Clear Python cache to ensure fresh code
-        find . -name "*.pyc" -delete
-        find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
-        pip install --no-cache-dir -e ".[dev]"
+        pip install -e ".[dev]"
     
     - name: Resolve Domain and Project IDs
       id: resolve
@@ -97,14 +98,16 @@ jobs:
         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         role-session-name: smus-pipeline-lifecycle-create
     
-    - name: Set up Python and install SMUS CLI
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
         cd experimental/SMUS-CICD-pipeline-cli
-        # Clear Python cache to ensure fresh code
-        find . -name "*.pyc" -delete
-        find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
-        pip install --no-cache-dir -e ".[dev]"
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
     
     - name: Create pipeline manifest
       run: |
@@ -140,14 +143,16 @@ jobs:
         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         role-session-name: smus-pipeline-lifecycle-validate
     
-    - name: Set up Python and install SMUS CLI
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
         cd experimental/SMUS-CICD-pipeline-cli
-        # Clear Python cache to ensure fresh code
-        find . -name "*.pyc" -delete
-        find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
-        pip install --no-cache-dir -e ".[dev]"
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
     
     - name: Download pipeline manifest
       uses: actions/download-artifact@v4
@@ -180,14 +185,16 @@ jobs:
         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         role-session-name: smus-pipeline-lifecycle-bundle
     
-    - name: Set up Python and install SMUS CLI
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
         cd experimental/SMUS-CICD-pipeline-cli
-        # Clear Python cache to ensure fresh code
-        find . -name "*.pyc" -delete
-        find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
-        pip install --no-cache-dir -e ".[dev]"
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
     
     - name: Download pipeline manifest
       uses: actions/download-artifact@v4
@@ -220,14 +227,16 @@ jobs:
         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         role-session-name: smus-pipeline-lifecycle-deploy
     
-    - name: Set up Python and install SMUS CLI
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
         cd experimental/SMUS-CICD-pipeline-cli
-        # Clear Python cache to ensure fresh code
-        find . -name "*.pyc" -delete
-        find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
-        pip install --no-cache-dir -e ".[dev]"
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
     
     - name: Download pipeline manifest
       uses: actions/download-artifact@v4
@@ -260,14 +269,16 @@ jobs:
         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         role-session-name: smus-pipeline-lifecycle-test
     
-    - name: Set up Python and install SMUS CLI
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
         cd experimental/SMUS-CICD-pipeline-cli
-        # Clear Python cache to ensure fresh code
-        find . -name "*.pyc" -delete
-        find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
-        pip install --no-cache-dir -e ".[dev]"
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
     
     - name: Download pipeline manifest
       uses: actions/download-artifact@v4
@@ -300,14 +311,16 @@ jobs:
         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         role-session-name: smus-pipeline-lifecycle-monitor
     
-    - name: Set up Python and install SMUS CLI
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
         cd experimental/SMUS-CICD-pipeline-cli
-        # Clear Python cache to ensure fresh code
-        find . -name "*.pyc" -delete
-        find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
-        pip install --no-cache-dir -e ".[dev]"
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
     
     - name: Download pipeline manifest
       uses: actions/download-artifact@v4
@@ -340,14 +353,16 @@ jobs:
         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         role-session-name: smus-pipeline-lifecycle-execute
     
-    - name: Set up Python and install SMUS CLI
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
         cd experimental/SMUS-CICD-pipeline-cli
-        # Clear Python cache to ensure fresh code
-        find . -name "*.pyc" -delete
-        find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
-        pip install --no-cache-dir -e ".[dev]"
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
     
     - name: Download pipeline manifest
       uses: actions/download-artifact@v4
@@ -403,14 +418,16 @@ jobs:
         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         role-session-name: smus-pipeline-lifecycle-cleanup
     
-    - name: Set up Python and install SMUS CLI
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
         cd experimental/SMUS-CICD-pipeline-cli
-        # Clear Python cache to ensure fresh code
-        find . -name "*.pyc" -delete
-        find . -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
-        pip install --no-cache-dir -e ".[dev]"
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
     
     - name: Download pipeline manifest
       uses: actions/download-artifact@v4
