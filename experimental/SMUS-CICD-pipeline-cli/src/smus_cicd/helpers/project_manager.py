@@ -26,7 +26,9 @@ class ProjectManager:
         print(f"🔍 DEBUG: project_name: {project_name}")
 
         # Check if project exists in DataZone first
-        project_info = get_datazone_project_info(project_name, self.config)
+        # Ensure config has region for get_datazone_project_info
+        config_with_region = {**self.config, 'region': self.region}
+        project_info = get_datazone_project_info(project_name, config_with_region)
         print(f"🔍 DEBUG: project_info keys: {list(project_info.keys())}")
         print(f"🔍 DEBUG: project_info has error: {'error' in project_info}")
 
@@ -77,7 +79,8 @@ class ProjectManager:
         typer.echo("🔧 Auto-initializing target infrastructure...")
 
         # Double-check project doesn't exist (race condition protection)
-        project_info = get_datazone_project_info(project_name, self.config)
+        config_with_region = {**self.config, 'region': self.region}
+        project_info = get_datazone_project_info(project_name, config_with_region)
         if "error" not in project_info:
             handle_success(
                 f"✅ Project '{project_name}' was created by another process"
@@ -122,9 +125,12 @@ class ProjectManager:
 
         print(f"🔍 DEBUG: CloudFormation creation succeeded - getting project info")
         handle_success("Target infrastructure ready")
-        final_project_info = get_datazone_project_info(project_name, self.config)
+        config_with_region = {**self.config, 'region': self.region}
+        final_project_info = get_datazone_project_info(project_name, config_with_region)
         print(f"🔍 DEBUG: Final project_info keys: {list(final_project_info.keys()) if isinstance(final_project_info, dict) else type(final_project_info)}")
         print(f"🔍 DEBUG: Final project_info has error: {'error' in final_project_info if isinstance(final_project_info, dict) else 'not a dict'}")
+        if isinstance(final_project_info, dict) and 'error' in final_project_info:
+            print(f"🔍 DEBUG: Actual error content: {final_project_info['error']}")
         return final_project_info
 
     def _update_existing_project(

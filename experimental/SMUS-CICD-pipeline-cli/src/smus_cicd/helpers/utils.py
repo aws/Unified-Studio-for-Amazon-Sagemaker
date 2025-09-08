@@ -124,30 +124,51 @@ def get_datazone_project_info(
     Returns:
         Dictionary containing project information or error details
     """
+    print(f"🔍 DEBUG: get_datazone_project_info called for project: {project_name}")
     try:
         region = _get_region_from_config(config)
+        print(f"🔍 DEBUG: Using region: {region}")
+        
         domain_id = _resolve_domain_id(config, region)
+        print(f"🔍 DEBUG: Resolved domain_id: {domain_id}")
 
         if not domain_id:
+            print(f"🔍 DEBUG: Domain not found - returning error")
             return {"error": "Domain not found"}
 
+        print(f"🔍 DEBUG: Getting project ID for project: {project_name}")
         project_id = _get_project_id(project_name, domain_id, region)
+        print(f"🔍 DEBUG: Project ID result: {project_id}")
         if not project_id:
+            print(f"🔍 DEBUG: Project {project_name} not found - returning error")
             return {"error": f"Project {project_name} not found"}
 
+        print(f"🔍 DEBUG: Getting project details for project_id: {project_id}")
         project_details = _get_project_details(domain_id, project_id, region)
+        print(f"🔍 DEBUG: Project details: {project_details}")
+        
+        print(f"🔍 DEBUG: Getting project owners")
         project_owners = _get_project_owners(domain_id, project_id, region)
+        print(f"🔍 DEBUG: Project owners: {len(project_owners) if project_owners else 0} owners")
+        
+        print(f"🔍 DEBUG: Getting project connections")
         project_connections = _get_project_connections(project_name, config, region)
+        print(f"🔍 DEBUG: Project connections: {len(project_connections) if project_connections else 0} connections")
 
-        return {
+        result = {
             "projectId": project_id,
             "project_id": project_id,  # Keep backward compatibility
             "status": project_details.get("status", "Unknown"),
             "owners": project_owners,
             "connections": project_connections,
         }
+        print(f"🔍 DEBUG: get_datazone_project_info returning success with keys: {list(result.keys())}")
+        return result
 
     except Exception as e:
+        print(f"🔍 DEBUG: get_datazone_project_info exception: {type(e).__name__}: {str(e)}")
+        import traceback
+        print(f"🔍 DEBUG: Full traceback: {traceback.format_exc()}")
         return {"error": str(e)}
 
 
