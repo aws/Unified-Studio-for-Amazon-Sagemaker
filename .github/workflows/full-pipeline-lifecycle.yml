@@ -98,7 +98,6 @@ jobs:
         echo "project-name=$PROJECT_NAME" >> $GITHUB_OUTPUT
         echo "pipeline-name=$PIPELINE_NAME" >> $GITHUB_OUTPUT
 
-  create-manifest:
   validate-configuration:
     name: "Step 1 - Validate Pipeline Configuration"
     runs-on: ubuntu-latest
