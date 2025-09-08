@@ -230,6 +230,14 @@ jobs:
           --targets dev --output JSON
         
         echo "✅ Deployment bundle created for dev target"
+        
+        # Debug: List files to see where bundle was created
+        echo "📁 Files in current directory:"
+        ls -la
+        echo "📁 Files in bundles directory (if exists):"
+        ls -la bundles/ 2>/dev/null || echo "No bundles directory found"
+        echo "📁 Looking for .zip files:"
+        find . -name "*.zip" -type f 2>/dev/null || echo "No .zip files found"
 
   deploy-test:
     name: "Step 4 - Deploy to Test Environment"
