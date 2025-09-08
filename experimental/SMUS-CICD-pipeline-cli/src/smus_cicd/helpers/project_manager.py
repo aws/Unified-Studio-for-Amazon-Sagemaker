@@ -210,15 +210,25 @@ class ProjectManager:
     ) -> None:
         """Ensure required environments exist in the project."""
         print(f"🔍 DEBUG: _ensure_environments_exist called for target: {target_name}")
-        print(f"🔍 DEBUG: target_config.initialization exists: {target_config.initialization is not None}")
-        
+        print(
+            f"🔍 DEBUG: target_config.initialization exists: {target_config.initialization is not None}"
+        )
+
         if target_config.initialization:
-            print(f"🔍 DEBUG: target_config.initialization type: {type(target_config.initialization)}")
-            print(f"🔍 DEBUG: target_config.initialization attributes: {dir(target_config.initialization)}")
-            print(f"🔍 DEBUG: hasattr environments: {hasattr(target_config.initialization, 'environments')}")
+            print(
+                f"🔍 DEBUG: target_config.initialization type: {type(target_config.initialization)}"
+            )
+            print(
+                f"🔍 DEBUG: target_config.initialization attributes: {dir(target_config.initialization)}"
+            )
+            print(
+                f"🔍 DEBUG: hasattr environments: {hasattr(target_config.initialization, 'environments')}"
+            )
             if hasattr(target_config.initialization, "environments"):
-                print(f"🔍 DEBUG: environments value: {target_config.initialization.environments}")
-        
+                print(
+                    f"🔍 DEBUG: environments value: {target_config.initialization.environments}"
+                )
+
         if not (
             target_config.initialization
             and hasattr(target_config.initialization, "environments")
@@ -314,45 +324,48 @@ class ProjectManager:
                 description=f"Auto-created environment for {env_name}",
             )
 
-            environment_id = response.get('id')
+            environment_id = response.get("id")
             print(f"🔍 DEBUG: Environment creation initiated: {environment_id}")
-            
+
             # Wait for environment to be fully provisioned
             print("⏳ Waiting for environment to be fully provisioned...")
             max_attempts = 60  # 10 minutes max
             attempt = 0
-            
+
             while attempt < max_attempts:
                 try:
                     env_response = datazone_client.get_environment(
-                        domainIdentifier=domain_id,
-                        identifier=environment_id
+                        domainIdentifier=domain_id, identifier=environment_id
                     )
                     status = env_response.get("status")
-                    print(f"🔍 DEBUG: Environment status check {attempt + 1}/{max_attempts}: {status}")
-                    
+                    print(
+                        f"🔍 DEBUG: Environment status check {attempt + 1}/{max_attempts}: {status}"
+                    )
+
                     if status == "ACTIVE":
                         print("✅ Environment is now ACTIVE and ready")
                         return True
                     elif status in ["FAILED", "CANCELLED"]:
                         print(f"❌ Environment creation failed with status: {status}")
                         return False
-                    
+
                     # Wait 10 seconds before next check
                     import time
+
                     time.sleep(10)
                     attempt += 1
-                    
+
                 except Exception as e:
                     print(f"⚠️ Error checking environment status: {e}")
                     attempt += 1
                     import time
+
                     time.sleep(10)
-            
+
             if attempt >= max_attempts:
                 print("⚠️ Timeout waiting for environment to become ACTIVE")
                 return False
-                
+
             return True
 
         except Exception as e:

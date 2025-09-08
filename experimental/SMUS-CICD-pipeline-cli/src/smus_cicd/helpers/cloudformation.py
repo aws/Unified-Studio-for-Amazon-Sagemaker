@@ -248,7 +248,7 @@ def create_project_via_cloudformation(
         except cf_client.exceptions.AlreadyExistsException:
             # Stack already exists - attempt to update it
             typer.echo(f"CloudFormation stack {stack_name} already exists")
-            
+
             try:
                 # Attempt to update the stack with new parameters
                 typer.echo(f"Updating CloudFormation stack: {stack_name}")
@@ -259,7 +259,7 @@ def create_project_via_cloudformation(
                     Capabilities=["CAPABILITY_IAM", "CAPABILITY_AUTO_EXPAND"],
                     Tags=tags,
                 )
-                
+
                 # Wait for update to complete
                 typer.echo("Waiting for stack update to complete...")
                 waiter = cf_client.get_waiter("stack_update_complete")
@@ -268,20 +268,30 @@ def create_project_via_cloudformation(
                     WaiterConfig={"Delay": 30, "MaxAttempts": 60},  # 30 minutes max
                 )
                 typer.echo(f"✅ Stack {stack_name} updated successfully")
-                
+
             except cf_client.exceptions.ClientError as update_error:
-                error_code = update_error.response['Error']['Code']
+                error_code = update_error.response["Error"]["Code"]
                 error_message = str(update_error)
-                
-                if error_code == 'ValidationError' and 'No updates are to be performed' in error_message:
+
+                if (
+                    error_code == "ValidationError"
+                    and "No updates are to be performed" in error_message
+                ):
                     # No changes needed - this is fine
                     typer.echo(f"✅ Stack {stack_name} is already up to date")
-                elif 'UPDATE_ROLLBACK_COMPLETE' in error_message and 'AlreadyExists' in error_message:
+                elif (
+                    "UPDATE_ROLLBACK_COMPLETE" in error_message
+                    and "AlreadyExists" in error_message
+                ):
                     # Stack update failed due to existing memberships - this is acceptable
-                    typer.echo(f"⚠️ Stack update rolled back due to existing project memberships - continuing")
+                    typer.echo(
+                        "⚠️ Stack update rolled back due to existing project memberships - continuing"
+                    )
                 else:
                     # Other update errors
-                    typer.echo(f"❌ Failed to update stack {stack_name}: {update_error}")
+                    typer.echo(
+                        f"❌ Failed to update stack {stack_name}: {update_error}"
+                    )
                     return False
 
             # Check if the project actually exists in DataZone
@@ -568,13 +578,9 @@ def _create_missing_environments_via_cloudformation(
         # Handle EnvironmentUserParameters object
         if hasattr(env_param, "EnvironmentConfigurationName"):
             env_name = env_param.EnvironmentConfigurationName
-            env_parameters = (
-                env_param.parameters if hasattr(env_param, "parameters") else []
-            )
         else:
             # Fallback for dict format
             env_name = env_param.get("EnvironmentConfigurationName", "")
-            env_parameters = env_param.get("EnvironmentParameters", [])
 
         if not env_name:
             continue
@@ -602,9 +608,6 @@ def _create_missing_environments_via_cloudformation(
             all_success = False
 
     return all_success
-
-
-
 
 
 def _validate_mwaa_environment(project_id: str, domain_id: str, region: str) -> None:
@@ -637,6 +640,3 @@ def _validate_mwaa_environment(project_id: str, domain_id: str, region: str) -> 
 
     except Exception as e:
         typer.echo(f"🔍 DEBUG: Error validating MWAA: {e}")
-
-
-

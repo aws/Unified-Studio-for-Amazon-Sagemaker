@@ -349,25 +349,33 @@ def _get_project_connection(
 
     connection_name = file_config.get("connectionName", "default.s3_shared")
     connections = project_info.get("connections", {})
-    
+
     # Log all available connections for debugging
-    typer.echo(f"🔍 DEBUG: Looking for connection '{connection_name}' in project '{project_name}'")
+    typer.echo(
+        f"🔍 DEBUG: Looking for connection '{connection_name}' in project '{project_name}'"
+    )
     typer.echo(f"🔍 DEBUG: Available connections: {list(connections.keys())}")
-    
+
     connection = connections.get(connection_name, {})
     if connection:
-        typer.echo(f"✅ Found connection '{connection_name}': {connection.get('type', 'unknown')} type")
+        typer.echo(
+            f"✅ Found connection '{connection_name}': {connection.get('type', 'unknown')} type"
+        )
     else:
         typer.echo(f"❌ Connection '{connection_name}' not found")
         # Try to find any S3 connection as fallback
-        s3_connections = {k: v for k, v in connections.items() if isinstance(v, dict) and v.get('type') == 'S3'}
+        s3_connections = {
+            k: v
+            for k, v in connections.items()
+            if isinstance(v, dict) and v.get("type") == "S3"
+        }
         if s3_connections:
             fallback_name = list(s3_connections.keys())[0]
             connection = s3_connections[fallback_name]
             typer.echo(f"🔄 Using fallback S3 connection: '{fallback_name}'")
         else:
             typer.echo("❌ No S3 connections available")
-    
+
     return connection
 
 
