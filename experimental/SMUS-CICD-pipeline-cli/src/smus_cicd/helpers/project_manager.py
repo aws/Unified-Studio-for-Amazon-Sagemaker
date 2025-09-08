@@ -20,31 +20,46 @@ class ProjectManager:
 
     def ensure_project_exists(self, target_name: str, target_config) -> Dict[str, Any]:
         """Ensure project exists, create if needed and configured to do so."""
+        print(f"🔍 DEBUG: ensure_project_exists called for target: {target_name}")
+        
         project_name = target_config.project.name
+        print(f"🔍 DEBUG: project_name: {project_name}")
 
         # Check if project exists in DataZone first
         project_info = get_datazone_project_info(project_name, self.config)
+        print(f"🔍 DEBUG: project_info keys: {list(project_info.keys())}")
+        print(f"🔍 DEBUG: project_info has error: {'error' in project_info}")
 
         if "error" not in project_info:
             # Project exists - check and create missing environments
+            print(f"🔍 DEBUG: Project exists path - calling _ensure_environments_exist")
             handle_success(f"✅ Project '{project_name}' already exists")
             self._update_existing_project(target_name, target_config, project_name)
             self._ensure_environments_exist(target_name, target_config, project_info)
             return project_info
 
         # Project doesn't exist - check if we should create it
+        print(f"🔍 DEBUG: Project doesn't exist - checking if should create")
         if self._should_create_project(target_config):
+            print(f"🔍 DEBUG: Should create project - calling _create_new_project")
             project_info = self._create_new_project(
                 target_name, target_config, project_name
             )
+            print(f"🔍 DEBUG: _create_new_project returned")
+            print(f"🔍 DEBUG: project_info after creation: {list(project_info.keys()) if isinstance(project_info, dict) else type(project_info)}")
+            print(f"🔍 DEBUG: project_info has error after creation: {'error' in project_info if isinstance(project_info, dict) else 'not a dict'}")
             if "error" not in project_info:
                 # After creating project, ensure environments exist
+                print(f"🔍 DEBUG: Project created successfully - calling _ensure_environments_exist")
                 self._ensure_environments_exist(
                     target_name, target_config, project_info
                 )
+            else:
+                print(f"🔍 DEBUG: Project creation failed - NOT calling _ensure_environments_exist")
             return project_info
 
         # Project doesn't exist and we're not configured to create it
+        print(f"🔍 DEBUG: Project doesn't exist and create=false - NOT calling _ensure_environments_exist")
         handle_error(f"Project '{project_name}' not found and create=false")
         return project_info
 
@@ -100,11 +115,17 @@ class ProjectManager:
             environments,
         )
 
+        print(f"🔍 DEBUG: CloudFormation create_project_via_cloudformation returned: {success}")
         if not success:
+            print(f"🔍 DEBUG: CloudFormation creation failed - returning error")
             handle_error("Failed to create project")
 
+        print(f"🔍 DEBUG: CloudFormation creation succeeded - getting project info")
         handle_success("Target infrastructure ready")
-        return get_datazone_project_info(project_name, self.config)
+        final_project_info = get_datazone_project_info(project_name, self.config)
+        print(f"🔍 DEBUG: Final project_info keys: {list(final_project_info.keys()) if isinstance(final_project_info, dict) else type(final_project_info)}")
+        print(f"🔍 DEBUG: Final project_info has error: {'error' in final_project_info if isinstance(final_project_info, dict) else 'not a dict'}")
+        return final_project_info
 
     def _update_existing_project(
         self, target_name: str, target_config, project_name: str
