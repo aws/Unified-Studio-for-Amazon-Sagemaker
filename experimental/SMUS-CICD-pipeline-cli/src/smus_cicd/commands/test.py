@@ -1,5 +1,6 @@
 """Test command implementation."""
 
+import json
 import os
 import subprocess
 import sys
@@ -201,8 +202,6 @@ def test_command(
 
         # Output results
         if output.upper() == "JSON":
-            import json
-
             result_data = {
                 "pipeline": manifest.pipeline_name,
                 "domain": manifest.domain.name,
@@ -243,8 +242,6 @@ def test_command(
 
     except Exception as e:
         if output.upper() == "JSON":
-            import json
-
             error_data = {"error": str(e)}
             typer.echo(json.dumps(error_data, indent=2))
         else:

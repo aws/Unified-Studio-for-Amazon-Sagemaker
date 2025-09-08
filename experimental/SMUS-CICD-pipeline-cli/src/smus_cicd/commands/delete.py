@@ -1,5 +1,6 @@
 """Delete command for SMUS CI/CD CLI."""
 
+import json
 from typing import Optional
 
 import typer
@@ -161,8 +162,6 @@ def delete_command(
 
         # Output results
         if output.upper() == "JSON":
-            import json
-
             print(
                 json.dumps(
                     {

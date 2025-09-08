@@ -2,6 +2,7 @@
 
 import json
 
+import boto3
 import typer
 
 from ..helpers.utils import get_datazone_project_info, load_config
@@ -159,8 +160,6 @@ def describe_command(
                                             and "ListConnections" in conn_info
                                         ):
                                             try:
-                                                import boto3
-
                                                 sts_client = boto3.client("sts")
                                                 identity = (
                                                     sts_client.get_caller_identity()
@@ -195,8 +194,6 @@ def describe_command(
                                             and "ListConnections" in error_msg
                                         ):
                                             try:
-                                                import boto3
-
                                                 sts_client = boto3.client("sts")
                                                 identity = (
                                                     sts_client.get_caller_identity()

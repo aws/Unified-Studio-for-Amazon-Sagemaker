@@ -22,6 +22,7 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       RoleName: GitHubActionsRole-SMUS-CLI-Tests
+      MaxSessionDuration: 3600  # 1 hour (3600 seconds)
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -32,7 +33,6 @@ Resources:
             Condition:
               StringEquals:
                 'token.actions.githubusercontent.com:aud': sts.amazonaws.com
-                'token.actions.githubusercontent.com:job_workflow_ref': !Sub '${GitHubOrg}/${GitHubRepo}/.github/workflows/integration-tests.yml@refs/heads/main'
               StringLike:
                 'token.actions.githubusercontent.com:sub': !Sub 'repo:${GitHubOrg}/${GitHubRepo}:environment:${GitHubEnvironment}'
       ManagedPolicyArns:

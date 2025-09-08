@@ -142,11 +142,10 @@ config.local.yaml
 *.local.yaml
 
 # Bundle files
-bundles/
+tests/integration/bundles/*.zip
 *.zip
 
 # Temporary files and scripts
 q-tasks.txt
 create_pdf*.py
 cleanup.py
-code-assist-script.md

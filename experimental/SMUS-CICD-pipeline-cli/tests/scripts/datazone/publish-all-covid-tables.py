@@ -6,7 +6,7 @@ Find and publish ALL COVID-19 tables.
 import boto3
 
 def publish_all_covid_tables():
-    domain_id = "dzd_6je2k8b63qse07"
+    domain_id = "<DOMAIN_ID>"
     project_id = "d8ipo2t2p8oalj"
     region = "us-east-1"
     

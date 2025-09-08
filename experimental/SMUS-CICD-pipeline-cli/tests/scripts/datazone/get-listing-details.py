@@ -7,7 +7,7 @@ import boto3
 import json
 
 def get_listing_details():
-    domain_id = "dzd_6je2k8b63qse07"
+    domain_id = "<DOMAIN_ID>"
     region = "us-east-1"
     
     datazone = boto3.client('datazone', region_name=region)

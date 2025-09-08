@@ -7,7 +7,7 @@ import boto3
 import time
 
 def run_data_source():
-    domain_id = "dzd_6je2k8b63qse07"
+    domain_id = "<DOMAIN_ID>"
     data_source_id = "4cwzmlddk64enb"
     region = "us-east-1"
     

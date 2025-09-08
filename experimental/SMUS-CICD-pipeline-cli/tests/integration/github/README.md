@@ -8,6 +8,31 @@ This directory contains the necessary files to set up GitHub Actions integration
 - `deploy-github-integration.sh` - Script to deploy the CloudFormation stack
 - `README.md` - This file
 
+## GitHub Workflows
+
+The repository includes several GitHub Actions workflows:
+
+### 1. CI Workflow (`.github/workflows/ci.yml`)
+- **Trigger**: Pull requests and pushes to main/master
+- **Jobs**: Linting (flake8, black, isort), unit tests with coverage, security scans
+- **Purpose**: Comprehensive code quality and testing validation
+
+### 2. PR Integration Tests (`.github/workflows/pr-tests.yml`)
+- **Trigger**: Pull requests to main/master (paths: `experimental/SMUS-CICD-pipeline-cli/**`)
+- **Jobs**: Integration tests with AWS credentials
+- **Purpose**: Test SMUS CLI functionality against real AWS resources
+- **Environment**: Uses `aws-env` GitHub environment for AWS credentials
+
+### 3. Full Pipeline Lifecycle Demo (`.github/workflows/full-pipeline-lifecycle.yml`)
+- **Trigger**: Manual workflow dispatch
+- **Jobs**: 8-step pipeline demonstration following `examples/full-pipeline-lifecycle.sh`
+- **Purpose**: End-to-end demonstration of SMUS CLI capabilities
+- **Features**: 
+  - Customizable domain, project, and pipeline names
+  - Sequential jobs: setup, create manifest, validate, bundle, deploy, test, monitor, execute workflows, cleanup
+  - Artifact sharing between jobs
+  - Proper error handling and cleanup
+
 ## Setup Instructions
 
 ### 1. Deploy the CloudFormation Stack

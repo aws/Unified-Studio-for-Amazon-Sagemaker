@@ -10,10 +10,10 @@ def test_datazone_apis():
     """Test various DataZone APIs to find project user role."""
     
     # Known values from our previous work
-    domain_id = "dzd_6je2k8b63qse07"
+    domain_id = "<DOMAIN_ID>"
     project_id = "d8ipo2t2p8oalj"
     region = "us-east-1"
-    expected_role = "arn:aws:iam::058264284947:role/datazone_usr_role_d8ipo2t2p8oalj_6hufhs8cbb5qjr"
+    expected_role = "arn:aws:iam::<ACCOUNT_ID>:role/datazone_usr_role_d8ipo2t2p8oalj_6hufhs8cbb5qjr"
     
     datazone = boto3.client('datazone', region_name=region)
     

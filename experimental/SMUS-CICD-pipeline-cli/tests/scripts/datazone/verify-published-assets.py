@@ -6,7 +6,7 @@ Verify COVID-19 assets are published by searching listings.
 import boto3
 
 def verify_published_assets():
-    domain_id = "dzd_6je2k8b63qse07"
+    domain_id = "<DOMAIN_ID>"
     region = "us-east-1"
     
     datazone = boto3.client('datazone', region_name=region)

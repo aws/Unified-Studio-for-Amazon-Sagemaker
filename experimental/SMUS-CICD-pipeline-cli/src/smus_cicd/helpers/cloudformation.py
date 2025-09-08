@@ -246,8 +246,53 @@ def create_project_via_cloudformation(
             typer.echo(f"Stack creation initiated: {stack_id}")
 
         except cf_client.exceptions.AlreadyExistsException:
-            # Stack already exists - check if project exists in DataZone
+            # Stack already exists - attempt to update it
             typer.echo(f"CloudFormation stack {stack_name} already exists")
+
+            try:
+                # Attempt to update the stack with new parameters
+                typer.echo(f"Updating CloudFormation stack: {stack_name}")
+                cf_client.update_stack(
+                    StackName=stack_name,
+                    TemplateBody=template_body,
+                    Parameters=parameters,
+                    Capabilities=["CAPABILITY_IAM", "CAPABILITY_AUTO_EXPAND"],
+                    Tags=tags,
+                )
+
+                # Wait for update to complete
+                typer.echo("Waiting for stack update to complete...")
+                waiter = cf_client.get_waiter("stack_update_complete")
+                waiter.wait(
+                    StackName=stack_name,
+                    WaiterConfig={"Delay": 30, "MaxAttempts": 60},  # 30 minutes max
+                )
+                typer.echo(f"✅ Stack {stack_name} updated successfully")
+
+            except cf_client.exceptions.ClientError as update_error:
+                error_code = update_error.response["Error"]["Code"]
+                error_message = str(update_error)
+
+                if (
+                    error_code == "ValidationError"
+                    and "No updates are to be performed" in error_message
+                ):
+                    # No changes needed - this is fine
+                    typer.echo(f"✅ Stack {stack_name} is already up to date")
+                elif (
+                    "UPDATE_ROLLBACK_COMPLETE" in error_message
+                    and "AlreadyExists" in error_message
+                ):
+                    # Stack update failed due to existing memberships - this is acceptable
+                    typer.echo(
+                        "⚠️ Stack update rolled back due to existing project memberships - continuing"
+                    )
+                else:
+                    # Other update errors
+                    typer.echo(
+                        f"❌ Failed to update stack {stack_name}: {update_error}"
+                    )
+                    return False
 
             # Check if the project actually exists in DataZone
             domain_id = datazone.get_domain_id_by_name(domain_name, region)
@@ -256,7 +301,7 @@ def create_project_via_cloudformation(
                     project_name, domain_id, region
                 )
                 if project_id:
-                    typer.echo(f"✅ Project {project_name} already exists and is ready")
+                    typer.echo(f"✅ Project {project_name} is ready")
 
                     # Check and create missing environments from user_parameters
                     if user_parameters:
@@ -278,7 +323,7 @@ def create_project_via_cloudformation(
 
             # Stack exists but project doesn't - this is an error state
             typer.echo(
-                f"❌ Stack exists but project {project_name} not found in DataZone"
+                f"❌ Stack updated but project {project_name} not found in DataZone"
             )
             return False
 
@@ -533,13 +578,9 @@ def _create_missing_environments_via_cloudformation(
         # Handle EnvironmentUserParameters object
         if hasattr(env_param, "EnvironmentConfigurationName"):
             env_name = env_param.EnvironmentConfigurationName
-            env_parameters = (
-                env_param.parameters if hasattr(env_param, "parameters") else []
-            )
         else:
             # Fallback for dict format
             env_name = env_param.get("EnvironmentConfigurationName", "")
-            env_parameters = env_param.get("EnvironmentParameters", [])
 
         if not env_name:
             continue
@@ -550,17 +591,9 @@ def _create_missing_environments_via_cloudformation(
 
         typer.echo(f"🔧 Creating missing environment: {env_name}")
         try:
-            # Create environment using CloudFormation stack
-            success = _create_environment_stack(
-                project_name,
-                env_name,
-                domain_name,
-                region,
-                pipeline_name,
-                target_name,
-                domain_id,
-                project_id,
-                env_parameters,
+            # Create environment using DataZone helper
+            success = datazone.create_environment_and_wait(
+                domain_id, project_id, env_name, target_name, region
             )
             if success:
                 typer.echo(f"✅ Environment '{env_name}' created successfully")
@@ -575,52 +608,6 @@ def _create_missing_environments_via_cloudformation(
             all_success = False
 
     return all_success
-
-
-def _get_environment_configuration_id(
-    domain_id: str, project_id: str, env_name: str, region: str
-) -> str:
-    """Get environment configuration ID from project profile."""
-    try:
-        import boto3
-
-        datazone_client = boto3.client("datazone", region_name=region)
-
-        # Get project details to find project profile
-        project_details = datazone_client.get_project(
-            domainIdentifier=domain_id, identifier=project_id
-        )
-
-        project_profile_id = project_details.get("projectProfileId")
-        if not project_profile_id:
-            typer.echo("🔍 DEBUG: No project profile found")
-            return None
-
-        typer.echo(f"🔍 DEBUG: Project Profile ID: {project_profile_id}")
-
-        # Get project profile details
-        profile_details = datazone_client.get_project_profile(
-            domainIdentifier=domain_id, identifier=project_profile_id
-        )
-
-        # Find environment configuration that matches target specification
-        env_configs = profile_details.get("environmentConfigurations", [])
-        typer.echo(f"🔍 DEBUG: Found {len(env_configs)} environment configurations")
-
-        for config in env_configs:
-            config_name = config.get("name")
-            config_id = config.get("id")
-            typer.echo(f"🔍 DEBUG: - {config_name} (ID: {config_id})")
-            if config_name == env_name:
-                typer.echo(f"🔍 DEBUG: Found matching configuration: {config_id}")
-                return config_id
-
-        typer.echo(f"🔍 DEBUG: Environment configuration '{env_name}' not found")
-        return None
-
-    except Exception as e:
-        typer.echo(f"🔍 DEBUG: Error getting environment configuration: {e}")
-        return None
 
 
 def _validate_mwaa_environment(project_id: str, domain_id: str, region: str) -> None:
@@ -653,89 +640,3 @@ def _validate_mwaa_environment(project_id: str, domain_id: str, region: str) -> 
 
     except Exception as e:
         typer.echo(f"🔍 DEBUG: Error validating MWAA: {e}")
-
-
-def _create_environment_stack(
-    project_name,
-    env_name,
-    domain_name,
-    region,
-    pipeline_name,
-    target_name,
-    domain_id,
-    project_id,
-    env_parameters,
-):
-    """Create a DataZone environment directly using API (not CloudFormation)."""
-    typer.echo(f"🔍 DEBUG: Starting environment creation for '{env_name}'")
-
-    try:
-        import boto3
-
-        datazone_client = boto3.client("datazone", region_name=region)
-        typer.echo(f"🔍 DEBUG: DataZone client created for region {region}")
-
-        # Generate environment name
-        safe_env_name = env_name.replace(" ", "-").replace("_", "-").lower()
-        environment_name = f"{target_name}-{safe_env_name}-env"
-        typer.echo(f"🔍 DEBUG: Generated environment name: {environment_name}")
-
-        # Check if environment already exists
-        typer.echo("🔍 DEBUG: Checking if environment already exists...")
-        try:
-            environments_response = datazone_client.list_environments(
-                domainIdentifier=domain_id, projectIdentifier=project_id
-            )
-            typer.echo(
-                f"🔍 DEBUG: Found {len(environments_response.get('items', []))} existing environments"
-            )
-
-            for env in environments_response.get("items", []):
-                existing_name = env.get("name")
-                typer.echo(f"🔍 DEBUG: Checking existing environment: {existing_name}")
-                if existing_name == environment_name:
-                    typer.echo(
-                        f"✅ Environment '{environment_name}' already exists, skipping creation"
-                    )
-                    return True
-
-        except Exception as list_error:
-            typer.echo(f"🔍 DEBUG: Could not check existing environments: {list_error}")
-
-        typer.echo("🔍 DEBUG: Environment doesn't exist, proceeding with creation")
-
-        # Get the correct environment configuration ID
-        typer.echo("🔍 DEBUG: Getting environment configuration ID...")
-        config_id = _get_environment_configuration_id(
-            domain_id, project_id, env_name, region
-        )
-        if not config_id:
-            typer.echo(f"❌ Environment configuration '{env_name}' not found")
-            return False
-
-        typer.echo(
-            f"🔧 Creating environment directly via DataZone API: {environment_name}"
-        )
-        typer.echo(f"🔍 DEBUG: Using configuration ID: {config_id}")
-
-        # Create environment directly using DataZone API
-        typer.echo("🔍 DEBUG: Calling create_environment API...")
-        response = datazone_client.create_environment(
-            domainIdentifier=domain_id,
-            projectIdentifier=project_id,
-            name=environment_name,
-            environmentConfigurationId=config_id,
-            description=f"Environment for {target_name} target - {env_name}",
-        )
-
-        environment_id = response.get("id")
-        typer.echo(f"✅ Environment created successfully: {environment_id}")
-        typer.echo(f"🔍 DEBUG: Environment status: {response.get('status')}")
-        typer.echo("🔍 DEBUG: Environment creation completed successfully")
-
-        return True
-
-    except Exception as e:
-        typer.echo(f"❌ Error creating environment via API: {e}")
-        typer.echo(f"🔍 DEBUG: Exception type: {type(e).__name__}")
-        return False

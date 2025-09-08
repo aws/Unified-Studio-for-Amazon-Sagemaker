@@ -7,7 +7,7 @@ import boto3
 import json
 
 def get_asset_details():
-    domain_id = "dzd_6je2k8b63qse07"
+    domain_id = "<DOMAIN_ID>"
     asset_id = "5wv8ic57ncebhj"  # time_series_19_covid_combined
     region = "us-east-1"
     

@@ -221,7 +221,7 @@ def wait_for_run_completion(domain_id, run_id, region, max_wait=300):
 
 def main():
     # Known values
-    domain_id = "dzd_6je2k8b63qse07"
+    domain_id = "<DOMAIN_ID>"
     project_id = "d8ipo2t2p8oalj"
     region = "us-east-1"
     

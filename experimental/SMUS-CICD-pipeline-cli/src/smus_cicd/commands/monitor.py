@@ -1,5 +1,6 @@
 """Monitor command implementation."""
 
+import datetime
 import json
 from typing import Optional
 
@@ -59,8 +60,6 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
             typer.echo("\n🔍 Monitoring Status:")
 
         # Add timestamp
-        import datetime
-
         timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
         output_data["monitoring_timestamp"] = timestamp
 

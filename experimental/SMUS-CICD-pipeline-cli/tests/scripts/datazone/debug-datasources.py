@@ -6,7 +6,7 @@ Debug script to see all data sources and their connections.
 import boto3
 
 def debug_data_sources():
-    domain_id = "dzd_6je2k8b63qse07"
+    domain_id = "<DOMAIN_ID>"
     project_id = "d8ipo2t2p8oalj"
     region = "us-east-1"
     

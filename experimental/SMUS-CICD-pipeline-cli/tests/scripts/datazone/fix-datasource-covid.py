@@ -6,7 +6,7 @@ Fix the data source configuration by removing schema name.
 import boto3
 
 def fix_data_source():
-    domain_id = "dzd_6je2k8b63qse07"
+    domain_id = "<DOMAIN_ID>"
     data_source_id = "4cwzmlddk64enb"  # The failed data source
     region = "us-east-1"
     
