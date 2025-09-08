@@ -179,11 +179,22 @@ def create_project_via_cloudformation(
                         current_role_arn.split("/")[-1] if "/" in current_role_arn else ""
                     )
 
-                # Try to resolve current role to DataZone user ID
-                if current_role_name:
-                    current_role_ids = datazone.resolve_usernames_to_ids(
-                        [current_role_name], domain_id, region
-                    )
+                # Try to resolve current role to DataZone user ID using full ARN
+                if current_role_arn:
+                    # Convert assumed role ARN to IAM role ARN for DataZone lookup
+                    if "assumed-role" in current_role_arn and current_role_name:
+                        # Convert arn:aws:sts::account:assumed-role/RoleName/SessionName
+                        # to arn:aws:iam::account:role/RoleName
+                        account_id = current_role_arn.split(":")[4]
+                        iam_role_arn = f"arn:aws:iam::{account_id}:role/{current_role_name}"
+                        current_role_ids = datazone.resolve_usernames_to_ids(
+                            [iam_role_arn], domain_id, region
+                        )
+                    else:
+                        # For regular IAM role ARNs, use as-is
+                        current_role_ids = datazone.resolve_usernames_to_ids(
+                            [current_role_arn], domain_id, region
+                        )
                     if current_role_ids:
                         current_role_id = current_role_ids[0]
                         # Filter out current role from owners to avoid duplicate
