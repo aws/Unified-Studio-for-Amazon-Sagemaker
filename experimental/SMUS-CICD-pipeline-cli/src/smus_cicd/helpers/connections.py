@@ -86,7 +86,7 @@ def get_project_connections(
     datazone_client = boto3.client("datazone", region_name=region)
 
     try:
-        response = datazone_client.list_project_data_sources(
+        response = datazone_client.list_connections(
             domainIdentifier=domain_id, projectIdentifier=project_id
         )
 
