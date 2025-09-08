@@ -22,7 +22,16 @@ def display_bundle_tree(zip_path: str, output: str):
 
     try:
         with zipfile.ZipFile(zip_path, "r") as zipf:
-            file_list = sorted(zipf.namelist())
+            # Filter out Python cache files
+            file_list = sorted(
+                [
+                    f
+                    for f in zipf.namelist()
+                    if not f.endswith(".pyc")
+                    and "__pycache__" not in f
+                    and ".ipynb_checkpoints" not in f
+                ]
+            )
 
         if not file_list:
             return
@@ -252,12 +261,29 @@ def bundle_command(
                             timeout=60,
                         )
 
-                        # Remove .git directory
+                        # Remove .git directory and Python cache files
                         git_dir = os.path.join(clone_path, ".git")
                         if os.path.exists(git_dir):
                             shutil.rmtree(git_dir)
 
-                        # Count files
+                        # Remove Python cache files and directories
+                        for root, dirs, files in os.walk(clone_path, topdown=False):
+                            # Remove __pycache__ directories
+                            dirs_to_remove = [
+                                d
+                                for d in dirs
+                                if d == "__pycache__" or d == ".ipynb_checkpoints"
+                            ]
+                            for d in dirs_to_remove:
+                                shutil.rmtree(os.path.join(root, d))
+                                dirs.remove(d)
+
+                            # Remove .pyc files
+                            files_to_remove = [f for f in files if f.endswith(".pyc")]
+                            for f in files_to_remove:
+                                os.remove(os.path.join(root, f))
+
+                        # Count files (after cleanup)
                         git_files_added = 0
                         for root, dirs, files in os.walk(clone_path):
                             git_files_added += len(files)
@@ -284,7 +310,18 @@ def bundle_command(
 
                 with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
                     for root, dirs, files in os.walk(temp_bundle_dir):
+                        # Filter out __pycache__ directories
+                        dirs[:] = [
+                            d
+                            for d in dirs
+                            if d != "__pycache__" and d != ".ipynb_checkpoints"
+                        ]
+
                         for file in files:
+                            # Skip .pyc files
+                            if file.endswith(".pyc"):
+                                continue
+
                             file_path = os.path.join(root, file)
                             arc_name = os.path.relpath(file_path, temp_bundle_dir)
                             zipf.write(file_path, arc_name)
