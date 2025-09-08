@@ -61,7 +61,7 @@ targets:
       project:
         create: true
         profileName: 'All capabilities'
-        owners: [arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests]
+        owners: [arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests, Eng1]
         contributors: []
       environments: 
         - EnvironmentConfigurationName: 'OnDemand Workflows'     
@@ -78,38 +78,13 @@ targets:
     tests:
       folder: ./tests
   
-  prod:
-    stage: PROD
-    project:
-      name: dev-marketing-prod
-      create: true  # Auto-create project
-    # default: true  # Uncomment to make this the default target
-    
-    initialization:
-      project:
-        create: true
-        profileName: 'All capabilities'
-        owners: [arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests]
-        contributors: []
-    
-    # Bundle target configuration
-    bundle_target_configuration:
-      storage:
-        connectionName: default.s3_shared
-        directory: 'src'        
-      workflows:
-        connectionName: default.s3_shared
-        directory: 'workflows'
-    
-    # Test configuration
-    tests:
-      folder: ./tests
-  
 
-# Workflows configuration (optional)
-# workflows:
-#   - workflowName: your_workflow_name
-#     connectionName: project.workflow_mwaa
+# Workflows configuration
+workflows:
+  - workflowName: sample_dag
+    connectionName: project.workflow_mwaa
+    engine: MWAA
+    triggerPostDeployment: false
 #     triggerPostDeployment: true
 #     logging: console
 #     engine: MWAA

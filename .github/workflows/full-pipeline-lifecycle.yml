@@ -25,10 +25,51 @@ permissions:
   contents: read
 
 jobs:
-  setup:
-    name: "Setup - Resolve Domain and Project IDs"
+  cleanup:
+    name: "Step 1 - Cleanup Previous Resources"
     runs-on: ubuntu-latest
     environment: aws-env
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-region: us-east-1
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        role-session-name: smus-pipeline-lifecycle-cleanup
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli
+        python -m pip install --upgrade pip --no-cache-dir
+        pip install -e ".[dev]" --no-cache-dir
+    
+    - name: Cleanup previous test resources
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli/examples
+        echo "🧹 Cleaning up previous test resources..."
+        
+        # Try to delete test target resources if they exist
+        smus-cli delete \
+          --pipeline "DemoMarketingPipeline.yaml" \
+          --targets test \
+          --force || echo "No test resources to clean up"
+        
+        echo "✅ Cleanup completed"
+      continue-on-error: true
+
+  setup:
+    name: "Step 2 - Setup Domain and Project IDs"
+    runs-on: ubuntu-latest
+    environment: aws-env
+    needs: cleanup
     outputs:
       domain-id: ${{ steps.resolve.outputs.domain-id }}
       project-id: ${{ steps.resolve.outputs.project-id }}
@@ -99,7 +140,7 @@ jobs:
         echo "pipeline-name=$PIPELINE_NAME" >> $GITHUB_OUTPUT
 
   validate-configuration:
-    name: "Step 1 - Validate Pipeline Configuration"
+    name: "Step 3 - Validate Pipeline Configuration"
     runs-on: ubuntu-latest
     environment: aws-env
     needs: [setup]
@@ -136,7 +177,7 @@ jobs:
         echo "✅ Pipeline configuration validated"
 
   create-bundle:
-    name: "Step 2 - Create Deployment Bundle"
+    name: "Step 3 - Create Deployment Bundle"
     runs-on: ubuntu-latest
     environment: aws-env
     needs: [setup, validate-configuration]
@@ -179,7 +220,7 @@ jobs:
         path: experimental/SMUS-CICD-pipeline-cli/examples/bundles/${{ needs.setup.outputs.pipeline-name }}.zip
 
   deploy-test:
-    name: "Step 3 - Deploy to Test Environment"
+    name: "Step 4 - Deploy to Test Environment"
     runs-on: ubuntu-latest
     environment: aws-env
     needs: [setup, create-bundle]
@@ -222,7 +263,7 @@ jobs:
         echo "✅ Deployed to test environment"
 
   run-tests:
-    name: "Step 4 - Run Tests"
+    name: "Step 5 - Run Tests"
     runs-on: ubuntu-latest
     environment: aws-env
     needs: [setup, deploy-test]
@@ -259,7 +300,7 @@ jobs:
         echo "✅ Tests completed"
 
   monitor-pipeline:
-    name: "Step 5 - Monitor Pipeline Status"
+    name: "Step 6 - Monitor Pipeline Status"
     runs-on: ubuntu-latest
     environment: aws-env
     needs: [setup, run-tests]
@@ -353,44 +394,8 @@ jobs:
           --command "tasks state test_dag hello_world $EXECUTION_DATE"
         
         echo "✅ Task state checked"
-
-  cleanup:
-    name: "Step 8 - Cleanup Resources"
-    runs-on: ubuntu-latest
-    environment: aws-env
-    needs: [setup, execute-workflows]
-    if: always()
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-region: us-east-1
-        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-        role-session-name: smus-pipeline-lifecycle-cleanup
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
-    
-    - name: Install dependencies
-      run: |
-        cd experimental/SMUS-CICD-pipeline-cli
-        python -m pip install --upgrade pip
-        pip install -e ".[dev]"
-    
-      continue-on-error: true
-    
-    - name: Cleanup test resources
-      run: |
-        cd experimental/SMUS-CICD-pipeline-cli/examples
-        smus-cli delete \
-          --targets test \
-          --pipeline "${{ needs.setup.outputs.pipeline-file }}" \
-          --force
-        
-        echo "✅ Cleanup completed"
-      continue-on-error: true
+        echo "🎉 Pipeline lifecycle demo completed successfully!"
+        echo "📋 Resources left in place for inspection:"
+        echo "  - Project: dev-marketing-test"
+        echo "  - Domain: cicd-test-domain"
+        echo "  - MWAA Environment: (if created)"
