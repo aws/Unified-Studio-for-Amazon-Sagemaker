@@ -271,7 +271,11 @@ class ProjectManager:
             return
 
         project_id = project_info.get("project_id")
-        domain_id = project_info.get("domain_id")
+        
+        # Resolve domain_id the same way _create_new_project does
+        domain_id = datazone.get_domain_id_by_name(self.domain_name, self.region)
+        
+        print(f"🔍 DEBUG: Resolved project_id: {project_id}, domain_id: {domain_id}")
 
         if not project_id or not domain_id:
             print(
