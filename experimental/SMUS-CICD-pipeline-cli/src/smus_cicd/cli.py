@@ -309,6 +309,7 @@ def cli_error_handler():
         if e.exit_code != 0:
             # Check if JSON output was requested
             import sys
+
             is_json_output = "--output" in sys.argv and "JSON" in sys.argv
             if not is_json_output:
                 console.print(f"[dim]SMUS CI/CD CLI v{__version__}[/dim]")
@@ -317,6 +318,7 @@ def cli_error_handler():
     except Exception as e:
         # Check if JSON output was requested
         import sys
+
         is_json_output = "--output" in sys.argv and "JSON" in sys.argv
         if not is_json_output:
             console.print(f"[dim]SMUS CI/CD CLI v{__version__}[/dim]")
