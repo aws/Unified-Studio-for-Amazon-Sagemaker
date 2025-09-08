@@ -1,4 +1,4 @@
-name: Full Pipeline Lifecycle Demo
+name: Full SMUS CICD Pipeline Lifecycle Demo
 
 on:
   pull_request:
