@@ -26,12 +26,14 @@ def _get_existing_memberships(
         for member in memberships_response.get("members", []):
             member_details = member.get("memberDetails", {})
             if "user" in member_details:
-                user_id = member_details["user"]["userIdentifier"]
-                designation = member.get("designation")
-                existing_memberships[user_id] = designation
-                typer.echo(
-                    f"🔍 DEBUG: Found existing membership: {user_id} -> {designation}"
-                )
+                user_info = member_details["user"]
+                user_id = user_info.get("userIdentifier")
+                if user_id:
+                    designation = member.get("designation")
+                    existing_memberships[user_id] = designation
+                    typer.echo(
+                        f"🔍 DEBUG: Found existing membership: {user_id} -> {designation}"
+                    )
 
         typer.echo(f"🔍 DEBUG: Total existing memberships: {len(existing_memberships)}")
         return existing_memberships
@@ -166,9 +168,7 @@ def create_project_via_cloudformation(
             if current_role_arn:
                 # Extract role name from ARN (arn:aws:iam::account:role/RoleName)
                 current_role_name = (
-                    current_role_arn.split("/")[-1]
-                    if "/" in current_role_arn
-                    else ""
+                    current_role_arn.split("/")[-1] if "/" in current_role_arn else ""
                 )
 
                 # Try to resolve current role to DataZone user ID
@@ -393,6 +393,33 @@ def create_project_via_cloudformation(
                 ):
                     # No changes needed - this is fine
                     typer.echo(f"✅ Stack {stack_name} is already up to date")
+                elif (
+                    error_code == "ValidationError"
+                    and "DELETE_IN_PROGRESS" in error_message
+                ):
+                    # Stack is being deleted - wait for deletion to complete then recreate
+                    typer.echo(f"⏳ Stack {stack_name} is being deleted, waiting for completion...")
+                    try:
+                        waiter = cf_client.get_waiter("stack_delete_complete")
+                        waiter.wait(
+                            StackName=stack_name,
+                            WaiterConfig={"Delay": 30, "MaxAttempts": 60},  # 30 minutes max
+                        )
+                        typer.echo(f"✅ Stack {stack_name} deletion completed, recreating...")
+                        
+                        # Now create the stack fresh
+                        response = cf_client.create_stack(
+                            StackName=stack_name,
+                            TemplateBody=template_body,
+                            Parameters=parameters,
+                            Capabilities=["CAPABILITY_IAM", "CAPABILITY_AUTO_EXPAND"],
+                            Tags=tags,
+                        )
+                        typer.echo(f"Stack recreation initiated: {response['StackId']}")
+                        
+                    except Exception as wait_error:
+                        typer.echo(f"❌ Failed to wait for stack deletion: {wait_error}")
+                        return False
                 elif (
                     "UPDATE_ROLLBACK_COMPLETE" in error_message
                     and "AlreadyExists" in error_message
