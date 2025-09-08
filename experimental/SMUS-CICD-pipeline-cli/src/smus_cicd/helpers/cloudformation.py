@@ -4,11 +4,36 @@ CloudFormation utility functions for SMUS CI/CD CLI.
 
 import time
 from pathlib import Path
+from typing import Dict
 
 import boto3
 import typer
 
 from . import datazone
+
+
+def _get_existing_memberships(
+    domain_id: str, project_id: str, region: str
+) -> Dict[str, str]:
+    """Get existing project memberships as a dict of user_id -> designation."""
+    try:
+        datazone_client = boto3.client("datazone", region_name=region)
+        memberships_response = datazone_client.list_project_memberships(
+            domainIdentifier=domain_id, projectIdentifier=project_id
+        )
+
+        existing_memberships = {}
+        for member in memberships_response.get("members", []):
+            member_details = member.get("memberDetails", {})
+            if "user" in member_details:
+                user_id = member_details["user"]["userIdentifier"]
+                designation = member.get("designation")
+                existing_memberships[user_id] = designation
+
+        return existing_memberships
+    except Exception as e:
+        typer.echo(f"🔍 DEBUG: Error getting existing memberships: {e}")
+        return {}
 
 
 def create_project_via_cloudformation(
@@ -126,6 +151,47 @@ def create_project_via_cloudformation(
                     f"Resolved {len(contributor_ids)} contributors: {contributors} -> {contributor_ids}"
                 )
 
+        # Check if project already exists and filter out existing memberships
+        existing_project_id = datazone.get_project_id_by_name(
+            project_name, domain_id, region
+        )
+        if existing_project_id:
+            typer.echo(
+                f"🔍 Project {project_name} already exists, checking existing memberships..."
+            )
+            existing_memberships = _get_existing_memberships(
+                domain_id, existing_project_id, region
+            )
+            typer.echo(f"🔍 Found {len(existing_memberships)} existing memberships")
+
+            # Filter out owners who already have PROJECT_OWNER designation
+            original_owner_count = len(owner_ids)
+            owner_ids = [
+                uid
+                for uid in owner_ids
+                if existing_memberships.get(uid) != "PROJECT_OWNER"
+            ]
+            if original_owner_count > len(owner_ids):
+                typer.echo(
+                    f"🔍 Filtered out {original_owner_count - len(owner_ids)} existing owners"
+                )
+
+            # Filter out contributors who already have PROJECT_CONTRIBUTOR designation
+            original_contributor_count = len(contributor_ids)
+            contributor_ids = [
+                uid
+                for uid in contributor_ids
+                if existing_memberships.get(uid) != "PROJECT_CONTRIBUTOR"
+            ]
+            if original_contributor_count > len(contributor_ids):
+                typer.echo(
+                    f"🔍 Filtered out {original_contributor_count - len(contributor_ids)} existing contributors"
+                )
+
+            typer.echo(
+                f"🔍 Will add {len(owner_ids)} new owners and {len(contributor_ids)} new contributors"
+            )
+
         # Generate CloudFormation template dynamically
         template_dict = {
             "AWSTemplateFormatVersion": "2010-09-09",
@@ -184,7 +250,10 @@ def create_project_via_cloudformation(
 
         # Add project memberships if they exist
         membership_counter = 1
+        has_new_memberships = False
+
         if owner_ids:
+            has_new_memberships = True
             for owner_id in owner_ids:
                 resource_name = f"OwnerMembership{membership_counter}"
                 template_dict["Resources"][resource_name] = {
@@ -199,6 +268,7 @@ def create_project_via_cloudformation(
                 membership_counter += 1
 
         if contributor_ids:
+            has_new_memberships = True
             for contributor_id in contributor_ids:
                 resource_name = f"ContributorMembership{membership_counter}"
                 template_dict["Resources"][resource_name] = {
@@ -211,6 +281,13 @@ def create_project_via_cloudformation(
                     },
                 }
                 membership_counter += 1
+
+        # If project exists and no new memberships needed, skip stack update
+        if existing_project_id and not has_new_memberships:
+            typer.echo(
+                "✅ No new memberships to add - project is already configured correctly"
+            )
+            return True
 
         import json
 
