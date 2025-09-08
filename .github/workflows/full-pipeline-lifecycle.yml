@@ -88,70 +88,22 @@ jobs:
         
         echo "✅ Domain ID: $DOMAIN_ID"
         echo "✅ Project ID: $PROJECT_ID"
-        echo "✅ Pipeline File: $PIPELINE_FILE"
+        echo "✅ Using existing pipeline file: DemoMarketingPipeline.yaml"
         
         # Set outputs
         echo "domain-id=$DOMAIN_ID" >> $GITHUB_OUTPUT
         echo "project-id=$PROJECT_ID" >> $GITHUB_OUTPUT
-        echo "pipeline-file=$PIPELINE_FILE" >> $GITHUB_OUTPUT
+        echo "pipeline-file=DemoMarketingPipeline.yaml" >> $GITHUB_OUTPUT
         echo "domain-name=$DOMAIN_NAME" >> $GITHUB_OUTPUT
         echo "project-name=$PROJECT_NAME" >> $GITHUB_OUTPUT
         echo "pipeline-name=$PIPELINE_NAME" >> $GITHUB_OUTPUT
-        
-        echo "domain-id=$DOMAIN_ID" >> $GITHUB_OUTPUT
-        echo "project-id=$PROJECT_ID" >> $GITHUB_OUTPUT
-        echo "pipeline-file=$PIPELINE_FILE" >> $GITHUB_OUTPUT
 
   create-manifest:
-    name: "Step 1 - Create Pipeline Manifest"
-    runs-on: ubuntu-latest
-    environment: aws-env
-    needs: setup
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-region: us-east-1
-        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-        role-session-name: smus-pipeline-lifecycle-create
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
-    
-    - name: Install dependencies
-      run: |
-        cd experimental/SMUS-CICD-pipeline-cli
-        python -m pip install --upgrade pip
-        pip install -e ".[dev]"
-    
-    - name: Create pipeline manifest
-      run: |
-        cd experimental/SMUS-CICD-pipeline-cli/examples
-        smus-cli create \
-          --name "${{ needs.setup.outputs.pipeline-name }}" \
-          --domain-id "${{ needs.setup.outputs.domain-id }}" \
-          --dev-project-id "${{ needs.setup.outputs.project-id }}" \
-          --output "${{ needs.setup.outputs.pipeline-file }}"
-        
-        echo "✅ Pipeline manifest created: ${{ needs.setup.outputs.pipeline-file }}"
-        cat "${{ needs.setup.outputs.pipeline-file }}"
-    
-    - name: Upload pipeline manifest
-      uses: actions/upload-artifact@v4
-      with:
-        name: pipeline-manifest
-        path: experimental/SMUS-CICD-pipeline-cli/examples/${{ needs.setup.outputs.pipeline-file }}
-
   validate-configuration:
-    name: "Step 2 - Validate Pipeline Configuration"
+    name: "Step 1 - Validate Pipeline Configuration"
     runs-on: ubuntu-latest
     environment: aws-env
-    needs: [setup, create-manifest]
+    needs: [setup]
     
     steps:
     - uses: actions/checkout@v4
@@ -174,11 +126,6 @@ jobs:
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
     
-    - name: Download pipeline manifest
-      uses: actions/download-artifact@v4
-      with:
-        name: pipeline-manifest
-        path: experimental/SMUS-CICD-pipeline-cli/examples/
     
     - name: Validate pipeline configuration
       run: |
@@ -190,7 +137,7 @@ jobs:
         echo "✅ Pipeline configuration validated"
 
   create-bundle:
-    name: "Step 3 - Create Deployment Bundle"
+    name: "Step 2 - Create Deployment Bundle"
     runs-on: ubuntu-latest
     environment: aws-env
     needs: [setup, validate-configuration]
@@ -216,11 +163,6 @@ jobs:
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
     
-    - name: Download pipeline manifest
-      uses: actions/download-artifact@v4
-      with:
-        name: pipeline-manifest
-        path: experimental/SMUS-CICD-pipeline-cli/examples/
     
     - name: Create deployment bundle
       run: |
@@ -238,7 +180,7 @@ jobs:
         path: experimental/SMUS-CICD-pipeline-cli/examples/bundles/${{ needs.setup.outputs.pipeline-name }}.zip
 
   deploy-test:
-    name: "Step 4 - Deploy to Test Environment"
+    name: "Step 3 - Deploy to Test Environment"
     runs-on: ubuntu-latest
     environment: aws-env
     needs: [setup, create-bundle]
@@ -264,11 +206,6 @@ jobs:
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
     
-    - name: Download pipeline manifest
-      uses: actions/download-artifact@v4
-      with:
-        name: pipeline-manifest
-        path: experimental/SMUS-CICD-pipeline-cli/examples/
     
     - name: Download deployment bundle
       uses: actions/download-artifact@v4
@@ -286,7 +223,7 @@ jobs:
         echo "✅ Deployed to test environment"
 
   run-tests:
-    name: "Step 5 - Run Tests"
+    name: "Step 4 - Run Tests"
     runs-on: ubuntu-latest
     environment: aws-env
     needs: [setup, deploy-test]
@@ -312,11 +249,6 @@ jobs:
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
     
-    - name: Download pipeline manifest
-      uses: actions/download-artifact@v4
-      with:
-        name: pipeline-manifest
-        path: experimental/SMUS-CICD-pipeline-cli/examples/
     
     - name: Run tests
       run: |
@@ -328,7 +260,7 @@ jobs:
         echo "✅ Tests completed"
 
   monitor-pipeline:
-    name: "Step 6 - Monitor Pipeline Status"
+    name: "Step 5 - Monitor Pipeline Status"
     runs-on: ubuntu-latest
     environment: aws-env
     needs: [setup, run-tests]
@@ -354,11 +286,6 @@ jobs:
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
     
-    - name: Download pipeline manifest
-      uses: actions/download-artifact@v4
-      with:
-        name: pipeline-manifest
-        path: experimental/SMUS-CICD-pipeline-cli/examples/
     
     - name: Monitor pipeline status
       run: |
@@ -396,11 +323,6 @@ jobs:
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
     
-    - name: Download pipeline manifest
-      uses: actions/download-artifact@v4
-      with:
-        name: pipeline-manifest
-        path: experimental/SMUS-CICD-pipeline-cli/examples/
     
     - name: Trigger DAG
       run: |
@@ -461,11 +383,6 @@ jobs:
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
     
-    - name: Download pipeline manifest
-      uses: actions/download-artifact@v4
-      with:
-        name: pipeline-manifest
-        path: experimental/SMUS-CICD-pipeline-cli/examples/
       continue-on-error: true
     
     - name: Cleanup test resources
