@@ -230,14 +230,12 @@ jobs:
           --targets dev --output JSON
         
         echo "✅ Deployment bundle created for dev target"
-        
-        # Debug: List files to see where bundle was created
-        echo "📁 Files in current directory:"
-        ls -la
-        echo "📁 Files in bundles directory (if exists):"
-        ls -la bundles/ 2>/dev/null || echo "No bundles directory found"
-        echo "📁 Looking for .zip files:"
-        find . -name "*.zip" -type f 2>/dev/null || echo "No .zip files found"
+    
+    - name: Upload deployment bundle
+      uses: actions/upload-artifact@v4
+      with:
+        name: deployment-bundle
+        path: experimental/SMUS-CICD-pipeline-cli/bundles/${{ needs.setup.outputs.pipeline-name }}.zip
 
   deploy-test:
     name: "Step 4 - Deploy to Test Environment"
@@ -271,6 +269,12 @@ jobs:
       with:
         name: pipeline-manifest
         path: experimental/SMUS-CICD-pipeline-cli/
+    
+    - name: Download deployment bundle
+      uses: actions/download-artifact@v4
+      with:
+        name: deployment-bundle
+        path: experimental/SMUS-CICD-pipeline-cli/bundles/
     
     - name: Deploy to test environment
       run: |
