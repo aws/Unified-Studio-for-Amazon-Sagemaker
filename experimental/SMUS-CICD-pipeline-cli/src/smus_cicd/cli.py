@@ -303,16 +303,17 @@ def main():
 
 def cli_error_handler():
     """Handle CLI errors and provide helpful suggestions."""
-    # Always print version for debugging
-    console.print(f"[dim]SMUS CI/CD CLI v{__version__}[/dim]")
-
     try:
         app()
     except typer.Exit as e:
         if e.exit_code != 0:
+            # Only print version and help on errors
+            console.print(f"[dim]SMUS CI/CD CLI v{__version__}[/dim]")
             show_help_suggestion()
         raise
     except Exception as e:
+        # Print version and error info on exceptions
+        console.print(f"[dim]SMUS CI/CD CLI v{__version__}[/dim]")
         console.print(f"\n[red]❌ Error: {e}[/red]")
         show_help_suggestion()
         raise typer.Exit(1)
