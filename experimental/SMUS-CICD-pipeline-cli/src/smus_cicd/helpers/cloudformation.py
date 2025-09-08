@@ -398,15 +398,22 @@ def create_project_via_cloudformation(
                     and "DELETE_IN_PROGRESS" in error_message
                 ):
                     # Stack is being deleted - wait for deletion to complete then recreate
-                    typer.echo(f"⏳ Stack {stack_name} is being deleted, waiting for completion...")
+                    typer.echo(
+                        f"⏳ Stack {stack_name} is being deleted, waiting for completion..."
+                    )
                     try:
                         waiter = cf_client.get_waiter("stack_delete_complete")
                         waiter.wait(
                             StackName=stack_name,
-                            WaiterConfig={"Delay": 30, "MaxAttempts": 60},  # 30 minutes max
+                            WaiterConfig={
+                                "Delay": 30,
+                                "MaxAttempts": 60,
+                            },  # 30 minutes max
                         )
-                        typer.echo(f"✅ Stack {stack_name} deletion completed, recreating...")
-                        
+                        typer.echo(
+                            f"✅ Stack {stack_name} deletion completed, recreating..."
+                        )
+
                         # Now create the stack fresh
                         response = cf_client.create_stack(
                             StackName=stack_name,
@@ -416,9 +423,11 @@ def create_project_via_cloudformation(
                             Tags=tags,
                         )
                         typer.echo(f"Stack recreation initiated: {response['StackId']}")
-                        
+
                     except Exception as wait_error:
-                        typer.echo(f"❌ Failed to wait for stack deletion: {wait_error}")
+                        typer.echo(
+                            f"❌ Failed to wait for stack deletion: {wait_error}"
+                        )
                         return False
                 elif (
                     "UPDATE_ROLLBACK_COMPLETE" in error_message
