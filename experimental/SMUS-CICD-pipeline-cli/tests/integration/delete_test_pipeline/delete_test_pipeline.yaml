@@ -18,7 +18,7 @@ targets:
       project: 
         create: true
         profileName: 'All capabilities'
-        owners: []
+        owners: [arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests]
         contributors: []
         userParameters: 
           - EnvironmentConfigurationName: 'Lakehouse Database'

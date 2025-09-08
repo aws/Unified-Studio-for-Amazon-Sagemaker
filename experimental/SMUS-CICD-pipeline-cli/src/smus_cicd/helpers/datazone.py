@@ -47,6 +47,143 @@ def get_project_id_by_name(project_name, domain_id, region):
         return None
 
 
+def create_environment_and_wait(domain_id, project_id, env_name, target_name, region):
+    """Create DataZone environment and wait for it to be ACTIVE."""
+    try:
+        datazone_client = boto3.client("datazone", region_name=region)
+        
+        # Check if environment already exists
+        try:
+            environments_response = datazone_client.list_environments(
+                domainIdentifier=domain_id, projectIdentifier=project_id
+            )
+            typer.echo(f"🔍 DEBUG: Found {len(environments_response.get('items', []))} existing environments")
+
+            environment_name = f"{target_name}-{env_name.lower().replace(' ', '-')}-env"
+            for env in environments_response.get("items", []):
+                existing_name = env.get("name")
+                existing_status = env.get("status")
+                existing_id = env.get("id")
+                typer.echo(f"🔍 DEBUG: Checking existing environment: {existing_name} (status: {existing_status})")
+                
+                if existing_name == environment_name:
+                    if existing_status == "ACTIVE":
+                        typer.echo(f"✅ Environment '{env_name}' already exists and is ACTIVE")
+                        return True
+                    elif existing_status == "CREATING":
+                        typer.echo(f"⏳ Environment '{env_name}' is already being created, waiting for completion...")
+                        # Wait for existing environment to complete
+                        return _wait_for_environment_completion(datazone_client, domain_id, existing_id)
+                    elif existing_status in ["FAILED", "CANCELLED"]:
+                        typer.echo(f"⚠️ Environment '{env_name}' exists but is in {existing_status} state")
+                        # Could delete and recreate, but for now just fail
+                        return False
+
+        except Exception as list_error:
+            typer.echo(f"🔍 DEBUG: Could not check existing environments: {list_error}")
+
+        # Get environment configuration ID
+        config_id = _get_environment_configuration_id(domain_id, project_id, env_name, region)
+        if not config_id:
+            typer.echo(f"❌ Environment configuration '{env_name}' not found")
+            return False
+
+        # Create environment
+        environment_name = f"{target_name}-{env_name.lower().replace(' ', '-')}-env"
+        typer.echo(f"🔧 Creating environment via DataZone API: {environment_name}")
+        typer.echo(f"🔍 DEBUG: Using configuration ID: {config_id}")
+
+        response = datazone_client.create_environment(
+            domainIdentifier=domain_id,
+            projectIdentifier=project_id,
+            name=environment_name,
+            environmentConfigurationId=config_id,
+            description=f"Environment for {target_name} target - {env_name}",
+        )
+
+        environment_id = response.get("id")
+        typer.echo(f"✅ Environment created successfully: {environment_id}")
+        typer.echo(f"🔍 DEBUG: Environment status: {response.get('status')}")
+        
+        # Wait for environment to be fully provisioned
+        typer.echo("⏳ Waiting for environment to be fully provisioned...")
+        return _wait_for_environment_completion(datazone_client, domain_id, environment_id)
+
+    except Exception as e:
+        typer.echo(f"❌ Error creating environment: {e}")
+        return False
+
+
+def _wait_for_environment_completion(datazone_client, domain_id, environment_id):
+    """Wait for an existing environment to complete provisioning."""
+    max_attempts = 120  # 20 minutes max (10 seconds * 120)
+    attempt = 0
+    
+    while attempt < max_attempts:
+        try:
+            env_response = datazone_client.get_environment(
+                domainIdentifier=domain_id,
+                identifier=environment_id
+            )
+            status = env_response.get("status")
+            typer.echo(f"🔍 DEBUG: Environment status check {attempt + 1}/{max_attempts}: {status}")
+            
+            if status == "ACTIVE":
+                typer.echo("✅ Environment is now ACTIVE and ready")
+                return True
+            elif status in ["FAILED", "CANCELLED"]:
+                typer.echo(f"❌ Environment creation failed with status: {status}")
+                return False
+            
+            # Wait 10 seconds before next check
+            time.sleep(10)
+            attempt += 1
+            
+        except Exception as e:
+            typer.echo(f"⚠️ Error checking environment status: {e}")
+            attempt += 1
+            time.sleep(10)
+    
+    if attempt >= max_attempts:
+        typer.echo("⚠️ Timeout waiting for environment to become ACTIVE")
+        return False
+
+
+    """Get environment configuration ID by name."""
+    try:
+        datazone_client = boto3.client("datazone", region_name=region)
+        
+        # Get project profile ID first
+        project_response = datazone_client.get_project(
+            domainIdentifier=domain_id, identifier=project_id
+        )
+        project_profile_id = project_response.get("projectProfileId")
+        typer.echo(f"🔍 DEBUG: Project Profile ID: {project_profile_id}")
+
+        # List environment configurations
+        configs_response = datazone_client.list_environment_configurations(
+            domainIdentifier=domain_id, projectIdentifier=project_id
+        )
+        
+        typer.echo(f"🔍 DEBUG: Found {len(configs_response.get('items', []))} environment configurations")
+        
+        for config in configs_response.get("items", []):
+            config_name = config.get("name")
+            config_id = config.get("id")
+            typer.echo(f"🔍 DEBUG: - {config_name} (ID: {config_id})")
+            
+            if config_name == env_name:
+                typer.echo(f"🔍 DEBUG: Found matching configuration: {config_id}")
+                return config_id
+        
+        typer.echo(f"🔍 DEBUG: No matching configuration found for: {env_name}")
+        return None
+        
+    except Exception as e:
+        typer.echo(f"🔍 DEBUG: Error getting environment configuration: {e}")
+        return None
+
+
 def wait_for_data_source_runs_completion(
     domain_name, project_id, region, max_wait_seconds=300
 ):
@@ -474,10 +611,33 @@ def resolve_connection_details(connection_name, target_config, region, domain_na
 
 
 def get_user_id_by_username(username, domain_id, region):
-    """Get IDC user identifier by username using Identity Center APIs."""
+    """Get user identifier by username or IAM role ARN using DataZone and Identity Center APIs."""
     try:
-        # Get Identity Center instance ARN from DataZone domain
         datazone_client = boto3.client("datazone", region_name=region)
+        
+        # Check if username is an IAM role ARN
+        if username.startswith("arn:aws:iam::") and ":role/" in username:
+            # Search for IAM role in DataZone user profiles
+            try:
+                response = datazone_client.search_user_profiles(
+                    domainIdentifier=domain_id,
+                    userType="DATAZONE_IAM_USER"
+                )
+                
+                for user_profile in response.get("items", []):
+                    iam_details = user_profile.get("details", {}).get("iam", {})
+                    if iam_details.get("arn") == username:
+                        return user_profile.get("id")
+                
+                print(f"IAM role ARN '{username}' not found in DataZone user profiles")
+                return None
+                
+            except Exception as e:
+                print(f"Error searching for IAM role '{username}': {str(e)}")
+                return None
+        
+        # Handle regular username lookup via Identity Center
+        # Get Identity Center instance ARN from DataZone domain
         domain_response = datazone_client.get_domain(identifier=domain_id)
 
         # Extract Identity Center instance ARN from domain

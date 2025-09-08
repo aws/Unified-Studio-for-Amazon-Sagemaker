@@ -59,6 +59,7 @@ targets:
             profileName: 'All capabilities'
             owners: 
             - Eng1
+            - arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests
             contributors: []                     
           # environments: 
           #   - EnvironmentConfigurationName: 'OnDemand Workflows'
@@ -88,6 +89,7 @@ targets:
             profileName: 'All capabilities'
             owners: 
             - Eng1
+            - arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests
             contributors: []             
           environments: 
             - EnvironmentConfigurationName: 'OnDemand Workflows'       
