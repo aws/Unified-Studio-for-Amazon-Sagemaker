@@ -6,6 +6,7 @@ SMUS CI/CD CLI - Command Line Interface for SageMaker Unified Studio CI/CD Pipel
 import typer
 from rich.console import Console
 
+from . import __version__
 from .commands.bundle import bundle_command
 from .commands.create import create_command_with_output
 from .commands.delete import delete_command
@@ -302,6 +303,9 @@ def main():
 
 def cli_error_handler():
     """Handle CLI errors and provide helpful suggestions."""
+    # Always print version for debugging
+    console.print(f"[dim]SMUS CI/CD CLI v{__version__}[/dim]")
+
     try:
         app()
     except typer.Exit as e:
