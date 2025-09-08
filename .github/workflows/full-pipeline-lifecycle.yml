@@ -33,6 +33,9 @@ jobs:
       domain-id: ${{ steps.resolve.outputs.domain-id }}
       project-id: ${{ steps.resolve.outputs.project-id }}
       pipeline-file: ${{ steps.resolve.outputs.pipeline-file }}
+      domain-name: ${{ steps.resolve.outputs.domain-name }}
+      project-name: ${{ steps.resolve.outputs.project-name }}
+      pipeline-name: ${{ steps.resolve.outputs.pipeline-name }}
     
     steps:
     - uses: actions/checkout@v4
@@ -58,25 +61,42 @@ jobs:
     - name: Resolve Domain and Project IDs
       id: resolve
       run: |
+        # Set default values when inputs are not available (e.g., on pull_request)
+        DOMAIN_NAME="${{ github.event.inputs.domain_name || 'cicd-test-domain' }}"
+        PROJECT_NAME="${{ github.event.inputs.project_name || 'dev-marketing' }}"
+        PIPELINE_NAME="${{ github.event.inputs.pipeline_name || 'DemoMarketingPipeline' }}"
+        
+        echo "🔍 Using domain: $DOMAIN_NAME"
+        echo "🔍 Using project: $PROJECT_NAME"
+        echo "🔍 Using pipeline: $PIPELINE_NAME"
+        
         # Resolve domain ID
-        DOMAIN_ID=$(aws datazone list-domains --query "items[?name=='${{ github.event.inputs.domain_name }}'].id" --output text)
+        DOMAIN_ID=$(aws datazone list-domains --query "items[?name=='$DOMAIN_NAME'].id" --output text)
         if [ -z "$DOMAIN_ID" ] || [ "$DOMAIN_ID" = "None" ]; then
-          echo "❌ Domain '${{ github.event.inputs.domain_name }}' not found"
+          echo "❌ Domain '$DOMAIN_NAME' not found"
           exit 1
         fi
         
         # Resolve project ID
-        PROJECT_ID=$(aws datazone list-projects --domain-identifier "$DOMAIN_ID" --query "items[?name=='${{ github.event.inputs.project_name }}'].id" --output text)
+        PROJECT_ID=$(aws datazone list-projects --domain-identifier "$DOMAIN_ID" --query "items[?name=='$PROJECT_NAME'].id" --output text)
         if [ -z "$PROJECT_ID" ] || [ "$PROJECT_ID" = "None" ]; then
-          echo "❌ Project '${{ github.event.inputs.project_name }}' not found in domain"
+          echo "❌ Project '$PROJECT_NAME' not found in domain"
           exit 1
         fi
         
-        PIPELINE_FILE="${{ github.event.inputs.pipeline_name }}.yaml"
+        PIPELINE_FILE="${PIPELINE_NAME}.yaml"
         
         echo "✅ Domain ID: $DOMAIN_ID"
         echo "✅ Project ID: $PROJECT_ID"
         echo "✅ Pipeline File: $PIPELINE_FILE"
+        
+        # Set outputs
+        echo "domain-id=$DOMAIN_ID" >> $GITHUB_OUTPUT
+        echo "project-id=$PROJECT_ID" >> $GITHUB_OUTPUT
+        echo "pipeline-file=$PIPELINE_FILE" >> $GITHUB_OUTPUT
+        echo "domain-name=$DOMAIN_NAME" >> $GITHUB_OUTPUT
+        echo "project-name=$PROJECT_NAME" >> $GITHUB_OUTPUT
+        echo "pipeline-name=$PIPELINE_NAME" >> $GITHUB_OUTPUT
         
         echo "domain-id=$DOMAIN_ID" >> $GITHUB_OUTPUT
         echo "project-id=$PROJECT_ID" >> $GITHUB_OUTPUT
@@ -113,7 +133,7 @@ jobs:
       run: |
         cd experimental/SMUS-CICD-pipeline-cli
         smus-cli create \
-          --name "${{ github.event.inputs.pipeline_name }}" \
+          --name "${{ needs.setup.outputs.pipeline-name }}" \
           --domain-id "${{ needs.setup.outputs.domain-id }}" \
           --dev-project-id "${{ needs.setup.outputs.project-id }}" \
           --output "${{ needs.setup.outputs.pipeline-file }}"
