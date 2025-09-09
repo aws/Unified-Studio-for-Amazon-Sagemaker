@@ -177,7 +177,9 @@ def create_project_via_cloudformation(
                 else:
                     # For regular roles, get the last part
                     current_role_name = (
-                        current_role_arn.split("/")[-1] if "/" in current_role_arn else ""
+                        current_role_arn.split("/")[-1]
+                        if "/" in current_role_arn
+                        else ""
                     )
 
                 # Try to resolve current role to DataZone user ID using full ARN
@@ -187,7 +189,9 @@ def create_project_via_cloudformation(
                         # Convert arn:aws:sts::account:assumed-role/RoleName/SessionName
                         # to arn:aws:iam::account:role/RoleName
                         account_id = current_role_arn.split(":")[4]
-                        iam_role_arn = f"arn:aws:iam::{account_id}:role/{current_role_name}"
+                        iam_role_arn = (
+                            f"arn:aws:iam::{account_id}:role/{current_role_name}"
+                        )
                         current_role_ids = datazone.resolve_usernames_to_ids(
                             [iam_role_arn], domain_id, region
                         )
@@ -475,18 +479,27 @@ def create_project_via_cloudformation(
 
                     # Check and create missing environments from user_parameters or environments
                     env_params_to_check = user_parameters or []
-                    
+
                     # If no user_parameters but environments exist, convert environments to user_parameters format
                     if not user_parameters and environments:
-                        typer.echo("🔍 Converting environments to user parameters for environment creation")
+                        typer.echo(
+                            "🔍 Converting environments to user parameters for environment creation"
+                        )
                         env_params_to_check = []
                         for env in environments:
-                            if isinstance(env, dict) and "EnvironmentConfigurationName" in env:
+                            if (
+                                isinstance(env, dict)
+                                and "EnvironmentConfigurationName" in env
+                            ):
                                 env_params_to_check.append(env)
                             elif isinstance(env, str):
-                                env_params_to_check.append({"EnvironmentConfigurationName": env})
-                        typer.echo(f"🔍 Environment parameters to check: {env_params_to_check}")
-                    
+                                env_params_to_check.append(
+                                    {"EnvironmentConfigurationName": env}
+                                )
+                        typer.echo(
+                            f"🔍 Environment parameters to check: {env_params_to_check}"
+                        )
+
                     if env_params_to_check:
                         env_success = _create_missing_environments_via_cloudformation(
                             project_name,

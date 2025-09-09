@@ -21,47 +21,57 @@ class ProjectManager:
     def ensure_project_exists(self, target_name: str, target_config) -> Dict[str, Any]:
         """Ensure project exists, create if needed and configured to do so."""
         print(f"🔍 DEBUG: ensure_project_exists called for target: {target_name}")
-        
+
         project_name = target_config.project.name
         print(f"🔍 DEBUG: project_name: {project_name}")
 
         # Check if project exists in DataZone first
         # Ensure config has region for get_datazone_project_info
-        config_with_region = {**self.config, 'region': self.region}
+        config_with_region = {**self.config, "region": self.region}
         project_info = get_datazone_project_info(project_name, config_with_region)
         print(f"🔍 DEBUG: project_info keys: {list(project_info.keys())}")
         print(f"🔍 DEBUG: project_info has error: {'error' in project_info}")
 
         if "error" not in project_info:
             # Project exists - check and create missing environments
-            print(f"🔍 DEBUG: Project exists path - calling _ensure_environments_exist")
+            print("🔍 DEBUG: Project exists path - calling _ensure_environments_exist")
             handle_success(f"✅ Project '{project_name}' already exists")
             self._update_existing_project(target_name, target_config, project_name)
             self._ensure_environments_exist(target_name, target_config, project_info)
             return project_info
 
         # Project doesn't exist - check if we should create it
-        print(f"🔍 DEBUG: Project doesn't exist - checking if should create")
+        print("🔍 DEBUG: Project doesn't exist - checking if should create")
         if self._should_create_project(target_config):
-            print(f"🔍 DEBUG: Should create project - calling _create_new_project")
+            print("🔍 DEBUG: Should create project - calling _create_new_project")
             project_info = self._create_new_project(
                 target_name, target_config, project_name
             )
-            print(f"🔍 DEBUG: _create_new_project returned")
-            print(f"🔍 DEBUG: project_info after creation: {list(project_info.keys()) if isinstance(project_info, dict) else type(project_info)}")
-            print(f"🔍 DEBUG: project_info has error after creation: {'error' in project_info if isinstance(project_info, dict) else 'not a dict'}")
+            print("🔍 DEBUG: _create_new_project returned")
+            print(
+                f"🔍 DEBUG: project_info after creation: {list(project_info.keys()) if isinstance(project_info, dict) else type(project_info)}"
+            )
+            print(
+                f"🔍 DEBUG: project_info has error after creation: {'error' in project_info if isinstance(project_info, dict) else 'not a dict'}"
+            )
             if "error" not in project_info:
                 # After creating project, ensure environments exist
-                print(f"🔍 DEBUG: Project created successfully - calling _ensure_environments_exist")
+                print(
+                    "🔍 DEBUG: Project created successfully - calling _ensure_environments_exist"
+                )
                 self._ensure_environments_exist(
                     target_name, target_config, project_info
                 )
             else:
-                print(f"🔍 DEBUG: Project creation failed - NOT calling _ensure_environments_exist")
+                print(
+                    "🔍 DEBUG: Project creation failed - NOT calling _ensure_environments_exist"
+                )
             return project_info
 
         # Project doesn't exist and we're not configured to create it
-        print(f"🔍 DEBUG: Project doesn't exist and create=false - NOT calling _ensure_environments_exist")
+        print(
+            "🔍 DEBUG: Project doesn't exist and create=false - NOT calling _ensure_environments_exist"
+        )
         handle_error(f"Project '{project_name}' not found and create=false")
         return project_info
 
@@ -79,7 +89,7 @@ class ProjectManager:
         typer.echo("🔧 Auto-initializing target infrastructure...")
 
         # Double-check project doesn't exist (race condition protection)
-        config_with_region = {**self.config, 'region': self.region}
+        config_with_region = {**self.config, "region": self.region}
         project_info = get_datazone_project_info(project_name, config_with_region)
         if "error" not in project_info:
             handle_success(
@@ -96,11 +106,12 @@ class ProjectManager:
         profile_name = self._get_profile_name(target_config)
         user_parameters = self._extract_user_parameters(target_config, target_name)
         owners, contributors = self._extract_memberships(target_config)
-        
+
         # Extract environments for environment creation
         environments = None
-        if (target_config.initialization 
-            and hasattr(target_config.initialization, "environments")):
+        if target_config.initialization and hasattr(
+            target_config.initialization, "environments"
+        ):
             environments = target_config.initialization.environments
 
         typer.echo(f"Creating project '{project_name}' via CloudFormation...")
@@ -118,18 +129,24 @@ class ProjectManager:
             environments,
         )
 
-        print(f"🔍 DEBUG: CloudFormation create_project_via_cloudformation returned: {success}")
+        print(
+            f"🔍 DEBUG: CloudFormation create_project_via_cloudformation returned: {success}"
+        )
         if not success:
-            print(f"🔍 DEBUG: CloudFormation creation failed - returning error")
+            print("🔍 DEBUG: CloudFormation creation failed - returning error")
             handle_error("Failed to create project")
 
-        print(f"🔍 DEBUG: CloudFormation creation succeeded - getting project info")
+        print("🔍 DEBUG: CloudFormation creation succeeded - getting project info")
         handle_success("Target infrastructure ready")
-        config_with_region = {**self.config, 'region': self.region}
+        config_with_region = {**self.config, "region": self.region}
         final_project_info = get_datazone_project_info(project_name, config_with_region)
-        print(f"🔍 DEBUG: Final project_info keys: {list(final_project_info.keys()) if isinstance(final_project_info, dict) else type(final_project_info)}")
-        print(f"🔍 DEBUG: Final project_info has error: {'error' in final_project_info if isinstance(final_project_info, dict) else 'not a dict'}")
-        if isinstance(final_project_info, dict) and 'error' in final_project_info:
+        print(
+            f"🔍 DEBUG: Final project_info keys: {list(final_project_info.keys()) if isinstance(final_project_info, dict) else type(final_project_info)}"
+        )
+        print(
+            f"🔍 DEBUG: Final project_info has error: {'error' in final_project_info if isinstance(final_project_info, dict) else 'not a dict'}"
+        )
+        if isinstance(final_project_info, dict) and "error" in final_project_info:
             print(f"🔍 DEBUG: Actual error content: {final_project_info['error']}")
         return final_project_info
 
@@ -139,11 +156,10 @@ class ProjectManager:
         """Update existing project stack tags and memberships."""
         typer.echo("Updating project stack tags...")
         cloudformation.update_project_stack_tags(
-            project_name,
-            self.domain_name,
-            self.region,
             self.manifest.pipeline_name,
             target_name,
+            project_name,
+            self.region,
             target_config.stage,
         )
 
@@ -271,10 +287,10 @@ class ProjectManager:
             return
 
         project_id = project_info.get("project_id")
-        
+
         # Resolve domain_id the same way _create_new_project does
         domain_id = datazone.get_domain_id_by_name(self.domain_name, self.region)
-        
+
         print(f"🔍 DEBUG: Resolved project_id: {project_id}, domain_id: {domain_id}")
 
         if not project_id or not domain_id:
@@ -340,32 +356,32 @@ class ProjectManager:
             # Get project details to find the project profile ID
             print(f"🔍 DEBUG: Getting project details for project: {project_id}")
             project_response = datazone_client.get_project(
-                domainIdentifier=domain_id,
-                identifier=project_id
+                domainIdentifier=domain_id, identifier=project_id
             )
-            
-            project_profile_id = project_response.get('projectProfileId')
+
+            project_profile_id = project_response.get("projectProfileId")
             if not project_profile_id:
-                print(f"🔍 DEBUG: Project profile ID not found")
+                print("🔍 DEBUG: Project profile ID not found")
                 return False
-            
+
             print(f"🔍 DEBUG: Project profile ID: {project_profile_id}")
 
             # Get project profile details to find environment configuration
-            print(f"🔍 DEBUG: Getting project profile details")
+            print("🔍 DEBUG: Getting project profile details")
             profile_details = datazone_client.get_project_profile(
-                domainIdentifier=domain_id,
-                identifier=project_profile_id
+                domainIdentifier=domain_id, identifier=project_profile_id
             )
-            
+
             # Find environment configuration that matches target specification
-            env_configs = profile_details.get('environmentConfigurations', [])
+            env_configs = profile_details.get("environmentConfigurations", [])
             env_config_id = None
-            
+
             for config in env_configs:
-                if config.get('name') == env_name:
-                    env_config_id = config.get('id')
-                    print(f"🔍 DEBUG: Using environment configuration: {config.get('name')} ({env_config_id})")
+                if config.get("name") == env_name:
+                    env_config_id = config.get("id")
+                    print(
+                        f"🔍 DEBUG: Using environment configuration: {config.get('name')} ({env_config_id})"
+                    )
                     break
 
             if not env_config_id:
@@ -373,7 +389,9 @@ class ProjectManager:
                 return False
 
             # Create environment with configuration
-            print(f"🔍 DEBUG: Creating environment with configuration ID: {env_config_id}")
+            print(
+                f"🔍 DEBUG: Creating environment with configuration ID: {env_config_id}"
+            )
             response = datazone_client.create_environment(
                 domainIdentifier=domain_id,
                 projectIdentifier=project_id,

@@ -243,7 +243,7 @@ def test_command(
     except Exception as e:
         if output.upper() == "JSON":
             # Only output error JSON if we haven't already output results
-            if 'test_results' not in locals() or not test_results:
+            if "test_results" not in locals() or not test_results:
                 error_data = {"error": str(e)}
                 typer.echo(json.dumps(error_data, indent=2))
         else:
