@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main, amirbo_feature_branch ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, amirbo_feature_branch ]
 
 permissions:
   id-token: write

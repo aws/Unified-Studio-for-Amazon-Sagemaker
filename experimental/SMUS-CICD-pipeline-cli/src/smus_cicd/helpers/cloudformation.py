@@ -500,20 +500,8 @@ def create_project_via_cloudformation(
                             f"🔍 Environment parameters to check: {env_params_to_check}"
                         )
 
-                    if env_params_to_check:
-                        env_success = _create_missing_environments_via_cloudformation(
-                            project_name,
-                            domain_name,
-                            region,
-                            pipeline_name,
-                            target_name,
-                            env_params_to_check,
-                            domain_id,
-                            project_id,
-                        )
-                        if not env_success:
-                            typer.echo("❌ Failed to create one or more environments")
-                            return False
+                    # Environment creation is now handled by ProjectManager._ensure_environments_exist()
+                    # No need for CloudFormation-based environment creation
 
                     return True
 
@@ -747,92 +735,4 @@ def update_project_stack_tags(
             return False
 
 
-def _create_missing_environments_via_cloudformation(
-    project_name,
-    domain_name,
-    region,
-    pipeline_name,
-    target_name,
-    user_parameters,
-    domain_id,
-    project_id,
-):
-    """Create missing environments using CloudFormation stacks."""
-    if not user_parameters:
-        return True
 
-    typer.echo("🔍 Checking for missing environments...")
-
-    # Get existing environments for the project
-    existing_envs = datazone.get_project_environments(project_id, domain_id, region)
-    existing_env_names = {env.get("name", "") for env in existing_envs}
-
-    all_success = True
-
-    # Check each environment from user_parameters
-    for env_param in user_parameters:
-        # Handle EnvironmentUserParameters object
-        if hasattr(env_param, "EnvironmentConfigurationName"):
-            env_name = env_param.EnvironmentConfigurationName
-        else:
-            # Fallback for dict format
-            env_name = env_param.get("EnvironmentConfigurationName", "")
-
-        if not env_name:
-            continue
-
-        if env_name in existing_env_names:
-            typer.echo(f"✅ Environment '{env_name}' already exists, skipping")
-            continue
-
-        typer.echo(f"🔧 Creating missing environment: {env_name}")
-        try:
-            # Create environment using DataZone helper
-            success = datazone.create_environment_and_wait(
-                domain_id, project_id, env_name, target_name, region
-            )
-            if success:
-                typer.echo(f"✅ Environment '{env_name}' created successfully")
-                # Check if this is a workflow environment and validate MWAA
-                if "workflow" in env_name.lower() or "mwaa" in env_name.lower():
-                    _validate_mwaa_environment(project_id, domain_id, region)
-            else:
-                typer.echo(f"❌ Failed to create environment '{env_name}'")
-                all_success = False
-        except Exception as e:
-            typer.echo(f"❌ Error creating environment '{env_name}': {str(e)}")
-            all_success = False
-
-    return all_success
-
-
-def _validate_mwaa_environment(project_id: str, domain_id: str, region: str) -> None:
-    """Validate MWAA environment is available."""
-    try:
-        import time
-
-        import boto3
-
-        # Wait a bit for environment to be ready
-        time.sleep(5)
-
-        datazone_client = boto3.client("datazone", region_name=region)
-
-        # Get project connections to find MWAA connection
-        connections_response = datazone_client.list_data_sources(
-            domainIdentifier=domain_id, projectIdentifier=project_id
-        )
-
-        mwaa_connection = None
-        for conn in connections_response.get("items", []):
-            if "mwaa" in conn.get("type", "").lower():
-                mwaa_connection = conn
-                break
-
-        if mwaa_connection:
-            typer.echo("✅ MWAA environment is available")
-        else:
-            typer.echo("⚠️  MWAA environment connection not found")
-
-    except Exception as e:
-        typer.echo(f"🔍 DEBUG: Error validating MWAA: {e}")

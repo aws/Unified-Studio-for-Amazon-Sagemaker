@@ -3,7 +3,7 @@ pipelineName: IntegrationTestMultiTarget
 # Domain configuration
 domain:
   name: cicd-test-domain
-  region: us-east-1
+  region: us-east-2
 
 # What to include in deployment bundles
 bundle:

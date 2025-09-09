@@ -37,7 +37,9 @@ class ProjectManager:
             print("🔍 DEBUG: Project exists path - calling _ensure_environments_exist")
             handle_success(f"✅ Project '{project_name}' already exists")
             self._update_existing_project(target_name, target_config, project_name)
-            self._ensure_environments_exist(target_name, target_config, project_info)
+            environments_ready = self._ensure_environments_exist(target_name, target_config, project_info)
+            if not environments_ready:
+                raise Exception("Environment creation failed - cannot proceed with deployment")
             return project_info
 
         # Project doesn't exist - check if we should create it
@@ -59,9 +61,11 @@ class ProjectManager:
                 print(
                     "🔍 DEBUG: Project created successfully - calling _ensure_environments_exist"
                 )
-                self._ensure_environments_exist(
+                environments_ready = self._ensure_environments_exist(
                     target_name, target_config, project_info
                 )
+                if not environments_ready:
+                    raise Exception("Environment creation failed - cannot proceed with deployment")
             else:
                 print(
                     "🔍 DEBUG: Project creation failed - NOT calling _ensure_environments_exist"
@@ -257,7 +261,7 @@ class ProjectManager:
 
     def _ensure_environments_exist(
         self, target_name: str, target_config, project_info: Dict[str, Any]
-    ) -> None:
+    ) -> bool:
         """Ensure required environments exist in the project."""
         print(f"🔍 DEBUG: _ensure_environments_exist called for target: {target_name}")
         print(
@@ -284,7 +288,7 @@ class ProjectManager:
             and hasattr(target_config.initialization, "environments")
         ):
             print(f"🔍 DEBUG: No environments specified for target: {target_name}")
-            return
+            return True  # No environments to create is success
 
         project_id = project_info.get("project_id")
 
@@ -297,7 +301,7 @@ class ProjectManager:
             print(
                 f"🔍 DEBUG: Missing project_id or domain_id: {project_id}, {domain_id}"
             )
-            return
+            return False
 
         print(f"🔍 DEBUG: Checking environments for project {project_id}")
 
@@ -317,9 +321,10 @@ class ProjectManager:
 
         except Exception as e:
             print(f"🔍 DEBUG: Error listing environments: {e}")
-            return
+            return False
 
         # Check each required environment
+        all_environments_ready = True
         for env_config in target_config.initialization.environments:
             env_name = (
                 env_config.get("EnvironmentConfigurationName")
@@ -343,6 +348,9 @@ class ProjectManager:
                     self._validate_mwaa_environment(project_id, domain_id)
             else:
                 print(f"❌ Failed to create environment: {env_name}")
+                all_environments_ready = False
+
+        return all_environments_ready
 
     def _create_environment(
         self, domain_id: str, project_id: str, env_name: str
@@ -405,7 +413,7 @@ class ProjectManager:
 
             # Wait for environment to be fully provisioned
             print("⏳ Waiting for environment to be fully provisioned...")
-            max_attempts = 60  # 10 minutes max
+            max_attempts = 360  # 3 hours max (360 * 30 seconds = 10800 seconds = 3 hours)
             attempt = 0
 
             while attempt < max_attempts:
@@ -425,10 +433,10 @@ class ProjectManager:
                         print(f"❌ Environment creation failed with status: {status}")
                         return False
 
-                    # Wait 10 seconds before next check
+                    # Wait 30 seconds before next check
                     import time
 
-                    time.sleep(10)
+                    time.sleep(30)
                     attempt += 1
 
                 except Exception as e:
@@ -436,7 +444,7 @@ class ProjectManager:
                     attempt += 1
                     import time
 
-                    time.sleep(10)
+                    time.sleep(30)
 
             if attempt >= max_attempts:
                 print("⚠️ Timeout waiting for environment to become ACTIVE")

@@ -30,6 +30,43 @@ Parameters:
   WorkflowBlueprintId:
     Type: String
     Description: 'Environment Blueprint ID for Workflow environments'
+  Region2:
+    Type: String
+    Default: ''
+    Description: 'Second region to enable (optional)'
+  Region3:
+    Type: String
+    Default: ''
+    Description: 'Third region to enable (optional)'
+  Region2VpcId:
+    Type: String
+    Default: ''
+    Description: 'VPC ID for Region2 (optional)'
+  Region2Subnets:
+    Type: String
+    Default: ''
+    Description: 'Comma-separated list of subnet IDs for Region2 (optional)'
+  Region2AvailabilityZones:
+    Type: String
+    Default: ''
+    Description: 'Comma-separated list of availability zones for Region2 (optional)'
+  Region3VpcId:
+    Type: String
+    Default: ''
+    Description: 'VPC ID for Region3 (optional)'
+  Region3Subnets:
+    Type: String
+    Default: ''
+    Description: 'Comma-separated list of subnet IDs for Region3 (optional)'
+  Region3AvailabilityZones:
+    Type: String
+    Default: ''
+    Description: 'Comma-separated list of availability zones for Region3 (optional)'
+
+Conditions:
+  HasRegion2: !Not [!Equals [!Ref Region2, '']]
+  HasRegion3: !Not [!Equals [!Ref Region3, '']]
+  HasMultipleRegions: !Or [!Condition HasRegion2, !Condition HasRegion3]
 
 Resources:
   # Lambda Role for Policy Grants
@@ -152,7 +189,15 @@ Resources:
       RegionalParameters:
         - Region: !Ref 'AWS::Region'
           Parameters: {}
-      EnabledRegions: [!Ref 'AWS::Region']
+      EnabledRegions: !If
+        - HasMultipleRegions
+        - !Split
+          - ','
+          - !Sub
+            - '${AWS::Region}${Region2Suffix}${Region3Suffix}'
+            - Region2Suffix: !If [HasRegion2, !Sub ',${Region2}', '']
+              Region3Suffix: !If [HasRegion3, !Sub ',${Region3}', '']
+        - [!Ref 'AWS::Region']
 
   DataLake:
     Type: AWS::DataZone::EnvironmentBlueprintConfiguration
@@ -164,14 +209,47 @@ Resources:
         Fn::ImportValue: !Sub '${DomainStackName}-SageMakerManageAccessRole'
       ProvisioningRoleArn:
         Fn::ImportValue: !Sub '${DomainStackName}-SageMakerProvisioningRole'
-      RegionalParameters:
-        - Region: !Ref 'AWS::Region'
-          Parameters:
-            VpcId: !Ref VpcId
-            Subnets: !Ref Subnets
-            AZs: !Ref AvailabilityZones
-            S3Location: !Sub 's3://${S3BucketName}'
-      EnabledRegions: [!Ref 'AWS::Region']
+      RegionalParameters: !If
+        - HasMultipleRegions
+        - - Region: !Ref 'AWS::Region'
+            Parameters:
+              VpcId: !Ref VpcId
+              Subnets: !Ref Subnets
+              AZs: !Ref AvailabilityZones
+              S3Location: !Sub 's3://${S3BucketName}'
+          - !If
+            - HasRegion2
+            - Region: !Ref Region2
+              Parameters:
+                VpcId: !Ref Region2VpcId
+                Subnets: !Ref Region2Subnets
+                AZs: !Ref Region2AvailabilityZones
+                S3Location: !Sub 's3://${S3BucketName}'
+            - !Ref 'AWS::NoValue'
+          - !If
+            - HasRegion3
+            - Region: !Ref Region3
+              Parameters:
+                VpcId: !Ref Region3VpcId
+                Subnets: !Ref Region3Subnets
+                AZs: !Ref Region3AvailabilityZones
+                S3Location: !Sub 's3://${S3BucketName}'
+            - !Ref 'AWS::NoValue'
+        - - Region: !Ref 'AWS::Region'
+            Parameters:
+              VpcId: !Ref VpcId
+              Subnets: !Ref Subnets
+              AZs: !Ref AvailabilityZones
+              S3Location: !Sub 's3://${S3BucketName}'
+      EnabledRegions: !If
+        - HasMultipleRegions
+        - !Split
+          - ','
+          - !Sub
+            - '${AWS::Region}${Region2Suffix}${Region3Suffix}'
+            - Region2Suffix: !If [HasRegion2, !Sub ',${Region2}', '']
+              Region3Suffix: !If [HasRegion3, !Sub ',${Region3}', '']
+        - [!Ref 'AWS::Region']
 
   Tooling:
     Type: AWS::DataZone::EnvironmentBlueprintConfiguration
@@ -183,14 +261,47 @@ Resources:
         Fn::ImportValue: !Sub '${DomainStackName}-SageMakerManageAccessRole'
       ProvisioningRoleArn:
         Fn::ImportValue: !Sub '${DomainStackName}-SageMakerProvisioningRole'
-      RegionalParameters:
-        - Region: !Ref 'AWS::Region'
-          Parameters:
-            VpcId: !Ref VpcId
-            Subnets: !Ref Subnets
-            AZs: !Ref AvailabilityZones
-            S3Location: !Sub 's3://${S3BucketName}'
-      EnabledRegions: [!Ref 'AWS::Region']
+      RegionalParameters: !If
+        - HasMultipleRegions
+        - - Region: !Ref 'AWS::Region'
+            Parameters:
+              VpcId: !Ref VpcId
+              Subnets: !Ref Subnets
+              AZs: !Ref AvailabilityZones
+              S3Location: !Sub 's3://${S3BucketName}'
+          - !If
+            - HasRegion2
+            - Region: !Ref Region2
+              Parameters:
+                VpcId: !Ref Region2VpcId
+                Subnets: !Ref Region2Subnets
+                AZs: !Ref Region2AvailabilityZones
+                S3Location: !Sub 's3://${S3BucketName}'
+            - !Ref 'AWS::NoValue'
+          - !If
+            - HasRegion3
+            - Region: !Ref Region3
+              Parameters:
+                VpcId: !Ref Region3VpcId
+                Subnets: !Ref Region3Subnets
+                AZs: !Ref Region3AvailabilityZones
+                S3Location: !Sub 's3://${S3BucketName}'
+            - !Ref 'AWS::NoValue'
+        - - Region: !Ref 'AWS::Region'
+            Parameters:
+              VpcId: !Ref VpcId
+              Subnets: !Ref Subnets
+              AZs: !Ref AvailabilityZones
+              S3Location: !Sub 's3://${S3BucketName}'
+      EnabledRegions: !If
+        - HasMultipleRegions
+        - !Split
+          - ','
+          - !Sub
+            - '${AWS::Region}${Region2Suffix}${Region3Suffix}'
+            - Region2Suffix: !If [HasRegion2, !Sub ',${Region2}', '']
+              Region3Suffix: !If [HasRegion3, !Sub ',${Region3}', '']
+        - [!Ref 'AWS::Region']
 
   Workflows:
     Type: AWS::DataZone::EnvironmentBlueprintConfiguration
@@ -202,14 +313,47 @@ Resources:
         Fn::ImportValue: !Sub '${DomainStackName}-SageMakerManageAccessRole'
       ProvisioningRoleArn:
         Fn::ImportValue: !Sub '${DomainStackName}-SageMakerProvisioningRole'
-      RegionalParameters:
-        - Region: !Ref 'AWS::Region'
-          Parameters:
-            VpcId: !Ref VpcId
-            Subnets: !Ref Subnets
-            AZs: !Ref AvailabilityZones
-            S3Location: !Sub 's3://${S3BucketName}'
-      EnabledRegions: [!Ref 'AWS::Region']
+      RegionalParameters: !If
+        - HasMultipleRegions
+        - - Region: !Ref 'AWS::Region'
+            Parameters:
+              VpcId: !Ref VpcId
+              Subnets: !Ref Subnets
+              AZs: !Ref AvailabilityZones
+              S3Location: !Sub 's3://${S3BucketName}'
+          - !If
+            - HasRegion2
+            - Region: !Ref Region2
+              Parameters:
+                VpcId: !Ref Region2VpcId
+                Subnets: !Ref Region2Subnets
+                AZs: !Ref Region2AvailabilityZones
+                S3Location: !Sub 's3://${S3BucketName}'
+            - !Ref 'AWS::NoValue'
+          - !If
+            - HasRegion3
+            - Region: !Ref Region3
+              Parameters:
+                VpcId: !Ref Region3VpcId
+                Subnets: !Ref Region3Subnets
+                AZs: !Ref Region3AvailabilityZones
+                S3Location: !Sub 's3://${S3BucketName}'
+            - !Ref 'AWS::NoValue'
+        - - Region: !Ref 'AWS::Region'
+            Parameters:
+              VpcId: !Ref VpcId
+              Subnets: !Ref Subnets
+              AZs: !Ref AvailabilityZones
+              S3Location: !Sub 's3://${S3BucketName}'
+      EnabledRegions: !If
+        - HasMultipleRegions
+        - !Split
+          - ','
+          - !Sub
+            - '${AWS::Region}${Region2Suffix}${Region3Suffix}'
+            - Region2Suffix: !If [HasRegion2, !Sub ',${Region2}', '']
+              Region3Suffix: !If [HasRegion3, !Sub ',${Region3}', '']
+        - [!Ref 'AWS::Region']
 
   # All Capabilities Project Profile
   AllCapabilitiesProjectProfile:

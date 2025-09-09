@@ -708,7 +708,7 @@ def main():
     parser.add_argument('domain_name', help='SageMaker Unified Studio domain name')
     parser.add_argument('--region', default='us-east-1', help='AWS region')
     parser.add_argument('--database', default='covid19_db', help='Glue database name')
-    parser.add_argument('--data-path', default='/Users/amirbo/code/covid-19', help='Local COVID-19 data path')
+    parser.add_argument('--data-path', default='./covid-19-data', help='Local COVID-19 data path')
     parser.add_argument('--project-name', default='covid-lake-admin', help='DataZone project name')
     
     args = parser.parse_args()

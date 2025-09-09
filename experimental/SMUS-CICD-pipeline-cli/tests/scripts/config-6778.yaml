@@ -2,21 +2,9 @@
 # Update these values for your specific AWS account and requirements
 
 # AWS Configuration
-region: us-east-1
+region: us-east-2
 region2: us-west-2
-region3: us-east-2 
-
-# Multi-region configuration
-regions:
-  primary:
-    name: us-east-1
-    enabled: true
-  secondary:
-    name: us-west-2
-    enabled: true
-  tertiary:
-    name: us-east-2
-    enabled: false
+region3: us-east-1
 
 # DataZone Domain Name
 domain_name: cicd-test-domain
@@ -37,10 +25,7 @@ projects:
 # User Configuration
 users:
   admin_username: eng1
-  owners:
-    - Eng1
-    - "arn:aws:iam::058264284947:role/Admin"
-    - "arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests"
 
 VPC:
-  VpcId: 'vpc-062f261a970d7c476'
+  # VpcId: 'vpc-062f261a970d7c476'
+  Name: 'SageMakerUnifiedStudioVPC'

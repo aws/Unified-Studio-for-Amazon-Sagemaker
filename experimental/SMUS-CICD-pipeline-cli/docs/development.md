@@ -34,6 +34,31 @@ See [GitHub Actions Integration](github-actions-integration.md) for complete set
 
 The project includes comprehensive unit and integration tests with coverage analysis.
 
+### Test Prerequisites
+
+Before running tests, you must set up the required AWS infrastructure and users:
+
+#### 1. Deploy AWS Resources
+Run the deployment scripts in the following order:
+
+```bash
+cd tests/scripts/
+
+# Deploy all resources in correct order
+./deploy-all.sh
+```
+
+The `deploy-all.sh` script executes the following in sequence:
+1. `deploy-domain.sh` - Creates the SageMaker Unified Studio domain
+2. `deploy-blueprints-profiles.sh` - Sets up environment blueprints and profiles
+3. `deploy-projects.sh` - Creates the dev project
+4. `deploy-memberships.sh` - Configures project memberships
+
+#### 2. Create Required IDC User
+Create an Identity Center (IDC) user named **Eng1** that the tests depend on:
+- This user must exist in your AWS Identity Center instance
+- The user should have appropriate permissions to access the created domain and projects
+
 ### Running Tests
 
 ```bash

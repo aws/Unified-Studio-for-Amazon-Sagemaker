@@ -1,118 +1,361 @@
-# SMUS-CICD-pipeline-cli
+# SMUS-CICD-pipeline-cli Development Guide
 
-This is a [BrazilPython 3](https://w.amazon.com/bin/view/BrazilPython3/) Python project.
+This is a Python 3 project for SageMaker Unified Studio CI/CD pipeline management.
 
-## Choosing your Python version
+## Development Setup
 
-This is a change from BrazilPython 2; in BP3 you choose your Python version
-using branches in your versionset. By default the version is inherited from
-`live` (which as of this writing is CPython 3.4, but that is subject to change).
-The actual version can be chosen using the [singleton interpreter process](https://w.amazon.com/index.php/BuilderTools/LiveCuration/SingletonInterpreters).
+### Prerequisites
+- Python 3.7 or higher
+- pip package manager
+- AWS CLI configured with appropriate credentials
+- yq (YAML processor) - `brew install yq` (macOS) or `apt-get install yq` (Ubuntu)
 
-The short version of that is:
+### Installation
 
-### Using CPython3
+```bash
+# Clone the repository
+git clone <repository-url>
+cd experimental/SMUS-CICD-pipeline-cli
 
-Build the following package major version/branches into your versionset:
+# Install in development mode
+pip install -e ".[dev]"
+```
 
-* `Python-`**`default`** : `live`
-* `CPython3-`**`default`** : `live`
+## Building and Testing
 
+### Building
 
-This will cause `bin/python` to run `python3.7` as of 03/2020 but over time this
-version will be kept up to date with the current best practice interpreters.
+The project uses standard Python setuptools for building and packaging.
 
-Your default interpreter is always enabled as a build target for python packages in your version set.
+```bash
+# Build the package
+python setup.py build
 
-You should build the `no` branches for all interpreters into your versionset as
-well, since the runtime interpreter will always build:
+# Create distribution packages
+python setup.py sdist bdist_wheel
+```
 
-* `CPython27-`**`build`** : `no`
-* `CPython34-`**`build`** : `no`
-* `CPython36-`**`build`** : `no`
-* `CPython37-`**`build`** : `no`
-* `CPython38-`**`build`** : `no`
-* `Jython27-`**`build`** : `no`
+### Unit Testing
 
-(Note that many of these are off in `live` already)
+Run tests using pytest:
 
-### Using a newer version of CPython3
+```bash
+# Run all tests
+pytest
 
-If you need a special version of CPython (say you want to be on the cutting edge and use 3.9):
+# Run with coverage
+pytest --cov=src/smus_cicd --cov-report=html
 
-* `Python-`**`default`** : `live`
-* `CPython3-`**`default`** : `CPython39`
+# Run specific test patterns
+pytest -k "test_pattern"
 
-This will cause `bin/python` to run `python3.9`
+# Run with debugging
+pytest --pdb
+```
 
-### Using CPython2 2.7 or Jython
+## Infrastructure Deployment Scripts
 
-**Don't**
+Before running integration tests or setting up GitHub workflows, you need to deploy the required AWS infrastructure. The deployment scripts are located in `tests/scripts/` and must be run in the correct order.
 
-## Building
+### Script Progression
 
-Modifying the build logic of this package just requires overriding parts of the
-setuptools process. The entry point is either the `release`, `build`, `test`, or
-`doc` commands, all of which are implemented as setuptools commands in
-the [BrazilPython-Base-3.0](https://code.amazon.com/packages/BrazilPython-Base/releases)
-package.
+The deployment follows this sequence:
 
-### Restricting what interpreter your package will attempt to build for
+1. **GitHub OIDC Integration** (`deploy-github-integration.sh`)
+   - Creates IAM role and OIDC provider for GitHub Actions
+   - Deployed to the domain region specified in config
 
-If you want to restrict the set of Python versions a package builds for, first answer these questions
+2. **VPC Infrastructure** (`deploy-vpc.sh`)
+   - Deploys VPCs in all enabled regions (primary + additional regions)
+   - Creates subnets, security groups, and networking components
+   - Supports multi-region deployment
 
-1. Do you need to build into version sets that may have more than the default interpreter enabled (such as live)?
-2. Are there versions that are commonly enabled in those version sets that would be difficult to support?
-  1. Example: Python 3.6 is currently enabled in `live` but if you want to publish a package to live that is only valid for Python 3.7+ consumers, then you may want to filter on it
-  2. Counter example: while Jython is a valid build target, it has largely been deprecated from use and is not enabled in the vast majority of version sets, so filtering on it will add almost entirely unused cruft to your package when you may have no Jython-enabled consumers
-3. Should the build fail if no valid interpreter is enabled?
+3. **DataZone Domain** (`deploy-domain.sh`)
+   - Creates DataZone domain with required IAM roles
+   - Deployed to the primary region
+   - Requires AWS Identity Center (IDC) to be enabled
 
-If your answer to all of those is `yes`, then you may want to make a filter for your package.
+4. **Environment Blueprints** (`deploy-blueprints-profiles.sh`)
+   - Configures DataZone environment blueprints across all regions
+   - Creates project profiles and S3 bucket for artifacts
+   - Enables multi-region blueprint support
 
-Do so by creating an executable script named `build-tools/bin/python-builds` in
-this package, and having it exit non-zero when the undesirable versions build.
-By default, packages without this file package will build for every version of Python in your versionset.
+5. **Dev Project** (`deploy-projects.sh`)
+   - Creates the dev-marketing project
+   - Finds IDC user and creates DataZone user profile if needed
+   - Adds user as PROJECT_OWNER via AWS CLI
 
-The version strings that'll be passed in are:
+6. **Project Memberships** (`deploy-memberships.sh`)
+   - Additional membership configurations (if needed)
 
-* CPython##
-* Jython##
+### Configuration
 
-Commands that only run for one version of Python will be run for the version in
-the `default_python` argument to `setup()` in `setup.py`. `doc` is one such
-command, and is configured by default to run the `doc_command` as defined in
-`setup.py`, which will build Sphinx documentation.
+All scripts use a YAML configuration file. Default is `config.yaml`, but you can override:
 
-An example can be found [here](https://code.amazon.com/packages/Pytest/blobs/5b12631bdbdc9fca03d994bb8ef3bbe8a70676d3/--/build-tools/bin/python-builds).
+```bash
+# Use custom config
+./deploy-all.sh config-6778.yaml
+```
 
-#### Best practices for filtering
+Example configuration structure:
+```yaml
+# AWS Configuration
+region: us-east-2
+region2: us-west-2
+region3: us-east-1
 
-1. Use forwards-compatible filters (i.e. `$version -ge 37`).  This will make it painless to test and update when you update your default
-2. Don't tie to older versions.  This is expensive technical debt that paying it down sooner is far better than chaining yourself (and your consumers) to older interpreters
-3. If you want to specifically only build for the default interpreter, you can add the filter `[[ $1 == "$(default-python-package-name)" ]] || exit 1`
-  1. **Only do this if you intend to vend an executable that is specifically getting run with the default interpreter, for integration test packages, or for packages that only should be built for a single interpreter (such as a data-generation or activation-scripts package)**
+# DataZone Domain Name
+domain_name: cicd-test-domain
 
+# Stack Names
+stacks:
+  domain: cicd-test-domain-stack
+  blueprints_profiles: sagemaker-blueprints-profiles-stack
 
+# Project Configuration
+projects:
+  dev:
+    name: dev-marketing
+    description: Development environment for marketing team
 
+# User Configuration
+users:
+  admin_username: eng1
 
+# VPC Configuration
+VPC:
+  Name: 'SageMakerUnifiedStudioVPC'
+```
 
-## Testing
+### Complete Deployment
 
-`brazil-build test` will run the test command defined in `setup.py`, by default `brazilpython_pytest`, which is defined in the [BrazilPython-Pytest-3.0](https://code.amazon.com/packages/BrazilPython-Pytest/releases) package. The arguments for this will be taken from `setup.cfg`'s `[tool:pytest]` section, but can be set in `pytest.ini` if that's your thing too. Coverage is enabled by default, provided by pytest-cov, which is part of the `PythonTestingDependencies` package group.
+```bash
+cd tests/scripts
+./deploy-all.sh [config-file]
+```
 
-## Running
+## Integration Testing
 
-(For details, check out the [FAQ](https://w.amazon.com/bin/view/BrazilPython3/FAQ/#HHowdoIrunaninterpreterinmypackage3F))
+### Local Integration Tests
 
-To run a script in your bin/ directory named `my-script` with its default
-shebang, you just do this:
+Before running integration tests, ensure the infrastructure is deployed:
 
-`brazil-runtime-exec *my-script*`
+#### 1. Deploy Infrastructure
+```bash
+cd tests/scripts
+./deploy-all.sh config-6778.yaml
+```
 
-To run the default interpreter for experimentation:
+#### 2. Configure Integration Tests
+Create or update `tests/integration/config.local.yaml`:
 
-`brazil-runtime-exec python`
+```yaml
+aws:
+  profile: default
+  region: us-east-2  # Match your domain region
+
+test_environment:
+  domain_name: cicd-test-domain
+  project_prefix: integration-test
+  cleanup_after_tests: true
+
+test_scenarios:
+  basic_pipeline:
+    enabled: true
+    description: "Basic pipeline with single target"
+    pipeline_file: "basic_pipeline.yaml"
+  
+  multi_target_pipeline:
+    enabled: true
+    description: "Pipeline with multiple targets (dev, test, prod)"
+    pipeline_file: "multi_target_pipeline.yaml"
+
+timeouts:
+  project_creation: 300
+  environment_creation: 600
+  bundle_creation: 120
+  deployment: 180
+```
+
+#### 3. Update Pipeline Configurations
+Ensure pipeline files use the correct region:
+
+```bash
+# Update basic_pipeline.yaml
+sed -i 's/region: us-east-1/region: us-east-2/g' tests/integration/basic_pipeline/basic_pipeline.yaml
+
+# Update multi_target_pipeline.yaml  
+sed -i 's/region: us-east-1/region: us-east-2/g' tests/integration/multi_target_pipeline/multi_target_pipeline.yaml
+```
+
+#### 4. Run Integration Tests
+```bash
+# Run with verbose output
+python run_tests_verbose.py
+
+# Or run specific tests
+pytest tests/integration/ -v
+```
+
+### GitHub Workflow Integration
+
+The repository includes several GitHub Actions workflows for automated testing and deployment.
+
+#### Available Workflows
+
+1. **CI Workflow** (`.github/workflows/ci.yml`)
+   - **Trigger**: Pull requests and pushes to main/master
+   - **Jobs**: Linting (flake8, black, isort), unit tests with coverage, security scans
+   - **Purpose**: Comprehensive code quality and testing validation
+
+2. **PR Integration Tests** (`.github/workflows/pr-tests.yml`)
+   - **Trigger**: Pull requests to main/master (paths: `experimental/SMUS-CICD-pipeline-cli/**`)
+   - **Jobs**: Integration tests with AWS credentials
+   - **Purpose**: Test SMUS CLI functionality against real AWS resources
+   - **Environment**: Uses `aws-env` GitHub environment for AWS credentials
+
+3. **Full Pipeline Lifecycle Demo** (`.github/workflows/full-pipeline-lifecycle.yml`)
+   - **Trigger**: Manual workflow dispatch
+   - **Jobs**: 8-step pipeline demonstration following `examples/full-pipeline-lifecycle.sh`
+   - **Purpose**: End-to-end demonstration of SMUS CLI capabilities
+   - **Features**: 
+     - Customizable domain, project, and pipeline names
+     - Sequential jobs: setup, create manifest, validate, bundle, deploy, test, monitor, execute workflows, cleanup
+     - Artifact sharing between jobs
+     - Proper error handling and cleanup
+
+#### Setting Up GitHub Integration
+
+##### 1. Deploy GitHub OIDC Integration
+
+```bash
+cd tests/scripts
+./deploy-github-integration.sh [config-file]
+```
+
+This creates:
+- OIDC identity provider for GitHub Actions
+- IAM role that GitHub Actions can assume
+- Role restricted to your repository and main branch
+
+##### 2. Configure GitHub Repository Secrets
+
+After deployment, add the following secret to your GitHub repository:
+
+1. Go to your repository settings
+2. Navigate to "Secrets and variables" → "Actions"  
+3. Add a new repository secret:
+   - Name: `AWS_ROLE_ARN`
+   - Value: The role ARN output from the CloudFormation deployment
+
+##### 3. Customize Parameters (Optional)
+
+You can customize the deployment by setting environment variables:
+
+```bash
+export GITHUB_ORG="your-org"
+export GITHUB_REPO="your-repo"
+export AWS_REGION="us-west-2"
+./deploy-github-integration.sh
+```
+
+##### 4. GitHub Environment Setup
+
+For workflows using the `aws-env` environment:
+
+1. Go to repository Settings → Environments
+2. Create environment named `aws-env`
+3. Add environment secrets:
+   - `AWS_ROLE_ARN`: The IAM role ARN from step 2
+4. Configure protection rules as needed
+
+#### Workflow Execution
+
+The GitHub workflows will:
+1. Assume the IAM role using OIDC (no long-lived credentials needed)
+2. Install the CLI and dependencies
+3. Run integration tests against your deployed infrastructure
+4. Execute full pipeline lifecycle demonstrations
+5. Provide detailed logs and artifacts
+
+## Running the CLI
+
+### Command Line Interface
+
+```bash
+# Run the CLI directly
+smus-cli --help
+
+# Or using Python module
+python -m smus_cicd.cli --help
+```
+
+### Development Mode
+
+```bash
+# Install in development mode for live code changes
+pip install -e .
+
+# Run from source
+python src/smus_cicd/cli.py --help
+```
+
+## Security Considerations
+
+- The IAM role is configured to only allow access from the `main` branch
+- The role has PowerUser access but you may want to restrict permissions further based on your needs
+- The OIDC provider uses GitHub's official thumbprint
+- Integration tests create and clean up temporary resources
+
+## Cleanup
+
+### Remove GitHub Integration
+```bash
+aws cloudformation delete-stack --stack-name smus-cli-github-integration
+```
+
+### Remove All Infrastructure
+```bash
+cd tests/scripts
+# Delete stacks in reverse order
+aws cloudformation delete-stack --stack-name datazone-project-dev
+aws cloudformation delete-stack --stack-name sagemaker-blueprints-profiles-stack  
+aws cloudformation delete-stack --stack-name cicd-test-domain-stack
+aws cloudformation delete-stack --stack-name sagemaker-unified-studio-vpc
+# Repeat for additional regions
+```
 
 ## Deploying
 
-If this is a library, nothing needs to be done; it'll deploy the versions it builds. If you intend to ship binaries, add a dependency on [Python = default](https://devcentral.amazon.com/ac/brazil/directory/package/majorVersionSummary/Python?majorVersion=default) to `Config`, and then ensure that the right branch of `Python-default` is built into your versionset. You'll want either [CPython2](https://code.amazon.com/packages/Python/trees/CPython2) or [CPython3](https://code.amazon.com/packages/Python/trees/CPython3) for CPython.
+For distribution:
+
+1. Build the package: `python setup.py sdist bdist_wheel`
+2. Upload to PyPI: `twine upload dist/*`
+
+For local installation:
+```bash
+pip install .
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **IDC not enabled**: Ensure AWS Identity Center is enabled in your account
+2. **Region not supported**: Some regions don't support DataZone - use supported regions like us-east-1, us-east-2, us-west-2
+3. **VPC not found**: Ensure VPC deployment completed successfully before running domain deployment
+4. **User not found**: Verify the admin_username exists in IDC and matches the configuration
+
+### Debug Mode
+
+Run scripts with debug output:
+```bash
+set -x  # Enable debug mode
+./deploy-all.sh config-6778.yaml
+```
+
+### Log Files
+
+Integration test results are saved to:
+- `tests/reports/test-results.html` - HTML test report
+- Console output with detailed progress information
