@@ -337,27 +337,47 @@ class ProjectManager:
 
             datazone_client = boto3.client("datazone", region_name=self.region)
 
-            # Get available environment profiles to find the right one
-            profiles_response = datazone_client.list_environment_profiles(
-                domainIdentifier=domain_id, projectIdentifier=project_id
+            # Get project details to find the project profile ID
+            print(f"🔍 DEBUG: Getting project details for project: {project_id}")
+            project_response = datazone_client.get_project(
+                domainIdentifier=domain_id,
+                identifier=project_id
             )
+            
+            project_profile_id = project_response.get('projectProfileId')
+            if not project_profile_id:
+                print(f"🔍 DEBUG: Project profile ID not found")
+                return False
+            
+            print(f"🔍 DEBUG: Project profile ID: {project_profile_id}")
 
-            # Find matching profile
-            profile_id = None
-            for profile in profiles_response.get("items", []):
-                if profile["name"] == env_name:
-                    profile_id = profile["id"]
+            # Get project profile details to find environment configuration
+            print(f"🔍 DEBUG: Getting project profile details")
+            profile_details = datazone_client.get_project_profile(
+                domainIdentifier=domain_id,
+                identifier=project_profile_id
+            )
+            
+            # Find environment configuration that matches target specification
+            env_configs = profile_details.get('environmentConfigurations', [])
+            env_config_id = None
+            
+            for config in env_configs:
+                if config.get('name') == env_name:
+                    env_config_id = config.get('id')
+                    print(f"🔍 DEBUG: Using environment configuration: {config.get('name')} ({env_config_id})")
                     break
 
-            if not profile_id:
-                print(f"🔍 DEBUG: Environment profile '{env_name}' not found")
+            if not env_config_id:
+                print(f"🔍 DEBUG: Environment configuration '{env_name}' not found")
                 return False
 
-            # Create the environment
+            # Create environment with configuration
+            print(f"🔍 DEBUG: Creating environment with configuration ID: {env_config_id}")
             response = datazone_client.create_environment(
                 domainIdentifier=domain_id,
                 projectIdentifier=project_id,
-                environmentProfileIdentifier=profile_id,
+                environmentConfigurationId=env_config_id,
                 name=env_name,
                 description=f"Auto-created environment for {env_name}",
             )
