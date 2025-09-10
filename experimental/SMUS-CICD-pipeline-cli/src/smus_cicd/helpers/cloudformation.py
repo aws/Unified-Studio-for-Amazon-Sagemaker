@@ -4,7 +4,6 @@ CloudFormation utility functions for SMUS CI/CD CLI.
 
 import json
 import time
-from typing import Dict
 
 import boto3
 import typer
@@ -212,37 +211,42 @@ def create_project_via_cloudformation(
         except cf_client.exceptions.AlreadyExistsException:
             # Stack already exists - attempt to update it
             typer.echo(f"CloudFormation stack {stack_name} already exists")
-            
+
             # Check if stack is in a transitional state
             try:
                 stack_response = cf_client.describe_stacks(StackName=stack_name)
                 current_status = stack_response["Stacks"][0]["StackStatus"]
-                
+
                 if "IN_PROGRESS" in current_status:
                     typer.echo(f"⏳ Stack is in transitional state: {current_status}")
                     typer.echo("Waiting for stack to reach stable state...")
-                    
+
                     # Wait for stack to reach stable state
                     max_wait_attempts = 60  # 30 minutes
                     wait_attempt = 0
-                    
-                    while wait_attempt < max_wait_attempts and "IN_PROGRESS" in current_status:
+
+                    while (
+                        wait_attempt < max_wait_attempts
+                        and "IN_PROGRESS" in current_status
+                    ):
                         time.sleep(30)
                         wait_attempt += 1
                         try:
-                            stack_response = cf_client.describe_stacks(StackName=stack_name)
+                            stack_response = cf_client.describe_stacks(
+                                StackName=stack_name
+                            )
                             current_status = stack_response["Stacks"][0]["StackStatus"]
                             typer.echo(f"Stack status: {current_status}")
                         except Exception:
                             break
-                    
+
                     if "IN_PROGRESS" in current_status:
-                        typer.echo(f"⏰ Timeout waiting for stack to reach stable state")
+                        typer.echo("⏰ Timeout waiting for stack to reach stable state")
                         return False
-                        
+
             except Exception as e:
                 typer.echo(f"Warning: Could not check stack status: {e}")
-            
+
             try:
                 typer.echo(f"Updating CloudFormation stack: {stack_name}")
                 cf_client.update_stack(
@@ -263,13 +267,15 @@ def create_project_via_cloudformation(
                 typer.echo(f"✅ Stack {stack_name} updated successfully")
 
             except cf_client.exceptions.ClientError as update_error:
-                error_code = update_error.response["Error"]["Code"]
+
                 error_message = str(update_error)
 
                 if "No updates are to be performed" in error_message:
                     typer.echo(f"✅ Stack {stack_name} is already up to date")
                 else:
-                    typer.echo(f"❌ Failed to update stack {stack_name}: {update_error}")
+                    typer.echo(
+                        f"❌ Failed to update stack {stack_name}: {update_error}"
+                    )
                     return False
 
             return True
@@ -339,14 +345,22 @@ def wait_for_project_deployment(project_name, project_id, domain_id, region):
         return False
 
 
-def delete_project_stack(stack_name, region):
+def delete_project_stack(
+    project_name, domain_name, region, pipeline_name, target_name, output="TEXT"
+):
     """Delete CloudFormation stack for a project."""
     try:
+        # Generate stack name: SMUS-{pipeline}-{target}-{project}-{template}
+        clean_pipeline = pipeline_name.replace("_", "-").replace(" ", "-").lower()
+        clean_target = target_name.replace("_", "-").replace(" ", "-").lower()
+        clean_project = project_name.replace("_", "-").replace(" ", "-").lower()
+        stack_name = f"SMUS-{clean_pipeline}-{clean_target}-{clean_project}-project"
+
         cf_client = boto3.client("cloudformation", region_name=region)
-        
+
         typer.echo(f"Deleting CloudFormation stack: {stack_name}")
         cf_client.delete_stack(StackName=stack_name)
-        
+
         # Wait for deletion to complete
         typer.echo("Waiting for stack deletion to complete...")
         waiter = cf_client.get_waiter("stack_delete_complete")
@@ -356,7 +370,7 @@ def delete_project_stack(stack_name, region):
         )
         typer.echo(f"✅ Stack {stack_name} deleted successfully")
         return True
-        
+
     except cf_client.exceptions.ClientError as e:
         error_code = e.response["Error"]["Code"]
         if error_code == "ValidationError" and "does not exist" in str(e):
@@ -374,19 +388,18 @@ def update_project_stack_tags(stack_name, region, tags):
     """Update CloudFormation stack tags."""
     try:
         cf_client = boto3.client("cloudformation", region_name=region)
-        
+
         typer.echo(f"Updating CloudFormation stack tags: {stack_name}")
         cf_client.update_stack(
             StackName=stack_name,
             UsePreviousTemplate=True,
             Tags=tags,
         )
-        
+
         typer.echo(f"✅ Stack {stack_name} tags updated successfully")
         return True
-        
+
     except cf_client.exceptions.ClientError as e:
-        error_code = e.response["Error"]["Code"]
         if "No updates are to be performed" in str(e):
             typer.echo(f"✅ Stack {stack_name} tags are already up to date")
             return True

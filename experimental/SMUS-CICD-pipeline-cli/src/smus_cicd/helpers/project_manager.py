@@ -151,23 +151,25 @@ class ProjectManager:
             handle_error("Failed to create project")
 
         print("🔍 DEBUG: CloudFormation creation succeeded - managing memberships")
-        
+
         # Get domain ID for membership management
         domain_id = datazone.get_domain_id_by_name(self.domain_name, self.region)
         if not domain_id:
             handle_error(f"Failed to find domain ID for {self.domain_name}")
-        
+
         # Get project ID for membership management
-        project_id = datazone.get_project_id_by_name(project_name, domain_id, self.region)
+        project_id = datazone.get_project_id_by_name(
+            project_name, domain_id, self.region
+        )
         if not project_id:
             handle_error(f"Failed to find project ID for {project_name}")
-        
+
         # Manage project memberships via DataZone API
         typer.echo("🔧 Managing project memberships...")
         membership_success = datazone.manage_project_memberships(
             project_id, domain_id, self.region, owners, contributors
         )
-        
+
         if not membership_success:
             handle_error("Failed to manage project memberships")
 
