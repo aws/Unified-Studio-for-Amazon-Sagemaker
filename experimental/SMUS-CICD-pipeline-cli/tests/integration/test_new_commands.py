@@ -218,7 +218,6 @@ class TestNewCommandsIntegration(IntegrationTestBase):
                     except json.JSONDecodeError:
                         pytest.fail(f"Invalid JSON output for command: {command}")
 
-    @pytest.mark.skip(reason="JSON error formatting disabled for easier debugging")
     def test_output_format_consistency(self):
         """Test output format consistency across commands."""
         runner = CliRunner()
@@ -264,4 +263,5 @@ class TestNewCommandsIntegration(IntegrationTestBase):
                 try:
                     json.loads(run_json.stdout)
                 except json.JSONDecodeError:
-                    pytest.fail("Run command should return valid JSON even on failure")
+                    # If JSON parsing fails, show the actual error message for debugging
+                    pytest.fail(f"Run command returned text error instead of JSON: {run_json.stdout.strip()}")
