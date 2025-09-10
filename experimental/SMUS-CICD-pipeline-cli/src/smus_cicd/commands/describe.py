@@ -323,9 +323,6 @@ def describe_command(
                 typer.echo(f"  - {workflow.workflow_name}")
                 typer.echo(f"    Connection: {workflow.connection_name}")
                 typer.echo(f"    Engine: {workflow.engine}")
-                typer.echo(
-                    f"    Trigger Post Deployment: {workflow.trigger_post_deployment}"
-                )
                 if hasattr(workflow, "parameters") and workflow.parameters:
                     typer.echo(f"    Parameters: {workflow.parameters}")
 
@@ -339,7 +336,6 @@ def describe_command(
                         "workflow_name": workflow.workflow_name,
                         "connection_name": workflow.connection_name,
                         "engine": workflow.engine,
-                        "trigger_post_deployment": workflow.trigger_post_deployment,
                     }
                     if hasattr(workflow, "parameters") and workflow.parameters:
                         workflow_data["parameters"] = workflow.parameters

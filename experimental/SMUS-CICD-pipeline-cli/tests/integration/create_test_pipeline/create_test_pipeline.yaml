@@ -2,7 +2,7 @@ pipelineName: CreateTestPipeline
 
 domain:
   name: cicd-test-domain
-  region: us-east-1
+  region: ${DEV_DOMAIN_REGION:us-east-2}
 
 targets:
   dev: 
@@ -39,7 +39,6 @@ workflows:
   - workflowName: simple_dag
     connectionName: project.workflow_mwaa
     engine: MWAA
-    triggerPostDeployment: false
 
 bundle:
   bundlesDirectory: /tmp/bundles

@@ -79,7 +79,6 @@ targets:
 workflows:
   - workflowName: data_pipeline
     connectionName: project.mwaa_connection
-    triggerPostDeployment: true
     logging: console
     engine: MWAA
     parameters:
@@ -87,7 +86,6 @@ workflows:
       timeout: 3600
   - workflowName: ml_training
     connectionName: project.spark_connection
-    triggerPostDeployment: false
     logging: none
     engine: MWAA
 """
@@ -104,8 +102,6 @@ workflows:
         assert "ml_training" in result.stdout
         assert "Connection: project.mwaa_connection" in result.stdout
         assert "Connection: project.spark_connection" in result.stdout
-        assert "Trigger Post Deployment: True" in result.stdout
-        assert "Trigger Post Deployment: False" in result.stdout
         assert "Engine: MWAA" in result.stdout
         assert "'env': 'production'" in result.stdout
         assert "'timeout': 3600" in result.stdout
@@ -511,7 +507,6 @@ workflows:
         assert "Pipeline:" in result.stdout
         assert "Targets:" in result.stdout
         assert "Connection: test-connection" in result.stdout
-        assert "Trigger Post Deployment: False" in result.stdout  # Default value
         assert "Engine: Workflows" in result.stdout  # Default value
 
     def test_edge_case_empty_strings(self):

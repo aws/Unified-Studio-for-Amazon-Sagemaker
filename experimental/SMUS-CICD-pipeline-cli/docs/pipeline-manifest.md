@@ -4,6 +4,54 @@
 
 The pipeline manifest is a YAML file that defines your CI/CD pipeline configuration, including targets, workflows, and deployment settings.
 
+## Environment Variable Parameterization
+
+**NEW**: Pipeline manifests support environment variable substitution using `${VARIABLE_NAME}` or `${VARIABLE_NAME:default_value}` syntax. This enables flexible configuration across different environments without maintaining separate manifest files.
+
+### Basic Syntax
+```yaml
+# Use environment variables with defaults
+domain:
+  name: ${DOMAIN_NAME:my-default-domain}
+  region: ${AWS_REGION:us-east-1}
+
+# Use environment variables without defaults (empty string if not set)
+database:
+  password: ${DB_PASSWORD}
+```
+
+### Multi-Environment Example
+```yaml
+pipelineName: ${PIPELINE_NAME:MyPipeline}
+
+domain:
+  name: ${DOMAIN_NAME}
+  region: ${DEV_DOMAIN_REGION:us-east-2}
+
+targets:
+  dev:
+    project:
+      name: ${PROJECT_PREFIX:myapp}-dev-${TEAM_NAME}
+  
+  prod:
+    project:
+      name: ${PROJECT_PREFIX:myapp}-prod-${TEAM_NAME}
+```
+
+**Usage:**
+```bash
+# Set environment variables
+export DOMAIN_NAME=production-domain
+export DEV_DOMAIN_REGION=us-west-2
+export PROJECT_PREFIX=dataplatform
+export TEAM_NAME=analytics
+
+# Deploy with substituted values
+smus-cli deploy --pipeline pipeline.yaml --target prod
+```
+
+See the main [README Environment Variable section](../README.md#environment-variable-parameterization) for complete documentation and examples.
+
 ## Quick Links
 
 - **[Pipeline Manifest Schema Documentation](pipeline-manifest-schema.md)** - Complete schema reference with validation rules and examples
@@ -15,10 +63,10 @@ The pipeline manifest is a YAML file that defines your CI/CD pipeline configurat
 pipelineName: MarketingDataPipeline
 bundlesDirectory: ./bundles
 
-# Domain configuration
+# Domain configuration (supports environment variables)
 domain:
-  name: my-studio-domain
-  region: us-east-1
+  name: ${DOMAIN_NAME:my-studio-domain}
+  region: ${AWS_REGION:us-east-1}
 
 # What to include in deployment bundles
 bundle:

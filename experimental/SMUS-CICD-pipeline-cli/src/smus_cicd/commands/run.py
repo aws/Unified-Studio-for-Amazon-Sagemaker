@@ -33,11 +33,47 @@ def run_command(
         smus-cli run -w test_dag -c "dags state test_dag"
         smus-cli run -w test_dag -c "tasks list test_dag"
     """
+    # Configure logging based on output format
+    import os
+
+    from ..helpers.logger import setup_logger
+
+    log_level = os.environ.get("SMUS_LOG_LEVEL", "INFO")
+    json_output = output.upper() == "JSON"
+    setup_logger("smus_cicd", log_level, json_output)
+
     _validate_required_parameters(workflow, command)
 
     try:
         manifest = PipelineManifest.from_file(manifest_file)
         targets_to_check = _resolve_targets(targets, manifest)
+
+        # Validate MWAA health for each target before executing commands
+        from ..helpers.mwaa import validate_mwaa_health
+        from ..helpers.utils import load_config
+
+        config = load_config()
+        # Add domain information from manifest for proper connection retrieval
+        config["domain"] = {"name": manifest.domain.name}
+        config["region"] = manifest.domain.region
+        mwaa_healthy = False
+
+        for target_name in targets_to_check:
+            target_config = manifest.get_target(target_name)
+            project_name = target_config.project.name
+
+            typer.echo(
+                f"🔍 Checking MWAA health for target '{target_name}' (project: {project_name})"
+            )
+            if validate_mwaa_health(project_name, config):
+                mwaa_healthy = True
+                break
+
+        if not mwaa_healthy:
+            typer.echo(
+                "❌ No healthy MWAA environments found. Cannot execute workflow commands."
+            )
+            raise typer.Exit(1)
 
         results = _execute_commands_on_targets(
             targets_to_check, manifest, workflow, command, output

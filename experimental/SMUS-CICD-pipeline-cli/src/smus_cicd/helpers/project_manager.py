@@ -20,41 +20,49 @@ class ProjectManager:
 
     def ensure_project_exists(self, target_name: str, target_config) -> Dict[str, Any]:
         """Ensure project exists, create if needed and configured to do so."""
-        print(f"🔍 DEBUG: ensure_project_exists called for target: {target_name}")
+        from .logger import get_logger
+
+        logger = get_logger("project_manager")
+
+        logger.debug(f"ensure_project_exists called for target: {target_name}")
 
         project_name = target_config.project.name
-        print(f"🔍 DEBUG: project_name: {project_name}")
+        logger.debug(f"project_name: {project_name}")
 
         # Check if project exists in DataZone first
         # Ensure config has region for get_datazone_project_info
         config_with_region = {**self.config, "region": self.region}
         project_info = get_datazone_project_info(project_name, config_with_region)
-        print(f"🔍 DEBUG: project_info keys: {list(project_info.keys())}")
-        print(f"🔍 DEBUG: project_info has error: {'error' in project_info}")
+        logger.debug(f"project_info keys: {list(project_info.keys())}")
+        logger.debug(f"project_info has error: {'error' in project_info}")
 
         if "error" not in project_info:
             # Project exists - check and create missing environments
-            print("🔍 DEBUG: Project exists path - calling _ensure_environments_exist")
+            logger.debug("Project exists path - calling _ensure_environments_exist")
             handle_success(f"✅ Project '{project_name}' already exists")
             self._update_existing_project(target_name, target_config, project_name)
-            environments_ready = self._ensure_environments_exist(target_name, target_config, project_info)
+            environments_ready = self._ensure_environments_exist(
+                target_name, target_config, project_info
+            )
             if not environments_ready:
-                raise Exception("Environment creation failed - cannot proceed with deployment")
+                raise Exception(
+                    "Environment creation failed - cannot proceed with deployment"
+                )
             return project_info
 
         # Project doesn't exist - check if we should create it
-        print("🔍 DEBUG: Project doesn't exist - checking if should create")
+        logger.debug("Project doesn't exist - checking if should create")
         if self._should_create_project(target_config):
-            print("🔍 DEBUG: Should create project - calling _create_new_project")
+            logger.debug("Should create project - calling _create_new_project")
             project_info = self._create_new_project(
                 target_name, target_config, project_name
             )
-            print("🔍 DEBUG: _create_new_project returned")
-            print(
-                f"🔍 DEBUG: project_info after creation: {list(project_info.keys()) if isinstance(project_info, dict) else type(project_info)}"
+            logger.debug("_create_new_project returned")
+            logger.debug(
+                f"project_info after creation: {list(project_info.keys()) if isinstance(project_info, dict) else type(project_info)}"
             )
-            print(
-                f"🔍 DEBUG: project_info has error after creation: {'error' in project_info if isinstance(project_info, dict) else 'not a dict'}"
+            logger.debug(
+                f"project_info has error after creation: {'error' in project_info if isinstance(project_info, dict) else 'not a dict'}"
             )
             if "error" not in project_info:
                 # After creating project, ensure environments exist
@@ -65,7 +73,9 @@ class ProjectManager:
                     target_name, target_config, project_info
                 )
                 if not environments_ready:
-                    raise Exception("Environment creation failed - cannot proceed with deployment")
+                    raise Exception(
+                        "Environment creation failed - cannot proceed with deployment"
+                    )
             else:
                 print(
                     "🔍 DEBUG: Project creation failed - NOT calling _ensure_environments_exist"
@@ -413,7 +423,9 @@ class ProjectManager:
 
             # Wait for environment to be fully provisioned
             print("⏳ Waiting for environment to be fully provisioned...")
-            max_attempts = 360  # 3 hours max (360 * 30 seconds = 10800 seconds = 3 hours)
+            max_attempts = (
+                360  # 3 hours max (360 * 30 seconds = 10800 seconds = 3 hours)
+            )
             attempt = 0
 
             while attempt < max_attempts:

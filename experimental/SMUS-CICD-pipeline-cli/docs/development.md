@@ -14,19 +14,81 @@ This guide covers development workflows, testing, and contribution guidelines fo
 ### GitHub Actions Integration
 The repository includes automated workflows for development:
 
-**For Code Changes (Automatic)**:
-- **CI Workflow**: Runs linting, unit tests, and security scans on every PR
-- **PR Integration Tests**: Validates CLI functionality against real AWS resources
+## Development Workflows
 
-**For Demonstrations (Manual)**:
-- **Full Pipeline Lifecycle Demo**: Complete 8-step pipeline showcase
-  - Trigger manually from GitHub Actions UI
-  - Customizable domain, project, and pipeline names
-  - Follows `examples/full-pipeline-lifecycle.sh` sequence
+### Automated Testing Workflows
 
-**Setup Requirements**:
-1. Deploy AWS OIDC integration: `cd tests/integration/github && ./deploy-github-integration.sh`
-2. Configure `AWS_ROLE_ARN` secret in GitHub environment `aws-env`
+**CI Workflow (`.github/workflows/ci.yml`)**:
+- **Triggers**: Pull requests and pushes to main/master
+- **Features**: Code linting (flake8, black, isort), unit tests with coverage, security scans (safety, bandit)
+- **Purpose**: Comprehensive code quality validation
+- **Coverage**: 158 unit tests with Codecov integration
+
+**PR Integration Tests (`.github/workflows/pr-tests.yml`)**:
+- **Triggers**: Pull requests affecting SMUS CLI code
+- **Features**: Integration tests with real AWS resources using OIDC authentication
+- **Purpose**: Validate CLI functionality against live AWS services
+- **Duration**: Extended 12-hour sessions for long-running MWAA operations
+
+**Full Pipeline Lifecycle Demo (`.github/workflows/full-pipeline-lifecycle.yml`)**:
+- **Triggers**: Manual workflow dispatch
+- **Features**: Complete 7-step pipeline demonstration with customizable inputs
+- **Purpose**: End-to-end showcase of SMUS CLI capabilities
+- **Note**: Cleanup step is commented out to prevent resource conflicts
+
+### Development Setup Requirements
+
+1. **Deploy AWS OIDC Integration**:
+   ```bash
+   cd tests/scripts
+   aws cloudformation deploy \
+     --template-file github-oidc-role.yaml \
+     --stack-name smus-cli-github-integration \
+     --capabilities CAPABILITY_NAMED_IAM
+   ```
+
+2. **Configure GitHub Secrets**:
+   - Create environment `aws-env` in repository settings
+   - Add secret `AWS_ROLE_ARN_DEV` with the OIDC role ARN
+   - Role has 12-hour maximum session duration for long operations
+
+3. **Local Development Setup**:
+   ```bash
+   cd experimental/SMUS-CICD-pipeline-cli
+   pip install -e ".[dev]"
+   ```
+
+### Environment Variable Configuration
+
+The CLI supports environment variable parameterization in pipeline manifests for flexible multi-environment development:
+
+**Local Development**:
+```bash
+# Set local environment variables
+export DEV_DOMAIN_REGION=us-east-1
+export PROJECT_PREFIX=myteam
+export DOMAIN_NAME=local-test-domain
+
+# Run tests with local configuration
+python -m pytest tests/integration/
+```
+
+**GitHub Actions**:
+```bash
+# Automatically set in CI environment
+export DEV_DOMAIN_REGION=us-east-2
+export AWS_ROLE_ARN_DEV=arn:aws:iam::ACCOUNT:role/GitHubActionsRole-SMUS-CLI-Tests
+```
+
+**Integration Test Manifests**:
+All integration test pipeline manifests use environment variables:
+```yaml
+domain:
+  name: cicd-test-domain
+  region: ${DEV_DOMAIN_REGION:us-east-2}  # Defaults to us-east-2 for CI
+```
+
+This allows the same test manifests to work in both local development (us-east-1) and CI environments (us-east-2) without modification.
 
 See [GitHub Actions Integration](github-actions-integration.md) for complete setup instructions.
 

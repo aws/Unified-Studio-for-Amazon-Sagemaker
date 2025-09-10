@@ -41,7 +41,7 @@ def test_environment_variables_available():
     
     assert domain_name, "Domain name should not be empty"
     assert project_prefix, "Project prefix should not be empty"
-    assert region in ['us-east-1', 'us-west-2', 'eu-west-1'], f"Region {region} should be valid"
+    assert region in ['us-east-1', 'us-east-2', 'us-west-2', 'eu-west-1'], f"Region {region} should be valid"
 
 
 def test_project_context():
@@ -55,7 +55,7 @@ def test_project_context():
     # Basic validation
     assert domain_name, "Domain name should not be empty"
     assert project_prefix, "Project prefix should not be empty"
-    assert region in ['us-east-1', 'us-west-2', 'eu-west-1'], f"Region {region} should be valid"
+    assert region in ['us-east-1', 'us-east-2', 'us-west-2', 'eu-west-1'], f"Region {region} should be valid"
     
     # Test project naming convention
     test_project_name = f"{project_prefix}-test"

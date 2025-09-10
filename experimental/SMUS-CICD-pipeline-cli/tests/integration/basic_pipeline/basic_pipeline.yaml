@@ -2,12 +2,11 @@ pipelineName: BasicTestPipeline
 
 domain: 
   name: cicd-test-domain
-  region: us-east-2
+  region: ${DEV_DOMAIN_REGION:us-east-2}
 
 workflows:
 - workflowName: test_dag
   connectionName: project.workflow_mwaa
-  triggerPostDeployment: True
   engine: MWAA 
   parameters: 
     default-sql-connection: project.athena 

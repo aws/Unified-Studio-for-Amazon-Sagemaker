@@ -35,7 +35,6 @@ bundle:
 workflows:
   - workflowName: integration_test_dag
     connectionName: project.workflow_connection
-    triggerPostDeployment: false
     logging: console
     engine: MWAA
 targets:

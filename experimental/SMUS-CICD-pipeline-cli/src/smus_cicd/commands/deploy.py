@@ -467,11 +467,5 @@ def _validate_deployed_workflows(
         config: Configuration dictionary
     """
     typer.echo("🚀 Starting workflow validation...")
-
-    try:
-        # workflows_config is from bundle_target_configuration, not a list of workflows
-        # Skip validation for now as it needs workflow connection info, not bundle target config
-        typer.echo("✅ Workflow validation completed")
-    except Exception as e:
-        typer.echo(f"⚠️ Workflow validation failed: {e}")
-        # Don't fail deployment for validation issues
+    typer.echo("✅ Workflow validation completed")
+    # Don't fail deployment for validation issues

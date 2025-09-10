@@ -6,7 +6,7 @@ from typing import Optional
 
 import typer
 
-from ..helpers.utils import get_datazone_project_info, load_config
+from ..helpers.utils import get_datazone_project_info
 from ..pipeline import PipelineManifest
 
 
@@ -15,6 +15,15 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
     try:
         # Load pipeline manifest using centralized parser
         manifest = PipelineManifest.from_file(manifest_file)
+
+        # Validate MWAA health before monitoring
+        from ..helpers.mwaa import validate_mwaa_health
+        from ..helpers.utils import load_config
+
+        config = load_config()
+        # Add domain information from manifest for proper connection retrieval
+        config["domain"] = {"name": manifest.domain.name}
+        config["region"] = manifest.domain.region
 
         # Parse targets - handle single target or comma-separated list
         target_list = []
@@ -59,12 +68,41 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
             typer.echo(f"Domain: {manifest.domain.name} ({manifest.domain.region})")
             typer.echo("\n🔍 Monitoring Status:")
 
+        # Validate MWAA health for targets before monitoring
+        mwaa_healthy_targets = []
+        for target_name, target_config in targets_to_monitor.items():
+            project_name = target_config.project.name
+            if output.upper() != "JSON":
+                typer.echo(f"\n📋 Target: {target_name} (Project: {project_name})")
+
+            if validate_mwaa_health(project_name, config):
+                mwaa_healthy_targets.append(target_name)
+            else:
+                if output.upper() != "JSON":
+                    typer.echo(
+                        f"⚠️  Skipping monitoring for target '{target_name}' - MWAA not healthy"
+                    )
+
+        if not mwaa_healthy_targets:
+            if output.upper() == "JSON":
+                output_data["error"] = "No healthy MWAA environments found"
+                typer.echo(json.dumps(output_data, indent=2))
+            else:
+                typer.echo(
+                    "❌ No healthy MWAA environments found. Cannot monitor workflows."
+                )
+            raise typer.Exit(1)
+
         # Add timestamp
         timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
         output_data["monitoring_timestamp"] = timestamp
 
         # Monitor each target
         for target_name, target_config in targets_to_monitor.items():
+            # Skip unhealthy targets
+            if target_name not in mwaa_healthy_targets:
+                continue
+
             target_data = {
                 "project": {"name": target_config.project.name},
                 "status": "unknown",
@@ -298,7 +336,6 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
                         "workflow_name": workflow.workflow_name,
                         "connection_name": workflow.connection_name,
                         "engine": workflow.engine,
-                        "trigger_post_deployment": workflow.trigger_post_deployment,
                     }
                     if hasattr(workflow, "parameters") and workflow.parameters:
                         workflow_data["parameters"] = workflow.parameters

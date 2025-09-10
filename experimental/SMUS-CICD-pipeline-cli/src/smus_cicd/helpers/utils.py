@@ -1,13 +1,44 @@
 """Utility functions for SMUS CLI."""
 
 import os
+import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import boto3
 import yaml
 
 from . import datazone
+
+
+def substitute_env_vars(data: Union[Dict, List, str]) -> Union[Dict, List, str]:
+    """
+    Recursively substitute environment variables in YAML data.
+
+    Supports ${VAR_NAME} syntax for environment variable substitution.
+
+    Args:
+        data: YAML data (dict, list, or string)
+
+    Returns:
+        Data with environment variables substituted
+    """
+    if isinstance(data, dict):
+        return {key: substitute_env_vars(value) for key, value in data.items()}
+    elif isinstance(data, list):
+        return [substitute_env_vars(item) for item in data]
+    elif isinstance(data, str):
+        # Pattern to match ${VAR_NAME} or ${VAR_NAME:default_value}
+        pattern = r"\$\{([^}:]+)(?::([^}]*))?\}"
+
+        def replace_var(match):
+            var_name = match.group(1)
+            default_value = match.group(2) if match.group(2) is not None else ""
+            return os.getenv(var_name, default_value)
+
+        return re.sub(pattern, replace_var, data)
+    else:
+        return data
 
 
 def load_yaml(file_path: str) -> Dict[str, Any]:
@@ -32,7 +63,8 @@ def load_yaml(file_path: str) -> Dict[str, Any]:
 
     try:
         with open(file_path, "r") as f:
-            return yaml.safe_load(f)
+            data = yaml.safe_load(f)
+            return substitute_env_vars(data)
     except yaml.YAMLError as e:
         raise yaml.YAMLError(f"Invalid YAML syntax in {file_path}: {e}")
 
@@ -72,10 +104,7 @@ def get_domain_id(config: Dict[str, Any]) -> Optional[str]:
     Raises:
         ValueError: If region is not specified in configuration
     """
-    region = config.get("region")
-    if not region:
-        raise ValueError("Region must be specified in configuration")
-
+    region = _get_region_from_config(config)
     domain_stack_name = config.get("stacks", {}).get("domain", "cicd-test-domain-stack")
 
     cf_client = boto3.client("cloudformation", region_name=region)
@@ -153,10 +182,28 @@ def get_datazone_project_info(
 
 
 def _get_region_from_config(config: Dict[str, Any]) -> str:
-    """Get region from configuration, raising error if not found."""
-    region = config.get("region")
+    """Get region from configuration, prioritizing DEV_DOMAIN_REGION env var."""
+    import os
+
+    from .logger import get_logger
+
+    logger = get_logger("utils")
+
+    # Check environment variable first
+    region = os.environ.get("DEV_DOMAIN_REGION")
+    if region:
+        logger.debug(f"Using DEV_DOMAIN_REGION environment variable: {region}")
+        return region
+
+    # Only check aws.region in config (no direct region support)
+    region = config.get("aws", {}).get("region")
+
     if not region:
-        raise ValueError("Region must be specified in configuration")
+        raise ValueError(
+            "Region must be specified in aws.region configuration or DEV_DOMAIN_REGION environment variable"
+        )
+
+    logger.debug(f"Using region from config: {region}")
     return region
 
 
@@ -262,7 +309,11 @@ def _get_project_connections(
     try:
         from . import connections
 
+        # Try different config structures for domain name
         domain_name = config.get("domain", {}).get("name")
+        if not domain_name:
+            domain_name = config.get("test_environment", {}).get("domain_name")
+
         if domain_name:
             return connections.get_project_connections(
                 project_name, domain_name, region

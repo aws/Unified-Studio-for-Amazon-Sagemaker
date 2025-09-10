@@ -2,6 +2,7 @@
 import pytest
 import tempfile
 import os
+from unittest.mock import patch
 from typer.testing import CliRunner
 from smus_cicd.cli import app
 
@@ -25,7 +26,6 @@ targets:
 workflows:
   - workflowName: test_workflow
     connectionName: project.workflow_mwaa
-    triggerPostDeployment: true
 """
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
         f.write(manifest_content)
@@ -34,8 +34,13 @@ workflows:
     os.unlink(f.name)
 
 
-def test_describe_basic(sample_manifest):
+@patch('smus_cicd.helpers.utils._get_region_from_config')
+@patch('smus_cicd.helpers.utils.load_config')
+def test_describe_basic(mock_load_config, mock_get_region, sample_manifest):
     """Test basic describe functionality."""
+    mock_load_config.return_value = {'region': 'us-east-1'}
+    mock_get_region.return_value = 'us-east-1'
+    
     runner = CliRunner()
     with tempfile.TemporaryDirectory() as temp_dir:
         os.chdir(temp_dir)
@@ -48,8 +53,13 @@ def test_describe_basic(sample_manifest):
         assert "Domain: test-domain (us-east-1)" in result.stdout
 
 
-def test_describe_with_connections(sample_manifest):
+@patch('smus_cicd.helpers.utils._get_region_from_config')
+@patch('smus_cicd.helpers.utils.load_config')
+def test_describe_with_connections(mock_load_config, mock_get_region, sample_manifest):
     """Test describe with connections flag."""
+    mock_load_config.return_value = {'region': 'us-east-1'}
+    mock_get_region.return_value = 'us-east-1'
+    
     runner = CliRunner()
     with tempfile.TemporaryDirectory() as temp_dir:
         os.chdir(temp_dir)
@@ -63,8 +73,13 @@ def test_describe_with_connections(sample_manifest):
         assert "Targets:" in result.stdout
 
 
-def test_describe_with_targets(sample_manifest):
+@patch('smus_cicd.helpers.utils._get_region_from_config')
+@patch('smus_cicd.helpers.utils.load_config')
+def test_describe_with_targets(mock_load_config, mock_get_region, sample_manifest):
     """Test describe with targets flag."""
+    mock_load_config.return_value = {'region': 'us-east-1'}
+    mock_get_region.return_value = 'us-east-1'
+    
     runner = CliRunner()
     with tempfile.TemporaryDirectory() as temp_dir:
         os.chdir(temp_dir)

@@ -22,7 +22,7 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       RoleName: GitHubActionsRole-SMUS-CLI-Tests
-      MaxSessionDuration: 3600  # 1 hour (3600 seconds)
+      MaxSessionDuration: 43200  # 12 hours (43200 seconds) - maximum allowed
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:

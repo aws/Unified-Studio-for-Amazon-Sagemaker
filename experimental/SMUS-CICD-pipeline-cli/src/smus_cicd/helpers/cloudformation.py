@@ -733,6 +733,3 @@ def update_project_stack_tags(
         else:
             typer.echo(f"❌ Error updating project stack tags: {str(e)}", err=True)
             return False
-
-
-

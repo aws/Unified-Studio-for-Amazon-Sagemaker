@@ -52,14 +52,19 @@ workflows:
             import os
             os.unlink(manifest_file)
 
+    @patch('smus_cicd.commands.run.PipelineManifest.from_file')
+    @patch('smus_cicd.helpers.mwaa.validate_mwaa_health')
+    @patch('smus_cicd.commands.run.load_config')
     @patch('smus_cicd.commands.run.get_datazone_project_info')
     @patch('smus_cicd.helpers.mwaa.run_airflow_command')
-    def test_run_json_output_with_parsed_data(self, mock_run_airflow, mock_get_project):
+    def test_run_json_output_with_parsed_data(self, mock_run_airflow, mock_get_project, mock_config, mock_mwaa_health, mock_manifest):
         """Test run command JSON output with parsed Airflow data."""
         runner = CliRunner()
         manifest_file = self.create_test_manifest()
         
         # Mock responses
+        mock_config.return_value = {}
+        mock_mwaa_health.return_value = True  # Mock MWAA as healthy
         mock_get_project.return_value = {
             'project_id': 'test-project-id',
             'connections': {
@@ -69,6 +74,14 @@ workflows:
                 }
             }
         }
+        
+        # Mock manifest
+        mock_target = MagicMock()
+        mock_target.project.name = 'test-project'
+        mock_manifest_obj = MagicMock()
+        mock_manifest_obj.targets = {'dev': mock_target}
+        mock_manifest_obj.get_target_config.return_value = mock_target
+        mock_manifest.return_value = mock_manifest_obj
         
         # Mock Airflow response with dags list output
         mock_run_airflow.return_value = {
@@ -89,8 +102,18 @@ workflows:
             
             assert result.exit_code == 0
             
-            # Parse JSON output
-            output_data = json.loads(result.stdout)
+            # Parse JSON output - extract JSON part from stdout
+            stdout_lines = result.stdout.strip().split('\n')
+            # Find the JSON part (starts with '{')
+            json_start = None
+            for i, line in enumerate(stdout_lines):
+                if line.strip().startswith('{'):
+                    json_start = i
+                    break
+            
+            assert json_start is not None, "No JSON found in output"
+            json_text = '\n'.join(stdout_lines[json_start:])
+            output_data = json.loads(json_text)
             assert "workflow" in output_data
             assert "command" in output_data
             assert "results" in output_data
@@ -159,14 +182,19 @@ workflows:
             # This test will be updated when we add it
             assert result.exit_code in [0, 2]  # May not have --format option yet
 
+    @patch('smus_cicd.commands.run.PipelineManifest.from_file')
+    @patch('smus_cicd.helpers.mwaa.validate_mwaa_health')
+    @patch('smus_cicd.commands.run.load_config')
     @patch('smus_cicd.commands.run.get_datazone_project_info')
     @patch('smus_cicd.helpers.mwaa.run_airflow_command')
-    def test_run_json_output_version_command(self, mock_run_airflow, mock_get_project):
+    def test_run_json_output_version_command(self, mock_run_airflow, mock_get_project, mock_config, mock_mwaa_health, mock_manifest):
         """Test run command JSON output with version command."""
         runner = CliRunner()
         manifest_file = self.create_test_manifest()
         
         # Mock responses
+        mock_config.return_value = {}
+        mock_mwaa_health.return_value = True  # Mock MWAA as healthy
         mock_get_project.return_value = {
             'project_id': 'test-project-id',
             'connections': {
@@ -176,6 +204,14 @@ workflows:
                 }
             }
         }
+        
+        # Mock manifest
+        mock_target = MagicMock()
+        mock_target.project.name = 'test-project'
+        mock_manifest_obj = MagicMock()
+        mock_manifest_obj.targets = {'dev': mock_target}
+        mock_manifest_obj.get_target_config.return_value = mock_target
+        mock_manifest.return_value = mock_manifest_obj
         
         # Mock Airflow version response
         mock_run_airflow.return_value = {
@@ -196,8 +232,18 @@ workflows:
             
             assert result.exit_code == 0
             
-            # Parse JSON output
-            output_data = json.loads(result.stdout)
+            # Parse JSON output - extract JSON part from stdout
+            stdout_lines = result.stdout.strip().split('\n')
+            # Find the JSON part (starts with '{')
+            json_start = None
+            for i, line in enumerate(stdout_lines):
+                if line.strip().startswith('{'):
+                    json_start = i
+                    break
+            
+            assert json_start is not None, "No JSON found in output"
+            json_text = '\n'.join(stdout_lines[json_start:])
+            output_data = json.loads(json_text)
             result_item = output_data["results"][0]
             assert "version" in result_item
             assert result_item["version"] == "2.10.1"
@@ -206,14 +252,19 @@ workflows:
             import os
             os.unlink(manifest_file)
 
+    @patch('smus_cicd.commands.run.PipelineManifest.from_file')
+    @patch('smus_cicd.helpers.mwaa.validate_mwaa_health')
+    @patch('smus_cicd.commands.run.load_config')
     @patch('smus_cicd.commands.run.get_datazone_project_info')
     @patch('smus_cicd.helpers.mwaa.run_airflow_command')
-    def test_run_json_output_tasks_list(self, mock_run_airflow, mock_get_project):
+    def test_run_json_output_tasks_list(self, mock_run_airflow, mock_get_project, mock_config, mock_mwaa_health, mock_manifest):
         """Test run command JSON output with tasks list command."""
         runner = CliRunner()
         manifest_file = self.create_test_manifest()
         
         # Mock responses
+        mock_config.return_value = {}
+        mock_mwaa_health.return_value = True  # Mock MWAA as healthy
         mock_get_project.return_value = {
             'project_id': 'test-project-id',
             'connections': {
@@ -223,6 +274,14 @@ workflows:
                 }
             }
         }
+        
+        # Mock manifest
+        mock_target = MagicMock()
+        mock_target.project.name = 'test-project'
+        mock_manifest_obj = MagicMock()
+        mock_manifest_obj.targets = {'dev': mock_target}
+        mock_manifest_obj.get_target_config.return_value = mock_target
+        mock_manifest.return_value = mock_manifest_obj
         
         # Mock Airflow tasks list response
         mock_run_airflow.return_value = {
@@ -243,8 +302,18 @@ workflows:
             
             assert result.exit_code == 0
             
-            # Parse JSON output
-            output_data = json.loads(result.stdout)
+            # Parse JSON output - extract JSON part from stdout
+            stdout_lines = result.stdout.strip().split('\n')
+            # Find the JSON part (starts with '{')
+            json_start = None
+            for i, line in enumerate(stdout_lines):
+                if line.strip().startswith('{'):
+                    json_start = i
+                    break
+            
+            assert json_start is not None, "No JSON found in output"
+            json_text = '\n'.join(stdout_lines[json_start:])
+            output_data = json.loads(json_text)
             result_item = output_data["results"][0]
             assert "tasks" in result_item
             assert result_item["tasks"] == ["task1", "task2", "task3"]

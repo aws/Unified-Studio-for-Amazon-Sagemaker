@@ -99,7 +99,6 @@ class WorkflowConfig:
 
     workflow_name: str
     connection_name: str
-    trigger_post_deployment: bool = False
     logging: str = "none"
     engine: str = "Workflows"
     parameters: Dict[str, Any] = field(default_factory=dict)
@@ -276,9 +275,6 @@ class PipelineManifest:
             workflow = WorkflowConfig(
                 workflow_name=workflow_name,
                 connection_name=connection_name,
-                trigger_post_deployment=workflow_data.get(
-                    "triggerPostDeployment", False
-                ),
                 logging=workflow_data.get("logging", "none"),
                 engine=workflow_data.get("engine", "Workflows"),
                 parameters=workflow_data.get("parameters", {}),

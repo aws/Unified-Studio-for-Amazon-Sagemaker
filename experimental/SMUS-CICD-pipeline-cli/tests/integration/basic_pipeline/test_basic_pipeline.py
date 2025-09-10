@@ -82,10 +82,17 @@ class TestBasicPipeline(IntegrationTestBase):
         print("\n=== Step 4: Upload Code to S3 ===")
         try:
             # Get S3 URI from dev project connections
+            import os
+            print(f"DEBUG: DEV_DOMAIN_REGION = {os.environ.get('DEV_DOMAIN_REGION')}")
+            print(f"DEBUG: config = {self.config}")
             project_info = get_datazone_project_info("dev-marketing", self.config)
+            print(f"DEBUG: project_info = {project_info}")
             connections = project_info.get('connections', {})
+            print(f"DEBUG: connections keys = {list(connections.keys())}")
             s3_shared_conn = connections.get('default.s3_shared', {})
+            print(f"DEBUG: s3_shared_conn = {s3_shared_conn}")
             s3_uri = s3_shared_conn.get('s3Uri')
+            print(f"DEBUG: s3_uri = {s3_uri}")
             
             if s3_uri:
                 # Copy local code files to S3
@@ -143,7 +150,7 @@ class TestBasicPipeline(IntegrationTestBase):
                         print(f"Bundle contains {len(file_list)} files")
                         
                         # Check for uploaded files in their respective directories
-                        assert any('workflows/test_dag.py' in f for f in file_list), f"workflows/test_dag.py not found in bundle: {file_list}"
+                        assert any('workflows/dags/test_dag.py' in f for f in file_list), f"workflows/dags/test_dag.py not found in bundle: {file_list}"
                         assert any('storage/src/test-notebook1.ipynb' in f for f in file_list), f"storage/src/test-notebook1.ipynb not found in bundle: {file_list}"
                         print("✅ Bundle contains uploaded files: workflows/test_dag.py and storage/src/test-notebook1.ipynb")
                     

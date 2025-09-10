@@ -3,7 +3,7 @@
 
 aws:
   profile: default  # AWS profile to use for tests
-  region: us-east-1  # AWS region for tests
+  region: ${DEV_DOMAIN_REGION:us-east-2}
   # Alternative: use access keys (not recommended for local development)
   # access_key_id: YOUR_ACCESS_KEY
   # secret_access_key: YOUR_SECRET_KEY
