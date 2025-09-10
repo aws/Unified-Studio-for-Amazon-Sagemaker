@@ -93,8 +93,6 @@ class TestRegionConfigurationRegression:
         first_call_args, first_call_kwargs = calls[0]
         assert first_call_args[0] == "cloudformation"
         assert first_call_kwargs["region_name"] == datazone_domain_region
-                assert kwargs["region_name"] == datazone_domain_region
-                assert kwargs["region_name"] != aws_credentials_region
         
         # Should succeed without region configuration errors
         assert "error" not in result or "Region must be specified" not in str(result.get("error", ""))
