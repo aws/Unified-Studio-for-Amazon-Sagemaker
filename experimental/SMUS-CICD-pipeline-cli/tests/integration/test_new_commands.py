@@ -5,6 +5,7 @@ import pytest
 from typer.testing import CliRunner
 from smus_cicd.cli import app
 from .base import IntegrationTestBase
+from ..test_helpers import parse_json_or_show_error
 
 
 @pytest.mark.integration
@@ -260,8 +261,4 @@ class TestNewCommandsIntegration(IntegrationTestBase):
             
             # Should return valid JSON even on failure
             if run_json.stdout.strip():
-                try:
-                    json.loads(run_json.stdout)
-                except json.JSONDecodeError:
-                    # If JSON parsing fails, show the actual error message for debugging
-                    pytest.fail(f"Run command returned text error instead of JSON: {run_json.stdout.strip()}")
+                parse_json_or_show_error(run_json.stdout, "Run command")
