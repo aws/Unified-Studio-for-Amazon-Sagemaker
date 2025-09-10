@@ -2,8 +2,8 @@
 CloudFormation utility functions for SMUS CI/CD CLI.
 """
 
+import json
 import time
-from pathlib import Path
 from typing import Dict
 
 import boto3
@@ -680,14 +680,9 @@ def update_project_stack_tags(
             stack_status = response["Stacks"][0]["StackStatus"]
 
             if stack_status in ["CREATE_COMPLETE", "UPDATE_COMPLETE"]:
-                # Read the CloudFormation template
-                template_path = (
-                    Path(__file__).parent.parent
-                    / "cloudformation"
-                    / "single-project.yaml"
-                )
-                with open(template_path, "r") as f:
-                    template_body = f.read()
+                # Get the template from the existing stack
+                template_response = cf_client.get_template(StackName=stack_name)
+                template_body = json.dumps(template_response["TemplateBody"])
 
                 # Get current parameters
                 current_stack = response["Stacks"][0]

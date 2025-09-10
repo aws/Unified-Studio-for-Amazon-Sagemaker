@@ -2,7 +2,6 @@
 
 import os
 import re
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 import boto3
@@ -71,24 +70,15 @@ def load_yaml(file_path: str) -> Dict[str, Any]:
 
 def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     """
-    Load configuration from specified path.
+    Load configuration - returns empty dict as all config comes from pipeline manifest.
 
     Args:
-        config_path: Path to configuration file (optional)
+        config_path: Ignored - kept for backward compatibility
 
     Returns:
-        Configuration dictionary (empty if file doesn't exist)
+        Empty configuration dictionary
     """
-    if config_path is None:
-        # Use package-relative path
-        config_path = Path(__file__).parent / "cloudformation" / "config.yaml"
-    else:
-        config_path = Path(config_path)
-
-    if not config_path.exists():
-        return {}
-
-    return load_yaml(str(config_path))
+    return {}
 
 
 def get_domain_id(config: Dict[str, Any]) -> Optional[str]:
