@@ -221,7 +221,17 @@ def _execute_command_on_target(
     """
     config = _prepare_config(manifest)
     project_info = _get_project_info(target_config.project.name, config)
+    
+    # Debug: Check what type project_info is
+    if output.upper() != "JSON":
+        typer.echo(f"🔍 DEBUG: project_info type: {type(project_info)}")
+        typer.echo(f"🔍 DEBUG: project_info value: {project_info}")
 
+    if isinstance(project_info, str):
+        # Handle case where project_info is a string (error message)
+        error_result = _create_error_result(target_name, project_info, output)
+        return [error_result]
+    
     if "error" in project_info or not project_info.get("project_id"):
         error_msg = (
             f"Failed to get project info: {project_info.get('error', 'Unknown error')}"
