@@ -298,11 +298,24 @@ def _get_workflow_connections(project_info: Dict[str, Any]) -> Dict[str, Any]:
         Dictionary of workflow connections
     """
     connections = project_info.get("connections", {})
-    return {
-        name: info
-        for name, info in connections.items()
-        if info.get("type") in ["MWAA", "WORKFLOWS_MWAA"]
-    }
+    
+    # Debug: Check connections structure
+    print(f"🔍 DEBUG: connections type: {type(connections)}")
+    print(f"🔍 DEBUG: connections value: {connections}")
+    
+    result = {}
+    for name, info in connections.items():
+        print(f"🔍 DEBUG: connection '{name}' info type: {type(info)}")
+        print(f"🔍 DEBUG: connection '{name}' info value: {info}")
+        
+        if isinstance(info, str):
+            print(f"❌ DEBUG: connection '{name}' info is a string, skipping")
+            continue
+            
+        if info.get("type") in ["MWAA", "WORKFLOWS_MWAA"]:
+            result[name] = info
+    
+    return result
 
 
 def _execute_on_workflow_connections(
