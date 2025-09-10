@@ -301,6 +301,9 @@ def _get_project_connections(
         if not domain_name:
             domain_name = config.get("test_environment", {}).get("domain_name")
 
+        # DEBUG: Log the parameters being passed to connections
+        print(f"🔍 DEBUG _get_project_connections: project_name={project_name}, domain_name={domain_name}, region={region}")
+
         if domain_name:
             return connections.get_project_connections(
                 project_name, domain_name, region

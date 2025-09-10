@@ -575,6 +575,9 @@ def get_project_connections(project_id, domain_id, region):
     """Get project connections from DataZone."""
     try:
         datazone_client = boto3.client("datazone", region_name=region)
+        
+        # DEBUG: Log the exact parameters being used for the ListConnections call
+        print(f"🔍 DEBUG datazone.get_project_connections: region={region}, domain_id={domain_id}, project_id={project_id}")
 
         # List connections for the project
         response = datazone_client.list_connections(
