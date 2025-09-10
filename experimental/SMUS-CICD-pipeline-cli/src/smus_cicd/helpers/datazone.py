@@ -786,3 +786,84 @@ def get_project_environments(project_id, domain_id, region):
     except Exception as e:
         print(f"Error getting project environments: {str(e)}")
         return []
+
+
+def manage_project_memberships(project_id, domain_id, region, owners=None, contributors=None):
+    """Idempotently manage project memberships via DataZone API."""
+    try:
+        datazone_client = boto3.client("datazone", region_name=region)
+        
+        # Get existing memberships
+        response = datazone_client.list_project_memberships(
+            domainIdentifier=domain_id, projectIdentifier=project_id
+        )
+        
+        existing_members = {}
+        for member in response.get("members", []):
+            member_details = member.get("memberDetails", {})
+            if "user" in member_details:
+                user_id = member_details["user"].get("userIdentifier")
+                if user_id:
+                    existing_members[user_id] = member.get("designation")
+        
+        typer.echo(f"🔍 Found {len(existing_members)} existing members")
+        
+        # Add owners
+        if owners:
+            owner_ids = resolve_usernames_to_ids(owners, domain_id, region)
+            for i, owner_id in enumerate(owner_ids):
+                if not owner_id:  # Skip if resolution failed
+                    continue
+                    
+                if owner_id not in existing_members:
+                    try:
+                        datazone_client.create_project_membership(
+                            domainIdentifier=domain_id,
+                            projectIdentifier=project_id,
+                            member={"userIdentifier": owner_id},
+                            designation="PROJECT_OWNER"
+                        )
+                        typer.echo(f"✅ Added owner: {owner_id}")
+                    except Exception as e:
+                        if "User is already in the project" in str(e):
+                            typer.echo(f"✓ Owner already exists: {owner_id}")
+                        else:
+                            typer.echo(f"❌ Failed to add owner {owner_id}: {e}")
+                            return False
+                elif existing_members[owner_id] != "PROJECT_OWNER":
+                    typer.echo(f"⚠️ User {owner_id} exists with different role: {existing_members[owner_id]}")
+                else:
+                    typer.echo(f"✓ Owner already exists: {owner_id}")
+        
+        # Add contributors
+        if contributors:
+            contributor_ids = resolve_usernames_to_ids(contributors, domain_id, region)
+            for contributor_id in contributor_ids:
+                if not contributor_id:  # Skip if resolution failed
+                    continue
+                    
+                if contributor_id not in existing_members:
+                    try:
+                        datazone_client.create_project_membership(
+                            domainIdentifier=domain_id,
+                            projectIdentifier=project_id,
+                            member={"userIdentifier": contributor_id},
+                            designation="PROJECT_CONTRIBUTOR"
+                        )
+                        typer.echo(f"✅ Added contributor: {contributor_id}")
+                    except Exception as e:
+                        if "User is already in the project" in str(e):
+                            typer.echo(f"✓ Contributor already exists: {contributor_id}")
+                        else:
+                            typer.echo(f"❌ Failed to add contributor {contributor_id}: {e}")
+                            return False
+                elif existing_members[contributor_id] != "PROJECT_CONTRIBUTOR":
+                    typer.echo(f"⚠️ User {contributor_id} exists with different role: {existing_members[contributor_id]}")
+                else:
+                    typer.echo(f"✓ Contributor already exists: {contributor_id}")
+        
+        return True
+        
+    except Exception as e:
+        typer.echo(f"❌ Error managing project memberships: {str(e)}", err=True)
+        return False
