@@ -255,12 +255,12 @@ workflows:
         if not self.verify_aws_connectivity():
             pytest.skip("AWS connectivity not available")
         
-        # Create a manifest with wrong region
+        # Create a manifest with parameterized region that defaults to wrong region
         manifest_content = """
 pipelineName: WrongRegionTest
 domain:
   name: cicd-test-domain
-  region: eu-west-1
+  region: ${DEV_DOMAIN_REGION:eu-west-1}
 bundle:
   bundlesDirectory: ./tests/integration/bundles
 targets:
