@@ -43,12 +43,22 @@ def _get_existing_memberships(
     except Exception as e:
         # Check if this is a permission error
         error_str = str(e)
-        if any(perm_error in error_str.lower() for perm_error in [
-            'accessdenied', 'access denied', 'unauthorized', 'forbidden', 
-            'permission', 'not authorized', 'insufficient privileges'
-        ]):
+        if any(
+            perm_error in error_str.lower()
+            for perm_error in [
+                "accessdenied",
+                "access denied",
+                "unauthorized",
+                "forbidden",
+                "permission",
+                "not authorized",
+                "insufficient privileges",
+            ]
+        ):
             logger.error(f"AWS Permission Error getting existing memberships: {e}")
-            raise Exception(f"AWS Permission Error: {error_str}. Check if the role has DataZone permissions.")
+            raise Exception(
+                f"AWS Permission Error: {error_str}. Check if the role has DataZone permissions."
+            )
         else:
             logger.debug(f"Error getting existing memberships: {e}")
             return {}

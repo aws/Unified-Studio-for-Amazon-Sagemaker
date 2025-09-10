@@ -26,14 +26,26 @@ def get_domain_id_by_name(domain_name, region):
     except Exception as e:
         # Check if this is a permission error
         error_str = str(e)
-        if any(perm_error in error_str.lower() for perm_error in [
-            'accessdenied', 'access denied', 'unauthorized', 'forbidden', 
-            'permission', 'not authorized', 'insufficient privileges'
-        ]):
+        if any(
+            perm_error in error_str.lower()
+            for perm_error in [
+                "accessdenied",
+                "access denied",
+                "unauthorized",
+                "forbidden",
+                "permission",
+                "not authorized",
+                "insufficient privileges",
+            ]
+        ):
             typer.echo(f"❌ AWS Permission Error: {error_str}", err=True)
-            typer.echo("Check if the role has DataZone permissions to find domains.", err=True)
+            typer.echo(
+                "Check if the role has DataZone permissions to find domains.", err=True
+            )
         else:
-            typer.echo(f"Error finding domain by name {domain_name}: {str(e)}", err=True)
+            typer.echo(
+                f"Error finding domain by name {domain_name}: {str(e)}", err=True
+            )
         return None
 
 
@@ -54,14 +66,26 @@ def get_project_id_by_name(project_name, domain_id, region):
     except Exception as e:
         # Check if this is a permission error
         error_str = str(e)
-        if any(perm_error in error_str.lower() for perm_error in [
-            'accessdenied', 'access denied', 'unauthorized', 'forbidden', 
-            'permission', 'not authorized', 'insufficient privileges'
-        ]):
+        if any(
+            perm_error in error_str.lower()
+            for perm_error in [
+                "accessdenied",
+                "access denied",
+                "unauthorized",
+                "forbidden",
+                "permission",
+                "not authorized",
+                "insufficient privileges",
+            ]
+        ):
             typer.echo(f"❌ AWS Permission Error: {error_str}", err=True)
-            typer.echo("Check if the role has DataZone permissions to list projects.", err=True)
+            typer.echo(
+                "Check if the role has DataZone permissions to list projects.", err=True
+            )
         else:
-            typer.echo(f"Error finding project by name {project_name}: {str(e)}", err=True)
+            typer.echo(
+                f"Error finding project by name {project_name}: {str(e)}", err=True
+            )
         return None
 
 
@@ -607,12 +631,26 @@ def get_project_connections(project_id, domain_id, region):
     except Exception as e:
         # Check if this is a permission error
         error_str = str(e)
-        if any(perm_error in error_str.lower() for perm_error in [
-            'accessdenied', 'access denied', 'unauthorized', 'forbidden', 
-            'permission', 'not authorized', 'insufficient privileges'
-        ]):
-            typer.echo(f"❌ AWS Permission Error getting project connections: {error_str}", err=True)
-            typer.echo("Check if the role has DataZone permissions to list connections.", err=True)
+        if any(
+            perm_error in error_str.lower()
+            for perm_error in [
+                "accessdenied",
+                "access denied",
+                "unauthorized",
+                "forbidden",
+                "permission",
+                "not authorized",
+                "insufficient privileges",
+            ]
+        ):
+            typer.echo(
+                f"❌ AWS Permission Error getting project connections: {error_str}",
+                err=True,
+            )
+            typer.echo(
+                "Check if the role has DataZone permissions to list connections.",
+                err=True,
+            )
             return {}
         else:
             typer.echo(f"Error getting project connections: {str(e)}", err=True)

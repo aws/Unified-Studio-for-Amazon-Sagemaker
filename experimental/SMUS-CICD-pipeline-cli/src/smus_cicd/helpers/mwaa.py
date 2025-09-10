@@ -87,12 +87,22 @@ def get_all_dag_details(
     except Exception as e:
         # Check if this is a permission error
         error_str = str(e)
-        if any(perm_error in error_str.lower() for perm_error in [
-            'accessdenied', 'access denied', 'unauthorized', 'forbidden', 
-            'permission', 'not authorized', 'insufficient privileges'
-        ]):
+        if any(
+            perm_error in error_str.lower()
+            for perm_error in [
+                "accessdenied",
+                "access denied",
+                "unauthorized",
+                "forbidden",
+                "permission",
+                "not authorized",
+                "insufficient privileges",
+            ]
+        ):
             print(f"❌ AWS Permission Error getting DAG details: {error_str}")
-            raise Exception(f"AWS Permission Error: {error_str}. Check if the role has MWAA permissions.")
+            raise Exception(
+                f"AWS Permission Error: {error_str}. Check if the role has MWAA permissions."
+            )
         else:
             return {}
 
