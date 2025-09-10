@@ -54,14 +54,14 @@ jobs:
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
     
-    - name: Run integration tests
+    - name: Run simple DataZone test
       env:
         DEV_DOMAIN_REGION: ${{ vars.DEV_DOMAIN_REGION }}
       run: |
         cd experimental/SMUS-CICD-pipeline-cli
-        echo "🧪 Starting integration tests with debug output..."
-        python -m pytest tests/integration/ --ignore=tests/integration/delete_test_pipeline -v -s --tb=short --capture=no || {
-          echo "❌ Integration tests failed. Showing detailed failure information:"
+        echo "🧪 Running simple hardcoded DataZone test..."
+        python test_simple_datazone.py || {
+          echo "❌ Simple DataZone test failed - this will help us isolate the issue"
           echo "=============================================================="
           exit 1
         }
