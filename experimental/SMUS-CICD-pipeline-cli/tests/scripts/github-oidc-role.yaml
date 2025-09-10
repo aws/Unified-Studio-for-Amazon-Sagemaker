@@ -52,6 +52,7 @@ Resources:
                   - iam:ListRoles
                   - cloudformation:*
                   - s3:*
+                  - datazone:*
                 Resource: '*'
 
 Outputs:
