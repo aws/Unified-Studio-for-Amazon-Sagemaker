@@ -7,13 +7,17 @@ from smus_cicd.helpers.utils import load_config, get_datazone_project_info
 
 
 def _load_test_config():
-    """Load integration test configuration."""
+    """Load integration test configuration with environment variable substitution."""
     config_path = Path(__file__).parent.parent.parent / "config.local.yaml"
     if not config_path.exists():
         config_path = Path(__file__).parent.parent.parent / "config.yaml"
     
     with open(config_path, 'r') as f:
-        return yaml.safe_load(f)
+        config_data = yaml.safe_load(f)
+    
+    # Apply environment variable substitution
+    from smus_cicd.helpers.utils import substitute_env_vars
+    return substitute_env_vars(config_data)
 
 
 def test_environment_variables_available():
