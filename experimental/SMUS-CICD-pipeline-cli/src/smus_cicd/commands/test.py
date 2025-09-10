@@ -78,6 +78,7 @@ def test_command(
 
         # Load AWS config
         config = load_config()
+        config["domain"] = {"name": manifest.domain.name, "region": manifest.domain.region}
         config["region"] = manifest.domain.region
         config["domain_name"] = manifest.domain.name
 

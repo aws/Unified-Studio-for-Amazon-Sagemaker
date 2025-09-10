@@ -116,13 +116,9 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
 
             try:
                 config = load_config()
+                config["domain"] = {"name": manifest.domain.name, "region": manifest.domain.region}
                 config["region"] = manifest.domain.region
                 config["domain_name"] = manifest.domain.name
-
-                # Set domain info in config for proper lookup
-                if "domain" not in config:
-                    config["domain"] = {}
-                config["domain"]["name"] = manifest.domain.name
 
                 project_info = get_datazone_project_info(
                     target_config.project.name, config
