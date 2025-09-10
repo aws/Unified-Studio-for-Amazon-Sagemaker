@@ -310,5 +310,14 @@ def _get_project_connections(
             )
         else:
             return {}
-    except Exception:
-        return {}  # Connections are optional
+    except Exception as e:
+        # Check if this is a permission error
+        error_str = str(e)
+        if any(perm_error in error_str.lower() for perm_error in [
+            'accessdenied', 'access denied', 'unauthorized', 'forbidden', 
+            'permission', 'not authorized', 'insufficient privileges'
+        ]):
+            print(f"❌ AWS Permission Error getting connections: {error_str}")
+            raise Exception(f"AWS Permission Error: {error_str}. Check if the role has required permissions.")
+        else:
+            return {}  # Connections are optional for non-permission errors

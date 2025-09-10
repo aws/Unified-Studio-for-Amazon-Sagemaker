@@ -121,4 +121,13 @@ def get_project_connections(
         return connections
 
     except Exception as e:
+        # Check if this is a permission error
+        error_str = str(e)
+        if any(perm_error in error_str.lower() for perm_error in [
+            'accessdenied', 'access denied', 'unauthorized', 'forbidden', 
+            'permission', 'not authorized', 'insufficient privileges'
+        ]):
+            raise Exception(f"AWS Permission Error: {error_str}. Check if the role has DataZone permissions to list connections.")
+        
+        # For other errors, return error info but don't fail completely
         return {"error": f"Could not list connections: {str(e)}"}
