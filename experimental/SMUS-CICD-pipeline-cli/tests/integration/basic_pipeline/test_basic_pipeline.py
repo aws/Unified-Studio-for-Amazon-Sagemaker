@@ -39,6 +39,7 @@ class TestBasicPipeline(IntegrationTestBase):
         
         if result['success']:
             print("✅ Describe command successful")
+            print(f"CLI OUTPUT:\n{result['output']}")
             # Actually validate the output contains expected content
             assert "Pipeline:" in result['output'], f"Parse output missing 'Pipeline:': {result['output']}"
             assert "BasicTestPipeline" in result['output'], f"Parse output missing pipeline name: {result['output']}"
@@ -53,6 +54,7 @@ class TestBasicPipeline(IntegrationTestBase):
         
         if result['success']:
             print("✅ Parse connections successful")
+            print(f"CLI OUTPUT:\n{result['output']}")
             # Connections are now shown under targets
             assert "Targets:" in result['output'], f"Parse connections output missing 'Targets:': {result['output']}"
         else:
@@ -66,6 +68,7 @@ class TestBasicPipeline(IntegrationTestBase):
         
         if result['success']:
             print("✅ Describe targets successful")
+            print(f"CLI OUTPUT:\n{result['output']}")
             # Validate targets are listed
             assert "Targets:" in result['output'], f"Describe targets output missing 'Targets:': {result['output']}"
             # Validate detailed information is shown (Project ID, Status fields)
