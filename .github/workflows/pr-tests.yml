@@ -66,6 +66,18 @@ jobs:
           exit 1
         }
     
+    - name: Run basic pipeline integration test
+      env:
+        DEV_DOMAIN_REGION: ${{ vars.DEV_DOMAIN_REGION }}
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli
+        echo "🧪 Running basic pipeline integration test..."
+        python -m pytest tests/integration/basic_pipeline/test_basic_pipeline.py::TestBasicPipeline::test_basic_pipeline_workflow -v -s || {
+          echo "❌ Basic pipeline test failed - checking region/domain/project configuration"
+          echo "=============================================================="
+          exit 1
+        }
+    
     - name: Upload test reports
       uses: actions/upload-artifact@v4
       if: always()
