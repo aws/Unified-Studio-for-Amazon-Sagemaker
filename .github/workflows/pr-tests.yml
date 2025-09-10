@@ -59,7 +59,14 @@ jobs:
         DEV_DOMAIN_REGION: ${{ vars.DEV_DOMAIN_REGION }}
       run: |
         cd experimental/SMUS-CICD-pipeline-cli
-        python scripts/run_tests.py --type integration
+        python scripts/run_tests.py --type integration --no-html-report || {
+          echo "❌ Integration tests failed. Showing detailed failure information:"
+          echo "=============================================================="
+          # Show last few failed tests with full output
+          pytest tests/integration/ -v --tb=short --maxfail=3 -x || true
+          echo "=============================================================="
+          exit 1
+        }
     
     - name: Upload test reports
       uses: actions/upload-artifact@v4
