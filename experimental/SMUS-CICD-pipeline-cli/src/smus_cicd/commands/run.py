@@ -62,17 +62,19 @@ def run_command(
             target_config = manifest.get_target(target_name)
             project_name = target_config.project.name
 
-            typer.echo(
-                f"🔍 Checking MWAA health for target '{target_name}' (project: {project_name})"
-            )
+            if output.upper() != "JSON":
+                typer.echo(
+                    f"🔍 Checking MWAA health for target '{target_name}' (project: {project_name})"
+                )
             if validate_mwaa_health(project_name, config):
                 mwaa_healthy = True
                 break
 
         if not mwaa_healthy:
-            typer.echo(
-                "❌ No healthy MWAA environments found. Cannot execute workflow commands."
-            )
+            if output.upper() != "JSON":
+                typer.echo(
+                    "❌ No healthy MWAA environments found. Cannot execute workflow commands."
+                )
             raise typer.Exit(1)
 
         results = _execute_commands_on_targets(

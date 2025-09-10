@@ -10,12 +10,15 @@ import boto3
 import typer
 
 from . import datazone
+from .logger import get_logger
 
 
 def _get_existing_memberships(
     domain_id: str, project_id: str, region: str
 ) -> Dict[str, str]:
     """Get existing project memberships as a dict of user_id -> designation."""
+    logger = get_logger("cloudformation")
+    
     try:
         datazone_client = boto3.client("datazone", region_name=region)
         memberships_response = datazone_client.list_project_memberships(
@@ -31,15 +34,14 @@ def _get_existing_memberships(
                 if user_id:
                     designation = member.get("designation")
                     existing_memberships[user_id] = designation
-                    typer.echo(
-                        f"🔍 DEBUG: Found existing membership: {user_id} -> {designation}"
+                    logger.debug(
+                        f"Found existing membership: {user_id} -> {designation}"
                     )
 
-        typer.echo(f"🔍 DEBUG: Total existing memberships: {len(existing_memberships)}")
+        logger.debug(f"Total existing memberships: {len(existing_memberships)}")
         return existing_memberships
     except Exception as e:
-        typer.echo(f"🔍 DEBUG: Error getting existing memberships: {e}")
-        return {}
+        logger.debug(f"Error getting existing memberships: {e}")
         return {}
 
 
@@ -57,11 +59,13 @@ def create_project_via_cloudformation(
     environments=None,
 ):
     """Create DataZone project with memberships using dynamically generated CloudFormation template."""
+    logger = get_logger("cloudformation")
+    
     try:
-        print("🔍 DEBUG: Creating project via CloudFormation")
-        print(f"🔍 DEBUG: project_name={project_name}")
-        print(f"🔍 DEBUG: profile_name={profile_name}")
-        print(f"🔍 DEBUG: user_parameters={user_parameters}")
+        logger.debug("Creating project via CloudFormation")
+        logger.debug(f"project_name={project_name}")
+        logger.debug(f"profile_name={profile_name}")
+        logger.debug(f"user_parameters={user_parameters}")
 
         cf_client = boto3.client("cloudformation", region_name=region)
         datazone_client = boto3.client("datazone", region_name=region)
@@ -69,11 +73,11 @@ def create_project_via_cloudformation(
         # Convert userParameters to CloudFormation format
         user_parameters_cf = []
         if user_parameters:
-            print(
-                f"🔍 DEBUG: Converting {len(user_parameters)} user parameters to CF format"
+            logger.debug(
+                f"Converting {len(user_parameters)} user parameters to CF format"
             )
             for env_config in user_parameters:
-                print(f"🔍 DEBUG: Processing env_config: {env_config}")
+                logger.debug(f"Processing env_config: {env_config}")
                 env_dict = {
                     "EnvironmentConfigurationName": env_config.EnvironmentConfigurationName,
                     "EnvironmentParameters": [],
@@ -83,11 +87,11 @@ def create_project_via_cloudformation(
                         {"Name": param.name, "Value": param.value}
                     )
                 user_parameters_cf.append(env_dict)
-                print(f"🔍 DEBUG: Added CF env_dict: {env_dict}")
+                logger.debug(f"Added CF env_dict: {env_dict}")
         else:
-            print("🔍 DEBUG: No user_parameters provided")
+            logger.debug("No user_parameters provided")
 
-        print(f"🔍 DEBUG: Final user_parameters_cf: {user_parameters_cf}")
+        logger.debug(f"Final user_parameters_cf: {user_parameters_cf}")
 
         # Look up domain ID from domain name
         try:
@@ -210,7 +214,7 @@ def create_project_via_cloudformation(
                             )
 
         except Exception as e:
-            typer.echo(f"🔍 DEBUG: Could not determine current role: {e}")
+            logger.debug(f"Could not determine current role: {e}")
 
         # Check if project already exists and filter out existing memberships
         existing_project_id = datazone.get_project_id_by_name(

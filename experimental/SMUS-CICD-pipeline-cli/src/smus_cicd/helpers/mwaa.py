@@ -3,6 +3,7 @@
 from typing import Any, Dict, List
 
 from . import boto3_client
+from .logger import get_logger
 
 
 def get_environment_status(
@@ -431,6 +432,8 @@ def validate_mwaa_health(project_name: str, config: Dict[str, Any]) -> bool:
     Returns:
         bool: True if MWAA is available, False otherwise
     """
+    logger = get_logger("mwaa")
+    
     try:
         import typer
 
@@ -445,38 +448,38 @@ def validate_mwaa_health(project_name: str, config: Dict[str, Any]) -> bool:
             connections = project_info["connections"]
 
             # Debug: Show all available connections
-            typer.echo(f"🔍 DEBUG: Available connections in project '{project_name}':")
+            logger.debug(f"Available connections in project '{project_name}':")
             for conn_name, conn_info in connections.items():
                 conn_type = conn_info.get("type", "UNKNOWN")
-                typer.echo(f"  - {conn_name}: {conn_type}")
+                logger.debug(f"  - {conn_name}: {conn_type}")
 
             # Look for MWAA workflow connection
             mwaa_connection = None
             for conn_name, conn_info in connections.items():
                 if conn_info.get("type") in ["MWAA", "WORKFLOWS_MWAA"]:
                     mwaa_connection = conn_info
-                    typer.echo(
-                        f"🔍 DEBUG: Found MWAA connection '{conn_name}': {conn_info.get('type')}"
+                    logger.debug(
+                        f"Found MWAA connection '{conn_name}': {conn_info.get('type')}"
                     )
                     break
 
             if mwaa_connection:
-                typer.echo("✅ MWAA environment is available")
+                logger.info("MWAA environment is available")
                 return True
             else:
-                typer.echo("⚠️  MWAA environment connection not found")
-                typer.echo(
-                    "🔍 DEBUG: Looking for connection types: ['MWAA', 'WORKFLOWS_MWAA']"
+                logger.warning("MWAA environment connection not found")
+                logger.debug(
+                    "Looking for connection types: ['MWAA', 'WORKFLOWS_MWAA']"
                 )
                 return False
         else:
-            typer.echo("⚠️  MWAA environment connection not found")
+            logger.warning("MWAA environment connection not found")
             if "error" in project_info:
-                typer.echo(f"🔍 DEBUG: Project info error: {project_info.get('error')}")
+                logger.debug(f"Project info error: {project_info.get('error')}")
             else:
-                typer.echo("🔍 DEBUG: No connections found in project info")
+                logger.debug("No connections found in project info")
             return False
 
     except Exception as e:
-        typer.echo(f"⚠️ MWAA health check failed: {e}")
+        logger.error(f"MWAA health check failed: {e}")
         return False
