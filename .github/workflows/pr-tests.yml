@@ -22,6 +22,19 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
+    - name: Validate environment variables
+      env:
+        DEV_DOMAIN_REGION: ${{ vars.DEV_DOMAIN_REGION }}
+      run: |
+        echo "Validating required environment variables..."
+        echo "DEV_DOMAIN_REGION: ${DEV_DOMAIN_REGION:-NOT_SET}"
+        if [ -z "$DEV_DOMAIN_REGION" ]; then
+          echo "❌ ERROR: DEV_DOMAIN_REGION environment variable is not set in aws-env environment"
+          echo "Please set DEV_DOMAIN_REGION in GitHub repository settings > Environments > aws-env"
+          exit 1
+        fi
+        echo "✅ All required environment variables are set"
+    
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
@@ -43,7 +56,7 @@ jobs:
     
     - name: Run integration tests
       env:
-        DEV_DOMAIN_REGION: us-east-2
+        DEV_DOMAIN_REGION: ${{ vars.DEV_DOMAIN_REGION }}
       run: |
         cd experimental/SMUS-CICD-pipeline-cli
         python scripts/run_tests.py --type integration
