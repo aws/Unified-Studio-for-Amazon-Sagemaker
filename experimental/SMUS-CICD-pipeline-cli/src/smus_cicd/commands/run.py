@@ -36,11 +36,11 @@ def run_command(
     # Configure logging based on output format
     import os
 
-    from ..helpers.logger import setup_logger
+    from ..helpers.logger import configure_root_logger
 
     log_level = os.environ.get("SMUS_LOG_LEVEL", "INFO")
     json_output = output.upper() == "JSON"
-    setup_logger("smus_cicd", log_level, json_output)
+    configure_root_logger(log_level, json_output)
 
     _validate_required_parameters(workflow, command, output)
 

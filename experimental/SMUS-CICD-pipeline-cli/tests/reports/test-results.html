@@ -328,7 +328,7 @@ div.media {
   </head>
   <body>
     <h1 id="title">test-results.html</h1>
-    <p>Report generated on 09-Sep-2025 at 22:34:42 by <a href="https://pypi.python.org/pypi/pytest-html">pytest-html</a>
+    <p>Report generated on 09-Sep-2025 at 22:44:42 by <a href="https://pypi.python.org/pypi/pytest-html">pytest-html</a>
         v4.1.1</p>
     <div id="environment-header">
       <h2>Environment</h2>
@@ -382,7 +382,7 @@ div.media {
         <h2>Summary</h2>
         <div class="additional-summary prefix">
         </div>
-        <p class="run-count">1 test took 51 ms.</p>
+        <p class="run-count">1 test took 52 ms.</p>
         <p class="filter">(Un)check the boxes to filter the results.</p>
         <div class="summary__reload">
           <div class="summary__reload__button hidden" onclick="location.reload()">
@@ -392,10 +392,10 @@ div.media {
         <div class="summary__spacer"></div>
         <div class="controls">
           <div class="filters">
-            <input checked="true" class="filter" name="filter_checkbox" type="checkbox" data-test-result="failed" />
-            <span class="failed">1 Failed,</span>
-            <input checked="true" class="filter" name="filter_checkbox" type="checkbox" data-test-result="passed" disabled/>
-            <span class="passed">0 Passed,</span>
+            <input checked="true" class="filter" name="filter_checkbox" type="checkbox" data-test-result="failed" disabled/>
+            <span class="failed">0 Failed,</span>
+            <input checked="true" class="filter" name="filter_checkbox" type="checkbox" data-test-result="passed" />
+            <span class="passed">1 Passed,</span>
             <input checked="true" class="filter" name="filter_checkbox" type="checkbox" data-test-result="skipped" disabled/>
             <span class="skipped">0 Skipped,</span>
             <input checked="true" class="filter" name="filter_checkbox" type="checkbox" data-test-result="xfailed" disabled/>
@@ -429,7 +429,7 @@ div.media {
     </table>
   </body>
   <footer>
-    <div id="data-container" data-jsonblob="{&#34;environment&#34;: {&#34;Python&#34;: &#34;3.12.11&#34;, &#34;Platform&#34;: &#34;macOS-15.6.1-arm64-i386-64bit&#34;, &#34;Packages&#34;: {&#34;pytest&#34;: &#34;8.4.1&#34;, &#34;pluggy&#34;: &#34;1.6.0&#34;}, &#34;Plugins&#34;: {&#34;html&#34;: &#34;4.1.1&#34;, &#34;metadata&#34;: &#34;3.1.1&#34;, &#34;anyio&#34;: &#34;4.10.0&#34;, &#34;cov&#34;: &#34;6.2.1&#34;}}, &#34;tests&#34;: {&#34;tests/integration/test_new_commands.py::TestNewCommandsIntegration::test_output_format_consistency&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Failed&#34;, &#34;testId&#34;: &#34;tests/integration/test_new_commands.py::TestNewCommandsIntegration::test_output_format_consistency&#34;, &#34;duration&#34;: &#34;51 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Failed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/integration/test_new_commands.py::TestNewCommandsIntegration::test_output_format_consistency&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;51 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;tests/test_helpers.py:25: in parse_json_or_show_error\n    return json.loads(output)\n           ^^^^^^^^^^^^^^^^^^\n../../../../.local/share/mise/installs/python/3.12.11/lib/python3.12/json/__init__.py:346: in loads\n    return _default_decoder.decode(s)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^\n../../../../.local/share/mise/installs/python/3.12.11/lib/python3.12/json/decoder.py:341: in decode\n    raise JSONDecodeError(&amp;quot;Extra data&amp;quot;, s, end)\nE   json.decoder.JSONDecodeError: Extra data: line 1 column 5 (char 4)\n\nDuring handling of the above exception, another exception occurred:\ntests/integration/test_new_commands.py:255: in test_output_format_consistency\n    parse_json_or_show_error(run_json.stdout, &amp;quot;Run command&amp;quot;)\ntests/test_helpers.py:28: in parse_json_or_show_error\n    pytest.fail(f&amp;quot;{context} returned text error instead of JSON: {output.strip()}&amp;quot;)\nE   Failed: Run command returned text error instead of JSON: 2025-09-09 22:34:42,238 - smus_cicd.mwaa - ERROR - MWAA health check failed: Region must be specified in aws.region configuration or DEV_DOMAIN_REGION environment variable\nE   2025-09-09 22:34:42,238 - smus_cicd.mwaa - ERROR - MWAA health check failed: Region must be specified in aws.region configuration or DEV_DOMAIN_REGION environment variable\n&#34;}]}, &#34;renderCollapsed&#34;: [&#34;passed&#34;], &#34;initialSort&#34;: &#34;result&#34;, &#34;title&#34;: &#34;test-results.html&#34;}"></div>
+    <div id="data-container" data-jsonblob="{&#34;environment&#34;: {&#34;Python&#34;: &#34;3.12.11&#34;, &#34;Platform&#34;: &#34;macOS-15.6.1-arm64-i386-64bit&#34;, &#34;Packages&#34;: {&#34;pytest&#34;: &#34;8.4.1&#34;, &#34;pluggy&#34;: &#34;1.6.0&#34;}, &#34;Plugins&#34;: {&#34;html&#34;: &#34;4.1.1&#34;, &#34;metadata&#34;: &#34;3.1.1&#34;, &#34;anyio&#34;: &#34;4.10.0&#34;, &#34;cov&#34;: &#34;6.2.1&#34;}}, &#34;tests&#34;: {&#34;tests/integration/test_new_commands.py::TestNewCommandsIntegration::test_output_format_consistency&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Passed&#34;, &#34;testId&#34;: &#34;tests/integration/test_new_commands.py::TestNewCommandsIntegration::test_output_format_consistency&#34;, &#34;duration&#34;: &#34;52 ms&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Passed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/integration/test_new_commands.py::TestNewCommandsIntegration::test_output_format_consistency&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;52 ms&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;No log output captured.&#34;}]}, &#34;renderCollapsed&#34;: [&#34;passed&#34;], &#34;initialSort&#34;: &#34;result&#34;, &#34;title&#34;: &#34;test-results.html&#34;}"></div>
     <script>
       (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
 const { getCollapsedCategory, setCollapsedIds } = require('./storage.js')
