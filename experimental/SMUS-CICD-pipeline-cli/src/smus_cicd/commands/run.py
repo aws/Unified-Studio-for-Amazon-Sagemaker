@@ -221,11 +221,6 @@ def _execute_command_on_target(
     """
     config = _prepare_config(manifest)
     project_info = _get_project_info(target_config.project.name, config)
-    
-    # Debug: Check what type project_info is
-    if output.upper() != "JSON":
-        typer.echo(f"🔍 DEBUG: project_info type: {type(project_info)}")
-        typer.echo(f"🔍 DEBUG: project_info value: {project_info}")
 
     if isinstance(project_info, str):
         # Handle case where project_info is a string (error message)
@@ -299,17 +294,9 @@ def _get_workflow_connections(project_info: Dict[str, Any]) -> Dict[str, Any]:
     """
     connections = project_info.get("connections", {})
     
-    # Debug: Check connections structure
-    print(f"🔍 DEBUG: connections type: {type(connections)}")
-    print(f"🔍 DEBUG: connections value: {connections}")
-    
     result = {}
     for name, info in connections.items():
-        print(f"🔍 DEBUG: connection '{name}' info type: {type(info)}")
-        print(f"🔍 DEBUG: connection '{name}' info value: {info}")
-        
         if isinstance(info, str):
-            print(f"❌ DEBUG: connection '{name}' info is a string, skipping")
             continue
             
         if info.get("type") in ["MWAA", "WORKFLOWS_MWAA"]:
