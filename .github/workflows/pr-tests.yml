@@ -43,7 +43,7 @@ jobs:
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        aws-region: us-east-2
+        aws-region: ${{ vars.DEV_DOMAIN_REGION || 'us-east-1' }}
         role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
         role-session-name: smus-cicd-integration-tests
         role-duration-seconds: 43200  # 12 hours for long-running MWAA operations

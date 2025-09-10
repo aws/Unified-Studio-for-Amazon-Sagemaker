@@ -185,16 +185,21 @@ def _get_region_from_config(config: Dict[str, Any]) -> str:
         logger.debug(f"Using DEV_DOMAIN_REGION environment variable: {region}")
         return region
 
-    # Only check aws.region in config (no direct region support)
+    # Check domain.region from pipeline manifest
+    domain_region = config.get("domain", {}).get("region")
+    if domain_region:
+        logger.debug(f"Using domain.region from config: {domain_region}")
+        return domain_region
+
+    # Fallback to aws.region in config
     region = config.get("aws", {}).get("region")
+    if region:
+        logger.debug(f"Using region from config: {region}")
+        return region
 
-    if not region:
-        raise ValueError(
-            "Region must be specified in aws.region configuration or DEV_DOMAIN_REGION environment variable"
-        )
-
-    logger.debug(f"Using region from config: {region}")
-    return region
+    raise ValueError(
+        "Region must be specified in domain.region, aws.region configuration or DEV_DOMAIN_REGION environment variable"
+    )
 
 
 def _resolve_domain_id(config: Dict[str, Any], region: str) -> Optional[str]:
