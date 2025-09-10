@@ -535,7 +535,7 @@ def get_project_connections(project_id, domain_id, region):
         datazone_client = boto3.client("datazone", region_name=region)
 
         # List connections for the project
-        response = datazone_client.list_project_connections(
+        response = datazone_client.list_connections(
             domainIdentifier=domain_id, projectIdentifier=project_id
         )
 
