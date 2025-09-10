@@ -146,8 +146,23 @@ class IntegrationTestBase:
         if aws_config.get('region'):
             os.environ['AWS_DEFAULT_REGION'] = aws_config['region']
         
+        # Verify AWS credentials are available before proceeding
+        self._verify_aws_credentials()
+        
         # Ensure current role is Lake Formation admin
         self.setup_lake_formation_admin()
+    
+    def _verify_aws_credentials(self):
+        """Verify AWS credentials are available and fail fast if not."""
+        try:
+            import boto3
+            sts_client = boto3.client('sts', region_name=self.config.get('aws', {}).get('region', 'us-east-1'))
+            identity = sts_client.get_caller_identity()
+            print(f"✅ AWS credentials verified: {identity['Arn']}")
+        except Exception as e:
+            error_msg = f"❌ AWS credentials not available: {str(e)}"
+            print(error_msg)
+            raise RuntimeError(f"Integration tests require valid AWS credentials. {error_msg}") from e
     
     def setup_lake_formation_admin(self):
         """Ensure current role is a Lake Formation admin (idempotent)."""
