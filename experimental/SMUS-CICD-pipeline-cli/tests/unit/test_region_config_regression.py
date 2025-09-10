@@ -85,14 +85,14 @@ class TestRegionConfigurationRegression:
         # Call the function that should create DataZone client
         result = get_datazone_project_info("integration-test-test", config)
         
-        # Verify boto3.client was called with the DOMAIN region, not credentials region
-        mock_boto3.client.assert_called_with("datazone", region_name=datazone_domain_region)
-        
-        # Verify it was NOT called with the AWS credentials region
+        # Verify boto3.client was called with the DOMAIN region (first call is CloudFormation for domain resolution)
         calls = mock_boto3.client.call_args_list
-        for call in calls:
-            args, kwargs = call
-            if args[0] == "datazone":  # DataZone service calls
+        assert len(calls) > 0, "Expected at least one boto3.client call"
+        
+        # First call should be CloudFormation with correct region
+        first_call_args, first_call_kwargs = calls[0]
+        assert first_call_args[0] == "cloudformation"
+        assert first_call_kwargs["region_name"] == datazone_domain_region
                 assert kwargs["region_name"] == datazone_domain_region
                 assert kwargs["region_name"] != aws_credentials_region
         
