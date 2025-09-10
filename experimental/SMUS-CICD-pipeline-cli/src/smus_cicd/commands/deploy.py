@@ -344,7 +344,7 @@ def _get_project_connection(
         Connection dictionary
     """
     logger = get_logger("deploy")
-    
+
     project_info = get_datazone_project_info(project_name, config)
     if "error" in project_info:
         typer.echo(f"  ❌ Error getting project info: {project_info['error']}")

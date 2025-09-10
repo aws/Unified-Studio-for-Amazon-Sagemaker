@@ -292,16 +292,14 @@ def wait_for_dags_available(mwaa_env_name, workflows_config, region, max_wait=90
 def get_dag_status(mwaa_client, mwaa_env_name, dag_id):
     """Get DAG status and schedule information from MWAA."""
     logger = get_logger("airflow")
-    
+
     try:
         # First check if DAG exists by listing all DAGs
         response = mwaa_client.list_dags(EnvironmentName=mwaa_env_name)
         dags = response.get("Dags", [])
 
         # DEBUG: Print all DAGs found in MWAA environment
-        logger.debug(
-            f"Found {len(dags)} DAGs in MWAA environment '{mwaa_env_name}'"
-        )
+        logger.debug(f"Found {len(dags)} DAGs in MWAA environment '{mwaa_env_name}'")
         for dag in dags[:10]:  # Show first 10 DAGs
             dag_id_found = dag.get("DagId", "Unknown")
             is_paused = dag.get("IsPaused", True)

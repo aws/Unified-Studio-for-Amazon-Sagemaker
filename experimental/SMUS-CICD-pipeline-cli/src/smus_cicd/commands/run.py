@@ -87,7 +87,9 @@ def run_command(
         _handle_execution_error(e, workflow, command, output)
 
 
-def _validate_required_parameters(workflow: str, command: str, output: str = "TEXT") -> None:
+def _validate_required_parameters(
+    workflow: str, command: str, output: str = "TEXT"
+) -> None:
     """
     Validate that required parameters are provided.
 
@@ -100,7 +102,7 @@ def _validate_required_parameters(workflow: str, command: str, output: str = "TE
         typer.Exit: If required parameters are missing
     """
     from ..helpers.error_handler import handle_error
-    
+
     if not workflow:
         handle_error("--workflow parameter is required")
 
@@ -228,7 +230,7 @@ def _execute_command_on_target(
         # Handle case where project_info is a string (error message)
         error_result = _create_error_result(target_name, project_info, output)
         return [error_result]
-    
+
     if "error" in project_info or not project_info.get("project_id"):
         error_msg = (
             f"Failed to get project info: {project_info.get('error', 'Unknown error')}"
@@ -295,15 +297,15 @@ def _get_workflow_connections(project_info: Dict[str, Any]) -> Dict[str, Any]:
         Dictionary of workflow connections
     """
     connections = project_info.get("connections", {})
-    
+
     result = {}
     for name, info in connections.items():
         if isinstance(info, str):
             continue
-            
+
         if info.get("type") in ["MWAA", "WORKFLOWS_MWAA"]:
             result[name] = info
-    
+
     return result
 
 
@@ -479,4 +481,5 @@ def _handle_execution_error(
         typer.Exit: Always exits with code 1
     """
     from ..helpers.error_handler import handle_error
+
     handle_error(f"executing workflow '{workflow}' command '{command}': {str(error)}")

@@ -44,13 +44,14 @@ def setup_logger(
 def get_logger(name: str, json_output: bool = None) -> logging.Logger:
     """Get or create logger with appropriate configuration."""
     logger_name = f"smus_cicd.{name}"
-    
+
     # Auto-detect JSON output mode if not specified
     if json_output is None:
         json_output = _detect_json_output_mode()
-    
+
     # Always set up the logger to ensure correct configuration
     import os
+
     level = os.environ.get("SMUS_LOG_LEVEL", "INFO")
     return setup_logger(logger_name, level, json_output)
 
@@ -58,12 +59,12 @@ def get_logger(name: str, json_output: bool = None) -> logging.Logger:
 def _detect_json_output_mode() -> bool:
     """
     Detect if we're in JSON output mode by checking command line arguments.
-    
+
     Returns:
         True if JSON output mode is detected, False otherwise
     """
     import sys
-    
+
     # Check if --output JSON is in the command line arguments
     args = sys.argv
     for i, arg in enumerate(args):
@@ -71,5 +72,5 @@ def _detect_json_output_mode() -> bool:
             return args[i + 1].upper() == "JSON"
         elif arg.startswith("--output="):
             return arg.split("=", 1)[1].upper() == "JSON"
-    
+
     return False

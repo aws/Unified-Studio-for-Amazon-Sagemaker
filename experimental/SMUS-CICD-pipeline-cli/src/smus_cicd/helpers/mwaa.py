@@ -433,7 +433,7 @@ def validate_mwaa_health(project_name: str, config: Dict[str, Any]) -> bool:
         bool: True if MWAA is available, False otherwise
     """
     logger = get_logger("mwaa")
-    
+
     try:
         import typer
 
@@ -468,9 +468,7 @@ def validate_mwaa_health(project_name: str, config: Dict[str, Any]) -> bool:
                 return True
             else:
                 logger.warning("MWAA environment connection not found")
-                logger.debug(
-                    "Looking for connection types: ['MWAA', 'WORKFLOWS_MWAA']"
-                )
+                logger.debug("Looking for connection types: ['MWAA', 'WORKFLOWS_MWAA']")
                 return False
         else:
             logger.warning("MWAA environment connection not found")

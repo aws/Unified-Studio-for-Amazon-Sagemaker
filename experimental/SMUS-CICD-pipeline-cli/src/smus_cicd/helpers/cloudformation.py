@@ -18,7 +18,7 @@ def _get_existing_memberships(
 ) -> Dict[str, str]:
     """Get existing project memberships as a dict of user_id -> designation."""
     logger = get_logger("cloudformation")
-    
+
     try:
         datazone_client = boto3.client("datazone", region_name=region)
         memberships_response = datazone_client.list_project_memberships(
@@ -60,7 +60,7 @@ def create_project_via_cloudformation(
 ):
     """Create DataZone project with memberships using dynamically generated CloudFormation template."""
     logger = get_logger("cloudformation")
-    
+
     try:
         logger.debug("Creating project via CloudFormation")
         logger.debug(f"project_name={project_name}")
