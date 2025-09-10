@@ -2,6 +2,7 @@
 import os
 import tempfile
 import pytest
+from pathlib import Path
 from typer.testing import CliRunner
 from smus_cicd.cli import app
 from .base import IntegrationTestBase
@@ -223,42 +224,32 @@ class TestNewCommandsIntegration(IntegrationTestBase):
         """Test output format consistency across commands."""
         runner = CliRunner()
         
-        with tempfile.TemporaryDirectory() as temp_dir:
-            os.chdir(temp_dir)
-            
-            manifest_file = "FormatTestPipeline.yaml"
-            
-            # Create manifest with specific output file
-            create_result = runner.invoke(app, [
-                "create",
-                "--output", manifest_file,
-                "--name", "FormatTestPipeline"
-            ])
-            assert create_result.exit_code == 0
-            
-            # Test describe JSON format
-            describe_json = runner.invoke(app, [
-                "describe", "--pipeline", manifest_file,
-                "--output", "JSON"
-            ])
-            assert describe_json.exit_code == 0
-            
-            import json
-            describe_data = json.loads(describe_json.stdout)
-            
-            # Verify JSON structure
-            required_keys = ["pipeline", "domain", "targets"]
-            for key in required_keys:
-                assert key in describe_data
-            
-            # Test run JSON format (will fail but should return valid JSON error)
-            run_json = runner.invoke(app, [
-                "run", "--pipeline", manifest_file,
-                "--workflow", "test_workflow",
-                "--command", "dags list",
-                "--output", "JSON"
-            ])
-            
-            # Should return valid JSON even on failure
-            if run_json.stdout.strip():
-                parse_json_or_show_error(run_json.stdout, "Run command")
+        # Use existing manifest with real project names instead of generating one
+        manifest_file = Path(__file__).parent / "create_test_pipeline" / "create_test_pipeline.yaml"
+        
+        # Test describe JSON format
+        describe_json = runner.invoke(app, [
+            "describe", "--pipeline", str(manifest_file),
+            "--output", "JSON"
+        ])
+        assert describe_json.exit_code == 0
+        
+        import json
+        describe_data = json.loads(describe_json.stdout)
+        
+        # Verify JSON structure
+        required_keys = ["pipeline", "domain", "targets"]
+        for key in required_keys:
+            assert key in describe_data
+        
+        # Test run JSON format (will fail but should return valid JSON error)
+        run_json = runner.invoke(app, [
+            "run", "--pipeline", str(manifest_file),
+            "--workflow", "test_workflow",
+            "--command", "dags list",
+            "--output", "JSON"
+        ])
+        
+        # Should return valid JSON even on failure
+        if run_json.stdout.strip():
+            parse_json_or_show_error(run_json.stdout, "Run command")
