@@ -116,7 +116,10 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
 
             try:
                 config = load_config()
-                config["domain"] = {"name": manifest.domain.name, "region": manifest.domain.region}
+                config["domain"] = {
+                    "name": manifest.domain.name,
+                    "region": manifest.domain.region,
+                }
                 config["region"] = manifest.domain.region
                 config["domain_name"] = manifest.domain.name
 

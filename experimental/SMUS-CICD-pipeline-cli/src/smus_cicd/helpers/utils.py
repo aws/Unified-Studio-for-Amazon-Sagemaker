@@ -302,7 +302,14 @@ def _get_project_connections(
             domain_name = config.get("test_environment", {}).get("domain_name")
 
         # DEBUG: Log the parameters being passed to connections
-        print(f"🔍 DEBUG _get_project_connections: project_name={project_name}, domain_name={domain_name}, region={region}")
+        import sys
+
+        is_json_output = "--output" in sys.argv and "JSON" in sys.argv
+        if not is_json_output:
+            print(
+                f"🔍 DEBUG _get_project_connections: project_name={project_name}, domain_name={domain_name}, region={region}",
+                file=sys.stderr,
+            )
 
         if domain_name:
             return connections.get_project_connections(

@@ -225,12 +225,6 @@ def create_project_via_cloudformation(
                         )
                     if current_role_ids:
                         current_role_id = current_role_ids[0]
-                        # Filter out current role from owners to avoid duplicate
-                        if current_role_id in owner_ids:
-                            owner_ids.remove(current_role_id)
-                            typer.echo(
-                                f"🔍 Filtered out creating role {current_role_name} from owners (will be auto-added)"
-                            )
 
         except Exception as e:
             logger.debug(f"Could not determine current role: {e}")
@@ -243,34 +237,23 @@ def create_project_via_cloudformation(
             typer.echo(
                 f"🔍 Project {project_name} already exists, checking existing memberships..."
             )
+        else:
+            # Only filter out current role from owners on creation to avoid duplicate
+            # On updates, keep the current role in the CloudFormation template
+            if current_role_ids and current_role_id in owner_ids:
+                owner_ids.remove(current_role_id)
+                typer.echo(
+                    f"🔍 Filtered out creating role {current_role_name} from owners (will be auto-added on creation)"
+                )
+
+        if existing_project_id:
             existing_memberships = _get_existing_memberships(
                 domain_id, existing_project_id, region
             )
             typer.echo(f"🔍 Found {len(existing_memberships)} existing memberships")
-
-            # Filter out owners who already have PROJECT_OWNER designation
-            original_owner_count = len(owner_ids)
-            owner_ids = [
-                uid
-                for uid in owner_ids
-                if existing_memberships.get(uid) != "PROJECT_OWNER"
-            ]
-            if original_owner_count > len(owner_ids):
-                typer.echo(
-                    f"🔍 Filtered out {original_owner_count - len(owner_ids)} existing owners"
-                )
-
-            # Filter out contributors who already have PROJECT_CONTRIBUTOR designation
-            original_contributor_count = len(contributor_ids)
-            contributor_ids = [
-                uid
-                for uid in contributor_ids
-                if existing_memberships.get(uid) != "PROJECT_CONTRIBUTOR"
-            ]
-            if original_contributor_count > len(contributor_ids):
-                typer.echo(
-                    f"🔍 Filtered out {original_contributor_count - len(contributor_ids)} existing contributors"
-                )
+            typer.echo(
+                "🔍 On update: keeping all desired memberships in CloudFormation template for idempotency"
+            )
 
         typer.echo(
             f"🔍 Will add {len(owner_ids)} new owners and {len(contributor_ids)} new contributors"

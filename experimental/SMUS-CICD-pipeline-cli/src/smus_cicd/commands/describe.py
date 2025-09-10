@@ -115,7 +115,10 @@ def describe_command(
             if connections or connect:
                 try:
                     config = load_config()
-                    config["domain"] = {"name": manifest.domain.name, "region": manifest.domain.region}
+                    config["domain"] = {
+                        "name": manifest.domain.name,
+                        "region": manifest.domain.region,
+                    }
                     config["region"] = manifest.domain.region
                     config["domain_name"] = manifest.domain.name
 

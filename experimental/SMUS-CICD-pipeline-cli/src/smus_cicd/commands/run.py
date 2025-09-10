@@ -54,7 +54,10 @@ def run_command(
 
         config = load_config()
         # Add domain information from manifest for proper connection retrieval
-        config["domain"] = {"name": manifest.domain.name, "region": manifest.domain.region}
+        config["domain"] = {
+            "name": manifest.domain.name,
+            "region": manifest.domain.region,
+        }
         config["region"] = manifest.domain.region
         mwaa_healthy = False
 
