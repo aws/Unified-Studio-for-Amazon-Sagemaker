@@ -54,7 +54,6 @@ jobs:
     runs-on: ubuntu-latest
     environment: aws-env
     needs: unit-tests
-    needs: unit-tests
     
     steps:
     - uses: actions/checkout@v4
