@@ -10,15 +10,12 @@ class TestMultiTargetPipeline(IntegrationTestBase):
     
     def setup_method(self, method):
         """Set up test environment."""
-        self.runner = CliRunner()
-        self.config = self._load_config()
-        self.test_dir = None
-        self.created_resources = []
-        self.setup_aws_session()
+        super().setup_method(method)
         self.setup_test_directory()
     
-    def teardown_method(self):
+    def teardown_method(self, method):
         """Clean up test environment."""
+        super().teardown_method(method)
         self.cleanup_resources()
         self.cleanup_test_directory()
     
@@ -711,7 +708,7 @@ workflows:
             # Validate it shows connection details
             describe_output = result['output']
             assert "Pipeline: IntegrationTestMultiTarget" in describe_output, f"Describe output missing pipeline name: {describe_output}"
-            assert "Domain: cicd-test-domain (us-east-2)" in describe_output, f"Describe output missing domain info: {describe_output}"
+            assert f"Domain: cicd-test-domain ({self.config['aws']['region']})" in describe_output, f"Describe output missing domain info: {describe_output}"
             assert "Targets:" in describe_output, f"Describe output missing targets section: {describe_output}"
             
             # Check for connection details (if project exists)

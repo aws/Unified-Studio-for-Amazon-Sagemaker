@@ -435,8 +435,6 @@ def validate_mwaa_health(project_name: str, config: Dict[str, Any]) -> bool:
     logger = get_logger("mwaa")
 
     try:
-        import typer
-
         from .utils import _get_region_from_config, get_datazone_project_info
 
         # Get region and project info

@@ -44,22 +44,22 @@ def setup_logger(
 def configure_root_logger(level: str = "INFO", json_output: bool = False) -> None:
     """Configure the root smus_cicd logger to control all child loggers."""
     root_logger = logging.getLogger("smus_cicd")
-    
+
     # Clear existing handlers
     root_logger.handlers.clear()
-    
+
     # Set level
     root_logger.setLevel(getattr(logging, level.upper()))
-    
+
     # Create handler - use stderr for JSON output to keep stdout clean
     handler = logging.StreamHandler(sys.stderr if json_output else sys.stdout)
-    
+
     # Create formatter
     formatter = logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
     handler.setFormatter(formatter)
-    
+
     root_logger.addHandler(handler)
     root_logger.propagate = False
 
@@ -74,14 +74,15 @@ def get_logger(name: str, json_output: bool = None) -> logging.Logger:
 
     # Get the logger - it will inherit from the root smus_cicd logger
     logger = logging.getLogger(logger_name)
-    
+
     # If the root logger isn't configured yet, configure it
     root_logger = logging.getLogger("smus_cicd")
     if not root_logger.handlers:
         import os
+
         level = os.environ.get("SMUS_LOG_LEVEL", "INFO")
         configure_root_logger(level, json_output)
-    
+
     return logger
 
 
