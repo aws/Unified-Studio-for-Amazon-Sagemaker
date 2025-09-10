@@ -55,19 +55,24 @@ class TestRegionConfigurationRegression:
         assert config["domain_name"] == "cicd-test-domain"
 
     @patch('smus_cicd.helpers.utils.boto3')
-    def test_get_datazone_project_info_with_fixed_config(self, mock_boto3):
-        """Test that get_datazone_project_info works with the fixed config structure."""
+    def test_boto3_client_uses_correct_region_not_credentials_region(self, mock_boto3):
+        """Test that boto3 clients are created with domain region, not AWS credentials region."""
         # Mock boto3 client
         mock_client = MagicMock()
         mock_boto3.client.return_value = mock_client
         
-        # Set up the fixed config structure
-        config = load_config()
-        config["domain"] = {"name": "cicd-test-domain", "region": "us-east-1"}
-        config["region"] = "us-east-1"
-        config["domain_name"] = "cicd-test-domain"
+        # Simulate GitHub Actions scenario:
+        # - AWS credentials configured for us-east-2 (this would be in AWS_DEFAULT_REGION env var)
+        # - But DataZone domain is in us-east-1 (from pipeline manifest)
+        aws_credentials_region = "us-east-2"  # From GitHub Actions AWS setup
+        datazone_domain_region = "us-east-1"  # From pipeline manifest
         
-        # Mock the DataZone API responses
+        # Set up config with the correct domain region (our fix)
+        config = load_config()
+        config["domain"] = {"name": "cicd-test-domain", "region": datazone_domain_region}
+        config["region"] = datazone_domain_region
+        
+        # Mock successful DataZone responses
         mock_client.list_domains.return_value = {
             "items": [{"id": "dzd_test123", "name": "cicd-test-domain"}]
         }
@@ -77,14 +82,54 @@ class TestRegionConfigurationRegression:
         mock_client.list_project_memberships.return_value = {"members": []}
         mock_client.list_connections.return_value = {"items": []}
         
-        # This should not raise the region configuration error
-        try:
-            result = get_datazone_project_info("integration-test-test", config)
-            # Should return a result without error key (or with specific project info)
-            assert "error" not in result or "Region must be specified" not in str(result.get("error", ""))
-        except ValueError as e:
-            # Should not get the region configuration error
-            assert "Region must be specified in domain.region or aws.region configuration" not in str(e)
+        # Call the function that should create DataZone client
+        result = get_datazone_project_info("integration-test-test", config)
+        
+        # Verify boto3.client was called with the DOMAIN region, not credentials region
+        mock_boto3.client.assert_called_with("datazone", region_name=datazone_domain_region)
+        
+        # Verify it was NOT called with the AWS credentials region
+        calls = mock_boto3.client.call_args_list
+        for call in calls:
+            args, kwargs = call
+            if args[0] == "datazone":  # DataZone service calls
+                assert kwargs["region_name"] == datazone_domain_region
+                assert kwargs["region_name"] != aws_credentials_region
+        
+        # Should succeed without region configuration errors
+        assert "error" not in result or "Region must be specified" not in str(result.get("error", ""))
+
+    @patch.dict('os.environ', {'AWS_DEFAULT_REGION': 'us-east-2'})
+    @patch('smus_cicd.helpers.utils.boto3')
+    def test_domain_region_overrides_aws_env_region(self, mock_boto3):
+        """Test that domain.region takes precedence over AWS_DEFAULT_REGION environment variable."""
+        # Mock boto3 client
+        mock_client = MagicMock()
+        mock_boto3.client.return_value = mock_client
+        
+        # Environment has AWS_DEFAULT_REGION=us-east-2 (simulating GitHub Actions)
+        # But pipeline manifest domain.region=us-east-1
+        config = load_config()
+        config["domain"] = {"name": "cicd-test-domain", "region": "us-east-1"}
+        config["region"] = "us-east-1"
+        
+        # Mock CloudFormation and DataZone responses
+        mock_client.describe_stacks.return_value = {"Stacks": []}  # No CF stack found
+        mock_client.list_domains.return_value = {
+            "items": [{"id": "dzd_test123", "name": "cicd-test-domain"}]
+        }
+        mock_client.list_projects.return_value = {"items": []}
+        mock_client.list_project_memberships.return_value = {"members": []}
+        mock_client.list_connections.return_value = {"items": []}
+        
+        # Call function
+        get_datazone_project_info("test-project", config)
+        
+        # Verify ALL boto3 clients use domain region (us-east-1), not env region (us-east-2)
+        calls = mock_boto3.client.call_args_list
+        for call in calls:
+            args, kwargs = call
+            assert kwargs["region_name"] == "us-east-1", f"Service {args[0]} used wrong region: {kwargs['region_name']}"
 
     def test_all_commands_config_consistency(self):
         """Test that all commands set up config consistently."""
