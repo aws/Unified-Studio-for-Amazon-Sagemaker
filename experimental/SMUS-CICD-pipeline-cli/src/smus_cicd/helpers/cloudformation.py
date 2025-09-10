@@ -60,8 +60,9 @@ def _get_existing_memberships(
                 f"AWS Permission Error: {error_str}. Check if the role has DataZone permissions."
             )
         else:
-            logger.debug(f"Error getting existing memberships: {e}")
-            return {}
+            logger.error(f"Error getting existing memberships: {e}")
+            # Don't silently return empty dict - this causes CloudFormation conflicts
+            raise Exception(f"Failed to get existing project memberships: {e}")
 
 
 def create_project_via_cloudformation(
