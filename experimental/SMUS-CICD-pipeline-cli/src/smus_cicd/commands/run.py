@@ -92,38 +92,18 @@ def _validate_required_parameters(workflow: str, command: str, output: str = "TE
     Args:
         workflow: Workflow name
         command: Command to execute
-        output: Output format
+        output: Output format (ignored for errors - always plain text)
 
     Raises:
         typer.Exit: If required parameters are missing
     """
+    from ..helpers.error_handler import handle_error
+    
     if not workflow:
-        if output.upper() == "JSON":
-            error_result = {
-                "success": False,
-                "error": "--workflow parameter is required",
-                "workflow": None,
-                "command": command,
-                "results": []
-            }
-            typer.echo(json.dumps(error_result, indent=2))
-        else:
-            typer.echo("❌ Error: --workflow parameter is required", err=True)
-        raise typer.Exit(1)
+        handle_error("--workflow parameter is required")
 
     if not command:
-        if output.upper() == "JSON":
-            error_result = {
-                "success": False,
-                "error": "--command parameter is required",
-                "workflow": workflow,
-                "command": None,
-                "results": []
-            }
-            typer.echo(json.dumps(error_result, indent=2))
-        else:
-            typer.echo("❌ Error: --command parameter is required", err=True)
-        raise typer.Exit(1)
+        handle_error("--command parameter is required")
 
 
 def _resolve_targets(
@@ -475,28 +455,16 @@ def _handle_execution_error(
     error: Exception, workflow: str, command: str, output: str
 ) -> None:
     """
-    Handle execution errors based on output format.
+    Handle execution errors with plain text output.
 
     Args:
         error: Exception that occurred
         workflow: Workflow name
         command: Command that was being executed
-        output: Output format
+        output: Output format (ignored for errors - always plain text)
 
     Raises:
         typer.Exit: Always exits with code 1
     """
-    # Output error in appropriate format
-    if output.upper() == "JSON":
-        error_result = {
-            "success": False,
-            "error": str(error),
-            "workflow": workflow,
-            "command": command,
-            "results": []
-        }
-        typer.echo(json.dumps(error_result, indent=2))
-    else:
-        typer.echo(f"❌ Error: {str(error)}", err=True)
-
-    raise typer.Exit(1)
+    from ..helpers.error_handler import handle_error
+    handle_error(f"executing workflow '{workflow}' command '{command}': {str(error)}")
