@@ -1,0 +1,54 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [ main, amirbo_feature_branch ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+    environment: aws-env
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .
+        pip install -r requirements-dev.txt
+
+    # - name: Configure AWS credentials
+    #   uses: aws-actions/configure-aws-credentials@v4
+    #   with:
+    #     role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+    #     aws-region: us-east-1
+
+    # - name: Run CLI CREATE command test
+    #   run: |
+    #     # Test the create command with minimal parameters
+    #     smus-cli create test-pipeline-${{ github.run_number }} --region us-east-1
+        
+    - name: Verify CLI installation
+      run: |
+        smus-cli --help
+        
+    - name: Run unit tests
+      run: |
+        pytest tests/unit/ -v
+        
+    # - name: Run integration tests
+    #   run: |
+    #     pytest tests/integration/ -v --tb=short

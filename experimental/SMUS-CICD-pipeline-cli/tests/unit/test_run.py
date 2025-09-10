@@ -1,9 +1,16 @@
 """Unit tests for run command."""
 import tempfile
 import pytest
+import re
 from unittest.mock import patch, MagicMock
 from typer.testing import CliRunner
 from smus_cicd.cli import app
+
+
+def strip_ansi_codes(text):
+    """Remove ANSI escape sequences from text."""
+    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+    return ansi_escape.sub('', text)
 
 
 class TestRunCommand:
@@ -181,7 +188,7 @@ workflows:
                 "--targets", "dev"
             ])
             
-            assert result.exit_code == 0  # Command completes but shows error
+            assert result.exit_code == 1  # Command fails with project info error
             assert "Failed to get project info" in result.stdout
         finally:
             import os
@@ -193,8 +200,9 @@ workflows:
         result = runner.invoke(app, ["run", "--help"])
         
         assert result.exit_code == 0
-        assert "Run Airflow CLI commands" in result.stdout
-        assert "--workflow" in result.stdout
-        assert "--command" in result.stdout
-        assert "--targets" in result.stdout
-        assert "--output" in result.stdout
+        clean_output = strip_ansi_codes(result.stdout)
+        assert "Run Airflow CLI commands" in clean_output
+        assert "--workflow" in clean_output
+        assert "--command" in clean_output
+        assert "--targets" in clean_output
+        assert "--output" in clean_output

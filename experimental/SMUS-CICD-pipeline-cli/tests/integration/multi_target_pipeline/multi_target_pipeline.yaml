@@ -7,7 +7,7 @@ domain:
 
 # What to include in deployment bundles
 bundle:
-  bundlesDirectory: ./tests/integration/bundles
+  bundlesDirectory: /tmp/bundles
   workflow:
     - connectionName: default.s3_shared
       append: true
@@ -37,10 +37,10 @@ targets:
       project: 
         create: true  # Enable auto-create for integration tests
         profileName: 'All capabilities'
-        owners: [Eng1]
+        owners: [Eng1, arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests, Admin]
         contributors: []                     
       environments: 
-        - EnvironmentConfigurationName: 'OnDemand Workflows'
+        - EnvironmentConfigurationName: 'OnDemand Workflows' 
     bundle_target_configuration:
       storage:
         connectionName: default.s3_shared
@@ -57,10 +57,10 @@ targets:
       project: 
         create: true
         profileName: 'All capabilities'
-        owners: [Eng1]
+        owners: [Eng1, arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests]
         contributors: []                     
       environments: 
-        - EnvironmentConfigurationName: 'OnDemand Workflows'
+        - EnvironmentConfigurationName: 'OnDemand Workflows'         
     bundle_target_configuration:
       storage:
         connectionName: default.s3_shared

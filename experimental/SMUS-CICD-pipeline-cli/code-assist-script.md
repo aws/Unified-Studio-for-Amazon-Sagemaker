@@ -25,6 +25,17 @@ git status
 ### 2. Make Code Changes
 - Implement the requested feature/fix
 - Update relevant docstrings and comments
+- **Always run linting checks after code changes:**
+  ```bash
+  # Check code formatting and imports
+  flake8 src/smus_cicd/ --config=setup.cfg
+  black --check src/smus_cicd/
+  isort --check-only src/smus_cicd/
+  
+  # Auto-fix formatting issues
+  black src/smus_cicd/
+  isort src/smus_cicd/
+  ```
 
 ### 3. Update Test Cases
 ```bash
@@ -92,6 +103,10 @@ pytest tests/integration/ -m "not slow"     # Integration tests
 ## Checklist for Any Code Change
 
 - [ ] AWS credentials refreshed (when needed)
+- [ ] **Code formatting and imports are clean:**
+  - [ ] `flake8 src/smus_cicd/ --config=setup.cfg` passes
+  - [ ] `black --check src/smus_cicd/` passes  
+  - [ ] `isort --check-only src/smus_cicd/` passes
 - [ ] Unit tests pass (95/95)
 - [ ] Integration tests pass (basic suite)
 - [ ] README examples are accurate and tested
@@ -100,12 +115,10 @@ pytest tests/integration/ -m "not slow"     # Integration tests
 - [ ] Mock objects match real implementation
 - [ ] CLI parameter usage is consistent
 - [ ] Documentation reflects actual behavior
-- [ ] Check that the code and markdown files don't contain aws account ids , nor web addresses, or host names.  mask all of these before committing. 
+- [ ] Check that the code and markdown files don't contain aws account ids , nor web addresses, or host names.  mask all of these before committing.
+- [ ] Check that lint is passing.  
+- [ ] don't swallow exceptions, if an error is thrown , it must be loggeg or handled. 
 - [ ] All changes are committed
-- [ ] Follow PEP 8 Coding Style 
-- [ ] Keep functions short.  Break functions if they contain multiple loops or long if\else clauses.  Use good naming for function names and variables names. 
-- [ ] Add a docstring to explain the purpose of the function and its parameters.
-- [ ] Add type annotations for better clarity and maintainability
 
 ## Common Test Patterns to Maintain
 
@@ -115,6 +128,7 @@ pytest tests/integration/ -m "not slow"     # Integration tests
 - Use proper patch decorators for dependencies
 
 ### Integration Test Patterns
+- Use `["describe", "--pipeline", file]` not `["describe", file]`
 - Expected exit codes should match test framework expectations
 - Rename DAG files to avoid pytest collection (`.dag` extension)
 
@@ -123,7 +137,6 @@ pytest tests/integration/ -m "not slow"     # Integration tests
 - Include realistic command outputs
 - Keep examples concise but informative
 - Verify examples actually work before documenting
-- Make sure all markeup files in the project are updated and not only the main README file
 
 ## Project Structure (Python-Native)
 

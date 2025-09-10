@@ -194,10 +194,11 @@ class TestNewCommandsIntegration(IntegrationTestBase):
                     "--targets", "dev"
                 ])
                 
-                # Command should not crash (may fail due to no AWS connectivity)
-                assert result.exit_code in [0, 1]
+                # Command should fail because no real AWS resources exist
+                # This is expected behavior - the test validates the command structure works
+                assert result.exit_code == 1, f"Airflow command {command} should fail without AWS resources"
                 
-                # Test JSON output
+                # Test JSON output - should be valid JSON even on failure
                 json_result = runner.invoke(app, [
                     "run", "--pipeline", manifest_file,
                     "--workflow", "test_workflow", 
@@ -206,10 +207,11 @@ class TestNewCommandsIntegration(IntegrationTestBase):
                     "--output", "JSON"
                 ])
                 
-                assert json_result.exit_code in [0, 1]
+                # JSON command should also fail but return valid JSON
+                assert json_result.exit_code == 1
                 
-                # If JSON output, verify it's valid JSON
-                if json_result.exit_code == 0 and json_result.stdout.strip():
+                # Verify JSON output is valid even on failure
+                if json_result.stdout.strip():
                     try:
                         import json
                         json.loads(json_result.stdout)

@@ -2,6 +2,8 @@
 *__pycache__*
 .idea
 
+experimental/SMUS-CICD-pipeline-cli/tests/integration/multi_target_pipeline/code/workflows/dags/generated_test_dag_*.py
+
 # Terraform
 **/.terraform/*
 *.tfstate

@@ -154,9 +154,8 @@ class TestBasicPipeline(IntegrationTestBase):
                 # Fallback validation
                 assert "Bundle created" in result['output'] or "bundling" in result['output'].lower(), f"Bundle output missing success indicator: {result['output']}"
         else:
-            print(f"❌ Bundle command failed: {result['output']}")
-            # Bundle may fail if AWS resources don't exist - that's still a valid integration test
-            assert "error" in result['output'].lower() or "failed" in result['output'].lower(), f"Bundle should show error message: {result['output']}"
+            # Bundle should succeed - any failure is a real test failure
+            pytest.fail(f"Bundle command failed: {result['output']}")
         
         print(f"\n✅ All CLI commands tested successfully!")
         

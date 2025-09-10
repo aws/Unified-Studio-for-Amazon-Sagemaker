@@ -18,7 +18,7 @@ targets:
       project: 
         create: true
         profileName: 'All capabilities'
-        owners: [Eng1]
+        owners: [Eng1, arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests]
         contributors: []
         userParameters: 
           - EnvironmentConfigurationName: 'Lakehouse Database'
@@ -42,7 +42,7 @@ workflows:
     triggerPostDeployment: false
 
 bundle:
-  bundlesDirectory: ./tests/integration/bundles
+  bundlesDirectory: /tmp/bundles
   workflow:
     - connectionName: default.s3_shared
       append: true

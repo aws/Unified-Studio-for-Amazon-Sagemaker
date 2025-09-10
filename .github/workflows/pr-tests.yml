@@ -1,0 +1,53 @@
+name: PR Integration Tests
+
+on:
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'experimental/SMUS-CICD-pipeline-cli/**'
+
+concurrency:
+  group: pr-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  integration-tests:
+    runs-on: ubuntu-latest
+    environment: aws-env
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-region: us-east-1
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        role-session-name: smus-cicd-integration-tests
+    
+    - name: Install dependencies
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+    
+    - name: Run integration tests
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli
+        python scripts/run_tests.py --type integration --no-html-report
+    
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: integration-test-results
+        path: experimental/SMUS-CICD-pipeline-cli/tests/reports/

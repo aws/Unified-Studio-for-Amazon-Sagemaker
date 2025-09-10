@@ -1,5 +1,5 @@
 $schema: "http://json-schema.org/draft-07/schema#"
-$id: "https://smus-cicd.amazon.com/schema/pipeline-manifest.yaml"
+$id: "https://smus-cicd.example.com/schema/pipeline-manifest.yaml"
 title: "SMUS CI/CD Pipeline Manifest"
 description: "Schema for SageMaker Unified Studio CI/CD pipeline configuration"
 type: object

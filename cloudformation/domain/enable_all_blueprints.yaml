@@ -40,6 +40,7 @@ Resources:
 
   AmazonBedrockGuardrail:
     Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: LakehouseCatalog
     Properties:
       DomainIdentifier: !Ref DomainId
       EnvironmentBlueprintIdentifier: "AmazonBedrockGuardrail"
@@ -59,6 +60,7 @@ Resources:
 
   MLExperiments:
     Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: AmazonBedrockGuardrail
     Properties:
       DomainIdentifier: !Ref DomainId
       EnvironmentBlueprintIdentifier: "MLExperiments"
@@ -79,6 +81,7 @@ Resources:
 
   Tooling:
     Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: MLExperiments
     Properties:
       DomainIdentifier: !Ref DomainId
       EnvironmentBlueprintIdentifier: "Tooling"
@@ -119,6 +122,7 @@ Resources:
 
   EmrServerless:
     Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: RedshiftServerless
     Properties:
       DomainIdentifier: !Ref DomainId
       EnvironmentBlueprintIdentifier: "EmrServerless"
@@ -139,6 +143,7 @@ Resources:
 
   Workflows:
     Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: EmrServerless
     Properties:
       DomainIdentifier: !Ref DomainId
       EnvironmentBlueprintIdentifier: "Workflows"
@@ -159,6 +164,7 @@ Resources:
 
   AmazonBedrockPrompt:
     Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: Workflows
     Properties:
       DomainIdentifier: !Ref DomainId
       EnvironmentBlueprintIdentifier: "AmazonBedrockPrompt"
@@ -179,6 +185,7 @@ Resources:
 
   DataLake:
     Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: AmazonBedrockPrompt
     Properties:
       DomainIdentifier: !Ref DomainId
       EnvironmentBlueprintIdentifier: "DataLake"
@@ -199,6 +206,7 @@ Resources:
 
   AmazonBedrockEvaluation:
     Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: DataLake
     Properties:
       DomainIdentifier: !Ref DomainId
       EnvironmentBlueprintIdentifier: "AmazonBedrockEvaluation"
@@ -219,6 +227,7 @@ Resources:
 
   AmazonBedrockKnowledgeBase:
     Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: AmazonBedrockEvaluation
     Properties:
       DomainIdentifier: !Ref DomainId
       EnvironmentBlueprintIdentifier: "AmazonBedrockKnowledgeBase"
@@ -239,6 +248,7 @@ Resources:
 
   PartnerApps:
     Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: AmazonBedrockKnowledgeBase
     Properties:
       DomainIdentifier: !Ref DomainId
       EnvironmentBlueprintIdentifier: "PartnerApps"
@@ -259,6 +269,7 @@ Resources:
 
   AmazonBedrockChatAgent:
     Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: PartnerApps
     Properties:
       DomainIdentifier: !Ref DomainId
       EnvironmentBlueprintIdentifier: "AmazonBedrockChatAgent"
@@ -279,6 +290,7 @@ Resources:
 
   AmazonBedrockFunction:
     Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: AmazonBedrockChatAgent
     Properties:
       DomainIdentifier: !Ref DomainId
       EnvironmentBlueprintIdentifier: "AmazonBedrockFunction"
@@ -319,6 +331,7 @@ Resources:
 
   AmazonBedrockFlow:
     Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: AmazonBedrockFunction
     Properties:
       DomainIdentifier: !Ref DomainId
       EnvironmentBlueprintIdentifier: "AmazonBedrockFlow"
@@ -339,6 +352,7 @@ Resources:
 
   EmrOnEc2:
     Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: AmazonBedrockFlow
     Properties:
       DomainIdentifier: !Ref DomainId
       EnvironmentBlueprintIdentifier: "EmrOnEc2"
