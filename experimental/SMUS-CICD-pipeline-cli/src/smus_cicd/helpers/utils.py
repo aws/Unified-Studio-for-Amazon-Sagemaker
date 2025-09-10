@@ -172,33 +172,25 @@ def get_datazone_project_info(
 
 
 def _get_region_from_config(config: Dict[str, Any]) -> str:
-    """Get region from configuration, prioritizing DEV_DOMAIN_REGION env var."""
-    import os
-
+    """Get region from configuration, using domain.region as the single source of truth."""
     from .logger import get_logger
 
     logger = get_logger("utils")
 
-    # Check environment variable first
-    region = os.environ.get("DEV_DOMAIN_REGION")
-    if region:
-        logger.debug(f"Using DEV_DOMAIN_REGION environment variable: {region}")
-        return region
-
-    # Check domain.region from pipeline manifest
+    # Use domain.region from pipeline manifest as the single source of truth
     domain_region = config.get("domain", {}).get("region")
     if domain_region:
         logger.debug(f"Using domain.region from config: {domain_region}")
         return domain_region
 
-    # Fallback to aws.region in config
+    # Fallback to aws.region in config for backward compatibility
     region = config.get("aws", {}).get("region")
     if region:
         logger.debug(f"Using region from config: {region}")
         return region
 
     raise ValueError(
-        "Region must be specified in domain.region, aws.region configuration or DEV_DOMAIN_REGION environment variable"
+        "Region must be specified in domain.region or aws.region configuration"
     )
 
 
