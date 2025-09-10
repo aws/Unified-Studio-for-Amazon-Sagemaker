@@ -84,16 +84,12 @@ workflows:
   - workflowName: sample_dag
     connectionName: project.workflow_mwaa
     engine: MWAA
-    triggerPostDeployment: false
-#     triggerPostDeployment: true
-#     logging: console
-#     engine: MWAA
+    logging: console
 #     # parameters:
 #     #   env: production
 #     #   timeout: 3600
 #   
 #   - workflowName: another_workflow
 #     connectionName: project.workflow_mwaa
-#     triggerPostDeployment: false
 #     logging: none
 #     engine: MWAA

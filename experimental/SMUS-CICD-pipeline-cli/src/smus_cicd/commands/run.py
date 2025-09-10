@@ -42,7 +42,7 @@ def run_command(
     json_output = output.upper() == "JSON"
     setup_logger("smus_cicd", log_level, json_output)
 
-    _validate_required_parameters(workflow, command)
+    _validate_required_parameters(workflow, command, output)
 
     try:
         manifest = PipelineManifest.from_file(manifest_file)
@@ -85,23 +85,44 @@ def run_command(
         _handle_execution_error(e, workflow, command, output)
 
 
-def _validate_required_parameters(workflow: str, command: str) -> None:
+def _validate_required_parameters(workflow: str, command: str, output: str = "TEXT") -> None:
     """
     Validate that required parameters are provided.
 
     Args:
         workflow: Workflow name
         command: Command to execute
+        output: Output format
 
     Raises:
         typer.Exit: If required parameters are missing
     """
     if not workflow:
-        typer.echo("❌ Error: --workflow parameter is required", err=True)
+        if output.upper() == "JSON":
+            error_result = {
+                "success": False,
+                "error": "--workflow parameter is required",
+                "workflow": None,
+                "command": command,
+                "results": []
+            }
+            typer.echo(json.dumps(error_result, indent=2))
+        else:
+            typer.echo("❌ Error: --workflow parameter is required", err=True)
         raise typer.Exit(1)
 
     if not command:
-        typer.echo("❌ Error: --command parameter is required", err=True)
+        if output.upper() == "JSON":
+            error_result = {
+                "success": False,
+                "error": "--command parameter is required",
+                "workflow": workflow,
+                "command": None,
+                "results": []
+            }
+            typer.echo(json.dumps(error_result, indent=2))
+        else:
+            typer.echo("❌ Error: --command parameter is required", err=True)
         raise typer.Exit(1)
 
 
@@ -465,9 +486,17 @@ def _handle_execution_error(
     Raises:
         typer.Exit: Always exits with code 1
     """
-    # Only output error message for text format
-    # JSON format is handled by _output_results
-    if output.upper() != "JSON":
+    # Output error in appropriate format
+    if output.upper() == "JSON":
+        error_result = {
+            "success": False,
+            "error": str(error),
+            "workflow": workflow,
+            "command": command,
+            "results": []
+        }
+        typer.echo(json.dumps(error_result, indent=2))
+    else:
         typer.echo(f"❌ Error: {str(error)}", err=True)
 
     raise typer.Exit(1)

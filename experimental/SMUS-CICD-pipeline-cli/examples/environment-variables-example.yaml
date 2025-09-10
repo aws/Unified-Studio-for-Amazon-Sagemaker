@@ -66,7 +66,6 @@ targets:
 workflows:
   - workflowName: ${MAIN_WORKFLOW:example_workflow}
     connectionName: ${MWAA_CONNECTION:project.workflow_mwaa}
-    triggerPostDeployment: ${TRIGGER_WORKFLOWS:true}
     logging: console
     engine: MWAA
 
