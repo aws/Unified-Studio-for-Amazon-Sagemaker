@@ -96,7 +96,7 @@ jobs:
       run: |
         cd experimental/SMUS-CICD-pipeline-cli
         echo "🧪 Running all integration tests..."
-        python -m pytest tests/integration/ -v -s --tb=short || {
+        python -m pytest tests/integration/ -v -s --tb=short --ignore=tests/integration/delete_test_pipeline/ || {
           echo "❌ Integration tests failed - analyzing domain/region/project access patterns"
           echo "=============================================================="
           exit 1

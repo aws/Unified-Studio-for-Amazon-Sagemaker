@@ -412,29 +412,35 @@ def delete_project_stack(
 
         cf_client = boto3.client("cloudformation", region_name=region)
 
-        typer.echo(f"Deleting CloudFormation stack: {stack_name}")
+        if output.upper() != "JSON":
+            typer.echo(f"Deleting CloudFormation stack: {stack_name}")
         cf_client.delete_stack(StackName=stack_name)
 
         # Wait for deletion to complete
-        typer.echo("Waiting for stack deletion to complete...")
+        if output.upper() != "JSON":
+            typer.echo("Waiting for stack deletion to complete...")
         waiter = cf_client.get_waiter("stack_delete_complete")
         waiter.wait(
             StackName=stack_name,
             WaiterConfig={"Delay": 30, "MaxAttempts": 60},
         )
-        typer.echo(f"✅ Stack {stack_name} deleted successfully")
+        if output.upper() != "JSON":
+            typer.echo(f"✅ Stack {stack_name} deleted successfully")
         return True
 
     except cf_client.exceptions.ClientError as e:
         error_code = e.response["Error"]["Code"]
         if error_code == "ValidationError" and "does not exist" in str(e):
-            typer.echo(f"✅ Stack {stack_name} does not exist")
+            if output.upper() != "JSON":
+                typer.echo(f"✅ Stack {stack_name} does not exist")
             return True
         else:
-            typer.echo(f"❌ Failed to delete stack {stack_name}: {e}")
+            if output.upper() != "JSON":
+                typer.echo(f"❌ Failed to delete stack {stack_name}: {e}")
             return False
     except Exception as e:
-        typer.echo(f"❌ Error deleting stack {stack_name}: {e}")
+        if output.upper() != "JSON":
+            typer.echo(f"❌ Error deleting stack {stack_name}: {e}")
         return False
 
 

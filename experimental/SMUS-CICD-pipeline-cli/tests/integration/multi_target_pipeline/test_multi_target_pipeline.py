@@ -24,6 +24,7 @@ class TestMultiTargetPipeline(IntegrationTestBase):
         import subprocess
         import glob
         import os
+        import boto3
         
         # Clean up local generated DAG files first
         pipeline_file = self.get_pipeline_file()
@@ -43,8 +44,84 @@ class TestMultiTargetPipeline(IntegrationTestBase):
             else:
                 print(f"  No local generated DAG files to clean")
         
-        # Note: S3 locations and MWAA environments are extracted dynamically from deploy output
-        # S3 cleanup is skipped since locations are determined at runtime
+        # Clean up deployed generated DAG files from S3 and MWAA environments
+        self._cleanup_deployed_generated_files()
+
+    def _cleanup_deployed_generated_files(self):
+        """Clean up generated DAG files from deployed S3 locations."""
+        try:
+            import boto3
+            from smus_cicd.helpers.utils import get_datazone_project_info, load_config
+            
+            # Load configuration
+            config = load_config()
+            config["domain"] = {
+                "name": "cicd-test-domain",
+                "region": "us-east-1",
+            }
+            config["region"] = "us-east-1"
+            
+            # Target projects to clean
+            target_projects = [
+                "dev-marketing",
+                "integration-test-test", 
+                "integration-test-prod"
+            ]
+            
+            s3_client = boto3.client('s3', region_name='us-east-1')
+            
+            for project_name in target_projects:
+                try:
+                    # Get project connections to find S3 locations
+                    project_info = get_datazone_project_info(project_name, config)
+                    
+                    if "error" not in project_info and "connections" in project_info:
+                        connections = project_info["connections"]
+                        
+                        # Find S3 shared connection
+                        for conn_name, conn_info in connections.items():
+                            if conn_info.get("type") == "S3" and "shared" in conn_name.lower():
+                                s3_location = conn_info.get("s3Location", "")
+                                if s3_location:
+                                    # Extract bucket and prefix from s3://bucket/prefix format
+                                    if s3_location.startswith("s3://"):
+                                        s3_path = s3_location[5:]  # Remove s3://
+                                        bucket_name = s3_path.split('/')[0]
+                                        prefix = '/'.join(s3_path.split('/')[1:])
+                                        
+                                        # Clean up generated DAG files in workflows directory
+                                        workflows_prefix = f"{prefix}/workflows/dags/"
+                                        
+                                        # List and delete generated DAG files
+                                        try:
+                                            response = s3_client.list_objects_v2(
+                                                Bucket=bucket_name,
+                                                Prefix=workflows_prefix
+                                            )
+                                            
+                                            if 'Contents' in response:
+                                                generated_objects = [
+                                                    obj for obj in response['Contents']
+                                                    if 'generated_test_dag_' in obj['Key'] and obj['Key'].endswith('.py')
+                                                ]
+                                                
+                                                for obj in generated_objects:
+                                                    s3_client.delete_object(Bucket=bucket_name, Key=obj['Key'])
+                                                    print(f"  Removed S3 file: s3://{bucket_name}/{obj['Key']}")
+                                                
+                                                if generated_objects:
+                                                    print(f"  Cleaned {len(generated_objects)} generated DAG files from {project_name}")
+                                        
+                                        except Exception as e:
+                                            print(f"  Warning: Could not clean S3 files for {project_name}: {e}")
+                                
+                except Exception as e:
+                    print(f"  Warning: Could not process project {project_name}: {e}")
+                    
+        except Exception as e:
+            print(f"  Warning: Could not clean deployed files: {e}")
+
+        # Note: MWAA environments will automatically pick up the S3 changes
 
     def generate_new_dag_file(self):
         """Generate a new DAG file with unique name and content."""

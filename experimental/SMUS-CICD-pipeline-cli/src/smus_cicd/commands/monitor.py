@@ -22,7 +22,10 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
 
         config = load_config()
         # Add domain information from manifest for proper connection retrieval
-        config["domain"] = {"name": manifest.domain.name}
+        config["domain"] = {
+            "name": manifest.domain.name,
+            "region": manifest.domain.region,
+        }
         config["region"] = manifest.domain.region
 
         # Parse targets - handle single target or comma-separated list
