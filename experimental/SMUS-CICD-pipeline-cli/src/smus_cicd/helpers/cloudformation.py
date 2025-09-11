@@ -271,7 +271,61 @@ def create_project_via_cloudformation(
                 error_message = str(update_error)
 
                 if "No updates are to be performed" in error_message:
-                    typer.echo(f"✅ Stack {stack_name} is already up to date")
+                    # Check if this is a legacy stack that needs membership resources removed
+                    try:
+                        stack_response = cf_client.describe_stacks(StackName=stack_name)
+                        stack_resources = cf_client.describe_stack_resources(
+                            StackName=stack_name
+                        )
+
+                        # Check if stack has membership resources that need to be removed
+                        has_membership_resources = any(
+                            resource["ResourceType"]
+                            == "AWS::DataZone::ProjectMembership"
+                            for resource in stack_resources["StackResources"]
+                        )
+
+                        if has_membership_resources:
+                            typer.echo(
+                                f"🔄 Stack {stack_name} has legacy membership resources - forcing update to remove them"
+                            )
+                            # Force update by adding a dummy parameter change
+                            updated_parameters = parameters.copy()
+                            updated_parameters.append(
+                                {
+                                    "ParameterKey": "ProjectDescription",
+                                    "ParameterValue": f"Auto-created project for {project_name} in {pipeline_name} pipeline (updated)",
+                                }
+                            )
+
+                            cf_client.update_stack(
+                                StackName=stack_name,
+                                TemplateBody=template_body,
+                                Parameters=updated_parameters,
+                                Capabilities=[
+                                    "CAPABILITY_IAM",
+                                    "CAPABILITY_AUTO_EXPAND",
+                                ],
+                                Tags=tags,
+                            )
+
+                            # Wait for update to complete
+                            typer.echo("Waiting for stack update to complete...")
+                            waiter = cf_client.get_waiter("stack_update_complete")
+                            waiter.wait(
+                                StackName=stack_name,
+                                WaiterConfig={"Delay": 30, "MaxAttempts": 60},
+                            )
+                            typer.echo(
+                                f"✅ Stack {stack_name} updated successfully (membership resources removed)"
+                            )
+                        else:
+                            typer.echo(f"✅ Stack {stack_name} is already up to date")
+                    except Exception as check_error:
+                        typer.echo(
+                            f"Warning: Could not check for legacy membership resources: {check_error}"
+                        )
+                        typer.echo(f"✅ Stack {stack_name} is already up to date")
                 else:
                     typer.echo(
                         f"❌ Failed to update stack {stack_name}: {update_error}"
