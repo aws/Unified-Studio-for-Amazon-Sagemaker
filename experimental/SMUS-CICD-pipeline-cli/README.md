@@ -42,127 +42,44 @@ graph LR
         PM[Pipeline YAML]
     end
     
-    subgraph "CLI Commands"
-        C1[1. describe] --> C2[2. bundle] --> C3[3. deploy] --> C4[4. run] --> C5[5. test] --> C6[6. monitor] --> C7[7. delete]
+    subgraph "DEV STAGE"
+        C1[describe]
+        C2[bundle]
+        C1 --> C2
+    end
+    
+    subgraph "TEST STAGE"
+        C3[deploy]
+        C4[run]
+        C5[test]
+        C3 --> C4 --> C5
+    end
+    
+    subgraph "PROD STAGE"
+        C6[deploy]
+        C7[monitor]
+        C6 --> C7
     end
     
     PM --> C1
-```
-
-### Target Environment Composition
-
-#### Development Environment
-```mermaid
-graph TB
-    subgraph "Dev Target Environment"
-        T1[Target: dev]
-        
-        subgraph "SageMaker Unified Studio"
-            P1[SageMaker Unified Studio Project<br/>dev-marketing]
-        end
-        
-        subgraph "Connections"
-            SC1[Storage Connection<br/>default.s3_shared]
-            WC1[Workflow Connection<br/>project.workflow_mwaa]
-            AC1[Analytics Connection<br/>project.athena]
-            LC1[Lakehouse Connection<br/>project.default_lakehouse]
-        end
-        
-        subgraph "AWS Resources"
-            S31[S3 Bucket<br/>sagemaker-unified-studio-...-shared/]
-            MWAA1[MWAA Environment<br/>SageMaker Unified StudioMWAAEnv-...-dev]
-            ATHENA1[Athena Workgroup<br/>workgroup-...-dev]
-            GLUE1[Glue Database<br/>sagemaker_unified_studio_..._dev]
-        end
-    end
-    
-    T1 --> P1
-    P1 --> SC1
-    P1 --> WC1
-    P1 --> AC1
-    P1 --> LC1
-    
-    SC1 --> S31
-    WC1 --> MWAA1
-    AC1 --> ATHENA1
-    LC1 --> GLUE1
-```
-
-#### Test Environment
-```mermaid
-graph TB
-    subgraph "Test Target Environment"
-        T2[Target: test]
-        
-        subgraph "SageMaker Unified Studio"
-            P2[SageMaker Unified Studio Project<br/>test-marketing]
-        end
-        
-        subgraph "Connections"
-            SC2[Storage Connection<br/>default.s3_shared]
-            WC2[Workflow Connection<br/>project.workflow_mwaa]
-            AC2[Analytics Connection<br/>project.athena]
-            LC2[Lakehouse Connection<br/>project.default_lakehouse]
-        end
-        
-        subgraph "AWS Resources"
-            S32[S3 Bucket<br/>sagemaker-unified-studio-...-shared/]
-            MWAA2[MWAA Environment<br/>SageMaker Unified StudioMWAAEnv-...-test]
-            ATHENA2[Athena Workgroup<br/>workgroup-...-test]
-            GLUE2[Glue Database<br/>sagemaker_unified_studio_..._test]
-        end
-    end
-    
-    T2 --> P2
-    P2 --> SC2
-    P2 --> WC2
-    P2 --> AC2
-    P2 --> LC2
-    
-    SC2 --> S32
-    WC2 --> MWAA2
-    AC2 --> ATHENA2
-    LC2 --> GLUE2
-```
-
-#### Production Environment
-```mermaid
-graph TB
-    subgraph "Prod Target Environment"
-        T3[Target: prod]
-        
-        subgraph "SageMaker Unified Studio"
-            P3[SageMaker Unified Studio Project<br/>prod-marketing]
-        end
-        
-        subgraph "Connections"
-            SC3[Storage Connection<br/>default.s3_shared]
-            WC3[Workflow Connection<br/>project.workflow_mwaa]
-            AC3[Analytics Connection<br/>project.athena]
-            LC3[Lakehouse Connection<br/>project.default_lakehouse]
-        end
-        
-        subgraph "AWS Resources"
-            S33[S3 Bucket<br/>sagemaker-unified-studio-...-shared/]
-            MWAA3[MWAA Environment<br/>SageMaker Unified StudioMWAAEnv-...-prod]
-            ATHENA3[Athena Workgroup<br/>workgroup-...-prod]
-            GLUE3[Glue Database<br/>sagemaker_unified_studio_..._prod]
-        end
-    end
-    
-    T3 --> P3
-    P3 --> SC3
-    P3 --> WC3
-    P3 --> AC3
-    P3 --> LC3
-    
-    SC3 --> S33
-    WC3 --> MWAA3
-    AC3 --> ATHENA3
-    LC3 --> GLUE3
+    C2 --> C3
+    C5 --> C6
 ```
 
 ## Key Concepts
+
+### CLI Capabilities
+
+The SMUS CI/CD CLI provides comprehensive pipeline management capabilities:
+
+- **Infrastructure Deployment**: Automatically deploy and configure SageMaker Unified Studio projects, connections, and AWS resources for test and production stages
+- **Artifact Bundling**: Package code, workflows, notebooks, data assets, and configuration files into deployable bundles
+- **Multi-Target Deployment**: Push bundled artifacts to multiple environments (dev, test, prod) with environment-specific configuration
+- **Workflow Orchestration**: Trigger, run, and monitor Airflow DAGs and ML pipelines across different stages
+- **Automated Testing**: Execute validation tests to verify deployment correctness and pipeline functionality
+- **Quality Gates**: Stop pipeline progression if tests fail, ensuring only validated changes reach production
+- **CI/CD Integration**: Native support for GitHub Actions, GitLab CI, and other CI/CD providers through environment variables and CLI automation
+- **Environment Management**: Handle environment-specific configuration through variable substitution and target-based deployment
 
 ### Pipeline Stages → SMUS Projects
 
@@ -409,6 +326,18 @@ python -m pytest tests/integration/
 
 ## Common Workflows
 
+### Example CI/CD Workflow in Action
+
+See a **live example** of the SMUS CI/CD pipeline in action: [GitHub Actions Workflow Run](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/actions/runs/17631303500)
+
+This example demonstrates:
+- **Automated Testing**: Unit tests, integration tests, and code quality checks
+- **Multi-Stage Deployment**: Deploy to dev → test → prod environments
+- **Pipeline Validation**: Verify pipeline configuration and connectivity
+- **Bundle Creation**: Package workflows and data assets for deployment
+- **Environment Management**: Use environment variables for flexible configuration
+- **Quality Gates**: Stop deployment if any stage fails validation
+
 ### Complete CI/CD Flow
 ```bash
 # 1. Analyze pipeline configuration
@@ -425,4 +354,116 @@ smus-cli deploy --targets prod
 ```
 
 For detailed development workflows, testing procedures, and contribution guidelines, see the **[Development Guide](docs/development.md)**.
-# Test trigger Wed Sep 10 12:34:07 EDT 2025
+
+## Target Environment Composition
+
+### Development Environment
+```mermaid
+graph TB
+    subgraph "Dev Target Environment"
+        T1[Target: dev]
+        
+        subgraph "SageMaker Unified Studio"
+            P1[SageMaker Unified Studio Project<br/>dev-marketing]
+        end
+        
+        subgraph "Connections"
+            SC1[Storage Connection<br/>default.s3_shared]
+            WC1[Workflow Connection<br/>project.workflow_mwaa]
+            AC1[Analytics Connection<br/>project.athena]
+            LC1[Lakehouse Connection<br/>project.default_lakehouse]
+        end
+        
+        subgraph "AWS Resources"
+            S31[S3 Bucket<br/>sagemaker-unified-studio-...-shared/]
+            MWAA1[MWAA Environment<br/>SageMaker Unified StudioMWAAEnv-...-dev]
+            ATHENA1[Athena Workgroup<br/>workgroup-...-dev]
+            GLUE1[Glue Database<br/>sagemaker_unified_studio_..._dev]
+        end
+    end
+    
+    T1 --> P1
+    P1 --> SC1
+    P1 --> WC1
+    P1 --> AC1
+    P1 --> LC1
+    
+    SC1 --> S31
+    WC1 --> MWAA1
+    AC1 --> ATHENA1
+    LC1 --> GLUE1
+```
+
+### Test Environment
+```mermaid
+graph TB
+    subgraph "Test Target Environment"
+        T2[Target: test]
+        
+        subgraph "SageMaker Unified Studio"
+            P2[SageMaker Unified Studio Project<br/>test-marketing]
+        end
+        
+        subgraph "Connections"
+            SC2[Storage Connection<br/>default.s3_shared]
+            WC2[Workflow Connection<br/>project.workflow_mwaa]
+            AC2[Analytics Connection<br/>project.athena]
+            LC2[Lakehouse Connection<br/>project.default_lakehouse]
+        end
+        
+        subgraph "AWS Resources"
+            S32[S3 Bucket<br/>sagemaker-unified-studio-...-shared/]
+            MWAA2[MWAA Environment<br/>SageMaker Unified StudioMWAAEnv-...-test]
+            ATHENA2[Athena Workgroup<br/>workgroup-...-test]
+            GLUE2[Glue Database<br/>sagemaker_unified_studio_..._test]
+        end
+    end
+    
+    T2 --> P2
+    P2 --> SC2
+    P2 --> WC2
+    P2 --> AC2
+    P2 --> LC2
+    
+    SC2 --> S32
+    WC2 --> MWAA2
+    AC2 --> ATHENA2
+    LC2 --> GLUE2
+```
+
+### Production Environment
+```mermaid
+graph TB
+    subgraph "Prod Target Environment"
+        T3[Target: prod]
+        
+        subgraph "SageMaker Unified Studio"
+            P3[SageMaker Unified Studio Project<br/>prod-marketing]
+        end
+        
+        subgraph "Connections"
+            SC3[Storage Connection<br/>default.s3_shared]
+            WC3[Workflow Connection<br/>project.workflow_mwaa]
+            AC3[Analytics Connection<br/>project.athena]
+            LC3[Lakehouse Connection<br/>project.default_lakehouse]
+        end
+        
+        subgraph "AWS Resources"
+            S33[S3 Bucket<br/>sagemaker-unified-studio-...-shared/]
+            MWAA3[MWAA Environment<br/>SageMaker Unified StudioMWAAEnv-...-prod]
+            ATHENA3[Athena Workgroup<br/>workgroup-...-prod]
+            GLUE3[Glue Database<br/>sagemaker_unified_studio_..._prod]
+        end
+    end
+    
+    T3 --> P3
+    P3 --> SC3
+    P3 --> WC3
+    P3 --> AC3
+    P3 --> LC3
+    
+    SC3 --> S33
+    WC3 --> MWAA3
+    AC3 --> ATHENA3
+    LC3 --> GLUE3
+```
