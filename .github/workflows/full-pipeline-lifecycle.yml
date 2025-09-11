@@ -1,10 +1,11 @@
 name: Full SMUS CICD Pipeline Lifecycle Demo
 
 on:
-  pull_request:
-    branches: [ main, master ]
-    paths:
-      - 'experimental/SMUS-CICD-pipeline-cli/**'
+  # Temporarily disabled to avoid race conditions
+  # pull_request:
+  #   branches: [ main, master ]
+  #   paths:
+  #     - 'experimental/SMUS-CICD-pipeline-cli/**'
   workflow_dispatch:
     inputs:
       domain_name:
@@ -25,10 +26,52 @@ permissions:
   contents: read
 
 jobs:
+  # cleanup:
+  #   name: "Step 1 - Cleanup Previous Resources"
+  #   runs-on: ubuntu-latest
+  #   environment: aws-env
+  #   
+  #   steps:
+  #   - uses: actions/checkout@v4
+  #   
+  #   - name: Configure AWS credentials
+  #     uses: aws-actions/configure-aws-credentials@v4
+  #     with:
+  #       aws-region: us-east-1
+  #       role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+  #       role-session-name: smus-pipeline-lifecycle-cleanup
+  #       role-duration-seconds: 43200  # 12 hours for long-running operations
+  #   
+  #   - name: Set up Python
+  #     uses: actions/setup-python@v4
+  #     with:
+  #       python-version: '3.12'
+  #   
+  #   - name: Install dependencies
+  #     run: |
+  #       cd experimental/SMUS-CICD-pipeline-cli
+  #       python -m pip install --upgrade pip --no-cache-dir
+  #       pip install -e ".[dev]" --no-cache-dir
+  #   
+  #   - name: Cleanup previous test resources
+  #     run: |
+  #       cd experimental/SMUS-CICD-pipeline-cli/examples
+  #       echo "🧹 Cleaning up previous test resources..."
+  #       
+  #       # Try to delete test target resources if they exist
+  #       smus-cli delete \
+  #         --pipeline "DemoMarketingPipeline.yaml" \
+  #         --targets test \
+  #         --force || echo "No test resources to clean up"
+  #       
+  #       echo "✅ Cleanup completed"
+  #     continue-on-error: true
+
   setup:
-    name: "Setup - Resolve Domain and Project IDs"
+    name: "Step 1 - Setup Domain and Project IDs"
     runs-on: ubuntu-latest
     environment: aws-env
+    # needs: cleanup
     outputs:
       domain-id: ${{ steps.resolve.outputs.domain-id }}
       project-id: ${{ steps.resolve.outputs.project-id }}
@@ -40,12 +83,26 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
+    - name: Validate environment variables
+      env:
+        DEV_DOMAIN_REGION: ${{ vars.DEV_DOMAIN_REGION }}
+      run: |
+        echo "Validating required environment variables..."
+        echo "DEV_DOMAIN_REGION: ${DEV_DOMAIN_REGION:-NOT_SET}"
+        if [ -z "$DEV_DOMAIN_REGION" ]; then
+          echo "❌ ERROR: DEV_DOMAIN_REGION environment variable is not set in aws-env environment"
+          echo "Please set DEV_DOMAIN_REGION in GitHub repository settings > Environments > aws-env"
+          exit 1
+        fi
+        echo "✅ All required environment variables are set"
+    
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-region: us-east-1
         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         role-session-name: smus-pipeline-lifecycle-setup
+        role-duration-seconds: 43200  # 12 hours for long-running operations
     
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -98,9 +155,8 @@ jobs:
         echo "project-name=$PROJECT_NAME" >> $GITHUB_OUTPUT
         echo "pipeline-name=$PIPELINE_NAME" >> $GITHUB_OUTPUT
 
-  create-manifest:
   validate-configuration:
-    name: "Step 1 - Validate Pipeline Configuration"
+    name: "Step 2 - Validate Pipeline Configuration"
     runs-on: ubuntu-latest
     environment: aws-env
     needs: [setup]
@@ -114,6 +170,7 @@ jobs:
         aws-region: us-east-1
         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         role-session-name: smus-pipeline-lifecycle-validate
+        role-duration-seconds: 43200  # 12 hours for long-running operations
     
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -128,6 +185,8 @@ jobs:
     
     
     - name: Validate pipeline configuration
+      env:
+        DEV_DOMAIN_REGION: ${{ vars.DEV_DOMAIN_REGION }}
       run: |
         cd experimental/SMUS-CICD-pipeline-cli/examples
         smus-cli describe \
@@ -151,6 +210,7 @@ jobs:
         aws-region: us-east-1
         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         role-session-name: smus-pipeline-lifecycle-bundle
+        role-duration-seconds: 43200  # 12 hours for long-running operations
     
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -165,6 +225,8 @@ jobs:
     
     
     - name: Create deployment bundle
+      env:
+        DEV_DOMAIN_REGION: ${{ vars.DEV_DOMAIN_REGION }}
       run: |
         cd experimental/SMUS-CICD-pipeline-cli/examples
         smus-cli bundle \
@@ -194,6 +256,7 @@ jobs:
         aws-region: us-east-1
         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         role-session-name: smus-pipeline-lifecycle-deploy
+        role-duration-seconds: 43200  # 12 hours for long-running operations
     
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -214,6 +277,8 @@ jobs:
         path: experimental/SMUS-CICD-pipeline-cli/examples/bundles/
     
     - name: Deploy to test environment
+      env:
+        DEV_DOMAIN_REGION: ${{ vars.DEV_DOMAIN_REGION }}
       run: |
         cd experimental/SMUS-CICD-pipeline-cli/examples
         smus-cli deploy \
@@ -237,6 +302,7 @@ jobs:
         aws-region: us-east-1
         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         role-session-name: smus-pipeline-lifecycle-test
+        role-duration-seconds: 43200  # 12 hours for long-running operations
     
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -251,6 +317,8 @@ jobs:
     
     
     - name: Run tests
+      env:
+        DEV_DOMAIN_REGION: ${{ vars.DEV_DOMAIN_REGION }}
       run: |
         cd experimental/SMUS-CICD-pipeline-cli/examples
         smus-cli test \
@@ -274,6 +342,7 @@ jobs:
         aws-region: us-east-1
         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         role-session-name: smus-pipeline-lifecycle-monitor
+        role-duration-seconds: 43200  # 12 hours for long-running operations
     
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -288,6 +357,8 @@ jobs:
     
     
     - name: Monitor pipeline status
+      env:
+        DEV_DOMAIN_REGION: ${{ vars.DEV_DOMAIN_REGION }}
       run: |
         cd experimental/SMUS-CICD-pipeline-cli/examples
         smus-cli monitor \
@@ -297,7 +368,7 @@ jobs:
         echo "✅ Pipeline monitoring completed"
 
   execute-workflows:
-    name: "Step 7 - Execute Workflow Commands"
+    name: "Step 6 - Execute Workflow Commands"
     runs-on: ubuntu-latest
     environment: aws-env
     needs: [setup, monitor-pipeline]
@@ -311,6 +382,7 @@ jobs:
         aws-region: us-east-1
         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         role-session-name: smus-pipeline-lifecycle-execute
+        role-duration-seconds: 43200  # 12 hours for long-running operations
     
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -325,6 +397,8 @@ jobs:
     
     
     - name: Trigger DAG
+      env:
+        DEV_DOMAIN_REGION: ${{ vars.DEV_DOMAIN_REGION }}
       run: |
         cd experimental/SMUS-CICD-pipeline-cli/examples
         smus-cli run \
@@ -335,6 +409,8 @@ jobs:
         echo "✅ DAG triggered"
     
     - name: List DAG tasks
+      env:
+        DEV_DOMAIN_REGION: ${{ vars.DEV_DOMAIN_REGION }}
       run: |
         cd experimental/SMUS-CICD-pipeline-cli/examples
         smus-cli run \
@@ -345,6 +421,8 @@ jobs:
         echo "✅ DAG tasks listed"
     
     - name: Check task state
+      env:
+        DEV_DOMAIN_REGION: ${{ vars.DEV_DOMAIN_REGION }}
       run: |
         cd experimental/SMUS-CICD-pipeline-cli/examples
         EXECUTION_DATE=$(date -u +'manual__%Y-%m-%dT%H:%M:%S+00:00')
@@ -354,44 +432,8 @@ jobs:
           --command "tasks state test_dag hello_world $EXECUTION_DATE"
         
         echo "✅ Task state checked"
-
-  cleanup:
-    name: "Step 8 - Cleanup Resources"
-    runs-on: ubuntu-latest
-    environment: aws-env
-    needs: [setup, execute-workflows]
-    if: always()
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-region: us-east-1
-        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-        role-session-name: smus-pipeline-lifecycle-cleanup
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.12'
-    
-    - name: Install dependencies
-      run: |
-        cd experimental/SMUS-CICD-pipeline-cli
-        python -m pip install --upgrade pip
-        pip install -e ".[dev]"
-    
-      continue-on-error: true
-    
-    - name: Cleanup test resources
-      run: |
-        cd experimental/SMUS-CICD-pipeline-cli/examples
-        smus-cli delete \
-          --targets test \
-          --pipeline "${{ needs.setup.outputs.pipeline-file }}" \
-          --force
-        
-        echo "✅ Cleanup completed"
-      continue-on-error: true
+        echo "🎉 Pipeline lifecycle demo completed successfully!"
+        echo "📋 Resources left in place for inspection:"
+        echo "  - Project: dev-marketing-test"
+        echo "  - Domain: cicd-test-domain"
+        echo "  - MWAA Environment: (if created)"

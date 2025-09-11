@@ -78,6 +78,10 @@ def test_command(
 
         # Load AWS config
         config = load_config()
+        config["domain"] = {
+            "name": manifest.domain.name,
+            "region": manifest.domain.region,
+        }
         config["region"] = manifest.domain.region
         config["domain_name"] = manifest.domain.name
 
@@ -242,8 +246,10 @@ def test_command(
 
     except Exception as e:
         if output.upper() == "JSON":
-            error_data = {"error": str(e)}
-            typer.echo(json.dumps(error_data, indent=2))
+            # Only output error JSON if we haven't already output results
+            if "test_results" not in locals() or not test_results:
+                error_data = {"error": str(e)}
+                typer.echo(json.dumps(error_data, indent=2))
         else:
             typer.echo(f"❌ Error running tests: {e}")
         raise typer.Exit(1)

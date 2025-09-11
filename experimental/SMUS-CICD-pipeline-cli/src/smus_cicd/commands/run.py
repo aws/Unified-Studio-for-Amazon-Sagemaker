@@ -33,11 +33,52 @@ def run_command(
         smus-cli run -w test_dag -c "dags state test_dag"
         smus-cli run -w test_dag -c "tasks list test_dag"
     """
-    _validate_required_parameters(workflow, command)
+    # Configure logging based on output format
+    import os
+
+    from ..helpers.logger import configure_root_logger
+
+    log_level = os.environ.get("SMUS_LOG_LEVEL", "INFO")
+    json_output = output.upper() == "JSON"
+    configure_root_logger(log_level, json_output)
+
+    _validate_required_parameters(workflow, command, output)
 
     try:
         manifest = PipelineManifest.from_file(manifest_file)
         targets_to_check = _resolve_targets(targets, manifest)
+
+        # Validate MWAA health for each target before executing commands
+        from ..helpers.mwaa import validate_mwaa_health
+        from ..helpers.utils import load_config
+
+        config = load_config()
+        # Add domain information from manifest for proper connection retrieval
+        config["domain"] = {
+            "name": manifest.domain.name,
+            "region": manifest.domain.region,
+        }
+        config["region"] = manifest.domain.region
+        mwaa_healthy = False
+
+        for target_name in targets_to_check:
+            target_config = manifest.get_target(target_name)
+            project_name = target_config.project.name
+
+            if output.upper() != "JSON":
+                typer.echo(
+                    f"🔍 Checking MWAA health for target '{target_name}' (project: {project_name})"
+                )
+            if validate_mwaa_health(project_name, config):
+                mwaa_healthy = True
+                break
+
+        if not mwaa_healthy:
+            if output.upper() != "JSON":
+                typer.echo(
+                    "❌ No healthy MWAA environments found. Cannot execute workflow commands."
+                )
+            raise typer.Exit(1)
 
         results = _execute_commands_on_targets(
             targets_to_check, manifest, workflow, command, output
@@ -49,24 +90,27 @@ def run_command(
         _handle_execution_error(e, workflow, command, output)
 
 
-def _validate_required_parameters(workflow: str, command: str) -> None:
+def _validate_required_parameters(
+    workflow: str, command: str, output: str = "TEXT"
+) -> None:
     """
     Validate that required parameters are provided.
 
     Args:
         workflow: Workflow name
         command: Command to execute
+        output: Output format (ignored for errors - always plain text)
 
     Raises:
         typer.Exit: If required parameters are missing
     """
+    from ..helpers.error_handler import handle_error
+
     if not workflow:
-        typer.echo("❌ Error: --workflow parameter is required", err=True)
-        raise typer.Exit(1)
+        handle_error("--workflow parameter is required")
 
     if not command:
-        typer.echo("❌ Error: --command parameter is required", err=True)
-        raise typer.Exit(1)
+        handle_error("--command parameter is required")
 
 
 def _resolve_targets(
@@ -185,6 +229,11 @@ def _execute_command_on_target(
     config = _prepare_config(manifest)
     project_info = _get_project_info(target_config.project.name, config)
 
+    if isinstance(project_info, str):
+        # Handle case where project_info is a string (error message)
+        error_result = _create_error_result(target_name, project_info, output)
+        return [error_result]
+
     if "error" in project_info or not project_info.get("project_id"):
         error_msg = (
             f"Failed to get project info: {project_info.get('error', 'Unknown error')}"
@@ -215,13 +264,9 @@ def _prepare_config(manifest: PipelineManifest) -> Dict[str, Any]:
         Configuration dictionary
     """
     config = load_config()
+    config["domain"] = {"name": manifest.domain.name, "region": manifest.domain.region}
     config["region"] = manifest.domain.region
     config["domain_name"] = manifest.domain.name
-
-    # Set domain info in config for proper lookup
-    if "domain" not in config:
-        config["domain"] = {}
-    config["domain"]["name"] = manifest.domain.name
 
     return config
 
@@ -251,11 +296,16 @@ def _get_workflow_connections(project_info: Dict[str, Any]) -> Dict[str, Any]:
         Dictionary of workflow connections
     """
     connections = project_info.get("connections", {})
-    return {
-        name: info
-        for name, info in connections.items()
-        if info.get("type") in ["MWAA", "WORKFLOWS_MWAA"]
-    }
+
+    result = {}
+    for name, info in connections.items():
+        if isinstance(info, str):
+            continue
+
+        if info.get("type") in ["MWAA", "WORKFLOWS_MWAA"]:
+            result[name] = info
+
+    return result
 
 
 def _execute_on_workflow_connections(
@@ -418,20 +468,17 @@ def _handle_execution_error(
     error: Exception, workflow: str, command: str, output: str
 ) -> None:
     """
-    Handle execution errors based on output format.
+    Handle execution errors with plain text output.
 
     Args:
         error: Exception that occurred
         workflow: Workflow name
         command: Command that was being executed
-        output: Output format
+        output: Output format (ignored for errors - always plain text)
 
     Raises:
         typer.Exit: Always exits with code 1
     """
-    # Only output error message for text format
-    # JSON format is handled by _output_results
-    if output.upper() != "JSON":
-        typer.echo(f"❌ Error: {str(error)}", err=True)
+    from ..helpers.error_handler import handle_error
 
-    raise typer.Exit(1)
+    handle_error(f"executing workflow '{workflow}' command '{command}': {str(error)}")

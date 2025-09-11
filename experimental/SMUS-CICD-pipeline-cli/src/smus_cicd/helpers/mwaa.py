@@ -3,6 +3,7 @@
 from typing import Any, Dict, List
 
 from . import boto3_client
+from .logger import get_logger
 
 
 def get_environment_status(
@@ -83,8 +84,27 @@ def get_all_dag_details(
 
         return dag_details
 
-    except Exception:
-        return {}
+    except Exception as e:
+        # Check if this is a permission error
+        error_str = str(e)
+        if any(
+            perm_error in error_str.lower()
+            for perm_error in [
+                "accessdenied",
+                "access denied",
+                "unauthorized",
+                "forbidden",
+                "permission",
+                "not authorized",
+                "insufficient privileges",
+            ]
+        ):
+            print(f"❌ AWS Permission Error getting DAG details: {error_str}")
+            raise Exception(
+                f"AWS Permission Error: {error_str}. Check if the role has MWAA permissions."
+            )
+        else:
+            return {}
 
 
 def run_airflow_command(
@@ -418,3 +438,63 @@ def check_environment_available(
 def create_mwaa_client(connection_info: Dict[str, Any] = None, region: str = None):
     """Create MWAA client using connection info or region."""
     return boto3_client.create_client("mwaa", connection_info, region)
+
+
+def validate_mwaa_health(project_name: str, config: Dict[str, Any]) -> bool:
+    """
+    Validate MWAA environment health for a project.
+
+    Args:
+        project_name: Name of the project
+        config: Configuration dictionary
+
+    Returns:
+        bool: True if MWAA is available, False otherwise
+    """
+    logger = get_logger("mwaa")
+
+    try:
+        from .utils import _get_region_from_config, get_datazone_project_info
+
+        # Get region and project info
+        region = _get_region_from_config(config)
+        config_with_region = {**config, "region": region}
+        project_info = get_datazone_project_info(project_name, config_with_region)
+
+        if "error" not in project_info and "connections" in project_info:
+            connections = project_info["connections"]
+
+            # Debug: Show all available connections
+            logger.debug(f"Available connections in project '{project_name}':")
+            for conn_name, conn_info in connections.items():
+                conn_type = conn_info.get("type", "UNKNOWN")
+                logger.debug(f"  - {conn_name}: {conn_type}")
+
+            # Look for MWAA workflow connection
+            mwaa_connection = None
+            for conn_name, conn_info in connections.items():
+                if conn_info.get("type") in ["MWAA", "WORKFLOWS_MWAA"]:
+                    mwaa_connection = conn_info
+                    logger.debug(
+                        f"Found MWAA connection '{conn_name}': {conn_info.get('type')}"
+                    )
+                    break
+
+            if mwaa_connection:
+                logger.info("MWAA environment is available")
+                return True
+            else:
+                logger.warning("MWAA environment connection not found")
+                logger.debug("Looking for connection types: ['MWAA', 'WORKFLOWS_MWAA']")
+                return False
+        else:
+            logger.warning("MWAA environment connection not found")
+            if "error" in project_info:
+                logger.debug(f"Project info error: {project_info.get('error')}")
+            else:
+                logger.debug("No connections found in project info")
+            return False
+
+    except Exception as e:
+        logger.error(f"MWAA health check failed: {e}")
+        return False

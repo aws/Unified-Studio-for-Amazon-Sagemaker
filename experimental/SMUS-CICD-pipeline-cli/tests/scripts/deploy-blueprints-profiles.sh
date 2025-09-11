@@ -2,7 +2,7 @@
 
 # Load configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_FILE="$SCRIPT_DIR/config.yaml"
+CONFIG_FILE="${1:-$SCRIPT_DIR/config.yaml}"
 
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "Error: config.yaml not found at $CONFIG_FILE"
@@ -10,21 +10,93 @@ if [ ! -f "$CONFIG_FILE" ]; then
 fi
 
 # Parse config
-REGION=$(yq '.region' "$CONFIG_FILE")
+ACCOUNT_ID=$(yq '.account_id' "$CONFIG_FILE")
+REGION=$(yq '.regions.primary.name' "$CONFIG_FILE")
+REGION2=$(yq '.regions.secondary.name // ""' "$CONFIG_FILE")
+REGION3=$(yq '.regions.tertiary.name // ""' "$CONFIG_FILE")
+SECONDARY_ENABLED=$(yq '.regions.secondary.enabled // false' "$CONFIG_FILE")
+TERTIARY_ENABLED=$(yq '.regions.tertiary.enabled // false' "$CONFIG_FILE")
 BLUEPRINTS_STACK_NAME=$(yq '.stacks.blueprints_profiles' "$CONFIG_FILE")
 DOMAIN_STACK_NAME=$(yq '.stacks.domain' "$CONFIG_FILE")
 
-# Get VPC information from config
-VPC_ID=$(yq '.VPC.VpcId' "$CONFIG_FILE")
+echo "Deploying Blueprints and Profiles..."
+echo "Account ID: $ACCOUNT_ID"
+echo "Primary Region: $REGION"
+if [ "$SECONDARY_ENABLED" = "true" ] && [ -n "$REGION2" ]; then
+    echo "Secondary Region: $REGION2 (enabled)"
+fi
+if [ "$TERTIARY_ENABLED" = "true" ] && [ -n "$REGION3" ]; then
+    echo "Tertiary Region: $REGION3 (enabled)"
+fi
 
-# Dynamically retrieve subnets and AZs for the VPC
-echo "Retrieving subnets and AZs for VPC: $VPC_ID"
-SUBNETS=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" --region "$REGION" --query 'Subnets[].SubnetId' --output text | tr '\t' ',')
-AVAILABILITY_ZONES=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" --region "$REGION" --query 'Subnets[].AvailabilityZone' --output text | tr '\t' ',')
+# Get VPC information from config or temporary files
+VPC_ID=$(yq '.VPC.VpcId // ""' "$CONFIG_FILE")
+VPC_NAME=$(yq '.VPC.Name // ""' "$CONFIG_FILE")
 
-echo "VPC ID: $VPC_ID"
-echo "Subnets: $SUBNETS"
-echo "Availability Zones: $AVAILABILITY_ZONES"
+# If VPC_ID is not in config, try VPC_NAME lookup or VPC deployment files
+if [ -z "$VPC_ID" ] || [ "$VPC_ID" = "null" ]; then
+    if [ -n "$VPC_NAME" ] && [ "$VPC_NAME" != "null" ]; then
+        echo "Looking up VPC by name: $VPC_NAME"
+        VPC_ID=$(aws ec2 describe-vpcs --filters "Name=tag:Name,Values=$VPC_NAME" --region "$REGION" --query 'Vpcs[0].VpcId' --output text)
+        if [ "$VPC_ID" = "None" ] || [ "$VPC_ID" = "null" ]; then
+            echo "VPC with name '$VPC_NAME' not found, checking VPC deployment files..."
+            VPC_ID=""
+        fi
+    fi
+    
+    # If still no VPC_ID, try to get it from VPC deployment
+    if [ -z "$VPC_ID" ] && [ -f "/tmp/vpc_id_${REGION}.txt" ]; then
+        VPC_ID=$(cat "/tmp/vpc_id_${REGION}.txt")
+        SUBNETS=$(cat "/tmp/subnets_${REGION}.txt")
+        AVAILABILITY_ZONES=$(cat "/tmp/azs_${REGION}.txt")
+    elif [ -z "$VPC_ID" ]; then
+        echo "Error: No VPC information found for region $REGION"
+        exit 1
+    fi
+fi
+
+# If we have VPC_ID but no subnets, retrieve them
+if [ -n "$VPC_ID" ] && [ -z "$SUBNETS" ]; then
+    echo "Retrieving subnets and AZs for VPC: $VPC_ID"
+    SUBNETS=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" --region "$REGION" --query 'Subnets[].SubnetId' --output text | tr '\t' ',')
+    AVAILABILITY_ZONES=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" --region "$REGION" --query 'Subnets[].AvailabilityZone' --output text | tr '\t' ',')
+fi
+
+# Get VPC information for additional regions
+REGION2_VPC_ID=""
+REGION2_SUBNETS=""
+REGION2_AZS=""
+if [ "$SECONDARY_ENABLED" = "true" ] && [ -n "$REGION2" ] && [ -f "/tmp/vpc_id_${REGION2}.txt" ]; then
+    REGION2_VPC_ID=$(cat "/tmp/vpc_id_${REGION2}.txt")
+    REGION2_SUBNETS=$(cat "/tmp/subnets_${REGION2}.txt")
+    REGION2_AZS=$(cat "/tmp/azs_${REGION2}.txt")
+fi
+
+REGION3_VPC_ID=""
+REGION3_SUBNETS=""
+REGION3_AZS=""
+if [ "$TERTIARY_ENABLED" = "true" ] && [ -n "$REGION3" ] && [ -f "/tmp/vpc_id_${REGION3}.txt" ]; then
+    REGION3_VPC_ID=$(cat "/tmp/vpc_id_${REGION3}.txt")
+    REGION3_SUBNETS=$(cat "/tmp/subnets_${REGION3}.txt")
+    REGION3_AZS=$(cat "/tmp/azs_${REGION3}.txt")
+fi
+
+echo "Primary Region: $REGION"
+echo "Additional Region 2: ${REGION2:-'Not configured'}"
+echo "Additional Region 3: ${REGION3:-'Not configured'}"
+echo "Primary VPC ID: $VPC_ID"
+echo "Primary Subnets: $SUBNETS"
+echo "Primary Availability Zones: $AVAILABILITY_ZONES"
+if [ -n "$REGION2_VPC_ID" ]; then
+    echo "Region2 VPC ID: $REGION2_VPC_ID"
+    echo "Region2 Subnets: $REGION2_SUBNETS"
+    echo "Region2 Availability Zones: $REGION2_AZS"
+fi
+if [ -n "$REGION3_VPC_ID" ]; then
+    echo "Region3 VPC ID: $REGION3_VPC_ID"
+    echo "Region3 Subnets: $REGION3_SUBNETS"
+    echo "Region3 Availability Zones: $REGION3_AZS"
+fi
 
 # Check if stack exists and is in ROLLBACK_COMPLETE or ROLLBACK_FAILED state
 STACK_STATUS=$(aws cloudformation describe-stacks --stack-name "$BLUEPRINTS_STACK_NAME" --region "$REGION" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "DOES_NOT_EXIST")
@@ -48,7 +120,11 @@ echo "S3 Bucket Name: $S3_BUCKET_NAME"
 
 if ! aws s3api head-bucket --bucket "$S3_BUCKET_NAME" --region "$REGION" 2>/dev/null; then
     echo "Creating S3 bucket $S3_BUCKET_NAME..."
-    aws s3api create-bucket --bucket "$S3_BUCKET_NAME" --region "$REGION"
+    if [ "$REGION" = "us-east-1" ]; then
+        aws s3api create-bucket --bucket "$S3_BUCKET_NAME" --region "$REGION"
+    else
+        aws s3api create-bucket --bucket "$S3_BUCKET_NAME" --region "$REGION" --create-bucket-configuration LocationConstraint="$REGION"
+    fi
     aws s3api put-public-access-block --bucket "$S3_BUCKET_NAME" --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
     echo "S3 bucket created successfully."
 else
@@ -93,21 +169,30 @@ echo "DataLake Blueprint ID: $DATA_LAKE_BLUEPRINT_ID"
 echo "Tooling Blueprint ID: $TOOLING_BLUEPRINT_ID"
 echo "Workflow Blueprint ID: $WORKFLOW_BLUEPRINT_ID"
 
+# Build parameter overrides
+PARAMETER_OVERRIDES="DomainStackName=$DOMAIN_STACK_NAME VpcId=$VPC_ID Subnets=$SUBNETS AvailabilityZones=$AVAILABILITY_ZONES S3BucketName=$S3_BUCKET_NAME LakehouseCatalogBlueprintId=$LAKEHOUSE_CATALOG_BLUEPRINT_ID DataLakeBlueprintId=$DATA_LAKE_BLUEPRINT_ID ToolingBlueprintId=$TOOLING_BLUEPRINT_ID WorkflowBlueprintId=$WORKFLOW_BLUEPRINT_ID"
+
+# Add optional region parameters if they exist
+if [ "$SECONDARY_ENABLED" = "true" ] && [ -n "$REGION2" ]; then
+    PARAMETER_OVERRIDES="$PARAMETER_OVERRIDES Region2=$REGION2"
+    if [ -n "$REGION2_VPC_ID" ]; then
+        PARAMETER_OVERRIDES="$PARAMETER_OVERRIDES Region2VpcId=$REGION2_VPC_ID Region2Subnets=$REGION2_SUBNETS Region2AvailabilityZones=$REGION2_AZS"
+    fi
+fi
+
+if [ "$TERTIARY_ENABLED" = "true" ] && [ -n "$REGION3" ]; then
+    PARAMETER_OVERRIDES="$PARAMETER_OVERRIDES Region3=$REGION3"
+    if [ -n "$REGION3_VPC_ID" ]; then
+        PARAMETER_OVERRIDES="$PARAMETER_OVERRIDES Region3VpcId=$REGION3_VPC_ID Region3Subnets=$REGION3_SUBNETS Region3AvailabilityZones=$REGION3_AZS"
+    fi
+fi
+
 # Deploy DataZone Blueprints and Profiles Stack
 echo "Deploying DataZone Blueprints and Profiles Stack..."
 if aws cloudformation deploy \
   --template-file blueprints-profiles.yaml \
   --stack-name "$BLUEPRINTS_STACK_NAME" \
-  --parameter-overrides \
-    DomainStackName="$DOMAIN_STACK_NAME" \
-    VpcId="$VPC_ID" \
-    Subnets="$SUBNETS" \
-    AvailabilityZones="$AVAILABILITY_ZONES" \
-    S3BucketName="$S3_BUCKET_NAME" \
-    LakehouseCatalogBlueprintId="$LAKEHOUSE_CATALOG_BLUEPRINT_ID" \
-    DataLakeBlueprintId="$DATA_LAKE_BLUEPRINT_ID" \
-    ToolingBlueprintId="$TOOLING_BLUEPRINT_ID" \
-    WorkflowBlueprintId="$WORKFLOW_BLUEPRINT_ID" \
+  --parameter-overrides $PARAMETER_OVERRIDES \
   --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
   --region "$REGION"; then
   echo "✅ DataZone blueprints and profiles stack deployment complete!"

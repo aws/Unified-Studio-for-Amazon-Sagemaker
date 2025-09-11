@@ -2,7 +2,7 @@
 
 # Load configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_FILE="$SCRIPT_DIR/config.yaml"
+CONFIG_FILE="${1:-$SCRIPT_DIR/config.yaml}"
 
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "Error: config.yaml not found at $CONFIG_FILE"
@@ -10,7 +10,8 @@ if [ ! -f "$CONFIG_FILE" ]; then
 fi
 
 # Parse config using yq (install with: brew install yq)
-REGION=$(yq '.region' "$CONFIG_FILE")
+ACCOUNT_ID=$(yq '.account_id' "$CONFIG_FILE")
+REGION=$(yq '.regions.primary.name' "$CONFIG_FILE")
 DOMAIN_STACK_NAME=$(yq '.stacks.domain' "$CONFIG_FILE")
 DOMAIN_NAME=$(yq '.domain_name' "$CONFIG_FILE")
 

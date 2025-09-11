@@ -7,6 +7,8 @@ import time
 import boto3
 import typer
 
+from .logger import get_logger
+
 
 def capture_workflow_logs(mwaa_client, mwaa_env_name, dag_id, run_id, timeout=300):
     """Verify workflow execution by checking DAG runs before and after trigger."""
@@ -289,23 +291,23 @@ def wait_for_dags_available(mwaa_env_name, workflows_config, region, max_wait=90
 
 def get_dag_status(mwaa_client, mwaa_env_name, dag_id):
     """Get DAG status and schedule information from MWAA."""
+    logger = get_logger("airflow")
+
     try:
         # First check if DAG exists by listing all DAGs
         response = mwaa_client.list_dags(EnvironmentName=mwaa_env_name)
         dags = response.get("Dags", [])
 
         # DEBUG: Print all DAGs found in MWAA environment
-        print(
-            f"🔍 DEBUG: Found {len(dags)} DAGs in MWAA environment '{mwaa_env_name}':"
-        )
+        logger.debug(f"Found {len(dags)} DAGs in MWAA environment '{mwaa_env_name}'")
         for dag in dags[:10]:  # Show first 10 DAGs
             dag_id_found = dag.get("DagId", "Unknown")
             is_paused = dag.get("IsPaused", True)
             status = "Active" if not is_paused else "Paused"
-            print(f"   - {dag_id_found} ({status})")
+            logger.debug(f"   - {dag_id_found} ({status})")
         if len(dags) > 10:
-            print(f"   ... and {len(dags) - 10} more DAGs")
-        print(f"🔍 DEBUG: Looking for DAG: '{dag_id}'")
+            logger.debug(f"   ... and {len(dags) - 10} more DAGs")
+        logger.debug(f"Looking for DAG: '{dag_id}'")
 
         # Check if our DAG exists in the list
         dag_exists = any(dag.get("DagId") == dag_id for dag in dags)
@@ -332,8 +334,8 @@ def get_dag_status(mwaa_client, mwaa_env_name, dag_id):
         }
 
     except Exception as e:
-        print(
-            f"🔍 DEBUG: Error listing DAGs in MWAA environment '{mwaa_env_name}': {str(e)}"
+        logger.debug(
+            f"Error listing DAGs in MWAA environment '{mwaa_env_name}': {str(e)}"
         )
         return {
             "dag_id": dag_id,

@@ -85,14 +85,28 @@ workflows:
             import os
             os.unlink(manifest_file)
 
+    @patch('smus_cicd.commands.run.PipelineManifest.from_file')
+    @patch('smus_cicd.helpers.mwaa.validate_mwaa_health')
+    @patch('smus_cicd.commands.run.load_config')
     @patch('smus_cicd.commands.run.get_datazone_project_info')
     @patch('smus_cicd.helpers.mwaa.run_airflow_command')
-    def test_run_successful_command(self, mock_run_airflow, mock_get_project):
+    def test_run_successful_command(self, mock_run_airflow, mock_get_project, mock_config, mock_mwaa_health, mock_manifest):
         """Test successful run command execution."""
         runner = CliRunner()
         manifest_file = self.create_test_manifest()
         
         # Mock responses
+        mock_config.return_value = {}
+        mock_mwaa_health.return_value = True  # Mock MWAA as healthy
+        
+        # Mock manifest
+        mock_target = MagicMock()
+        mock_target.project.name = 'test-project'
+        mock_manifest_obj = MagicMock()
+        mock_manifest_obj.targets = {'dev': mock_target}
+        mock_manifest_obj.get_target_config.return_value = mock_target
+        mock_manifest.return_value = mock_manifest_obj
+        
         mock_get_project.return_value = {
             'project_id': 'test-project-id',
             'connections': {
@@ -125,14 +139,28 @@ workflows:
             import os
             os.unlink(manifest_file)
 
+    @patch('smus_cicd.commands.run.PipelineManifest.from_file')
+    @patch('smus_cicd.helpers.mwaa.validate_mwaa_health')
+    @patch('smus_cicd.commands.run.load_config')
     @patch('smus_cicd.commands.run.get_datazone_project_info')
     @patch('smus_cicd.helpers.mwaa.run_airflow_command')
-    def test_run_json_output(self, mock_run_airflow, mock_get_project):
+    def test_run_json_output(self, mock_run_airflow, mock_get_project, mock_config, mock_mwaa_health, mock_manifest):
         """Test run command with JSON output."""
         runner = CliRunner()
         manifest_file = self.create_test_manifest()
         
         # Mock responses
+        mock_config.return_value = {}
+        mock_mwaa_health.return_value = True  # Mock MWAA as healthy
+        
+        # Mock manifest
+        mock_target = MagicMock()
+        mock_target.project.name = 'test-project'
+        mock_manifest_obj = MagicMock()
+        mock_manifest_obj.targets = {'dev': mock_target}
+        mock_manifest_obj.get_target_config.return_value = mock_target
+        mock_manifest.return_value = mock_manifest_obj
+        
         mock_get_project.return_value = {
             'project_id': 'test-project-id',
             'connections': {
@@ -159,9 +187,19 @@ workflows:
             ])
             
             assert result.exit_code == 0
-            # Should be valid JSON
+            # Should be valid JSON - extract JSON part from stdout
             import json
-            output_data = json.loads(result.stdout)
+            stdout_lines = result.stdout.strip().split('\n')
+            # Find the JSON part (starts with '{')
+            json_start = None
+            for i, line in enumerate(stdout_lines):
+                if line.strip().startswith('{'):
+                    json_start = i
+                    break
+            
+            assert json_start is not None, "No JSON found in output"
+            json_text = '\n'.join(stdout_lines[json_start:])
+            output_data = json.loads(json_text)
             assert "workflow" in output_data
             assert "command" in output_data
             assert "results" in output_data
@@ -169,11 +207,25 @@ workflows:
             import os
             os.unlink(manifest_file)
 
+    @patch('smus_cicd.commands.run.PipelineManifest.from_file')
+    @patch('smus_cicd.helpers.mwaa.validate_mwaa_health')
+    @patch('smus_cicd.commands.run.load_config')
     @patch('smus_cicd.commands.run.get_datazone_project_info')
-    def test_run_project_info_failure(self, mock_get_project):
+    def test_run_project_info_failure(self, mock_get_project, mock_config, mock_mwaa_health, mock_manifest):
         """Test run command when project info fails."""
         runner = CliRunner()
         manifest_file = self.create_test_manifest()
+        
+        mock_config.return_value = {}
+        mock_mwaa_health.return_value = False  # Mock MWAA as unhealthy
+        
+        # Mock manifest
+        mock_target = MagicMock()
+        mock_target.project.name = 'test-project'
+        mock_manifest_obj = MagicMock()
+        mock_manifest_obj.targets = {'dev': mock_target}
+        mock_manifest_obj.get_target_config.return_value = mock_target
+        mock_manifest.return_value = mock_manifest_obj
         
         mock_get_project.return_value = {
             'success': False,
@@ -188,8 +240,8 @@ workflows:
                 "--targets", "dev"
             ])
             
-            assert result.exit_code == 1  # Command fails with project info error
-            assert "Failed to get project info" in result.stdout
+            assert result.exit_code == 1  # Command fails with MWAA health check
+            assert "No healthy MWAA environments found" in result.stdout
         finally:
             import os
             os.unlink(manifest_file)

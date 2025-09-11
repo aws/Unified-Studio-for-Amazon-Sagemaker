@@ -57,7 +57,7 @@ targets:
       project:
         create: true
         profileName: 'All capabilities'
-        owners: [arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests]
+        owners: [arn:aws:iam::123456789012:role/GitHubActionsRole-SMUS-CLI-Tests]
         contributors: []
     
     # Bundle target configuration
@@ -80,7 +80,7 @@ targets:
       project:
         create: true
         profileName: 'All capabilities'
-        owners: [arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests]
+        owners: [arn:aws:iam::123456789012:role/GitHubActionsRole-SMUS-CLI-Tests]
         contributors: []
     
     # Bundle target configuration
@@ -97,7 +97,6 @@ targets:
 # workflows:
 #   - workflowName: your_workflow_name
 #     connectionName: project.workflow_mwaa
-#     triggerPostDeployment: true
 #     logging: console
 #     engine: MWAA
 #     # parameters:
@@ -106,6 +105,5 @@ targets:
 #   
 #   - workflowName: another_workflow
 #     connectionName: project.workflow_mwaa
-#     triggerPostDeployment: false
 #     logging: none
 #     engine: MWAA

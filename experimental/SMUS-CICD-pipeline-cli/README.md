@@ -12,26 +12,7 @@ See **[CLI Commands Reference](docs/cli-commands.md)** for detailed command docu
 
 See **[Development Guide](docs/development.md)** for development workflows, testing, and contribution guidelines.
 
-## GitHub Actions Integration
-
-The repository includes three GitHub Actions workflows for automated testing and demonstration:
-
-### 1. CI Workflow (`.github/workflows/ci.yml`)
-- **Triggers**: Pull requests and pushes to main/master
-- **Features**: Code linting, unit tests with coverage, security scans
-- **Purpose**: Comprehensive code quality validation
-
-### 2. PR Integration Tests (`.github/workflows/pr-tests.yml`)  
-- **Triggers**: Pull requests affecting SMUS CLI code
-- **Features**: Integration tests with real AWS resources using OIDC authentication
-- **Purpose**: Validate CLI functionality against live AWS services
-
-### 3. Full Pipeline Lifecycle Demo (`.github/workflows/full-pipeline-lifecycle.yml`)
-- **Triggers**: Manual workflow dispatch
-- **Features**: Complete 8-step pipeline demonstration with customizable inputs
-- **Purpose**: End-to-end showcase of SMUS CLI capabilities
-
-See **[GitHub Actions Integration](docs/github-actions-integration.md)** for setup instructions and **[tests/integration/github/README.md](tests/integration/github/README.md)** for AWS OIDC configuration.
+See **[GitHub Actions Integration](docs/github-actions-integration.md)** for automated testing and deployment workflows.
 
 ## What is a CI/CD Pipeline?
 
@@ -263,6 +244,169 @@ smus-cli test --pipeline pipeline.yaml --targets marketing-test-stage
 smus-cli delete --targets marketing-test-stage --pipeline pipeline.yaml --force
 ```
 
+## Environment Variable Parameterization
+
+The SMUS CLI supports **environment variable substitution** in pipeline manifest files, enabling flexible configuration across different environments and deployment contexts.
+
+### Syntax
+
+Use `${VARIABLE_NAME}` or `${VARIABLE_NAME:default_value}` syntax in your YAML manifests:
+
+```yaml
+# pipeline.yaml
+pipelineName: MyPipeline
+
+domain:
+  name: ${DOMAIN_NAME:my-default-domain}
+  region: ${AWS_REGION:us-east-1}
+
+targets:
+  dev:
+    project:
+      name: ${PROJECT_PREFIX:myapp}-dev
+  
+  prod:
+    project:
+      name: ${PROJECT_PREFIX:myapp}-prod
+
+database:
+  host: ${DB_HOST:localhost}
+  port: ${DB_PORT:5432}
+  user: ${DB_USER}
+  password: ${DB_PASSWORD}
+```
+
+### Usage Examples
+
+#### 1. Local Development
+```bash
+# Set environment variables
+export AWS_REGION=us-west-2
+export PROJECT_PREFIX=myteam
+export DB_HOST=dev-db.company.com
+
+# Run CLI commands - variables are automatically substituted
+smus-cli describe --pipeline pipeline.yaml
+smus-cli deploy --pipeline pipeline.yaml --target dev
+```
+
+#### 2. CI/CD Environments
+```bash
+# GitHub Actions / CI environment
+export AWS_REGION=us-east-2
+export PROJECT_PREFIX=production
+export DOMAIN_NAME=prod-datazone-domain
+
+# Deploy to production
+smus-cli deploy --pipeline pipeline.yaml --target prod
+```
+
+#### 3. Multi-Environment Configuration
+```yaml
+# Same pipeline.yaml works across environments
+domain:
+  name: ${DOMAIN_NAME}  # Required - no default
+  region: ${AWS_REGION:us-east-1}  # Optional - defaults to us-east-1
+
+targets:
+  dev:
+    project:
+      name: ${ENV_PREFIX:dev}-${TEAM_NAME}-project
+  
+  staging:
+    project:
+      name: ${ENV_PREFIX:staging}-${TEAM_NAME}-project
+  
+  prod:
+    project:
+      name: ${ENV_PREFIX:prod}-${TEAM_NAME}-project
+```
+
+### Variable Resolution Rules
+
+1. **Environment Variable Set**: Uses the environment variable value
+   ```bash
+   export AWS_REGION=us-west-2
+   # ${AWS_REGION:us-east-1} → "us-west-2"
+   ```
+
+2. **Environment Variable Not Set**: Uses default value if provided
+   ```bash
+   unset AWS_REGION
+   # ${AWS_REGION:us-east-1} → "us-east-1"
+   ```
+
+3. **No Default Value**: Uses empty string if variable not set
+   ```bash
+   unset DB_PASSWORD
+   # ${DB_PASSWORD} → ""
+   ```
+
+### Common Use Cases
+
+#### Multi-Region Deployments
+```yaml
+domain:
+  region: ${DEV_DOMAIN_REGION:us-east-2}
+
+# Deploy to different regions
+export DEV_DOMAIN_REGION=us-west-2  # West Coast
+export DEV_DOMAIN_REGION=eu-west-1  # Europe
+```
+
+#### Team-Specific Projects
+```yaml
+targets:
+  dev:
+    project:
+      name: ${TEAM_NAME}-dev-project
+      
+# Each team sets their identifier
+export TEAM_NAME=data-science    # → "data-science-dev-project"
+export TEAM_NAME=ml-platform     # → "ml-platform-dev-project"
+```
+
+#### Environment-Specific Configuration
+```yaml
+bundle:
+  storage:
+    connectionName: ${STORAGE_CONNECTION:default.s3_shared}
+  
+workflows:
+  - workflowName: ${WORKFLOW_NAME:default_workflow}
+    connectionName: ${MWAA_CONNECTION:project.workflow_mwaa}
+```
+
+### Integration Test Configuration
+
+The integration tests use environment variables for flexible testing:
+
+```yaml
+# tests/integration/*/pipeline.yaml
+domain:
+  name: cicd-test-domain
+  region: ${DEV_DOMAIN_REGION:us-east-2}
+```
+
+**GitHub Actions** automatically sets:
+```bash
+export DEV_DOMAIN_REGION=us-east-2
+```
+
+**Local testing** can override:
+```bash
+export DEV_DOMAIN_REGION=us-east-1  # Use local domain
+python -m pytest tests/integration/
+```
+
+### Best Practices
+
+1. **Always provide defaults** for optional configuration
+2. **Use descriptive variable names** (e.g., `DEV_DOMAIN_REGION` not `REGION`)
+3. **Document required variables** in your pipeline README
+4. **Group related variables** with consistent prefixes
+5. **Validate critical variables** are set before deployment
+
 ## Common Workflows
 
 ### Complete CI/CD Flow
@@ -281,3 +425,4 @@ smus-cli deploy --targets prod
 ```
 
 For detailed development workflows, testing procedures, and contribution guidelines, see the **[Development Guide](docs/development.md)**.
+# Test trigger Wed Sep 10 12:34:07 EDT 2025

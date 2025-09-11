@@ -7,13 +7,17 @@ from smus_cicd.helpers.utils import load_config, get_datazone_project_info
 
 
 def _load_test_config():
-    """Load integration test configuration."""
+    """Load integration test configuration with environment variable substitution."""
     config_path = Path(__file__).parent.parent.parent / "config.local.yaml"
     if not config_path.exists():
         config_path = Path(__file__).parent.parent.parent / "config.yaml"
     
     with open(config_path, 'r') as f:
-        return yaml.safe_load(f)
+        config_data = yaml.safe_load(f)
+    
+    # Apply environment variable substitution
+    from smus_cicd.helpers.utils import substitute_env_vars
+    return substitute_env_vars(config_data)
 
 
 def test_environment_variables_available():
@@ -41,7 +45,7 @@ def test_environment_variables_available():
     
     assert domain_name, "Domain name should not be empty"
     assert project_prefix, "Project prefix should not be empty"
-    assert region in ['us-east-1', 'us-west-2', 'eu-west-1'], f"Region {region} should be valid"
+    assert region in ['us-east-1', 'us-east-2', 'us-west-2', 'eu-west-1'], f"Region {region} should be valid"
 
 
 def test_project_context():
@@ -55,7 +59,7 @@ def test_project_context():
     # Basic validation
     assert domain_name, "Domain name should not be empty"
     assert project_prefix, "Project prefix should not be empty"
-    assert region in ['us-east-1', 'us-west-2', 'eu-west-1'], f"Region {region} should be valid"
+    assert region in ['us-east-1', 'us-east-2', 'us-west-2', 'eu-west-1'], f"Region {region} should be valid"
     
     # Test project naming convention
     test_project_name = f"{project_prefix}-test"

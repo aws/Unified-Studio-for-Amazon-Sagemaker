@@ -17,8 +17,23 @@ from .commands.describe import describe_command
 from .commands.monitor import monitor_command
 from .commands.run import run_command
 from .commands.test import test_command
+from .helpers.logger import setup_logger
 
 console = Console()
+
+
+def configure_logging(output_format: str = "TEXT"):
+    """Configure logging based on output format."""
+    import os
+
+    # Set log level from environment or default to INFO
+    log_level = os.environ.get("SMUS_LOG_LEVEL", "INFO")
+
+    # For JSON output, send logs to stderr to keep stdout clean
+    json_output = output_format.upper() == "JSON"
+
+    # Configure root logger for the application
+    setup_logger("smus_cicd", log_level, json_output)
 
 
 def show_help_suggestion():

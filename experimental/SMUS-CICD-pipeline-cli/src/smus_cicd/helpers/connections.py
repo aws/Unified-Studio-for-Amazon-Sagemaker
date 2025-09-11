@@ -85,6 +85,16 @@ def get_project_connections(
     # Get connections from DataZone
     datazone_client = boto3.client("datazone", region_name=region)
 
+    # DEBUG: Log the exact parameters being used for the ListConnections call
+    import sys
+
+    is_json_output = "--output" in sys.argv and "JSON" in sys.argv
+    if not is_json_output:
+        print(
+            f"🔍 DEBUG ListConnections: region={region}, domain_id={domain_id}, project_id={project_id}",
+            file=sys.stderr,
+        )
+
     try:
         response = datazone_client.list_connections(
             domainIdentifier=domain_id, projectIdentifier=project_id
@@ -121,4 +131,23 @@ def get_project_connections(
         return connections
 
     except Exception as e:
+        # Check if this is a permission error
+        error_str = str(e)
+        if any(
+            perm_error in error_str.lower()
+            for perm_error in [
+                "accessdenied",
+                "access denied",
+                "unauthorized",
+                "forbidden",
+                "permission",
+                "not authorized",
+                "insufficient privileges",
+            ]
+        ):
+            raise Exception(
+                f"AWS Permission Error: {error_str}. Check if the role has DataZone permissions to list connections."
+            )
+
+        # For other errors, return error info but don't fail completely
         return {"error": f"Could not list connections: {str(e)}"}

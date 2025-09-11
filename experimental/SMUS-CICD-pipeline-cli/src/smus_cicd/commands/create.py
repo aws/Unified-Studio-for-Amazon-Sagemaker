@@ -253,7 +253,6 @@ targets:
 # workflows:
 #   - workflowName: your_workflow_name
 #     connectionName: project.workflow_mwaa
-#     triggerPostDeployment: true
 #     logging: console
 #     engine: MWAA
 #     # parameters:
@@ -262,7 +261,6 @@ targets:
 #
 #   - workflowName: another_workflow
 #     connectionName: project.workflow_mwaa
-#     triggerPostDeployment: false
 #     logging: none
 #     engine: MWAA
 """

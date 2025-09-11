@@ -3,8 +3,11 @@ import subprocess
 import sys
 import os
 
+# Get the directory where this script is located
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 def run_tests_with_progress():
-    os.chdir('/Users/amirbo/code/smus/experimental/SMUS-CICD-pipeline-cli')
+    os.chdir(SCRIPT_DIR)
     
     # Run pytest with live output
     cmd = [

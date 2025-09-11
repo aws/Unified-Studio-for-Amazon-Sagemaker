@@ -115,13 +115,12 @@ def describe_command(
             if connections or connect:
                 try:
                     config = load_config()
+                    config["domain"] = {
+                        "name": manifest.domain.name,
+                        "region": manifest.domain.region,
+                    }
                     config["region"] = manifest.domain.region
                     config["domain_name"] = manifest.domain.name
-
-                    # Set domain info in config for proper lookup
-                    if "domain" not in config:
-                        config["domain"] = {}
-                    config["domain"]["name"] = manifest.domain.name
 
                     project_info = get_datazone_project_info(
                         target_config.project.name, config
@@ -323,9 +322,6 @@ def describe_command(
                 typer.echo(f"  - {workflow.workflow_name}")
                 typer.echo(f"    Connection: {workflow.connection_name}")
                 typer.echo(f"    Engine: {workflow.engine}")
-                typer.echo(
-                    f"    Trigger Post Deployment: {workflow.trigger_post_deployment}"
-                )
                 if hasattr(workflow, "parameters") and workflow.parameters:
                     typer.echo(f"    Parameters: {workflow.parameters}")
 
@@ -339,7 +335,6 @@ def describe_command(
                         "workflow_name": workflow.workflow_name,
                         "connection_name": workflow.connection_name,
                         "engine": workflow.engine,
-                        "trigger_post_deployment": workflow.trigger_post_deployment,
                     }
                     if hasattr(workflow, "parameters") and workflow.parameters:
                         workflow_data["parameters"] = workflow.parameters

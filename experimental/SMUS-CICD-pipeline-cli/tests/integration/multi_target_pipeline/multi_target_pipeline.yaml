@@ -3,7 +3,7 @@ pipelineName: IntegrationTestMultiTarget
 # Domain configuration
 domain:
   name: cicd-test-domain
-  region: us-east-1
+  region: ${DEV_DOMAIN_REGION:us-east-2}
 
 # What to include in deployment bundles
 bundle:
@@ -73,16 +73,13 @@ targets:
 workflows:
   - workflowName: test_dag
     connectionName: project.workflow_mwaa
-    triggerPostDeployment: True  # trigger in integration tests
     logging: console
     engine: MWAA
   - workflowName: test_dag_not_mentioned
     connectionName: project.workflow_mwaa
-    triggerPostDeployment: True  # trigger in integration tests
     logging: console
     engine: MWAA
   - workflowName: runGettingStartedNotebook
     connectionName: project.workflow_mwaa
-    triggerPostDeployment: True  # trigger in integration tests
     logging: console
     engine: MWAA

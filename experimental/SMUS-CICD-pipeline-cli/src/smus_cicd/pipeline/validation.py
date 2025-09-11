@@ -29,6 +29,12 @@ def validate_yaml_syntax(manifest_path: str) -> Tuple[bool, str, Dict[str, Any]]
     try:
         with open(manifest_path, "r") as f:
             data = yaml.safe_load(f)
+
+        # Import here to avoid circular imports
+        from ..helpers.utils import substitute_env_vars
+
+        data = substitute_env_vars(data)
+
         return True, "", data
     except yaml.YAMLError as e:
         return False, f"YAML syntax error: {e}", {}

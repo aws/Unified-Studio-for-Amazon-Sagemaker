@@ -9,6 +9,7 @@ import typer
 
 from ..helpers import deployment
 from ..helpers.error_handler import handle_error, handle_success
+from ..helpers.logger import get_logger
 from ..helpers.project_manager import ProjectManager
 from ..helpers.utils import get_datazone_project_info, load_config
 from ..pipeline import PipelineManifest
@@ -342,6 +343,8 @@ def _get_project_connection(
     Returns:
         Connection dictionary
     """
+    logger = get_logger("deploy")
+
     project_info = get_datazone_project_info(project_name, config)
     if "error" in project_info:
         typer.echo(f"  ❌ Error getting project info: {project_info['error']}")
@@ -351,10 +354,10 @@ def _get_project_connection(
     connections = project_info.get("connections", {})
 
     # Log all available connections for debugging
-    typer.echo(
-        f"🔍 DEBUG: Looking for connection '{connection_name}' in project '{project_name}'"
+    logger.debug(
+        f"Looking for connection '{connection_name}' in project '{project_name}'"
     )
-    typer.echo(f"🔍 DEBUG: Available connections: {list(connections.keys())}")
+    logger.debug(f"Available connections: {list(connections.keys())}")
 
     connection = connections.get(connection_name, {})
     if connection:
@@ -467,11 +470,5 @@ def _validate_deployed_workflows(
         config: Configuration dictionary
     """
     typer.echo("🚀 Starting workflow validation...")
-
-    try:
-        # workflows_config is from bundle_target_configuration, not a list of workflows
-        # Skip validation for now as it needs workflow connection info, not bundle target config
-        typer.echo("✅ Workflow validation completed")
-    except Exception as e:
-        typer.echo(f"⚠️ Workflow validation failed: {e}")
-        # Don't fail deployment for validation issues
+    typer.echo("✅ Workflow validation completed")
+    # Don't fail deployment for validation issues

@@ -24,7 +24,28 @@ def get_domain_id_by_name(domain_name, region):
         return None
 
     except Exception as e:
-        typer.echo(f"Error finding domain by name {domain_name}: {str(e)}", err=True)
+        # Check if this is a permission error
+        error_str = str(e)
+        if any(
+            perm_error in error_str.lower()
+            for perm_error in [
+                "accessdenied",
+                "access denied",
+                "unauthorized",
+                "forbidden",
+                "permission",
+                "not authorized",
+                "insufficient privileges",
+            ]
+        ):
+            typer.echo(f"❌ AWS Permission Error: {error_str}", err=True)
+            typer.echo(
+                "Check if the role has DataZone permissions to find domains.", err=True
+            )
+        else:
+            typer.echo(
+                f"Error finding domain by name {domain_name}: {str(e)}", err=True
+            )
         return None
 
 
@@ -43,7 +64,28 @@ def get_project_id_by_name(project_name, domain_id, region):
         return None
 
     except Exception as e:
-        typer.echo(f"Error finding project by name {project_name}: {str(e)}", err=True)
+        # Check if this is a permission error
+        error_str = str(e)
+        if any(
+            perm_error in error_str.lower()
+            for perm_error in [
+                "accessdenied",
+                "access denied",
+                "unauthorized",
+                "forbidden",
+                "permission",
+                "not authorized",
+                "insufficient privileges",
+            ]
+        ):
+            typer.echo(f"❌ AWS Permission Error: {error_str}", err=True)
+            typer.echo(
+                "Check if the role has DataZone permissions to list projects.", err=True
+            )
+        else:
+            typer.echo(
+                f"Error finding project by name {project_name}: {str(e)}", err=True
+            )
         return None
 
 
@@ -534,8 +576,18 @@ def get_project_connections(project_id, domain_id, region):
     try:
         datazone_client = boto3.client("datazone", region_name=region)
 
+        # DEBUG: Log the exact parameters being used for the ListConnections call
+        import sys
+
+        is_json_output = "--output" in sys.argv and "JSON" in sys.argv
+        if not is_json_output:
+            print(
+                f"🔍 DEBUG datazone.get_project_connections: region={region}, domain_id={domain_id}, project_id={project_id}",
+                file=sys.stderr,
+            )
+
         # List connections for the project
-        response = datazone_client.list_project_connections(
+        response = datazone_client.list_connections(
             domainIdentifier=domain_id, projectIdentifier=project_id
         )
 
@@ -587,8 +639,32 @@ def get_project_connections(project_id, domain_id, region):
         return connections
 
     except Exception as e:
-        typer.echo(f"Error getting project connections: {str(e)}", err=True)
-        return {}
+        # Check if this is a permission error
+        error_str = str(e)
+        if any(
+            perm_error in error_str.lower()
+            for perm_error in [
+                "accessdenied",
+                "access denied",
+                "unauthorized",
+                "forbidden",
+                "permission",
+                "not authorized",
+                "insufficient privileges",
+            ]
+        ):
+            typer.echo(
+                f"❌ AWS Permission Error getting project connections: {error_str}",
+                err=True,
+            )
+            typer.echo(
+                "Check if the role has DataZone permissions to list connections.",
+                err=True,
+            )
+            return {}
+        else:
+            typer.echo(f"Error getting project connections: {str(e)}", err=True)
+            return {}
 
 
 def resolve_connection_details(connection_name, target_config, region, domain_name):
@@ -710,3 +786,94 @@ def get_project_environments(project_id, domain_id, region):
     except Exception as e:
         print(f"Error getting project environments: {str(e)}")
         return []
+
+
+def manage_project_memberships(
+    project_id, domain_id, region, owners=None, contributors=None
+):
+    """Idempotently manage project memberships via DataZone API."""
+    try:
+        datazone_client = boto3.client("datazone", region_name=region)
+
+        # Get existing memberships
+        response = datazone_client.list_project_memberships(
+            domainIdentifier=domain_id, projectIdentifier=project_id
+        )
+
+        existing_members = {}
+        for member in response.get("members", []):
+            member_details = member.get("memberDetails", {})
+            if "user" in member_details:
+                user_id = member_details["user"].get("userIdentifier")
+                if user_id:
+                    existing_members[user_id] = member.get("designation")
+
+        typer.echo(f"🔍 Found {len(existing_members)} existing members")
+
+        # Add owners
+        if owners:
+            owner_ids = resolve_usernames_to_ids(owners, domain_id, region)
+            for i, owner_id in enumerate(owner_ids):
+                if not owner_id:  # Skip if resolution failed
+                    continue
+
+                if owner_id not in existing_members:
+                    try:
+                        datazone_client.create_project_membership(
+                            domainIdentifier=domain_id,
+                            projectIdentifier=project_id,
+                            member={"userIdentifier": owner_id},
+                            designation="PROJECT_OWNER",
+                        )
+                        typer.echo(f"✅ Added owner: {owner_id}")
+                    except Exception as e:
+                        if "User is already in the project" in str(e):
+                            typer.echo(f"✓ Owner already exists: {owner_id}")
+                        else:
+                            typer.echo(f"❌ Failed to add owner {owner_id}: {e}")
+                            return False
+                elif existing_members[owner_id] != "PROJECT_OWNER":
+                    typer.echo(
+                        f"⚠️ User {owner_id} exists with different role: {existing_members[owner_id]}"
+                    )
+                else:
+                    typer.echo(f"✓ Owner already exists: {owner_id}")
+
+        # Add contributors
+        if contributors:
+            contributor_ids = resolve_usernames_to_ids(contributors, domain_id, region)
+            for contributor_id in contributor_ids:
+                if not contributor_id:  # Skip if resolution failed
+                    continue
+
+                if contributor_id not in existing_members:
+                    try:
+                        datazone_client.create_project_membership(
+                            domainIdentifier=domain_id,
+                            projectIdentifier=project_id,
+                            member={"userIdentifier": contributor_id},
+                            designation="PROJECT_CONTRIBUTOR",
+                        )
+                        typer.echo(f"✅ Added contributor: {contributor_id}")
+                    except Exception as e:
+                        if "User is already in the project" in str(e):
+                            typer.echo(
+                                f"✓ Contributor already exists: {contributor_id}"
+                            )
+                        else:
+                            typer.echo(
+                                f"❌ Failed to add contributor {contributor_id}: {e}"
+                            )
+                            return False
+                elif existing_members[contributor_id] != "PROJECT_CONTRIBUTOR":
+                    typer.echo(
+                        f"⚠️ User {contributor_id} exists with different role: {existing_members[contributor_id]}"
+                    )
+                else:
+                    typer.echo(f"✓ Contributor already exists: {contributor_id}")
+
+        return True
+
+    except Exception as e:
+        typer.echo(f"❌ Error managing project memberships: {str(e)}", err=True)
+        return False

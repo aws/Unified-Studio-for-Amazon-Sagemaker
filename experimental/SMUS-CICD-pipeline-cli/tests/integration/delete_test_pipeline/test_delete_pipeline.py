@@ -15,11 +15,7 @@ class TestDeletePipeline(IntegrationTestBase):
 
     def setup_method(self, method):
         """Set up test environment."""
-        self.runner = CliRunner()
-        self.config = self._load_config()
-        self.test_dir = None
-        self.created_resources = []
-        self.setup_aws_session()
+        super().setup_method(method)
         self.setup_test_directory()
         
         # Clean up any leftover resources from previous test runs

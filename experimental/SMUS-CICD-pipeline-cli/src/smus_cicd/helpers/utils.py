@@ -1,13 +1,43 @@
 """Utility functions for SMUS CLI."""
 
 import os
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+import re
+from typing import Any, Dict, List, Optional, Union
 
 import boto3
 import yaml
 
 from . import datazone
+
+
+def substitute_env_vars(data: Union[Dict, List, str]) -> Union[Dict, List, str]:
+    """
+    Recursively substitute environment variables in YAML data.
+
+    Supports ${VAR_NAME} syntax for environment variable substitution.
+
+    Args:
+        data: YAML data (dict, list, or string)
+
+    Returns:
+        Data with environment variables substituted
+    """
+    if isinstance(data, dict):
+        return {key: substitute_env_vars(value) for key, value in data.items()}
+    elif isinstance(data, list):
+        return [substitute_env_vars(item) for item in data]
+    elif isinstance(data, str):
+        # Pattern to match ${VAR_NAME} or ${VAR_NAME:default_value}
+        pattern = r"\$\{([^}:]+)(?::([^}]*))?\}"
+
+        def replace_var(match):
+            var_name = match.group(1)
+            default_value = match.group(2) if match.group(2) is not None else ""
+            return os.getenv(var_name, default_value)
+
+        return re.sub(pattern, replace_var, data)
+    else:
+        return data
 
 
 def load_yaml(file_path: str) -> Dict[str, Any]:
@@ -32,31 +62,23 @@ def load_yaml(file_path: str) -> Dict[str, Any]:
 
     try:
         with open(file_path, "r") as f:
-            return yaml.safe_load(f)
+            data = yaml.safe_load(f)
+            return substitute_env_vars(data)
     except yaml.YAMLError as e:
         raise yaml.YAMLError(f"Invalid YAML syntax in {file_path}: {e}")
 
 
 def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
     """
-    Load configuration from specified path.
+    Load configuration - returns empty dict as all config comes from pipeline manifest.
 
     Args:
-        config_path: Path to configuration file (optional)
+        config_path: Ignored - kept for backward compatibility
 
     Returns:
-        Configuration dictionary (empty if file doesn't exist)
+        Empty configuration dictionary
     """
-    if config_path is None:
-        # Use package-relative path
-        config_path = Path(__file__).parent / "cloudformation" / "config.yaml"
-    else:
-        config_path = Path(config_path)
-
-    if not config_path.exists():
-        return {}
-
-    return load_yaml(str(config_path))
+    return {}
 
 
 def get_domain_id(config: Dict[str, Any]) -> Optional[str]:
@@ -72,10 +94,7 @@ def get_domain_id(config: Dict[str, Any]) -> Optional[str]:
     Raises:
         ValueError: If region is not specified in configuration
     """
-    region = config.get("region")
-    if not region:
-        raise ValueError("Region must be specified in configuration")
-
+    region = _get_region_from_config(config)
     domain_stack_name = config.get("stacks", {}).get("domain", "cicd-test-domain-stack")
 
     cf_client = boto3.client("cloudformation", region_name=region)
@@ -139,24 +158,40 @@ def get_datazone_project_info(
         project_owners = _get_project_owners(domain_id, project_id, region)
         project_connections = _get_project_connections(project_name, config, region)
 
-        return {
+        result = {
             "projectId": project_id,
             "project_id": project_id,  # Keep backward compatibility
             "status": project_details.get("status", "Unknown"),
             "owners": project_owners,
             "connections": project_connections,
         }
+        return result
 
     except Exception as e:
         return {"error": str(e)}
 
 
 def _get_region_from_config(config: Dict[str, Any]) -> str:
-    """Get region from configuration, raising error if not found."""
-    region = config.get("region")
-    if not region:
-        raise ValueError("Region must be specified in configuration")
-    return region
+    """Get region from configuration, using domain.region as the single source of truth."""
+    from .logger import get_logger
+
+    logger = get_logger("utils")
+
+    # Use domain.region from pipeline manifest as the single source of truth
+    domain_region = config.get("domain", {}).get("region")
+    if domain_region:
+        logger.debug(f"Using domain.region from config: {domain_region}")
+        return domain_region
+
+    # Fallback to aws.region in config for backward compatibility
+    region = config.get("aws", {}).get("region")
+    if region:
+        logger.debug(f"Using region from config: {region}")
+        return region
+
+    raise ValueError(
+        "Region must be specified in domain.region or aws.region configuration"
+    )
 
 
 def _resolve_domain_id(config: Dict[str, Any], region: str) -> Optional[str]:
@@ -261,12 +296,45 @@ def _get_project_connections(
     try:
         from . import connections
 
+        # Try different config structures for domain name
         domain_name = config.get("domain", {}).get("name")
+        if not domain_name:
+            domain_name = config.get("test_environment", {}).get("domain_name")
+
+        # DEBUG: Log the parameters being passed to connections
+        import sys
+
+        is_json_output = "--output" in sys.argv and "JSON" in sys.argv
+        if not is_json_output:
+            print(
+                f"🔍 DEBUG _get_project_connections: project_name={project_name}, domain_name={domain_name}, region={region}",
+                file=sys.stderr,
+            )
+
         if domain_name:
             return connections.get_project_connections(
                 project_name, domain_name, region
             )
         else:
             return {}
-    except Exception:
-        return {}  # Connections are optional
+    except Exception as e:
+        # Check if this is a permission error
+        error_str = str(e)
+        if any(
+            perm_error in error_str.lower()
+            for perm_error in [
+                "accessdenied",
+                "access denied",
+                "unauthorized",
+                "forbidden",
+                "permission",
+                "not authorized",
+                "insufficient privileges",
+            ]
+        ):
+            print(f"❌ AWS Permission Error getting connections: {error_str}")
+            raise Exception(
+                f"AWS Permission Error: {error_str}. Check if the role has required permissions."
+            )
+        else:
+            return {}  # Connections are optional for non-permission errors

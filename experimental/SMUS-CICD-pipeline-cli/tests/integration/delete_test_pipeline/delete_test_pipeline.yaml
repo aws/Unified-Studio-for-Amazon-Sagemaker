@@ -2,7 +2,7 @@ pipelineName: DeleteTestPipeline
 
 domain:
   name: cicd-test-domain
-  region: us-east-1
+  region: ${DEV_DOMAIN_REGION:us-east-2}
 
 targets:
   dev: 
@@ -18,15 +18,15 @@ targets:
       project: 
         create: true
         profileName: 'All capabilities'
-        owners: []
+        owners: [Eng1, arn:aws:iam::058264284947:role/Admin, arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests]
         contributors: []
         userParameters: 
           - EnvironmentConfigurationName: 'Lakehouse Database'
             parameters:
               - name: glueDbName
                 value: delete_test_db        
-      environments: 
-        - EnvironmentConfigurationName: 'OnDemand Workflows'
+      # environments: 
+      #   - EnvironmentConfigurationName: 'OnDemand Workflows'
     bundle_target_configuration:
       storage:
         connectionName: default.s3_shared
@@ -39,7 +39,6 @@ workflows:
   - workflowName: simple_dag
     connectionName: project.workflow_mwaa
     engine: MWAA
-    triggerPostDeployment: false
 
 bundle:
   bundlesDirectory: /tmp/bundles
