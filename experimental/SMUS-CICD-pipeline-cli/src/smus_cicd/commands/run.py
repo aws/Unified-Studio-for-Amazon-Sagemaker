@@ -12,26 +12,25 @@ from ..pipeline import PipelineManifest
 
 
 def run_command(
-    manifest_file: str, workflow: str, command: str, targets: Optional[str], output: str
+    manifest_file: str,
+    workflow: str,
+    command: Optional[str],
+    targets: Optional[str],
+    output: str,
 ) -> None:
     """
-    Run Airflow CLI commands on specified workflow environments.
-
-    For complete Airflow CLI reference, see:
-    https://airflow.apache.org/docs/apache-airflow/stable/cli-and-env-variables-ref.html
+    Run Airflow CLI commands in target environment.
 
     Args:
         manifest_file: Path to pipeline manifest file
-        workflow: Name of the workflow to run commands on
-        command: Airflow CLI command to execute
+        workflow: Name of the workflow to run
+        command: Optional Airflow CLI command to execute (if not provided, triggers the workflow)
         targets: Comma-separated list of targets (optional, defaults to all)
         output: Output format (TEXT or JSON)
 
     Examples:
-        smus-cli run -w test_dag -c "dags list"
-        smus-cli run -w test_dag -c "dags trigger test_dag"
-        smus-cli run -w test_dag -c "dags state test_dag"
-        smus-cli run -w test_dag -c "tasks list test_dag"
+        smus-cli run -w test_dag
+        smus-cli run -w test_dag -t prod
     """
     # Configure logging based on output format
     import os
@@ -42,7 +41,7 @@ def run_command(
     json_output = output.upper() == "JSON"
     configure_root_logger(log_level, json_output)
 
-    _validate_required_parameters(workflow, command, output)
+    _validate_required_parameters(workflow, output)
 
     try:
         manifest = PipelineManifest.from_file(manifest_file)
@@ -50,7 +49,6 @@ def run_command(
 
         # Validate MWAA health for each target before executing commands
         from ..helpers.mwaa import validate_mwaa_health
-        from ..helpers.utils import load_config
 
         config = load_config()
         # Add domain information from manifest for proper connection retrieval
@@ -74,11 +72,24 @@ def run_command(
                 break
 
         if not mwaa_healthy:
-            if output.upper() != "JSON":
+            if output.upper() == "JSON":
+                typer.echo(
+                    json.dumps(
+                        {
+                            "success": False,
+                            "error": "No healthy MWAA environments found",
+                        }
+                    )
+                )
+            else:
                 typer.echo(
                     "❌ No healthy MWAA environments found. Cannot execute workflow commands."
                 )
             raise typer.Exit(1)
+
+        # If no command provided, trigger the workflow
+        if not command:
+            command = f"dags trigger {workflow}"
 
         results = _execute_commands_on_targets(
             targets_to_check, manifest, workflow, command, output
@@ -90,15 +101,12 @@ def run_command(
         _handle_execution_error(e, workflow, command, output)
 
 
-def _validate_required_parameters(
-    workflow: str, command: str, output: str = "TEXT"
-) -> None:
+def _validate_required_parameters(workflow: str, output: str = "TEXT") -> None:
     """
     Validate that required parameters are provided.
 
     Args:
         workflow: Workflow name
-        command: Command to execute
         output: Output format (ignored for errors - always plain text)
 
     Raises:
@@ -107,10 +115,16 @@ def _validate_required_parameters(
     from ..helpers.error_handler import handle_error
 
     if not workflow:
-        handle_error("--workflow parameter is required")
-
-    if not command:
-        handle_error("--command parameter is required")
+        if output.upper() == "JSON":
+            typer.echo(
+                json.dumps(
+                    {
+                        "success": False,
+                        "error": "--workflow parameter is required",
+                    }
+                )
+            )
+        handle_error("--workflow parameter is required", exit_code=1)
 
 
 def _resolve_targets(
@@ -375,9 +389,7 @@ def _process_command_result(
         Processed result dictionary or None
     """
     if output.upper() == "JSON":
-        parsed_output = parse_airflow_output(
-            command, result["stdout"], result["stderr"]
-        )
+        parsed_output = parse_airflow_output(command, result["stdout"], result["stderr"])
         return {
             "target": target_name,
             "connection": conn_name,
@@ -411,9 +423,7 @@ def _display_command_result(result: Dict[str, Any]) -> None:
     typer.echo()
 
 
-def _create_error_result(
-    target_name: str, error_msg: str, output: str
-) -> Dict[str, Any]:
+def _create_error_result(target_name: str, error_msg: str, output: str) -> Dict[str, Any]:
     """
     Create error result based on output format.
 
@@ -447,17 +457,13 @@ def _output_results(
     failed_results = [r for r in results if not r.get("success", True)]
 
     if output.upper() == "JSON":
-        typer.echo(
-            json.dumps(
-                {
-                    "workflow": workflow,
-                    "command": command,
-                    "results": results,
-                    "success": len(failed_results) == 0,
-                },
-                indent=2,
-            )
-        )
+        output_data = {
+            "workflow": workflow,
+            "command": command,
+            "results": results,
+            "success": len(failed_results) == 0,
+        }
+        typer.echo(json.dumps(output_data))
 
     # Exit with error code if there were failures
     if failed_results:
@@ -481,4 +487,7 @@ def _handle_execution_error(
     """
     from ..helpers.error_handler import handle_error
 
-    handle_error(f"executing workflow '{workflow}' command '{command}': {str(error)}")
+    error_msg = f"executing workflow '{workflow}' command '{command}': {str(error)}"
+    if output.upper() == "JSON":
+        typer.echo(json.dumps({"success": False, "error": error_msg}))
+    handle_error(error_msg, exit_code=1)

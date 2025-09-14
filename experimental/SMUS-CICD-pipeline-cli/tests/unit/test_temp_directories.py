@@ -14,7 +14,7 @@ pipelineName: TestPipeline
 domain:
   name: test-domain
   region: us-east-1
-bundlesDirectory: ./bundles
+bundlesDirectory: /tmp/bundles
 bundle:
   workflow:
     - connectionName: default.s3_shared

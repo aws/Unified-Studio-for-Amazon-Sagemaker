@@ -19,3 +19,5 @@ override.tf.json
 *_override.tf.json
 .terraformrc
 terraform.rc
+experimental/SMUS-CICD-pipeline-cli/tests/reports/test-results.html
+experimental/SMUS-CICD-pipeline-cli/tests/reports/test-results.html

@@ -16,7 +16,7 @@ domain:
   name: test-domain
   region: us-east-1
 bundle:
-  bundlesDirectory: ./bundles
+  bundlesDirectory: /tmp/bundles
 targets:
   dev:
     stage: DEV

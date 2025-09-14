@@ -253,7 +253,7 @@ domain:
   name: cicd-test-domain
   region: us-east-2
 bundle:
-  bundlesDirectory: ./tests/integration/bundles
+  bundlesDirectory: /tmp/bundles
 targets:
   test:
     stage: test
@@ -296,7 +296,7 @@ domain:
   name: nonexistent-domain-12345
   region: us-east-2
 bundle:
-  bundlesDirectory: ./tests/integration/bundles
+  bundlesDirectory: /tmp/bundles
 targets:
   test:
     stage: test
@@ -339,7 +339,7 @@ domain:
   name: cicd-test-domain
   region: ${DEV_DOMAIN_REGION:eu-west-1}
 bundle:
-  bundlesDirectory: ./tests/integration/bundles
+  bundlesDirectory: /tmp/bundles
 targets:
   test:
     stage: test
@@ -462,7 +462,7 @@ domain:
   name: cicd-test-domain
   region: us-east-2
 bundle:
-  bundlesDirectory: ./tests/integration/bundles
+  bundlesDirectory: /tmp/bundles
 targets:
   existing:
     stage: test
@@ -511,7 +511,7 @@ domain:
   name: cicd-test-domain
   region: us-east-2
 bundle:
-  bundlesDirectory: ./tests/integration/bundles
+  bundlesDirectory: /tmp/bundles
 targets:
   test:
     stage: test

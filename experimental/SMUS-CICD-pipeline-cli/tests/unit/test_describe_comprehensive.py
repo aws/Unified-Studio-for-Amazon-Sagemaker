@@ -35,7 +35,7 @@ domain:
   name: minimal-domain
   region: us-west-2
 bundle:
-  bundlesDirectory: ./test-bundles
+  bundlesDirectory: /tmp/bundles
 targets:
   staging:
     stage: STAGING
@@ -55,7 +55,7 @@ domain:
   name: complex-domain
   region: eu-central-1
 bundle:
-  bundlesDirectory: ./custom-bundles
+  bundlesDirectory: /tmp/bundles
   workflow:
     - connectionName: project.workflow_connection
       append: true
@@ -154,7 +154,7 @@ domain:
   name: test-domain
   region: {region}
 bundle:
-  bundlesDirectory: ./bundles
+  bundlesDirectory: /tmp/bundles
 targets:
   test:
     stage: TEST
@@ -175,7 +175,7 @@ domain:
   name: test-domain
   region: us-east-1
 bundle:
-  bundlesDirectory: ./bundles
+  bundlesDirectory: /tmp/bundles
 targets:
   test:
     stage: TEST
@@ -194,7 +194,7 @@ domain:
   name: test-domain
   region: us-east-1
 bundle:
-  bundlesDirectory: ./bundles
+  bundlesDirectory: /tmp/bundles
 targets:
   test:
     stage: TEST
@@ -214,7 +214,7 @@ domain:
   name: test-domain
   region: us-east-1
 bundle:
-  bundlesDirectory: ./bundles
+  bundlesDirectory: /tmp/bundles
 targets:
   test:
     stage: TEST
@@ -251,7 +251,7 @@ domain:
   name: test-domain
   region: us-east-1
 bundle:
-  bundlesDirectory: ./bundles
+  bundlesDirectory: /tmp/bundles
 targets:
   test:
     stage: TEST
@@ -268,7 +268,7 @@ targets:
         manifest = """
 pipelineName: TestPipeline
 bundle:
-  bundlesDirectory: ./bundles
+  bundlesDirectory: /tmp/bundles
 targets:
   test:
     stage: TEST
@@ -287,7 +287,7 @@ pipelineName: TestPipeline
 domain:
   region: us-east-1
 bundle:
-  bundlesDirectory: ./bundles
+  bundlesDirectory: /tmp/bundles
 targets:
   test:
     stage: TEST
@@ -306,7 +306,7 @@ pipelineName: TestPipeline
 domain:
   name: test-domain
 bundle:
-  bundlesDirectory: ./bundles
+  bundlesDirectory: /tmp/bundles
 targets:
   test:
     stage: TEST
@@ -326,7 +326,7 @@ domain:
   name: test-domain
   region: us-east-1
 bundle:
-  bundlesDirectory: ./bundles
+  bundlesDirectory: /tmp/bundles
 """
         result = self.run_describe(manifest)
         assert result.exit_code == 1
@@ -341,7 +341,7 @@ domain:
   name: test-domain
   region: us-east-1
 bundle:
-  bundlesDirectory: ./bundles
+  bundlesDirectory: /tmp/bundles
 targets: {}
 """
         result = self.run_describe(manifest)
@@ -357,7 +357,7 @@ domain:
   name: test-domain
   region: us-east-1
 bundle:
-  bundlesDirectory: ./bundles
+  bundlesDirectory: /tmp/bundles
 targets:
   test: {}
 """
@@ -374,7 +374,7 @@ domain:
   name: test-domain
   region: us-east-1
 bundle:
-  bundlesDirectory: ./bundles
+  bundlesDirectory: /tmp/bundles
 targets:
   test:
     stage: TEST
@@ -397,7 +397,7 @@ domain:
   name: test-domain
   region: us-east-1
 bundle:
-  bundlesDirectory: ./bundles
+  bundlesDirectory: /tmp/bundles
 targets:
   test:
     stage: TEST
@@ -420,7 +420,7 @@ domain:
   name: test-domain
   region: us-east-1
 bundle:
-  bundlesDirectory: ./bundles
+  bundlesDirectory: /tmp/bundles
 targets:
   test:
     stage: TEST
@@ -490,7 +490,7 @@ domain:
   name: test-domain
   region: us-east-1
 bundle:
-  bundlesDirectory: ./bundles
+  bundlesDirectory: /tmp/bundles
 targets:
   test:
     stage: TEST
@@ -517,7 +517,7 @@ domain:
   name: ""
   region: ""
 bundle:
-  bundlesDirectory: ""
+  bundlesDirectory: "/tmp/bundles"
 targets:
   test:
     stage: TEST
@@ -536,7 +536,7 @@ domain:
   name: "domain-with-dashes"
   region: us-east-1
 bundle:
-  bundlesDirectory: "./bundles-with-dashes"
+  bundlesDirectory: "/tmp/bundles-with-dashes"
 targets:
   "target-with-dashes":
     stage: TEST

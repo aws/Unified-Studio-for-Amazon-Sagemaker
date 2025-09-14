@@ -9,7 +9,7 @@ domain:
 
 # Bundle configuration (optional)
 bundle:
-  bundlesDirectory: ./bundles
+  bundlesDirectory: /tmp/bundles
   # workflow:
   #   - connectionName: project.workflow_connection
   #     append: true
