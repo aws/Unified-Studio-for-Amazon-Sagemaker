@@ -389,7 +389,9 @@ def _process_command_result(
         Processed result dictionary or None
     """
     if output.upper() == "JSON":
-        parsed_output = parse_airflow_output(command, result["stdout"], result["stderr"])
+        parsed_output = parse_airflow_output(
+            command, result["stdout"], result["stderr"]
+        )
         return {
             "target": target_name,
             "connection": conn_name,
@@ -423,7 +425,9 @@ def _display_command_result(result: Dict[str, Any]) -> None:
     typer.echo()
 
 
-def _create_error_result(target_name: str, error_msg: str, output: str) -> Dict[str, Any]:
+def _create_error_result(
+    target_name: str, error_msg: str, output: str
+) -> Dict[str, Any]:
     """
     Create error result based on output format.
 
