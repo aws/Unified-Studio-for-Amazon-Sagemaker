@@ -6,8 +6,9 @@ When making any code changes to the SMUS CI/CD CLI, follow this automated workfl
 
 ### 0. AWS Credentials Setup (when needed)
 ```bash
-# Refresh AWS credentials using validation script
-python scripts/validate.py --aws-login
+# Check AWS credentials using test runner
+python scripts/run_tests.py --type integration
+# If credentials are missing, you'll see a warning
 
 # Or manually:
 isenguardcli
@@ -17,8 +18,8 @@ aws sts get-caller-identity
 ### 1. Pre-Change Validation
 ```bash
 # Verify current state is clean
-python scripts/validate.py --unit
-python scripts/validate.py --integration
+python scripts/run_tests.py --type unit
+python scripts/run_tests.py --type integration
 git status
 ```
 
@@ -40,7 +41,7 @@ git status
 ### 3. Update Test Cases
 ```bash
 # Run tests to identify failures
-python scripts/validate.py --unit
+python scripts/run_tests.py --type unit
 
 # Fix any failing tests by:
 # - Updating test expectations to match new behavior
@@ -57,20 +58,23 @@ python scripts/validate.py --unit
 # - Examples need updating
 # - Diagrams need modification
 
-# Verify examples work:
-python scripts/validate.py --readme
+# Verify examples work by running tests
+python scripts/run_tests.py --type all
 ```
 
 ### 5. Integration Test Validation
 ```bash
-# Run integration tests (automatically refreshes AWS credentials)
-python scripts/validate.py --integration
+# Run integration tests
+python scripts/run_tests.py --type integration
+
+# For faster iteration, skip slow tests:
+python scripts/run_tests.py --type integration --skip-slow
 ```
 
 ### 6. Final Validation and Commit
 ```bash
-# Full validation pipeline
-python scripts/validate.py --all
+# Full validation with coverage
+python scripts/run_tests.py --type all
 
 # Commit changes
 git add .
@@ -84,30 +88,59 @@ git commit -m "Descriptive commit message
 git status
 ```
 
-## Python-Native Validation Commands
+## Test Runner Options
 
 ```bash
-# Quick validation options
-python scripts/validate.py --unit           # Unit tests only
-python scripts/validate.py --integration    # Integration tests only  
-python scripts/validate.py --readme         # README examples only
-python scripts/validate.py --aws-login      # AWS credentials only
-python scripts/validate.py --clean          # Clean temp files
-python scripts/validate.py --all            # Full validation (default)
+# Available test types:
+python scripts/run_tests.py --type unit           # Unit tests only
+python scripts/run_tests.py --type integration    # Integration tests only
+python scripts/run_tests.py --type all            # All tests (default)
 
-# Alternative using pytest directly
+# Additional options:
+--no-coverage        # Skip coverage analysis
+--no-html-report    # Skip HTML test results and coverage reports
+--skip-slow         # Skip slow tests (marked with @pytest.mark.slow)
+--coverage-only     # Only generate coverage report from existing data
+
+# Alternative using pytest directly:
 pytest tests/unit/                          # Unit tests
-pytest tests/integration/ -m "not slow"     # Integration tests
+pytest tests/integration/ -m "not slow"     # Integration tests (skip slow)
 ```
+
+## Direct Test Execution (without run_tests.py)
+
+### Running Tests Directly
+For running tests directly without using the run_tests.py script:
+
+#### Unit Tests
+```bash
+cd experimental/SMUS-CICD-pipeline-cli
+python -m pytest tests/unit -v
+```
+
+#### Integration Tests
+```bash
+cd experimental/SMUS-CICD-pipeline-cli
+python -m pytest tests/integration -v
+```
+
+Integration tests are located in `tests/integration/` and include:
+- Basic pipeline tests
+- Multi-target pipeline tests
+- Bundle deploy pipeline tests
+- Test pipeline creation/deletion
+- End-to-end pipeline tests
+
+Important Note: These are pytest-based integration tests, NOT Hydra tests. Do not attempt to run them using the Hydra test platform.
 
 ## Checklist for Any Code Change
 
-- [ ] AWS credentials refreshed (when needed)
+- [ ] AWS credentials configured (when needed)
 - [ ] **Code formatting and imports are clean:**
   - [ ] `flake8 src/smus_cicd/ --config=setup.cfg` passes
   - [ ] `black --check src/smus_cicd/` passes  
   - [ ] `isort --check-only src/smus_cicd/` passes
-- [ ] Unit tests pass (95/95)
+- [ ] Unit tests pass
 - [ ] Integration tests pass (basic suite)
 - [ ] README examples are accurate and tested
 - [ ] CLI help text is updated if needed
@@ -115,9 +148,9 @@ pytest tests/integration/ -m "not slow"     # Integration tests
 - [ ] Mock objects match real implementation
 - [ ] CLI parameter usage is consistent
 - [ ] Documentation reflects actual behavior
-- [ ] Check that the code and markdown files don't contain aws account ids , nor web addresses, or host names.  mask all of these before committing.
-- [ ] Check that lint is passing.  
-- [ ] don't swallow exceptions, if an error is thrown , it must be loggeg or handled. 
+- [ ] Check that the code and markdown files don't contain aws account ids, web addresses, or host names. Mask all of these before committing.
+- [ ] Check that lint is passing
+- [ ] Don't swallow exceptions, if an error is thrown, it must be logged or handled
 - [ ] All changes are committed
 
 ## Common Test Patterns to Maintain
@@ -144,7 +177,7 @@ pytest tests/integration/ -m "not slow"     # Integration tests
 smus_cicd/
 ├── pyproject.toml          # Modern Python project config
 ├── scripts/
-│   └── validate.py         # Validation script (replaces Makefile)
+│   └── run_tests.py       # Test runner script
 ├── smus_cicd/             # Main package
 ├── tests/                 # Test suite
 └── README.md              # Documentation
@@ -152,11 +185,9 @@ smus_cicd/
 
 ## AWS Credential Management
 
-When you say "refresh your aws credentials", I will run:
-```bash
-python scripts/validate.py --aws-login
-```
-
-This ensures integration tests that require AWS access will work properly.
+When you need to refresh AWS credentials:
+1. Run `isenguardcli` to get fresh credentials
+2. Verify with `aws sts get-caller-identity`
+3. Run a test command to confirm: `python scripts/run_tests.py --type integration`
 
 This script ensures that every code change maintains the quality and consistency of the codebase using Python-native tools.

@@ -6,28 +6,33 @@ import pytest
 import tempfile
 import os
 from pathlib import Path
-from smus_cicd.pipeline.validation import validate_yaml_syntax, validate_manifest_schema, validate_manifest_file, load_schema
+from smus_cicd.pipeline.validation import (
+    validate_yaml_syntax,
+    validate_manifest_schema,
+    validate_manifest_file,
+    load_schema,
+)
 from smus_cicd.pipeline import PipelineManifest
 
 
 class TestManifestValidation:
     """Test manifest validation functions."""
-    
+
     def setup_method(self):
         """Set up test fixtures."""
         self.schema = load_schema()
-        
+
     def create_temp_manifest(self, content: str) -> str:
         """Create a temporary manifest file with given content."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(content)
             return f.name
-    
+
     def teardown_method(self):
         """Clean up temporary files."""
         # Clean up any temp files created during tests
         pass
-    
+
     def test_valid_manifest(self):
         """Test validation of a valid manifest."""
         valid_manifest = """
@@ -46,10 +51,10 @@ targets:
             is_valid, errors, data = validate_manifest_file(manifest_file)
             assert is_valid
             assert len(errors) == 0
-            assert data['pipelineName'] == 'TestPipeline'
+            assert data["pipelineName"] == "TestPipeline"
         finally:
             os.unlink(manifest_file)
-    
+
     def test_invalid_yaml_syntax(self):
         """Test validation with invalid YAML syntax."""
         invalid_yaml = """
@@ -72,7 +77,7 @@ targets:
             assert "YAML syntax error" in errors[0]
         finally:
             os.unlink(manifest_file)
-    
+
     def test_missing_required_field_pipeline_name(self):
         """Test validation with missing required pipelineName."""
         missing_pipeline_name = """
@@ -89,10 +94,12 @@ targets:
         try:
             is_valid, errors, data = validate_manifest_file(manifest_file)
             assert not is_valid
-            assert any("'pipelineName' is a required property" in error for error in errors)
+            assert any(
+                "'pipelineName' is a required property" in error for error in errors
+            )
         finally:
             os.unlink(manifest_file)
-    
+
     def test_missing_required_field_domain(self):
         """Test validation with missing required domain."""
         missing_domain = """
@@ -110,7 +117,7 @@ targets:
             assert any("'domain' is a required property" in error for error in errors)
         finally:
             os.unlink(manifest_file)
-    
+
     def test_missing_required_field_targets(self):
         """Test validation with missing required targets."""
         missing_targets = """
@@ -126,7 +133,7 @@ domain:
             assert any("'targets' is a required property" in error for error in errors)
         finally:
             os.unlink(manifest_file)
-    
+
     def test_invalid_pipeline_name_pattern(self):
         """Test validation with invalid pipelineName pattern."""
         invalid_name = """
@@ -147,7 +154,7 @@ targets:
             assert any("does not match" in error for error in errors)
         finally:
             os.unlink(manifest_file)
-    
+
     def test_invalid_region_pattern(self):
         """Test validation with invalid region pattern."""
         invalid_region = """
@@ -168,7 +175,7 @@ targets:
             assert any("does not match" in error for error in errors)
         finally:
             os.unlink(manifest_file)
-    
+
     def test_invalid_engine_enum(self):
         """Test validation with invalid workflow engine."""
         invalid_engine = """
@@ -193,7 +200,7 @@ workflows:
             assert any("is not one of" in error for error in errors)
         finally:
             os.unlink(manifest_file)
-    
+
     def test_missing_project_name_in_target(self):
         """Test validation with missing project name in target."""
         missing_project_name = """
@@ -213,7 +220,7 @@ targets:
             assert any("'name' is a required property" in error for error in errors)
         finally:
             os.unlink(manifest_file)
-    
+
     def test_empty_targets_object(self):
         """Test validation with empty targets object."""
         empty_targets = """
@@ -231,7 +238,7 @@ targets: {}
             assert any("should be non-empty" in error for error in errors)
         finally:
             os.unlink(manifest_file)
-    
+
     def test_missing_bundle_target_config_required_fields(self):
         """Test validation with missing required fields in bundle_target_configuration."""
         missing_fields = """
@@ -253,20 +260,22 @@ targets:
         try:
             is_valid, errors, data = validate_manifest_file(manifest_file)
             assert not is_valid
-            assert any("'directory' is a required property" in error for error in errors)
+            assert any(
+                "'directory' is a required property" in error for error in errors
+            )
         finally:
             os.unlink(manifest_file)
 
 
 class TestPipelineManifestValidation:
     """Test PipelineManifest class validation integration."""
-    
+
     def create_temp_manifest(self, content: str) -> str:
         """Create a temporary manifest file with given content."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(content)
             return f.name
-    
+
     def test_valid_manifest_loads_successfully(self):
         """Test that a valid manifest loads without errors."""
         valid_manifest = """
@@ -283,11 +292,11 @@ targets:
         manifest_file = self.create_temp_manifest(valid_manifest)
         try:
             manifest = PipelineManifest.from_file(manifest_file)
-            assert manifest.pipeline_name == 'TestPipeline'
-            assert manifest.domain.name == 'test-domain'
+            assert manifest.pipeline_name == "TestPipeline"
+            assert manifest.domain.name == "test-domain"
         finally:
             os.unlink(manifest_file)
-    
+
     def test_invalid_manifest_raises_value_error(self):
         """Test that an invalid manifest raises ValueError with validation details."""
         invalid_manifest = """
@@ -301,13 +310,13 @@ targets: {}
         try:
             with pytest.raises(ValueError) as exc_info:
                 PipelineManifest.from_file(manifest_file)
-            
+
             error_message = str(exc_info.value)
             assert "Manifest validation failed" in error_message
             assert "does not match" in error_message  # Pattern validation error
         finally:
             os.unlink(manifest_file)
-    
+
     def test_yaml_syntax_error_raises_value_error(self):
         """Test that YAML syntax errors raise ValueError."""
         invalid_yaml = """
@@ -326,7 +335,7 @@ targets:
         try:
             with pytest.raises(ValueError) as exc_info:
                 PipelineManifest.from_file(manifest_file)
-            
+
             error_message = str(exc_info.value)
             assert "Manifest validation failed" in error_message
             assert "YAML syntax error" in error_message

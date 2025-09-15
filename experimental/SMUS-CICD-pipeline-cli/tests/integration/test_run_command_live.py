@@ -1,4 +1,5 @@
 """Integration tests for run command against live Airflow environments."""
+
 import pytest
 from typer.testing import CliRunner
 from smus_cicd.cli import app
@@ -17,7 +18,7 @@ class TestRunCommandLive(IntegrationTestBase):
     def test_run_command_parameter_validation_live(self):
         """Test run command parameter validation with live manifest."""
         runner = CliRunner()
-        
+
         # Test help command works
         result = runner.invoke(app, ["run", "--help"])
         assert result.exit_code == 0
@@ -26,7 +27,7 @@ class TestRunCommandLive(IntegrationTestBase):
     def test_run_command_target_validation_live(self):
         """Test run command target validation with live manifest."""
         runner = CliRunner()
-        
+
         # Test help command works
         result = runner.invoke(app, ["run", "--help"])
         assert result.exit_code == 0
@@ -35,7 +36,7 @@ class TestRunCommandLive(IntegrationTestBase):
     def test_run_command_json_output_structure_live(self):
         """Test run command JSON output structure with live manifest."""
         runner = CliRunner()
-        
+
         # Test help command works
         result = runner.invoke(app, ["run", "--help"])
         assert result.exit_code == 0
@@ -44,16 +45,23 @@ class TestRunCommandLive(IntegrationTestBase):
     def test_run_command_help_and_validation_live(self):
         """Test run command help and basic validation."""
         runner = CliRunner()
-        
+
         # Test help
         result = runner.invoke(app, ["run", "--help"])
         assert result.exit_code == 0
         assert "Run Airflow CLI commands" in result.stdout
-        
+
         # Test with invalid pipeline file
-        result = runner.invoke(app, [
-            "run", "--pipeline", "nonexistent.yaml",
-            "--workflow", "test_dag",
-            "--command", "dags list"
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "run",
+                "--pipeline",
+                "nonexistent.yaml",
+                "--workflow",
+                "test_dag",
+                "--command",
+                "dags list",
+            ],
+        )
         assert result.exit_code == 1

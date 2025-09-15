@@ -1,7 +1,9 @@
 """Pytest configuration for integration tests."""
+
 import pytest
 import sys
 from .base import IntegrationTestBase
+
 
 def pytest_sessionfinish(session, exitstatus):
     """Called after whole test run finished, right before returning the exit status to the system."""

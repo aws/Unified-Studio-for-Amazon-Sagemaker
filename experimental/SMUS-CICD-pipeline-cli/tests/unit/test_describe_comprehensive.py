@@ -1,4 +1,5 @@
 """Comprehensive unit tests for describe command."""
+
 import pytest
 import tempfile
 import os
@@ -11,7 +12,7 @@ class TestDescribeCommand:
 
     def create_manifest_file(self, content):
         """Helper to create temporary manifest file."""
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(content)
             f.flush()
             return f.name
@@ -91,11 +92,11 @@ workflows:
 """
         result = self.run_describe(manifest, ["--connections"])
         assert result.exit_code == 0
-        
+
         # Check pipeline info
         assert "Pipeline: ComplexPipeline" in result.stdout
         assert "Domain: complex-domain (eu-central-1)" in result.stdout
-        
+
         # Check workflows
         assert "Workflows:" in result.stdout
         assert "data_pipeline" in result.stdout
@@ -105,7 +106,7 @@ workflows:
         assert "Engine: MWAA" in result.stdout
         assert "'env': 'production'" in result.stdout
         assert "'timeout': 3600" in result.stdout
-        
+
         # Check targets
         assert "Targets:" in result.stdout
         assert "development: dev-project" in result.stdout
@@ -115,12 +116,12 @@ workflows:
         """Test that different bundle directories are not hardcoded."""
         test_cases = [
             "./bundles",
-            "./custom-bundles", 
+            "./custom-bundles",
             "/absolute/path/bundles",
             "relative/bundles",
-            "~/home-bundles"
+            "~/home-bundles",
         ]
-        
+
         for bundle_dir in test_cases:
             manifest = f"""
 pipelineName: BundleDirTest
@@ -143,10 +144,15 @@ targets:
     def test_different_regions(self):
         """Test that different AWS regions are not hardcoded."""
         regions = [
-            "us-east-1", "us-west-2", "eu-west-1", "eu-central-1",
-            "ap-southeast-1", "ap-northeast-1", "ca-central-1"
+            "us-east-1",
+            "us-west-2",
+            "eu-west-1",
+            "eu-central-1",
+            "ap-southeast-1",
+            "ap-northeast-1",
+            "ca-central-1",
         ]
-        
+
         for region in regions:
             manifest = f"""
 pipelineName: RegionTest
@@ -241,7 +247,10 @@ workflows:
         assert "Pipeline:" in result.stdout
         assert "Targets:" in result.stdout
         assert "Parameters: {'key1': 'value1'}" in result.stdout
-        assert "Parameters: {'string_param': 'test string', 'number_param': 42, 'boolean_param': True}" in result.stdout
+        assert (
+            "Parameters: {'string_param': 'test string', 'number_param': 42, 'boolean_param': True}"
+            in result.stdout
+        )
 
     # Negative test cases
     def test_missing_pipeline_name(self):
@@ -436,7 +445,9 @@ targets:
     def test_nonexistent_manifest_file(self):
         """Test error when manifest file doesn't exist."""
         runner = CliRunner()
-        result = runner.invoke(app, ["describe", "--pipeline", "/nonexistent/file.yaml"])
+        result = runner.invoke(
+            app, ["describe", "--pipeline", "/nonexistent/file.yaml"]
+        )
         assert result.exit_code == 1
         assert "Error describing manifest" in result.stderr
         assert "not found" in result.stderr.lower()
