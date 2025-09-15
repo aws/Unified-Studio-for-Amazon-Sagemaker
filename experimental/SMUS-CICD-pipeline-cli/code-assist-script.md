@@ -191,3 +191,56 @@ When you need to refresh AWS credentials:
 3. Run a test command to confirm: `python scripts/run_tests.py --type integration`
 
 This script ensures that every code change maintains the quality and consistency of the codebase using Python-native tools.
+
+## GitHub PR Validation Using GitHub CLI
+
+### View PR Status and Checks
+```bash
+# View PR details including status checks
+gh pr view <PR-NUMBER> --json statusCheckRollup
+
+# View specific check run logs
+gh run view <RUN-ID> --job <JOB-NAME> --log
+
+# List all check runs for a PR
+gh pr checks <PR-NUMBER>
+
+# View PR diff
+gh pr diff <PR-NUMBER>
+
+# View PR comments and reviews
+gh pr view <PR-NUMBER> --json comments,reviews
+```
+
+### Common GitHub CLI Commands for PR Review
+```bash
+# List all open PRs
+gh pr list
+
+# Check out PR locally
+gh pr checkout <PR-NUMBER>
+
+# View PR status
+gh pr status
+
+# Add a comment to PR
+gh pr comment <PR-NUMBER> --body "Your comment here"
+
+# Request changes or approve PR
+gh pr review <PR-NUMBER> --approve
+gh pr review <PR-NUMBER> --request-changes --body "Changes needed"
+```
+
+### Monitoring CI/CD Pipeline Status
+```bash
+# View recent workflow runs
+gh run list --workflow=".github/workflows/pr-integration-tests.yml"
+
+# Watch workflow run in real-time
+gh run watch
+
+# Download workflow artifacts
+gh run download <RUN-ID>
+```
+
+Note: Replace `<PR-NUMBER>` with the actual PR number and `<RUN-ID>` with the actual run ID from the GitHub Actions workflow.

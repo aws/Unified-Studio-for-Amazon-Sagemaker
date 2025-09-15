@@ -5,6 +5,8 @@ Tests creation and deletion of a single target project.
 
 import pytest
 import time
+import os
+import zipfile
 from pathlib import Path
 from typer.testing import CliRunner
 from tests.integration.base import IntegrationTestBase
@@ -116,6 +118,47 @@ class TestDeletePipeline(IntegrationTestBase):
         """Get the path to the delete test pipeline file."""
         return str(Path(__file__).parent / "delete_test_pipeline.yaml")
 
+    def create_bundle_manually(self):
+        """Create a bundle manually from the code directory."""
+        pipeline_file = self.get_pipeline_file()
+        code_dir = os.path.join(os.path.dirname(pipeline_file), "code")
+        bundles_dir = "/tmp/bundles"
+
+        # Ensure bundles directory exists
+        os.makedirs(bundles_dir, exist_ok=True)
+
+        # Create bundle zip file
+        bundle_path = os.path.join(bundles_dir, "DeleteTestPipeline.zip")
+
+        with zipfile.ZipFile(bundle_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+            # Add storage files - directly under src/
+            src_dir = os.path.join(code_dir, "src")
+            if os.path.exists(src_dir):
+                for root, dirs, files in os.walk(src_dir):
+                    for file in files:
+                        if not file.endswith((".pyc", ".DS_Store")):
+                            file_path = os.path.join(root, file)
+                            # Remove the src/ prefix from the path to avoid src/src
+                            arcname = os.path.join(
+                                "storage", "src", os.path.relpath(file_path, src_dir)
+                            )
+                            zipf.write(file_path, arcname)
+
+            # Add workflow files
+            workflows_dir = os.path.join(code_dir, "workflows")
+            if os.path.exists(workflows_dir):
+                for root, dirs, files in os.walk(workflows_dir):
+                    for file in files:
+                        if not file.endswith((".pyc", ".DS_Store")):
+                            file_path = os.path.join(root, file)
+                            arcname = os.path.join(
+                                "workflows", os.path.relpath(file_path, workflows_dir)
+                            )
+                            zipf.write(file_path, arcname)
+
+        print(f"Created bundle: {bundle_path}")
+        return bundle_path
+
     @pytest.mark.integration
     def test_delete_pipeline_workflow(self):
         """Test complete delete pipeline workflow: describe -> deploy -> delete."""
@@ -125,8 +168,14 @@ class TestDeletePipeline(IntegrationTestBase):
         pipeline_file = self.get_pipeline_file()
         results = []
 
-        # Step 1: Describe pipeline configuration
-        print("\n=== Step 1: Describe Pipeline ===")
+        # Step 1: Create bundle manually
+        print("\n=== Step 1: Create Bundle ===")
+        bundle_path = self.create_bundle_manually()
+        assert os.path.exists(bundle_path), f"Bundle not created: {bundle_path}"
+        print("✅ Bundle created successfully")
+
+        # Step 2: Describe pipeline configuration
+        print("\n=== Step 2: Describe Pipeline ===")
         result = self.run_cli_command(["describe", "--pipeline", pipeline_file])
         results.append(result)
 
@@ -142,10 +191,10 @@ class TestDeletePipeline(IntegrationTestBase):
             print(f"❌ Describe command failed: {result['output']}")
             assert False, f"Describe command failed: {result['output']}"
 
-        # Step 2: Deploy the project (initialize)
-        print("\n=== Step 2: Deploy Project ===")
+        # Step 3: Deploy the project (initialize)
+        print("\n=== Step 3: Deploy Project ===")
         result = self.run_cli_command(
-            ["deploy", "--targets", "delete-test", "--pipeline", pipeline_file]
+            ["deploy", "--targets", "delete-test", "--pipeline", pipeline_file, "--bundle", bundle_path]
         )
         results.append(result)
 
@@ -155,11 +204,6 @@ class TestDeletePipeline(IntegrationTestBase):
         print("✅ Deploy command successful")
         # Wait a bit for deployment to settle
         time.sleep(30)
-
-        # Step 3: Test delete command with confirmation (should be cancelled)
-        print("\n=== Step 3: Test Delete with Confirmation (Cancel) ===")
-        # This will fail because we can't provide interactive input in tests
-        # But we can test the --force flag instead
 
         # Step 4: Test delete command with --force flag
         print("\n=== Step 4: Delete Project with --force ===")

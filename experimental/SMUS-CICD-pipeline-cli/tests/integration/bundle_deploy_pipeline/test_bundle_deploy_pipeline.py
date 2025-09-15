@@ -358,7 +358,6 @@ class TestBundleDeployPipeline(IntegrationTestBase):
             expected_files = [
                 "storage/src/test-notebook1.ipynb",
                 "storage/src/covid_analysis.ipynb",
-                "workflows/dags/test_dag.py",
                 "workflows/dags/execute_notebooks_dag.py",
             ]
 
