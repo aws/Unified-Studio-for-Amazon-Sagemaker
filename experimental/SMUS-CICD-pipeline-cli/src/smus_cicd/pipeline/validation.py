@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 import jsonschema
-import yaml
+
+from ..helpers.utils import load_yaml
 
 
 def load_schema() -> Dict[str, Any]:
@@ -15,8 +16,7 @@ def load_schema() -> Dict[str, Any]:
     if not schema_path.exists():
         raise FileNotFoundError(f"Schema file not found: {schema_path}")
 
-    with open(schema_path, "r") as f:
-        return yaml.safe_load(f)
+    return load_yaml(str(schema_path))
 
 
 def validate_yaml_syntax(manifest_path: str) -> Tuple[bool, str, Dict[str, Any]]:
@@ -27,21 +27,12 @@ def validate_yaml_syntax(manifest_path: str) -> Tuple[bool, str, Dict[str, Any]]
         Tuple of (is_valid, error_message, parsed_data)
     """
     try:
-        with open(manifest_path, "r") as f:
-            data = yaml.safe_load(f)
-
-        # Import here to avoid circular imports
-        from ..helpers.utils import substitute_env_vars
-
-        data = substitute_env_vars(data)
-
+        data = load_yaml(manifest_path)
         return True, "", data
-    except yaml.YAMLError as e:
-        return False, f"YAML syntax error: {e}", {}
     except FileNotFoundError:
         return False, f"File not found: {manifest_path}", {}
     except Exception as e:
-        return False, f"Error reading file: {e}", {}
+        return False, f"YAML syntax error: {e}", {}
 
 
 def validate_manifest_schema(
