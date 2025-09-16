@@ -34,6 +34,10 @@ targets:
     tests:
       folder: tests/integration/multi_target_pipeline/pipeline_tests/
     initialization:
+      domain:
+        name: cicd-test-domain
+        region: ${DEV_DOMAIN_REGION:us-east-2}
+        create: false
       project: 
         create: true  # Enable auto-create for integration tests
         profileName: 'All capabilities'
@@ -54,6 +58,10 @@ targets:
     project: 
       name: integration-test-prod
     initialization:
+      domain:
+        name: cicd-test-domain
+        region: ${DEV_DOMAIN_REGION:us-east-2}
+        create: false
       project: 
         create: true
         profileName: 'All capabilities'

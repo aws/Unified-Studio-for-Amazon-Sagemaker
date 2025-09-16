@@ -59,10 +59,20 @@ class EnvironmentConfig:
 
 
 @dataclass
+class DomainInitConfig:
+    """Domain initialization configuration."""
+
+    name: str
+    region: str
+    create: bool = False
+
+
+@dataclass
 class InitializationConfig:
     """Initialization configuration."""
 
     project: Optional[ProjectConfig] = None
+    domain: Optional[DomainInitConfig] = None
     environments: List[EnvironmentConfig] = field(default_factory=list)
 
 
@@ -213,6 +223,7 @@ class PipelineManifest:
             init_data = target_data.get("initialization")
             if init_data:
                 init_project = None
+                init_domain = None
                 if "project" in init_data:
                     proj_data = init_data["project"]
                     init_project = ProjectConfig(
@@ -223,8 +234,18 @@ class PipelineManifest:
                         contributors=proj_data.get("contributors", []),
                     )
 
+                if "domain" in init_data:
+                    domain_data = init_data["domain"]
+                    init_domain = DomainInitConfig(
+                        name=domain_data.get("name", domain.name),
+                        region=domain_data.get("region", domain.region),
+                        create=domain_data.get("create", False),
+                    )
+
                 initialization = InitializationConfig(
-                    project=init_project, environments=init_data.get("environments", [])
+                    project=init_project,
+                    domain=init_domain,
+                    environments=init_data.get("environments", [])
                 )
 
             # Parse bundle target configuration
