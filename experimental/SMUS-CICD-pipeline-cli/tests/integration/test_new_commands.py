@@ -149,12 +149,12 @@ class TestNewCommandsIntegration(IntegrationTestBase):
             assert result.exit_code == 1
             assert "Error: --workflow parameter is required" in result.output
 
-            # Test missing command parameter
+            # Test command parameter is optional (defaults to triggering workflow)
             result = runner.invoke(
                 app, ["run", "--pipeline", manifest_file, "--workflow", "test_workflow"]
             )
-            assert result.exit_code == 1
-            assert "Error: --command parameter is required" in result.output
+            assert result.exit_code == 1  # Should fail due to no MWAA environment, not due to missing command
+            assert "No healthy MWAA environments found" in result.output
 
             # Test invalid target
             result = runner.invoke(

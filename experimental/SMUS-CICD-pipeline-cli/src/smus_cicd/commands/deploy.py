@@ -7,8 +7,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import typer
 
-from ..helpers import airflow, cloudformation, datazone, deployment
-from ..helpers.error_handler import handle_error, handle_info, handle_success
+from ..helpers import deployment
+from ..helpers.error_handler import handle_error, handle_success
 from ..helpers.project_manager import ProjectManager
 from ..helpers.utils import get_datazone_project_info, load_config
 from ..pipeline import PipelineManifest
@@ -36,7 +36,7 @@ def deploy_command(
 
         # Initialize project if needed
         project_manager = ProjectManager(manifest, config)
-        project_info = project_manager.ensure_project_exists(target_name, target_config)
+        project_manager.ensure_project_exists(target_name, target_config)
 
         # Deploy bundle and track errors
         deployment_success = _deploy_bundle_to_target(
@@ -377,7 +377,7 @@ def _display_deployment_summary(
     workflow_files, workflow_s3_uri = workflow_result
 
     try:
-        typer.echo(f"\n📦 Deployment Summary:")
+        typer.echo("\n📦 Deployment Summary:")
         typer.echo("=" * 50)
 
         # Build tree structure organized by destination
@@ -454,5 +454,5 @@ def _validate_deployed_workflows(
         # Skip validation for now as it needs workflow connection info, not bundle target config
         typer.echo("✅ Workflow validation completed")
     except Exception as e:
-        typer.echo(f"⚠️ Workflow validation failed: {e}")
+        typer.echo("⚠️ Workflow validation failed: " + str(e))
         # Don't fail deployment for validation issues
