@@ -99,7 +99,7 @@ jobs:
       uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-region: us-east-1
-        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
         role-session-name: smus-pipeline-lifecycle-setup
         role-duration-seconds: 43200  # 12 hours for long-running operations
     
@@ -167,7 +167,7 @@ jobs:
       uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-region: us-east-1
-        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
         role-session-name: smus-pipeline-lifecycle-validate
         role-duration-seconds: 43200  # 12 hours for long-running operations
     
@@ -208,7 +208,7 @@ jobs:
       uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-region: us-east-1
-        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
         role-session-name: smus-pipeline-lifecycle-bundle
         role-duration-seconds: 43200  # 12 hours for long-running operations
     
@@ -255,7 +255,7 @@ jobs:
       uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-region: us-east-1
-        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
         role-session-name: smus-pipeline-lifecycle-deploy
         role-duration-seconds: 43200  # 12 hours for long-running operations
     
@@ -302,7 +302,7 @@ jobs:
       uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-region: us-east-1
-        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
         role-session-name: smus-pipeline-lifecycle-test
         role-duration-seconds: 43200  # 12 hours for long-running operations
     
@@ -343,7 +343,7 @@ jobs:
       uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-region: us-east-1
-        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
         role-session-name: smus-pipeline-lifecycle-monitor
         role-duration-seconds: 43200  # 12 hours for long-running operations
     
@@ -385,7 +385,7 @@ jobs:
       uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-region: us-east-1
-        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
         role-session-name: smus-pipeline-lifecycle-execute
         role-duration-seconds: 43200  # 12 hours for long-running operations
     
@@ -440,8 +440,204 @@ jobs:
           --command "tasks state test_dag hello_world $EXECUTION_DATE"
         
         echo "✅ Task state checked on Test target"
+
+  deploy-prod:
+    name: "Step 7 - Deploy to Production Environment"
+    runs-on: ubuntu-latest
+    environment: aws-env-amirbo-6778
+    needs: [setup, execute-workflows-test-target]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-region: us-east-1
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
+        role-session-name: smus-pipeline-lifecycle-deploy-prod
+        role-duration-seconds: 43200  # 12 hours for long-running operations
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+    
+    - name: Download deployment bundle
+      uses: actions/download-artifact@v4
+      with:
+        name: deployment-bundle
+        path: experimental/SMUS-CICD-pipeline-cli/examples/bundles/
+    
+    - name: Deploy to production environment
+      env:
+        PROD_DOMAIN_REGION: ${{ vars.PROD_DOMAIN_REGION }}
+        SMUS_LOG_LEVEL: WARNING
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli/examples
+        smus-cli deploy \
+          --pipeline "${{ needs.setup.outputs.pipeline-file }}" \
+          --targets prod
+        
+        echo "✅ Deployed to production environment"
+
+  run-tests-prod-target:
+    name: "Step 8 - Run Tests (Production Target)"
+    runs-on: ubuntu-latest
+    environment: aws-env-amirbo-6778
+    needs: [setup, deploy-prod]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-region: us-east-1
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
+        role-session-name: smus-pipeline-lifecycle-test-prod
+        role-duration-seconds: 43200  # 12 hours for long-running operations
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+    
+    - name: Run tests on Production target
+      env:
+        PROD_DOMAIN_REGION: ${{ vars.PROD_DOMAIN_REGION }}
+        SMUS_LOG_LEVEL: WARNING
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli/examples
+        smus-cli test \
+          --pipeline "${{ needs.setup.outputs.pipeline-file }}" \
+          --targets prod
+        
+        echo "✅ Tests completed on Production target"
+
+  monitor-pipeline-prod-target:
+    name: "Step 9 - Monitor Pipeline Status (Production Target)"
+    runs-on: ubuntu-latest
+    environment: aws-env-amirbo-6778
+    needs: [setup, run-tests-prod-target]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-region: us-east-1
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
+        role-session-name: smus-pipeline-lifecycle-monitor-prod
+        role-duration-seconds: 43200  # 12 hours for long-running operations
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+    
+    - name: Monitor pipeline status for Production target
+      env:
+        PROD_DOMAIN_REGION: ${{ vars.PROD_DOMAIN_REGION }}
+        SMUS_LOG_LEVEL: WARNING
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli/examples
+        smus-cli monitor \
+          --pipeline "${{ needs.setup.outputs.pipeline-file }}" \
+          --targets prod \
+          --output TEXT
+        
+        echo "✅ Pipeline monitoring completed for Production target"
+
+  execute-workflows-prod-target:
+    name: "Step 10 - Execute Workflow Commands (Production Target)"
+    runs-on: ubuntu-latest
+    environment: aws-env-amirbo-6778
+    needs: [setup, monitor-pipeline-prod-target]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-region: us-east-1
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
+        role-session-name: smus-pipeline-lifecycle-execute-prod
+        role-duration-seconds: 43200  # 12 hours for long-running operations
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+    
+    - name: Trigger DAG on Production target
+      env:
+        PROD_DOMAIN_REGION: ${{ vars.PROD_DOMAIN_REGION }}
+        SMUS_LOG_LEVEL: WARNING
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli/examples
+        smus-cli run \
+          --pipeline "${{ needs.setup.outputs.pipeline-file }}" \
+          --targets prod --workflow test_dag \
+          --command "dags trigger test_dag"
+        
+        echo "✅ DAG triggered on Production target"
+    
+    - name: List DAG tasks on Production target
+      env:
+        PROD_DOMAIN_REGION: ${{ vars.PROD_DOMAIN_REGION }}
+        SMUS_LOG_LEVEL: WARNING
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli/examples
+        smus-cli run \
+          --pipeline "${{ needs.setup.outputs.pipeline-file }}" \
+          --targets prod --workflow test_dag \
+          --command "tasks list test_dag"
+        
+        echo "✅ DAG tasks listed on Production target"
+    
+    - name: Check task state on Production target
+      env:
+        PROD_DOMAIN_REGION: ${{ vars.PROD_DOMAIN_REGION }}
+        SMUS_LOG_LEVEL: WARNING
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli/examples
+        EXECUTION_DATE=$(date -u +'manual__%Y-%m-%dT%H:%M:%S+00:00')
+        smus-cli run \
+          --pipeline "${{ needs.setup.outputs.pipeline-file }}" \
+          --targets prod --workflow test_dag \
+          --command "tasks state test_dag hello_world $EXECUTION_DATE"
+        
+        echo "✅ Task state checked on Production target"
         echo "🎉 Pipeline lifecycle demo completed successfully!"
         echo "📋 Resources left in place for inspection:"
-        echo "  - Project: dev-marketing-test"
+        echo "  - Test Project: dev-marketing-test"
+        echo "  - Production Project: prod-marketing"
         echo "  - Domain: cicd-test-domain"
-        echo "  - MWAA Environment: (if created)"
+        echo "  - MWAA Environments: (if created)"

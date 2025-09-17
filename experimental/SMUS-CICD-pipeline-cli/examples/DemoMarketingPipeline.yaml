@@ -80,6 +80,36 @@ targets:
     tests:
       folder: ./tests
   
+  prod:
+    domain:
+      name: cicd-test-domain
+      region: ${PROD_DOMAIN_REGION:us-east-1}
+    stage: PROD
+    project:
+      name: prod-marketing
+      create: true  # Auto-create project
+    
+    initialization:
+      project:
+        create: true
+        profileName: 'All capabilities'
+        owners: [arn:aws:iam::588738596778:role/GitHubActionsRole-SMUS-CLI-Tests, Eng1]
+        contributors: []
+      environments: 
+        - EnvironmentConfigurationName: 'OnDemand Workflows'     
+    # Bundle target configuration
+    bundle_target_configuration:
+      storage:
+        connectionName: default.s3_shared
+        directory: 'src'        
+      workflows:
+        connectionName: default.s3_shared
+        directory: 'workflows'
+    
+    # Test configuration
+    tests:
+      folder: ./tests
+  
 
 # Workflows configuration
 workflows:

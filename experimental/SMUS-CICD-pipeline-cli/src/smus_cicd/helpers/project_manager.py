@@ -34,7 +34,7 @@ class ProjectManager:
 
         # Check if project exists in DataZone first
         # Ensure config has region for get_datazone_project_info
-        config_with_region = {**self.config, "region": region}
+        config_with_region = {**self.config, "domain": {"region": region}}
         project_info = get_datazone_project_info(project_name, config_with_region)
         logger.debug(f"project_info keys: {list(project_info.keys())}")
         logger.debug(f"project_info has error: {'error' in project_info}")
@@ -84,6 +84,9 @@ class ProjectManager:
             else:
                 print(
                     "🔍 DEBUG: Project creation failed - NOT calling _ensure_environments_exist"
+                )
+                raise Exception(
+                    f"Project creation failed: {project_info.get('error', 'Unknown error')}"
                 )
             return project_info
 
@@ -182,7 +185,7 @@ class ProjectManager:
             handle_error("Failed to manage project memberships")
 
         handle_success("Target infrastructure ready")
-        config_with_region = {**self.config, "region": region}
+        config_with_region = {**self.config, "domain": {"region": region}}
         final_project_info = get_datazone_project_info(project_name, config_with_region)
         print(
             f"🔍 DEBUG: Final project_info keys: {list(final_project_info.keys()) if isinstance(final_project_info, dict) else type(final_project_info)}"
@@ -192,6 +195,7 @@ class ProjectManager:
         )
         if isinstance(final_project_info, dict) and "error" in final_project_info:
             print(f"🔍 DEBUG: Actual error content: {final_project_info['error']}")
+            raise Exception(f"Project validation failed: {final_project_info['error']}")
         return final_project_info
 
     def _update_existing_project(
@@ -199,13 +203,17 @@ class ProjectManager:
     ):
         """Update existing project stack tags and memberships."""
         typer.echo("Updating project stack tags...")
-        cloudformation.update_project_stack_tags(
-            self.manifest.pipeline_name,
-            target_name,
-            project_name,
-            region,
-            target_config.stage,
-        )
+
+        # Construct stack name and tags
+        stack_name = f"{self.manifest.pipeline_name}-{target_name}-{project_name}"
+        tags = [
+            {"Key": "Pipeline", "Value": self.manifest.pipeline_name},
+            {"Key": "Target", "Value": target_name},
+            {"Key": "Project", "Value": project_name},
+            {"Key": "Stage", "Value": target_config.stage},
+        ]
+
+        cloudformation.update_project_stack_tags(stack_name, region, tags)
 
         owners, contributors = self._extract_memberships(target_config)
         if owners or contributors:
