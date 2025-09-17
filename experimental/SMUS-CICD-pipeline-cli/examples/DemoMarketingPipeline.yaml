@@ -83,7 +83,7 @@ targets:
   prod:
     domain:
       name: cicd-test-domain
-      region: us-east-1
+      region: ${PROD_DOMAIN_REGION:us-east-1}
     stage: PROD
     project:
       name: prod-marketing
