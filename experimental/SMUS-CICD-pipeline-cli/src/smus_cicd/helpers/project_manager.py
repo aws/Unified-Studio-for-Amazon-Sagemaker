@@ -85,7 +85,9 @@ class ProjectManager:
                 print(
                     "🔍 DEBUG: Project creation failed - NOT calling _ensure_environments_exist"
                 )
-                raise Exception(f"Project creation failed: {project_info.get('error', 'Unknown error')}")
+                raise Exception(
+                    f"Project creation failed: {project_info.get('error', 'Unknown error')}"
+                )
             return project_info
 
         # Project doesn't exist and we're not configured to create it
@@ -201,13 +203,17 @@ class ProjectManager:
     ):
         """Update existing project stack tags and memberships."""
         typer.echo("Updating project stack tags...")
-        cloudformation.update_project_stack_tags(
-            self.manifest.pipeline_name,
-            target_name,
-            project_name,
-            region,
-            target_config.stage,
-        )
+
+        # Construct stack name and tags
+        stack_name = f"{self.manifest.pipeline_name}-{target_name}-{project_name}"
+        tags = [
+            {"Key": "Pipeline", "Value": self.manifest.pipeline_name},
+            {"Key": "Target", "Value": target_name},
+            {"Key": "Project", "Value": project_name},
+            {"Key": "Stage", "Value": target_config.stage},
+        ]
+
+        cloudformation.update_project_stack_tags(stack_name, region, tags)
 
         owners, contributors = self._extract_memberships(target_config)
         if owners or contributors:
