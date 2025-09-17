@@ -35,7 +35,7 @@ jobs:
     - name: Run unit tests with coverage
       run: |
         cd experimental/SMUS-CICD-pipeline-cli
-        python scripts/run_tests.py --type unit --no-html-report
+        python tests/run_tests.py --type unit --no-html-report
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
@@ -120,3 +120,61 @@ jobs:
           experimental/SMUS-CICD-pipeline-cli/tests/reports/*.html
           experimental/SMUS-CICD-pipeline-cli/tests/reports/*.xml
         retention-days: 7
+
+  delete-pipeline-test:
+    runs-on: ubuntu-latest
+    environment: aws-env
+    needs: unit-tests
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Validate environment variables
+      env:
+        DEV_DOMAIN_REGION: ${{ vars.DEV_DOMAIN_REGION }}
+      run: |
+        echo "Validating required environment variables..."
+        echo "DEV_DOMAIN_REGION: ${DEV_DOMAIN_REGION:-NOT_SET}"
+        if [ -z "$DEV_DOMAIN_REGION" ]; then
+          echo "❌ ERROR: DEV_DOMAIN_REGION environment variable is not set in aws-env environment"
+          echo "Please set DEV_DOMAIN_REGION in GitHub repository settings > Environments > aws-env"
+          exit 1
+        fi
+        echo "✅ All required environment variables are set"
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-region: us-east-2
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
+        role-session-name: smus-cicd-delete-pipeline-test
+        role-duration-seconds: 43200  # 12 hours for long-running operations
+    
+    - name: Install dependencies
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+    
+    - name: Run delete pipeline test
+      env:
+        DEV_DOMAIN_REGION: ${{ vars.DEV_DOMAIN_REGION }}
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli
+        echo "🗑️ Running delete pipeline test..."
+        python -m pytest tests/integration/delete_test_pipeline/test_delete_pipeline.py -v -s --tb=short
+      timeout-minutes: 20
+    
+    - name: Upload delete test reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: delete-test-reports-${{ github.run_number }}
+        path: |
+          experimental/SMUS-CICD-pipeline-cli/tests/reports/
+        retention-days: 30

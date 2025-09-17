@@ -88,23 +88,6 @@ def bundle_command(
 
         # Use first target for now (bundle command typically works with single target)
         target_name = target_list[0] if target_list else None
-        if "domain" in manifest:
-            config["domain"] = manifest["domain"]
-            config["region"] = manifest["domain"].get("region")
-            if not config["region"]:
-                raise ValueError(
-                    "Region must be specified in manifest domain configuration"
-                )
-
-        region = config.get("region")
-        if not region:
-            raise ValueError("Region must be specified in configuration or manifest")
-
-        # Check if bundle section exists
-        bundle_config = manifest.get("bundle", {})
-        if not bundle_config:
-            typer.echo("Error: No bundle section found in pipeline manifest", err=True)
-            raise typer.Exit(1)
 
         # Get target configuration
         targets = manifest.get("targets", {})
@@ -129,6 +112,17 @@ def bundle_command(
 
         target_config = targets[target_name]
         project_name = target_config.get("project", {}).get("name")
+
+        # Get region from target's domain configuration
+        if "domain" in target_config:
+            config["domain"] = target_config["domain"]
+            config["region"] = target_config["domain"].get("region")
+
+        region = config.get("region")
+        if not region:
+            raise ValueError(
+                "Region must be specified in target domain configuration or AWS config"
+            )
 
         typer.echo(f"Creating bundle for target: {target_name}")
         typer.echo(f"Project: {project_name}")

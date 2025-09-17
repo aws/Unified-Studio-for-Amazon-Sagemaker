@@ -6,7 +6,7 @@ from typing import Optional
 
 import typer
 
-from ..helpers.utils import get_datazone_project_info
+from ..helpers.utils import get_datazone_project_info, load_config
 from ..pipeline import PipelineManifest
 
 
@@ -16,18 +16,6 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
         # Load pipeline manifest using centralized parser
         manifest = PipelineManifest.from_file(manifest_file)
 
-        # Validate MWAA health before monitoring
-        from ..helpers.mwaa import validate_mwaa_health
-        from ..helpers.utils import load_config
-
-        config = load_config()
-        # Add domain information from manifest for proper connection retrieval
-        config["domain"] = {
-            "name": manifest.domain.name,
-            "region": manifest.domain.region,
-        }
-        config["region"] = manifest.domain.region
-
         # Parse targets - handle single target or comma-separated list
         target_list = []
         if targets:
@@ -36,7 +24,6 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
         # Prepare output data structure for JSON format
         output_data = {
             "pipeline": manifest.pipeline_name,
-            "domain": {"name": manifest.domain.name, "region": manifest.domain.region},
             "targets": {},
             "monitoring_timestamp": None,
         }
@@ -68,15 +55,27 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
         # TEXT output header
         if output.upper() != "JSON":
             typer.echo(f"Pipeline: {manifest.pipeline_name}")
-            typer.echo(f"Domain: {manifest.domain.name} ({manifest.domain.region})")
-            typer.echo("\n🔍 Monitoring Status:")
 
         # Validate MWAA health for targets before monitoring
         mwaa_healthy_targets = []
         for target_name, target_config in targets_to_monitor.items():
+            # Load AWS config
+            config = load_config()
+            config["domain"] = {
+                "name": target_config.domain.name,
+                "region": target_config.domain.region,
+            }
+            config["region"] = target_config.domain.region
+
             project_name = target_config.project.name
             if output.upper() != "JSON":
                 typer.echo(f"\n📋 Target: {target_name} (Project: {project_name})")
+                typer.echo(
+                    f"   Domain: {target_config.domain.name} ({target_config.domain.region})"
+                )
+
+            # Validate MWAA health before monitoring
+            from ..helpers.mwaa import validate_mwaa_health
 
             if validate_mwaa_health(project_name, config):
                 mwaa_healthy_targets.append(target_name)
@@ -108,6 +107,10 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
 
             target_data = {
                 "project": {"name": target_config.project.name},
+                "domain": {
+                    "name": target_config.domain.name,
+                    "region": target_config.domain.region,
+                },
                 "status": "unknown",
                 "workflows": {},
                 "connections": {},
@@ -120,11 +123,11 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
             try:
                 config = load_config()
                 config["domain"] = {
-                    "name": manifest.domain.name,
-                    "region": manifest.domain.region,
+                    "name": target_config.domain.name,
+                    "region": target_config.domain.region,
                 }
-                config["region"] = manifest.domain.region
-                config["domain_name"] = manifest.domain.name
+                config["region"] = target_config.domain.region
+                config["domain_name"] = target_config.domain.name
 
                 project_info = get_datazone_project_info(
                     target_config.project.name, config
@@ -180,10 +183,10 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
 
                                     # Get DAG list and details
                                     existing_workflows = mwaa.list_dags(
-                                        env_name, manifest.domain.region, conn_info
+                                        env_name, target_config.domain.region, conn_info
                                     )
                                     all_dag_details = mwaa.get_all_dag_details(
-                                        env_name, manifest.domain.region, conn_info
+                                        env_name, target_config.domain.region, conn_info
                                     )
 
                                     workflow_data["status"] = "healthy"
@@ -193,7 +196,9 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
 
                                         # Get Airflow UI URL
                                         airflow_url = mwaa.get_airflow_ui_url(
-                                            env_name, manifest.domain.region, conn_info
+                                            env_name,
+                                            target_config.domain.region,
+                                            conn_info,
                                         )
                                         if airflow_url:
                                             # Format as clickable hyperlink
@@ -234,7 +239,7 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
                                             dag_runs = mwaa.get_dag_runs(
                                                 dag_name,
                                                 env_name,
-                                                manifest.domain.region,
+                                                target_config.domain.region,
                                                 conn_info,
                                                 limit=5,
                                             )

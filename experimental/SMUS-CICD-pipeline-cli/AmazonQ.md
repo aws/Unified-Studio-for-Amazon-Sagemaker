@@ -1,0 +1,246 @@
+# Code Assist Script
+
+## Automated Workflow for Code Changes
+
+When making any code changes to the SMUS CI/CD CLI, follow this automated workflow to ensure consistency and quality:
+
+### 0. AWS Credentials Setup (when needed)
+```bash
+# Check AWS credentials using test runner
+python tests/run_tests.py --type integration
+# If credentials are missing, you'll see a warning
+
+# Or manually:
+isenguardcli
+aws sts get-caller-identity
+```
+
+### 1. Pre-Change Validation
+```bash
+# Verify current state is clean
+python tests/run_tests.py --type unit
+python tests/run_tests.py --type integration
+git status
+```
+
+### 2. Make Code Changes
+- Implement the requested feature/fix
+- Update relevant docstrings and comments
+- **Always run linting checks after code changes:**
+  ```bash
+  # Check code formatting and imports
+  flake8 src/smus_cicd/ --config=setup.cfg
+  black --check src/smus_cicd/
+  isort --check-only src/smus_cicd/
+  
+  # Auto-fix formatting issues
+  black src/smus_cicd/
+  isort src/smus_cicd/
+  ```
+
+### 3. Update Test Cases
+```bash
+# Run tests to identify failures
+python tests/run_tests.py --type unit
+
+# Fix any failing tests by:
+# - Updating test expectations to match new behavior
+# - Adding new test cases for new functionality
+# - Ensuring mock objects match actual implementation
+# - Verifying CLI parameter usage is correct
+```
+
+### 4. Update README and Documentation
+```bash
+# Update README.md if:
+# - CLI syntax changed
+# - New commands added
+# - Examples need updating
+# - Diagrams need modification
+
+# Verify examples work by running tests
+python tests/run_tests.py --type all
+```
+
+### 5. Integration Test Validation
+```bash
+# Run integration tests
+python tests/run_tests.py --type integration
+
+# For faster iteration, skip slow tests:
+python tests/run_tests.py --type integration --skip-slow
+```
+
+### 6. Final Validation and Commit
+```bash
+# Full validation with coverage
+python tests/run_tests.py --type all
+
+# Commit changes
+git add .
+git commit -m "Descriptive commit message
+
+- List specific changes made
+- Note test updates
+- Note documentation updates"
+
+# Verify clean state
+git status
+```
+
+## Test Runner Options
+
+```bash
+# Available test types:
+python tests/run_tests.py --type unit           # Unit tests only
+python tests/run_tests.py --type integration    # Integration tests only
+python tests/run_tests.py --type all            # All tests (default)
+
+# Additional options:
+--no-coverage        # Skip coverage analysis
+--no-html-report    # Skip HTML test results and coverage reports
+--skip-slow         # Skip slow tests (marked with @pytest.mark.slow)
+--coverage-only     # Only generate coverage report from existing data
+
+# Alternative using pytest directly:
+pytest tests/unit/                          # Unit tests
+pytest tests/integration/ -m "not slow"     # Integration tests (skip slow)
+```
+
+## Direct Test Execution (without run_tests.py)
+
+### Running Tests Directly
+For running tests directly without using the run_tests.py script:
+
+#### Unit Tests
+```bash
+cd experimental/SMUS-CICD-pipeline-cli
+python -m pytest tests/unit -v
+```
+
+#### Integration Tests
+```bash
+cd experimental/SMUS-CICD-pipeline-cli
+python -m pytest tests/integration -v
+```
+
+Integration tests are located in `tests/integration/` and include:
+- Basic pipeline tests
+- Multi-target pipeline tests
+- Bundle deploy pipeline tests
+- Test pipeline creation/deletion
+- End-to-end pipeline tests
+
+Important Note: These are pytest-based integration tests, NOT Hydra tests. Do not attempt to run them using the Hydra test platform.
+
+## Checklist for Any Code Change
+
+- [ ] AWS credentials configured (when needed)
+- [ ] **Code formatting and imports are clean:**
+  - [ ] `flake8 src/smus_cicd/ --config=setup.cfg` passes
+  - [ ] `black --check src/smus_cicd/` passes  
+  - [ ] `isort --check-only src/smus_cicd/` passes
+- [ ] Unit tests pass
+- [ ] Integration tests pass (basic suite)
+- [ ] README examples are accurate and tested
+- [ ] CLI help text is updated if needed
+- [ ] New functionality has corresponding tests
+- [ ] Mock objects match real implementation
+- [ ] CLI parameter usage is consistent
+- [ ] Documentation reflects actual behavior
+- [ ] Check that the code and markdown files don't contain aws account ids, web addresses, or host names. Mask all of these before committing.
+- [ ] Check that lint is passing
+- [ ] Don't swallow exceptions, if an error is thrown, it must be logged or handled
+- [ ] All changes are committed
+
+## Common Test Patterns to Maintain
+
+### Unit Test Patterns
+- Mock objects need proper attributes, not dictionaries
+- Test expectations should match actual output format
+- Use proper patch decorators for dependencies
+
+### Integration Test Patterns
+- Use `["describe", "--pipeline", file]` not `["describe", file]`
+- Expected exit codes should match test framework expectations
+- Rename DAG files to avoid pytest collection (`.dag` extension)
+
+### README Patterns
+- All CLI examples use correct parameter syntax
+- Include realistic command outputs
+- Keep examples concise but informative
+- Verify examples actually work before documenting
+
+## Project Structure (Python-Native)
+
+```
+smus_cicd/
+├── pyproject.toml          # Modern Python project config
+├── tests/
+│   └── run_tests.py       # Test runner script
+├── smus_cicd/             # Main package
+├── tests/                 # Test suite
+└── README.md              # Documentation
+```
+
+## AWS Credential Management
+
+When you need to refresh AWS credentials:
+1. Run `isenguardcli` to get fresh credentials
+2. Verify with `aws sts get-caller-identity`
+3. Run a test command to confirm: `python tests/run_tests.py --type integration`
+
+This script ensures that every code change maintains the quality and consistency of the codebase using Python-native tools.
+
+## GitHub PR Validation Using GitHub CLI
+
+### View PR Status and Checks
+```bash
+# View PR details including status checks
+gh pr view <PR-NUMBER> --json statusCheckRollup
+
+# View specific check run logs
+gh run view <RUN-ID> --job <JOB-NAME> --log
+
+# List all check runs for a PR
+gh pr checks <PR-NUMBER>
+
+# View PR diff
+gh pr diff <PR-NUMBER>
+
+# View PR comments and reviews
+gh pr view <PR-NUMBER> --json comments,reviews
+```
+
+### Common GitHub CLI Commands for PR Review
+```bash
+# List all open PRs
+gh pr list
+
+# Check out PR locally
+gh pr checkout <PR-NUMBER>
+
+# View PR status
+gh pr status
+
+# Add a comment to PR
+gh pr comment <PR-NUMBER> --body "Your comment here"
+
+# Request changes or approve PR
+gh pr review <PR-NUMBER> --approve
+gh pr review <PR-NUMBER> --request-changes --body "Changes needed"
+```
+
+### Monitoring CI/CD Pipeline Status
+```bash
+# View recent workflow runs
+gh run list --workflow=".github/workflows/pr-integration-tests.yml"
+
+# Watch workflow run in real-time
+gh run watch
+
+# Download workflow artifacts
+gh run download <RUN-ID>
+```
+
+Note: Replace `<PR-NUMBER>` with the actual PR number and `<RUN-ID>` with the actual run ID from the GitHub Actions workflow.

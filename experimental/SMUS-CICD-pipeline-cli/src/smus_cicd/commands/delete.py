@@ -59,15 +59,14 @@ def delete_command(
         # Show what will be deleted
         if output.upper() != "JSON":
             console.print(f"[yellow]Pipeline:[/yellow] {manifest.pipeline_name}")
-            console.print(
-                f"[yellow]Domain:[/yellow] {manifest.domain.name} ({manifest.domain.region})"
-            )
             console.print()
             console.print("[yellow]Targets to delete:[/yellow]")
 
             for target_name in target_list:
                 target = manifest.targets[target_name]
-                console.print(f"  - {target_name}: {target.project.name}")
+                console.print(
+                    f"  - {target_name}: {target.project.name} (Domain: {target.domain.name})"
+                )
 
         # Confirmation prompt (unless --force)
         if not force:
@@ -81,14 +80,6 @@ def delete_command(
                     console.print("Deletion cancelled.")
                 return  # Just return instead of raising Exit
 
-        # Get domain ID
-        domain_id = get_domain_id_by_name(manifest.domain.name, manifest.domain.region)
-        if not domain_id:
-            console.print(
-                f"[red]Error: Domain '{manifest.domain.name}' not found[/red]"
-            )
-            raise typer.Exit(1)
-
         # Delete each target
         results = []
         for target_name in target_list:
@@ -97,11 +88,29 @@ def delete_command(
                 console.print(f"\n[blue]🗑️  Deleting target: {target_name}[/blue]")
 
             try:
+                # Get domain ID for this target
+                domain_id = get_domain_id_by_name(
+                    target.domain.name, target.domain.region
+                )
+                if not domain_id:
+                    console.print(
+                        f"[red]Error: Domain '{target.domain.name}' not found[/red]"
+                    )
+                    results.append(
+                        {
+                            "target": target_name,
+                            "project_name": target.project.name,
+                            "status": "error",
+                            "message": f"Domain '{target.domain.name}' not found",
+                        }
+                    )
+                    continue
+
                 # Only delete CloudFormation stack - this will delete the project automatically
                 stack_deleted = delete_project_stack(
                     target.project.name,
-                    manifest.domain.name,
-                    manifest.domain.region,
+                    target.domain.name,
+                    target.domain.region,
                     manifest.pipeline_name,
                     target_name,
                     output,
@@ -166,7 +175,6 @@ def delete_command(
                 json.dumps(
                     {
                         "pipeline": manifest.pipeline_name,
-                        "domain": manifest.domain.name,
                         "results": results,
                     },
                     indent=2,

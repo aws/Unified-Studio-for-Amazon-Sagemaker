@@ -1,5 +1,12 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: 'VPC setup for SageMaker Unified Studio with private subnets and VPC endpoints'
+
+# This template creates a VPC, 3 private subnets in 3 different
+# availability zones (to be used with SageMaker Unified Studio), and a public subnet
+# to allow connectivity to internet. The template creates a route from each
+# private subnets to a NAT gateway with EIP in the public subnet, and
+# a route in the public subnet to an IGW.
+# This setup enables internet connectivity from SageMaker Unified Studio VPC which allows
+# usage of all AWS services.
 
 Parameters:
   useVpcEndpoints:
@@ -8,40 +15,149 @@ Parameters:
       - true
       - false
     Default: false
-    Description: Create VPC endpoints for secure communication
+    Description: >
+      You are not required to use VPC endpoints with Amazon SageMaker Unified Studio. The data sent via VPC endpoints that interacts with the AWS
+      services does not leave the AWS network and does not reach public internet. If you choose to create VPC endpoints for more secure
+      communication, you might incur extra charges. For more information, see AWS PrivateLink pricing at
+      https://aws.amazon.com/privatelink/pricing/.
 
 Mappings:
+  # found with describe-vpc-endpoint-services --service-names com.amazonaws.<region>.redshift-serverless
+  # AZ IDs are fetched with aws ec2 describe-availability-zones --region <region> --query 'AvailabilityZones[*].[ZoneName, ZoneId]' --output text
   AvailabilityZonesId:
     eu-west-1:
       AZ1: euw1-az1
       AZ2: euw1-az2
       AZ3: euw1-az3
+      AZ4: ""
     us-east-1:
       AZ1: use1-az1
       AZ2: use1-az2
       AZ3: use1-az4
-    us-west-1:
-      AZ1: usw1-az1
-      AZ2: usw1-az3
-      AZ3: ""
+      AZ4: use1-az6
     us-west-2:
       AZ1: usw2-az1
       AZ2: usw2-az2
       AZ3: usw2-az3
+      AZ4: ""
     us-east-2:
       AZ1: use2-az1
       AZ2: use2-az2
       AZ3: use2-az3
+      AZ4: ""
     eu-central-1:
       AZ1: euc1-az2
       AZ2: euc1-az3
       AZ3: euc1-az1
-
+      AZ4: ""
+    sa-east-1:
+      AZ1: sae1-az1
+      AZ2: sae1-az2
+      AZ3: sae1-az3
+      AZ4: ""
+    ap-northeast-2:
+      AZ1: apne2-az1
+      AZ2: apne2-az2
+      AZ3: apne2-az3
+      AZ4: ""
+    eu-west-2:
+      AZ1: euw2-az2
+      AZ2: euw2-az3
+      AZ3: euw2-az1
+      AZ4: ""
+    ap-northeast-1:
+      AZ1: apne1-az4
+      AZ2: apne1-az1
+      AZ3: apne1-az2
+      AZ4: ""
+    ap-southeast-1:
+      AZ1: apse1-az2
+      AZ2: apse1-az1
+      AZ3: apse1-az3
+      AZ4: ""
+    ap-southeast-2:
+      AZ1: apse2-az3
+      AZ2: apse2-az1
+      AZ3: apse2-az2
+      AZ4: ""
+    ca-central-1:
+      AZ1: cac1-az1
+      AZ2: cac1-az2
+      AZ3: cac1-az4
+      AZ4: ""
+    ap-south-1:
+      AZ1: aps1-az1
+      AZ2: aps1-az2
+      AZ3: aps1-az3
+      AZ4: ""
+    eu-west-3:
+      AZ1: euw3-az1
+      AZ2: euw3-az2
+      AZ3: euw3-az3
+      AZ4: "" 
+    eu-north-1:
+      AZ1: eun1-az1
+      AZ2: eun1-az2
+      AZ3: eun1-az3
+      AZ4: ""
+    af-south-1:
+      AZ1: afs1-az1
+      AZ2: afs1-az2
+      AZ3: afs1-az3
+      AZ4: ""
+    ap-east-1:
+      AZ1: ape1-az1
+      AZ2: ape1-az2
+      AZ3: ape1-az3
+      AZ4: ""
+    eu-south-2:
+      AZ1: eus2-az1
+      AZ2: eus2-az2
+      AZ3: eus2-az3
+      AZ4: ""
+    eu-central-2:
+      AZ1: euc2-az1
+      AZ2: euc2-az2
+      AZ3: euc2-az3
+      AZ4: ""
 Conditions:
   useVpcEndpoints: !Equals [!Ref useVpcEndpoints, "true"]
+
+  codeWhispererEnabledRegion: !Equals [!Ref "AWS::Region", 'us-east-1']
+  qEnabledRegion: !Equals [!Ref "AWS::Region", 'us-east-1']
+  isUSEast1: !Equals [!Ref "AWS::Region", 'us-east-1']
+  isSAEast1: !Equals [!Ref "AWS::Region", 'sa-east-1']
+  isCACentral1: !Equals [!Ref "AWS::Region", 'ca-central-1']
+  
   hasAZ1ForRegion: !Not [!Equals [!FindInMap [AvailabilityZonesId, !Ref "AWS::Region", AZ1], ""]]
   hasAZ2ForRegion: !Not [!Equals [!FindInMap [AvailabilityZonesId, !Ref "AWS::Region", AZ2], ""]]
   hasAZ3ForRegion: !Not [!Equals [!FindInMap [AvailabilityZonesId, !Ref "AWS::Region", AZ3], ""]]
+  hasAZ4ForRegion: !Not [!Equals [!FindInMap [AvailabilityZonesId, !Ref "AWS::Region", AZ4], ""]]
+  
+  createVPCEWithTwoSubnets: !And [!Condition useVpcEndpoints, !Condition hasAZ1ForRegion, !Condition hasAZ2ForRegion, !Not [!Condition hasAZ3ForRegion]]
+  createVPCEWithThreeSubnets: !And [!Condition useVpcEndpoints, !Condition hasAZ1ForRegion, !Condition hasAZ2ForRegion, !Condition hasAZ3ForRegion]
+
+  createVPCEWithTwoSubnetsRedshiftServerless: !And [!Condition useVpcEndpoints, !Condition hasAZ1ForRegion, !Condition hasAZ2ForRegion, !Not [!Condition hasAZ3ForRegion]]
+  createVPCEWithThreeSubnetsRedshiftServerlessNotUSEast1: !And [!Condition useVpcEndpoints, !Condition hasAZ1ForRegion, !Condition hasAZ2ForRegion, !Condition hasAZ3ForRegion, !Not [!Condition isUSEast1]]
+  createVPCEWithThreeSubnetsRedshiftServerlessUSEast1: !And [!Condition useVpcEndpoints, !Condition hasAZ1ForRegion, !Condition hasAZ2ForRegion, !Condition hasAZ4ForRegion, !Condition isUSEast1]
+
+  createVPCEWithTwoSubnetsCodeWhisperer: !And [!Condition useVpcEndpoints, !Condition codeWhispererEnabledRegion, !Condition createVPCEWithTwoSubnets]
+  createVPCEWithThreeSubnetsCodeWhisperer: !And [!Condition useVpcEndpoints, !Condition codeWhispererEnabledRegion, !Condition createVPCEWithThreeSubnets]
+
+  createVPCEWithTwoSubnetsQ: !And [!Condition useVpcEndpoints, !Condition qEnabledRegion, !Condition createVPCEWithTwoSubnets]
+  createVPCEWithThreeSubnetsQ: !And [!Condition useVpcEndpoints, !Condition qEnabledRegion, !Condition createVPCEWithThreeSubnets]
+
+  createVPCEWithTwoSubnetsCodeCommit: !And [!Condition useVpcEndpoints, !Condition isSAEast1]
+  createVPCEWithThreeSubnetsCodeCommit: !And [!Condition useVpcEndpoints, !Not [!Condition isSAEast1]]
+
+  createVPCEWithTwoSubnetsGitCodeCommit: !And [!Condition useVpcEndpoints, !Condition isSAEast1]
+  createVPCEWithThreeSubnetsGitCodeCommit: !And [!Condition useVpcEndpoints, !Not [!Condition isSAEast1]]
+
+  createVPCEWithTwoSubnetsEMR: !And [!Condition useVpcEndpoints, !Condition isCACentral1]
+  createVPCEWithThreeSubnetsEMR: !And [!Condition useVpcEndpoints, !Not [!Condition isCACentral1]]
+
+  createVPCEWithTwoSubnetsRedshift: !And [!Condition useVpcEndpoints, !Condition isCACentral1]
+  createVPCEWithThreeSubnetsRedshift: !And [!Condition useVpcEndpoints, !Not [!Condition isCACentral1]]
 
 Resources:
   SageMakerUnifiedStudioVpc:
@@ -57,7 +173,7 @@ Resources:
           Value: 'SageMakerUnifiedStudioVPC'
         - Key: for-use-with-amazon-emr-managed-policies
           Value: true
-
+  
   SageMakerUnifiedStudioSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -80,6 +196,7 @@ Resources:
           Value: true
       VpcId: !Ref SageMakerUnifiedStudioVpc
 
+
   SageMakerUnifiedStudioPublicSubnet:
     Type: AWS::EC2::Subnet
     Properties:
@@ -91,6 +208,26 @@ Resources:
           Value: true
         - Key: Name
           Value: 'SageMakerUnifiedStudioPublicSubnet'
+        - Key: for-use-with-amazon-emr-managed-policies
+          Value: true
+
+  PublicRouteTableIGWRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref SageMakerUnifiedStudioVpcInternetGateway
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref SageMakerUnifiedStudioVpc
+
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref SageMakerUnifiedStudioPublicSubnet
 
   SageMakerUnifiedStudioPrivateSubnet1:
     Condition: hasAZ1ForRegion
@@ -104,6 +241,8 @@ Resources:
           Value: true
         - Key: Name
           Value: 'SageMakerUnifiedStudioPrivateSubnet1'
+        - Key: for-use-with-amazon-emr-managed-policies
+          Value: true
 
   SageMakerUnifiedStudioPrivateSubnet2:
     Condition: hasAZ2ForRegion
@@ -117,6 +256,8 @@ Resources:
           Value: true
         - Key: Name
           Value: 'SageMakerUnifiedStudioPrivateSubnet2'
+        - Key: for-use-with-amazon-emr-managed-policies
+          Value: true
 
   SageMakerUnifiedStudioPrivateSubnet3:
     Condition: hasAZ3ForRegion
@@ -130,6 +271,23 @@ Resources:
           Value: true
         - Key: Name
           Value: 'SageMakerUnifiedStudioPrivateSubnet3'
+        - Key: for-use-with-amazon-emr-managed-policies
+          Value: true
+  
+  SageMakerUnifiedStudioPrivateSubnet4:
+    Condition: hasAZ4ForRegion
+    Type: AWS::EC2::Subnet
+    Properties:
+      AvailabilityZoneId: !FindInMap [AvailabilityZonesId, !Ref "AWS::Region", AZ4]
+      CidrBlock: "10.38.216.0/21"
+      VpcId: !Ref SageMakerUnifiedStudioVpc
+      Tags:
+        - Key: CreatedForUseWithSageMakerUnifiedStudio
+          Value: true
+        - Key: Name
+          Value: 'SageMakerUnifiedStudioPrivateSubnet4'
+        - Key: for-use-with-amazon-emr-managed-policies
+          Value: true
 
   SageMakerUnifiedStudioEIP:
     Type: AWS::EC2::EIP
@@ -138,7 +296,7 @@ Resources:
 
   SageMakerUnifiedStudioVpcInternetGateway:
     Type: AWS::EC2::InternetGateway
-
+    Properties: {}
   SageMakerUnifiedStudioVpcInternetGatewayAttachment:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
@@ -149,24 +307,6 @@ Resources:
     Type: AWS::EC2::NatGateway
     Properties:
       AllocationId: !GetAtt SageMakerUnifiedStudioEIP.AllocationId
-      SubnetId: !Ref SageMakerUnifiedStudioPublicSubnet
-
-  PublicRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref SageMakerUnifiedStudioVpc
-
-  PublicRouteTableIGWRoute:
-    Type: AWS::EC2::Route
-    Properties:
-      DestinationCidrBlock: 0.0.0.0/0
-      GatewayId: !Ref SageMakerUnifiedStudioVpcInternetGateway
-      RouteTableId: !Ref PublicRouteTable
-
-  PublicSubnetRouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      RouteTableId: !Ref PublicRouteTable
       SubnetId: !Ref SageMakerUnifiedStudioPublicSubnet
 
   SageMakerUnifiedStudioRouteTable:
@@ -201,10 +341,18 @@ Resources:
     Properties:
       RouteTableId: !Ref SageMakerUnifiedStudioRouteTable
       SubnetId: !Ref SageMakerUnifiedStudioPrivateSubnet3
+  
+  PrivateSubnetRouteTableAssociation4:
+    Condition: hasAZ4ForRegion
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref SageMakerUnifiedStudioRouteTable
+      SubnetId: !Ref SageMakerUnifiedStudioPrivateSubnet4
 
-  # S3 VPC Endpoint (Gateway type)
+  ############################################################
+  # S3 VPC-E
+  ############################################################
   SageMakerUnifiedStudioS3VpcEndpoint:
-    Condition: useVpcEndpoints
     Type: AWS::EC2::VPCEndpoint
     Properties:
       ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
@@ -227,6 +375,7 @@ Outputs:
       - - !If [hasAZ1ForRegion, !Ref SageMakerUnifiedStudioPrivateSubnet1, !Ref 'AWS::NoValue']
         - !If [hasAZ2ForRegion, !Ref SageMakerUnifiedStudioPrivateSubnet2, !Ref 'AWS::NoValue']
         - !If [hasAZ3ForRegion, !Ref SageMakerUnifiedStudioPrivateSubnet3, !Ref 'AWS::NoValue']
+        - !If [hasAZ4ForRegion, !Ref SageMakerUnifiedStudioPrivateSubnet4, !Ref 'AWS::NoValue']
     Export:
       Name: !Sub '${AWS::StackName}-PrivateSubnets'
 
@@ -237,5 +386,6 @@ Outputs:
       - - !If [hasAZ1ForRegion, !GetAtt SageMakerUnifiedStudioPrivateSubnet1.AvailabilityZone, !Ref 'AWS::NoValue']
         - !If [hasAZ2ForRegion, !GetAtt SageMakerUnifiedStudioPrivateSubnet2.AvailabilityZone, !Ref 'AWS::NoValue']
         - !If [hasAZ3ForRegion, !GetAtt SageMakerUnifiedStudioPrivateSubnet3.AvailabilityZone, !Ref 'AWS::NoValue']
+        - !If [hasAZ4ForRegion, !GetAtt SageMakerUnifiedStudioPrivateSubnet4.AvailabilityZone, !Ref 'AWS::NoValue']
     Export:
       Name: !Sub '${AWS::StackName}-AvailabilityZones'

@@ -144,6 +144,12 @@ def deploy(
         "-t",
         help="Target name(s) - single target or comma-separated list (uses default target if not specified)",
     ),
+    bundle: str = typer.Option(
+        None,
+        "--bundle",
+        "-b",
+        help="Path to pre-created bundle file",
+    ),
     target_positional: str = typer.Argument(
         None, help="Target name (positional argument for backward compatibility)"
     ),
@@ -151,7 +157,7 @@ def deploy(
     """Deploy bundle files to target's bundle_target_configuration (auto-initializes infrastructure if needed)."""
     # Use positional argument if provided, otherwise use --targets flag
     final_targets = target_positional if target_positional else targets
-    deploy_command(final_targets, manifest_file)
+    deploy_command(final_targets, manifest_file, bundle)
 
 
 @app.command(
@@ -223,15 +229,15 @@ def create(
 
 @app.command(
     "run",
-    help="6. Run Airflow CLI commands. Example: smus-cli run --workflow dag --command version -p pipeline.yaml",
+    help="6. Run Airflow CLI commands in target environment. Example: smus-cli run --workflow my_dag -p pipeline.yaml",
     rich_help_panel="Pipeline Commands",
 )
 def run(
     workflow: str = typer.Option(
-        None, "--workflow", "-w", help="Workflow name to target (required)"
+        None, "--workflow", "-w", help="Workflow name to run (required)"
     ),
     command: str = typer.Option(
-        None, "--command", "-c", help="Airflow command to execute (required)"
+        None, "--command", "-c", help="Airflow CLI command to execute (optional)"
     ),
     targets: str = typer.Option(
         None,
@@ -246,7 +252,7 @@ def run(
         "TEXT", "--output", "-o", help="Output format: TEXT (default) or JSON"
     ),
 ):
-    """Run Airflow CLI commands on specified workflow environments."""
+    """Run Airflow CLI commands in target environment."""
     run_command(manifest_file, workflow, command, targets, output)
 
 

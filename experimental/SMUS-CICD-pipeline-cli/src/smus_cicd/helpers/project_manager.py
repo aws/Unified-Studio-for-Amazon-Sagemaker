@@ -15,8 +15,6 @@ class ProjectManager:
     def __init__(self, manifest, config: Dict[str, Any]):
         self.manifest = manifest
         self.config = config
-        self.domain_name = manifest.domain.name
-        self.region = manifest.domain.region
 
     def ensure_project_exists(self, target_name: str, target_config) -> Dict[str, Any]:
         """Ensure project exists, create if needed and configured to do so."""
@@ -27,11 +25,16 @@ class ProjectManager:
         logger.debug(f"ensure_project_exists called for target: {target_name}")
 
         project_name = target_config.project.name
+        domain_name = target_config.domain.name
+        region = target_config.domain.region
+
         logger.debug(f"project_name: {project_name}")
+        logger.debug(f"domain_name: {domain_name}")
+        logger.debug(f"region: {region}")
 
         # Check if project exists in DataZone first
         # Ensure config has region for get_datazone_project_info
-        config_with_region = {**self.config, "region": self.region}
+        config_with_region = {**self.config, "region": region}
         project_info = get_datazone_project_info(project_name, config_with_region)
         logger.debug(f"project_info keys: {list(project_info.keys())}")
         logger.debug(f"project_info has error: {'error' in project_info}")
@@ -40,9 +43,11 @@ class ProjectManager:
             # Project exists - check and create missing environments
             logger.debug("Project exists path - calling _ensure_environments_exist")
             handle_success(f"✅ Project '{project_name}' already exists")
-            self._update_existing_project(target_name, target_config, project_name)
+            self._update_existing_project(
+                target_name, target_config, project_name, region
+            )
             environments_ready = self._ensure_environments_exist(
-                target_name, target_config, project_info
+                target_name, target_config, project_info, domain_name, region
             )
             if not environments_ready:
                 raise Exception(
@@ -55,7 +60,7 @@ class ProjectManager:
         if self._should_create_project(target_config):
             logger.debug("Should create project - calling _create_new_project")
             project_info = self._create_new_project(
-                target_name, target_config, project_name
+                target_name, target_config, project_name, domain_name, region
             )
             logger.debug("_create_new_project returned")
             logger.debug(
@@ -70,7 +75,7 @@ class ProjectManager:
                     "🔍 DEBUG: Project created successfully - calling _ensure_environments_exist"
                 )
                 environments_ready = self._ensure_environments_exist(
-                    target_name, target_config, project_info
+                    target_name, target_config, project_info, domain_name, region
                 )
                 if not environments_ready:
                     raise Exception(
@@ -97,13 +102,18 @@ class ProjectManager:
         return should_create
 
     def _create_new_project(
-        self, target_name: str, target_config, project_name: str
+        self,
+        target_name: str,
+        target_config,
+        project_name: str,
+        domain_name: str,
+        region: str,
     ) -> Dict[str, Any]:
         """Create a new project via CloudFormation."""
         typer.echo("🔧 Auto-initializing target infrastructure...")
 
         # Double-check project doesn't exist (race condition protection)
-        config_with_region = {**self.config, "region": self.region}
+        config_with_region = {**self.config, "region": region}
         project_info = get_datazone_project_info(project_name, config_with_region)
         if "error" not in project_info:
             handle_success(
@@ -112,9 +122,9 @@ class ProjectManager:
             return project_info
 
         # Get domain ID
-        domain_id = datazone.get_domain_id_by_name(self.domain_name, self.region)
+        domain_id = datazone.get_domain_id_by_name(domain_name, region)
         if not domain_id:
-            handle_error(f"Domain '{self.domain_name}' not found")
+            handle_error(f"Domain '{domain_name}' not found")
 
         # Extract project configuration
         profile_name = self._get_profile_name(target_config)
@@ -132,8 +142,8 @@ class ProjectManager:
         success = cloudformation.create_project_via_cloudformation(
             project_name,
             profile_name,
-            self.domain_name,
-            self.region,
+            domain_name,
+            region,
             self.manifest.pipeline_name,
             target_name,
             target_config.stage,
@@ -153,28 +163,26 @@ class ProjectManager:
         print("🔍 DEBUG: CloudFormation creation succeeded - managing memberships")
 
         # Get domain ID for membership management
-        domain_id = datazone.get_domain_id_by_name(self.domain_name, self.region)
+        domain_id = datazone.get_domain_id_by_name(domain_name, region)
         if not domain_id:
-            handle_error(f"Failed to find domain ID for {self.domain_name}")
+            handle_error(f"Failed to find domain ID for {domain_name}")
 
         # Get project ID for membership management
-        project_id = datazone.get_project_id_by_name(
-            project_name, domain_id, self.region
-        )
+        project_id = datazone.get_project_id_by_name(project_name, domain_id, region)
         if not project_id:
             handle_error(f"Failed to find project ID for {project_name}")
 
         # Manage project memberships via DataZone API
         typer.echo("🔧 Managing project memberships...")
         membership_success = datazone.manage_project_memberships(
-            project_id, domain_id, self.region, owners, contributors
+            project_id, domain_id, region, owners, contributors
         )
 
         if not membership_success:
             handle_error("Failed to manage project memberships")
 
         handle_success("Target infrastructure ready")
-        config_with_region = {**self.config, "region": self.region}
+        config_with_region = {**self.config, "region": region}
         final_project_info = get_datazone_project_info(project_name, config_with_region)
         print(
             f"🔍 DEBUG: Final project_info keys: {list(final_project_info.keys()) if isinstance(final_project_info, dict) else type(final_project_info)}"
@@ -187,7 +195,7 @@ class ProjectManager:
         return final_project_info
 
     def _update_existing_project(
-        self, target_name: str, target_config, project_name: str
+        self, target_name: str, target_config, project_name: str, region: str
     ):
         """Update existing project stack tags and memberships."""
         typer.echo("Updating project stack tags...")
@@ -195,7 +203,7 @@ class ProjectManager:
             self.manifest.pipeline_name,
             target_name,
             project_name,
-            self.region,
+            region,
             target_config.stage,
         )
 
@@ -292,7 +300,12 @@ class ProjectManager:
         return user_parameters
 
     def _ensure_environments_exist(
-        self, target_name: str, target_config, project_info: Dict[str, Any]
+        self,
+        target_name: str,
+        target_config,
+        project_info: Dict[str, Any],
+        domain_name: str,
+        region: str,
     ) -> bool:
         """Ensure required environments exist in the project."""
         print(f"🔍 DEBUG: _ensure_environments_exist called for target: {target_name}")
@@ -325,7 +338,7 @@ class ProjectManager:
         project_id = project_info.get("project_id")
 
         # Resolve domain_id the same way _create_new_project does
-        domain_id = datazone.get_domain_id_by_name(self.domain_name, self.region)
+        domain_id = datazone.get_domain_id_by_name(domain_name, region)
 
         print(f"🔍 DEBUG: Resolved project_id: {project_id}, domain_id: {domain_id}")
 
@@ -341,7 +354,7 @@ class ProjectManager:
         try:
             import boto3
 
-            datazone_client = boto3.client("datazone", region_name=self.region)
+            datazone_client = boto3.client("datazone", region_name=region)
 
             existing_envs_response = datazone_client.list_environments(
                 domainIdentifier=domain_id, projectIdentifier=project_id
@@ -371,13 +384,13 @@ class ProjectManager:
 
             # Environment doesn't exist, try to create it
             print(f"🔧 Creating missing environment: {env_name}")
-            success = self._create_environment(domain_id, project_id, env_name)
+            success = self._create_environment(domain_id, project_id, env_name, region)
 
             if success:
                 print(f"✅ Environment '{env_name}' created successfully")
                 # Check if this is a workflow environment and validate MWAA
                 if "workflow" in env_name.lower() or "mwaa" in env_name.lower():
-                    self._validate_mwaa_environment(project_id, domain_id)
+                    self._validate_mwaa_environment(project_id, domain_id, region)
             else:
                 print(f"❌ Failed to create environment: {env_name}")
                 all_environments_ready = False
@@ -385,13 +398,13 @@ class ProjectManager:
         return all_environments_ready
 
     def _create_environment(
-        self, domain_id: str, project_id: str, env_name: str
+        self, domain_id: str, project_id: str, env_name: str, region: str
     ) -> bool:
         """Create a DataZone environment."""
         try:
             import boto3
 
-            datazone_client = boto3.client("datazone", region_name=self.region)
+            datazone_client = boto3.client("datazone", region_name=region)
 
             # Get project details to find the project profile ID
             print(f"🔍 DEBUG: Getting project details for project: {project_id}")
@@ -490,7 +503,9 @@ class ProjectManager:
             print(f"🔍 DEBUG: Error creating environment: {e}")
             return False
 
-    def _validate_mwaa_environment(self, project_id: str, domain_id: str) -> None:
+    def _validate_mwaa_environment(
+        self, project_id: str, domain_id: str, region: str
+    ) -> None:
         """Validate MWAA environment is available."""
         try:
             import time
@@ -500,7 +515,7 @@ class ProjectManager:
             # Wait a bit for environment to be ready
             time.sleep(5)
 
-            datazone_client = boto3.client("datazone", region_name=self.region)
+            datazone_client = boto3.client("datazone", region_name=region)
 
             # Get project connections to find MWAA connection
             connections_response = datazone_client.list_project_data_sources(

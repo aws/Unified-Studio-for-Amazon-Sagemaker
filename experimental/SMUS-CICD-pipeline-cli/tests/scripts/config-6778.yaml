@@ -2,9 +2,22 @@
 # Update these values for your specific AWS account and requirements
 
 # AWS Configuration
+account_id: "588738596778"
 region: us-east-2
 region2: us-west-2
 region3: us-east-1
+
+# Multi-region configuration
+regions:
+  primary:
+    name: us-east-2
+    enabled: true
+  secondary:
+    name: us-west-2
+    enabled: false
+  tertiary:
+    name: us-east-1
+    enabled: false
 
 # DataZone Domain Name
 domain_name: cicd-test-domain

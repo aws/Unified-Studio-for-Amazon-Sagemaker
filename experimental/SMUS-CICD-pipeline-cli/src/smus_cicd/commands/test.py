@@ -71,19 +71,14 @@ def test_command(
                 typer.echo(f"❌ Error: Target '{target_name}' not found in manifest")
                 raise typer.Exit(1)
 
+        # Get the first target's domain for display (they should all be the same)
+        first_target = next(iter(manifest.targets.values()))
+        domain_config = first_target.domain
+
         if output.upper() != "JSON":
             typer.echo(f"Pipeline: {manifest.pipeline_name}")
-            typer.echo(f"Domain: {manifest.domain.name} ({manifest.domain.region})")
+            typer.echo(f"Domain: {domain_config.name} ({domain_config.region})")
             typer.echo()
-
-        # Load AWS config
-        config = load_config()
-        config["domain"] = {
-            "name": manifest.domain.name,
-            "region": manifest.domain.region,
-        }
-        config["region"] = manifest.domain.region
-        config["domain_name"] = manifest.domain.name
 
         test_results = {}
         overall_success = True
@@ -119,6 +114,15 @@ def test_command(
                 _display_target_summary(target_name, test_results, output)
                 continue
 
+            # Load AWS config
+            config = load_config()
+            config["domain"] = {
+                "name": target_config.domain.name,
+                "region": target_config.domain.region,
+            }
+            config["region"] = target_config.domain.region
+            config["domain_name"] = target_config.domain.name
+
             # Get project info for context
             project_info = get_datazone_project_info(target_config.project.name, config)
 
@@ -143,8 +147,8 @@ def test_command(
                     "SMUS_PROJECT_ID": project_info.get("id", ""),
                     "SMUS_PROJECT_NAME": target_config.project.name,
                     "SMUS_TARGET_NAME": target_name,
-                    "SMUS_REGION": manifest.domain.region,
-                    "SMUS_DOMAIN_NAME": manifest.domain.name,
+                    "SMUS_REGION": target_config.domain.region,
+                    "SMUS_DOMAIN_NAME": target_config.domain.name,
                 }
             )
 
@@ -208,8 +212,8 @@ def test_command(
         if output.upper() == "JSON":
             result_data = {
                 "pipeline": manifest.pipeline_name,
-                "domain": manifest.domain.name,
-                "region": manifest.domain.region,
+                "domain": domain_config.name,
+                "region": domain_config.region,
                 "targets": test_results,
                 "overall_success": overall_success,
             }

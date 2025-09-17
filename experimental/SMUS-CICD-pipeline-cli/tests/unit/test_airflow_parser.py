@@ -1,8 +1,12 @@
 """Unit tests for Airflow output parser."""
+
 import pytest
 from smus_cicd.helpers.airflow_parser import (
-    parse_dags_list, parse_tasks_list, parse_version, 
-    parse_dag_state, parse_airflow_output
+    parse_dags_list,
+    parse_tasks_list,
+    parse_version,
+    parse_dag_state,
+    parse_airflow_output,
 )
 
 
@@ -17,17 +21,17 @@ generated_test_dag_1755976838_2112 | /usr/local/airflow/dags/generated_test_dag_
 sample_dag                         | /usr/local/airflow/dags/sample_dag.py                         | airflow          | True     
 test_dag                           | /usr/local/airflow/dags/test_dag.py                           | airflow          | False    
 """
-        
+
         result = parse_dags_list(stdout)
-        
+
         assert len(result) == 3
         assert result[0]["dag_id"] == "generated_test_dag_1755976838_2112"
         assert result[0]["owners"] == "integration-test"
         assert result[0]["is_paused"] is False
-        
+
         assert result[1]["dag_id"] == "sample_dag"
         assert result[1]["is_paused"] is True
-        
+
         assert result[2]["dag_id"] == "test_dag"
         assert result[2]["is_paused"] is False
 
@@ -37,25 +41,25 @@ test_dag                           | /usr/local/airflow/dags/test_dag.py        
 task_1
 task_2
 """
-        
+
         result = parse_tasks_list(stdout)
-        
+
         assert result == ["hello_world", "task_1", "task_2"]
 
     def test_parse_version(self):
         """Test parsing version output."""
         stdout = "2.10.1\n"
-        
+
         result = parse_version(stdout)
-        
+
         assert result == {"version": "2.10.1"}
 
     def test_parse_dag_state(self):
         """Test parsing dag state output."""
         stdout = "running\n"
-        
+
         result = parse_dag_state(stdout)
-        
+
         assert result == {"state": "running"}
 
     def test_parse_airflow_output_dags_list(self):
@@ -66,9 +70,9 @@ task_2
 test_dag   | /test_dag.py   | airflow | False    
 """
         stderr = "Some warning"
-        
+
         result = parse_airflow_output(command, stdout, stderr)
-        
+
         assert result["command"] == "dags list"
         assert result["raw_stdout"] == stdout
         assert result["raw_stderr"] == stderr
@@ -80,9 +84,9 @@ test_dag   | /test_dag.py   | airflow | False
         command = "version"
         stdout = "2.10.1"
         stderr = ""
-        
+
         result = parse_airflow_output(command, stdout, stderr)
-        
+
         assert result["command"] == "version"
         assert result["version"] == "2.10.1"
 
@@ -91,9 +95,9 @@ test_dag   | /test_dag.py   | airflow | False
         command = "unknown command"
         stdout = "some output"
         stderr = ""
-        
+
         result = parse_airflow_output(command, stdout, stderr)
-        
+
         assert result["command"] == "unknown command"
         assert result["output"] == "some output"
 
@@ -102,15 +106,15 @@ test_dag   | /test_dag.py   | airflow | False
         stdout = """dag_id | fileloc | owners | is_paused
 =======+=========+========+==========
 """
-        
+
         result = parse_dags_list(stdout)
-        
+
         assert result == []
 
     def test_parse_tasks_list_empty(self):
         """Test parsing empty tasks list."""
         stdout = ""
-        
+
         result = parse_tasks_list(stdout)
-        
+
         assert result == []

@@ -11,8 +11,8 @@ The SMUS CLI provides seven main commands for managing CI/CD pipelines in SageMa
 | `create` | Create new pipeline manifest | `smus-cli create --output pipeline.yaml` |
 | `describe` | Validate and show pipeline configuration | `smus-cli describe --pipeline pipeline.yaml --connect` |
 | `bundle` | Package files from source environment | `smus-cli bundle --targets dev` |
-| `deploy` | Deploy bundle to target environment | `smus-cli deploy --targets test` |
-| `run` | Execute workflow commands | `smus-cli run --workflow dag_name --command trigger` |
+| `deploy` | Deploy bundle to target environment | `smus-cli deploy --targets test --bundle bundle.zip` |
+| `run` | Execute Airflow commands or trigger workflows | `smus-cli run --command version` or `smus-cli run --workflows dag1,dag2` |
 | `monitor` | Monitor workflow status | `smus-cli monitor --pipeline pipeline.yaml` |
 | `test` | Run tests for pipeline targets | `smus-cli test --targets marketing-test-stage` |
 | `delete` | Remove target environments | `smus-cli delete --targets marketing-test-stage --force` |
@@ -21,6 +21,10 @@ The SMUS CLI provides seven main commands for managing CI/CD pipelines in SageMa
 
 ### 1. Describe Pipeline Configuration
 ```bash
+# Basic describe
+smus-cli describe --pipeline pipeline.yaml
+
+# Describe with connection details and AWS connectivity
 smus-cli describe --pipeline pipeline.yaml --connect
 ```
 **Example Output:**
@@ -30,10 +34,18 @@ Domain: cicd-test-domain (us-east-1)
 
 Targets:
   - dev: dev-marketing
+    Project Name: dev-marketing
     Project ID: <dev-project-id>
     Status: ACTIVE
     Owners: Admin, eng1
     Connections:
+      project.workflow_mwaa:
+        connectionId: 6f58emph2gtciv
+        type: WORKFLOWS_MWAA
+        region: us-east-1
+        awsAccountId: <aws-account-id>
+        description: Connection for MWAA environment
+        environmentName: DataZoneMWAAEnv-<domain-id>-<project-id>-dev
       default.s3_shared:
         connectionId: dqbxjn28zehzjb
         type: S3
@@ -42,12 +54,168 @@ Targets:
         description: This is the connection to interact with s3 shared storage location if enabled in the project.
         s3Uri: s3://sagemaker-unified-studio-<aws-account-id>-us-east-1-your-domain-name/<domain-id>/<dev-project-id>/shared/
         status: READY
-      project.athena:
-        connectionId: amp1omxvjo3kiv
-        type: ATHENA
-        region: us-east-1
-        awsAccountId: <aws-account-id>
-        description: This is a default ATHENA connection.
+
+Manifest Workflows:
+  - test_dag
+    Connection: project.workflow_mwaa
+    Engine: MWAA
+  - execute_notebooks_dag
+    Connection: project.workflow_mwaa
+    Engine: MWAA
+```
+
+### 2. Bundle Creation
+```bash
+# Bundle for specific target
+smus-cli bundle --targets dev --output-dir ./bundles
+
+# Bundle for multiple targets
+smus-cli bundle --targets dev,test --output-dir /tmp/bundles
+```
+
+### 3. Deploy Bundle
+```bash
+# Deploy using auto-created bundle
+smus-cli deploy --targets test
+
+# Deploy using pre-created bundle file
+smus-cli deploy --targets test --bundle /path/to/bundle.zip
+
+# Deploy with JSON output
+smus-cli deploy --targets test --bundle bundle.zip --output JSON
+```
+
+### 4. Run Commands and Workflows
+
+#### Execute Airflow CLI Commands
+```bash
+# Get Airflow version
+smus-cli run --command version
+
+# List all DAGs
+smus-cli run --command "dags list"
+
+# Get DAG state
+smus-cli run --command "dags state my_dag"
+```
+
+#### Trigger Workflows
+```bash
+# Trigger single workflow
+smus-cli run --workflows test_dag
+
+# Trigger multiple workflows
+smus-cli run --workflows test_dag,execute_notebooks_dag
+
+# Trigger all manifest workflows
+smus-cli run --workflows all
+```
+
+#### Combined Usage
+```bash
+# Run command on specific workflow context
+smus-cli run --workflows test_dag --command "dags trigger test_dag"
+```
+
+**Example Output (TEXT format):**
+```
+🔍 Checking MWAA health for target 'test' (project: integration-test-test)
+🎯 Target: test
+🚀 Triggering workflow: test_dag
+🔧 Connection: project.workflow_mwaa (DataZoneMWAAEnv-dzd_6je2k8b63qse07-broygppc8vw17r-dev)
+📋 Command: dags trigger test_dag
+✅ Command executed successfully
+📤 Output:
+2.10.1
+```
+
+**Example Output (JSON format):**
+```json
+{
+  "workflows": ["test_dag"],
+  "command": "dags trigger test_dag",
+  "results": [
+    {
+      "target": "test",
+      "connection": "project.workflow_mwaa",
+      "environment": "DataZoneMWAAEnv-dzd_6je2k8b63qse07-broygppc8vw17r-dev",
+      "success": true,
+      "status_code": 200,
+      "command": "dags trigger test_dag",
+      "raw_stdout": "...",
+      "raw_stderr": "..."
+    }
+  ],
+  "success": true
+}
+```
+
+### 5. Monitor Workflows
+```bash
+# Monitor all targets
+smus-cli monitor --pipeline pipeline.yaml
+
+# Monitor specific targets with JSON output
+smus-cli monitor --targets test --output JSON
+```
+
+### 6. Test Pipeline
+```bash
+# Run tests for all targets
+smus-cli test --pipeline pipeline.yaml
+
+# Run tests for specific targets
+smus-cli test --targets test --verbose
+```
+
+### 7. Delete Resources
+```bash
+# Delete with confirmation
+smus-cli delete --targets test
+
+# Force delete without confirmation
+smus-cli delete --targets test --force
+
+# Async delete (don't wait for completion)
+smus-cli delete --targets test --force --async
+```
+
+## Universal Options
+
+All commands support these universal options:
+
+| Option | Short | Description | Example |
+|--------|-------|-------------|---------|
+| `--pipeline` | `-p` | Path to pipeline manifest file | `--pipeline my-pipeline.yaml` |
+| `--targets` | `-t` | Target environment(s) | `--targets dev,test` |
+| `--output` | `-o` | Output format (TEXT/JSON) | `--output JSON` |
+
+## Output Formats
+
+### TEXT Format (Default)
+- Human-readable output with emojis and formatting
+- Raw stdout/stderr for run commands
+- Suitable for interactive use
+
+### JSON Format
+- Structured data output
+- Suitable for automation and scripting
+- All commands support JSON output via `--output JSON`
+
+## Error Handling
+
+The CLI provides comprehensive error handling:
+- **Exit Code 0**: Success
+- **Exit Code 1**: Error occurred
+- **Graceful Failures**: Commands handle missing infrastructure gracefully
+- **Detailed Error Messages**: Clear indication of what went wrong and how to fix it
+
+## MWAA Integration
+
+The CLI automatically validates MWAA environment health before executing workflow commands:
+- ✅ **MWAA Available**: Commands execute successfully
+- ❌ **MWAA Unavailable**: Commands fail with clear error message
+- 🔍 **Auto-Detection**: CLI automatically finds and validates MWAA connections
         workgroup: workgroup-<dev-project-id>-xyz123
       project.spark.compatibility:
         connectionId: 6236xbz8cowo4n

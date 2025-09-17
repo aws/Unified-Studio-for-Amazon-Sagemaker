@@ -1,10 +1,5 @@
 pipelineName: IntegrationTestMultiTarget
 
-# Domain configuration
-domain:
-  name: cicd-test-domain
-  region: ${DEV_DOMAIN_REGION:us-east-2}
-
 # What to include in deployment bundles
 bundle:
   bundlesDirectory: /tmp/bundles
@@ -24,11 +19,24 @@ targets:
   dev: 
     stage: DEV
     default: true
+    domain:
+      name: cicd-test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-2}
     project: 
       name: dev-marketing
+    bundle_target_configuration:
+      storage:
+        connectionName: default.s3_shared
+        directory: 'src'
+      workflows:
+        connectionName: default.s3_shared
+        directory: 'workflows'
 
   test: 
     stage: TEST
+    domain:
+      name: cicd-test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-2}
     project: 
       name: integration-test-test
     tests:
@@ -51,6 +59,9 @@ targets:
 
   prod:
     stage: PROD
+    domain:
+      name: cicd-test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-2}
     project: 
       name: integration-test-prod
     initialization:
