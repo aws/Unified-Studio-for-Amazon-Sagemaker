@@ -99,7 +99,7 @@ jobs:
       uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-region: us-east-1
-        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
         role-session-name: smus-pipeline-lifecycle-setup
         role-duration-seconds: 43200  # 12 hours for long-running operations
     
@@ -167,7 +167,7 @@ jobs:
       uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-region: us-east-1
-        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
         role-session-name: smus-pipeline-lifecycle-validate
         role-duration-seconds: 43200  # 12 hours for long-running operations
     
@@ -208,7 +208,7 @@ jobs:
       uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-region: us-east-1
-        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
         role-session-name: smus-pipeline-lifecycle-bundle
         role-duration-seconds: 43200  # 12 hours for long-running operations
     
@@ -255,7 +255,7 @@ jobs:
       uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-region: us-east-1
-        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
         role-session-name: smus-pipeline-lifecycle-deploy
         role-duration-seconds: 43200  # 12 hours for long-running operations
     
@@ -302,7 +302,7 @@ jobs:
       uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-region: us-east-1
-        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
         role-session-name: smus-pipeline-lifecycle-test
         role-duration-seconds: 43200  # 12 hours for long-running operations
     
@@ -343,7 +343,7 @@ jobs:
       uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-region: us-east-1
-        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
         role-session-name: smus-pipeline-lifecycle-monitor
         role-duration-seconds: 43200  # 12 hours for long-running operations
     
@@ -385,7 +385,7 @@ jobs:
       uses: aws-actions/configure-aws-credentials@v4
       with:
         aws-region: us-east-1
-        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
         role-session-name: smus-pipeline-lifecycle-execute
         role-duration-seconds: 43200  # 12 hours for long-running operations
     
