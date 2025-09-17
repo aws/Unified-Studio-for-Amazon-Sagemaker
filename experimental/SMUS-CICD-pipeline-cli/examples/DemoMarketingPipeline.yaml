@@ -3,10 +3,6 @@
 
 pipelineName: DemoMarketingPipeline
 
-domain:
-  name: cicd-test-domain
-  region: us-east-1
-
 # Bundle configuration (optional)
 bundle:
   bundlesDirectory: ./bundles
@@ -31,6 +27,9 @@ bundle:
 
 targets:
   dev:
+    domain:
+      name: cicd-test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-1}
     stage: DEV
     project:
       name: dev-marketing
@@ -51,6 +50,9 @@ targets:
       folder: ./tests
   
   test:
+    domain:
+      name: cicd-test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-1}
     stage: TEST
     project:
       name: dev-marketing-test
