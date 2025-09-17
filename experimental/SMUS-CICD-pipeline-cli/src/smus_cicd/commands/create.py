@@ -214,16 +214,14 @@ def _generate_manifest_content(
     Returns:
         Complete manifest content as string
     """
-    targets_config = _generate_targets_section(stages, dev_project_name)
+    targets_config = _generate_targets_section(
+        stages, dev_project_name, domain_name, region
+    )
 
     return f"""# SMUS CI/CD Pipeline Manifest
 # Generated template with required fields and optional field examples
 
 pipelineName: {pipeline_name}
-
-domain:
-  name: {domain_name}
-  region: {region}
 
 # Bundle configuration (optional)
 bundle:
@@ -266,13 +264,17 @@ targets:
 """
 
 
-def _generate_targets_section(stages: List[str], dev_project_name: str) -> str:
+def _generate_targets_section(
+    stages: List[str], dev_project_name: str, domain_name: str, region: str
+) -> str:
     """
     Generate the targets section of the manifest.
 
     Args:
         stages: List of stage names
         dev_project_name: Development project name
+        domain_name: Domain name for all targets
+        region: AWS region to use as default
 
     Returns:
         Formatted targets section as string
@@ -287,6 +289,9 @@ def _generate_targets_section(stages: List[str], dev_project_name: str) -> str:
         default_comment = _get_default_comment(i)
 
         targets_config += f"""  {stage}:
+    domain:
+      name: {domain_name}
+      region: ${{DEV_DOMAIN_REGION:{region}}}
     stage: {stage_upper}
     project:
       name: {project_name}

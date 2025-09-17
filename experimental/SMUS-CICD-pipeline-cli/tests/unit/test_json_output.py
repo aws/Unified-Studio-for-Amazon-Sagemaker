@@ -15,11 +15,11 @@ class TestJSONOutput:
         """Create a test manifest file."""
         manifest_content = """
 pipelineName: TestPipeline
-domain:
-  name: test-domain
-  region: us-east-1
 targets:
   dev:
+    domain:
+      name: test-domain
+      region: us-east-1
     stage: DEV
     project:
       name: test-project
@@ -48,9 +48,9 @@ workflows:
             # Should be valid JSON
             output_data = json.loads(result.stdout)
             assert "pipeline" in output_data
-            assert "domain" in output_data
             assert "targets" in output_data
             assert output_data["pipeline"] == "TestPipeline"
+            assert "domain" in output_data["targets"]["dev"]
         finally:
             import os
 

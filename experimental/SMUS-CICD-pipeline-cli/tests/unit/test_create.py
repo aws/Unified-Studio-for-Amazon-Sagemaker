@@ -103,7 +103,7 @@ class TestCreateCommand:
             # Verify custom region in file
             with open(output_file, "r") as f:
                 content = f.read()
-                assert "region: us-west-2" in content
+                assert "region: ${DEV_DOMAIN_REGION:us-west-2}" in content
 
     @patch("smus_cicd.commands.create.boto3.client")
     def test_create_with_aws_resources(self, mock_boto3_client):
@@ -200,6 +200,26 @@ class TestCreateCommand:
             # Verify successful validation
             assert "✅ Manifest validation successful!" in result.stdout
             assert os.path.exists(output_file)
+
+            # Verify file content has target-level domain configuration
+            with open(output_file, "r") as f:
+                content = f.read()
+                assert "targets:" in content
+                # Check no top-level domain configuration
+                lines = content.split("\n")
+                in_targets = False
+                for line in lines:
+                    stripped = line.strip()
+                    if stripped == "targets:":
+                        in_targets = True
+                    elif not line.startswith(" ") and stripped and stripped != "---":  # New top-level key
+                        in_targets = False
+                    if not in_targets and stripped == "domain:":  # Only check outside targets section
+                        assert False, "Found top-level domain configuration"
+                # Check domain configuration exists under each target
+                for stage in ["dev", "test", "prod"]:
+                    assert f"{stage}:" in content
+                    assert f"  {stage}:\n    domain:" in content  # Domain under target
 
     @patch("smus_cicd.commands.create.boto3.client")
     def test_create_with_aws_domain_error(self, mock_boto3_client):
@@ -335,7 +355,7 @@ class TestCreateCommand:
                 assert "pipelineName:" in content
                 assert "domain:" in content
                 assert "name:" in content  # domain name
-                assert "region:" in content
+                assert "${DEV_DOMAIN_REGION:" in content  # parameterized region
                 assert "targets:" in content
 
                 # Optional fields (commented)

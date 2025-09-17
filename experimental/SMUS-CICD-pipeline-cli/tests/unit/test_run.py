@@ -21,11 +21,11 @@ class TestRunCommand:
         """Create a test manifest file."""
         manifest_content = """
 pipelineName: TestPipeline
-domain:
-  name: test-domain
-  region: us-east-1
 targets:
   dev:
+    domain:
+      name: test-domain
+      region: us-east-1
     stage: DEV
     project:
       name: test-project

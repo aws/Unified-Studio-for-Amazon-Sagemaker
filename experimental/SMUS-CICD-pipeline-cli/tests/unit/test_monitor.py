@@ -12,29 +12,32 @@ runner = CliRunner()
 def sample_manifest():
     return """
 pipelineName: TestPipeline
-domain:
-  name: test-domain
-  region: us-east-1
-workflows:
-  - workflowName: global_workflow
 targets:
   dev:
+    domain:
+      name: test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-1}
     project:
       name: dev-project
       create: false
     workflows:
       - workflowName: target_workflow
   test:
+    domain:
+      name: test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-1}
     project:
       name: test-project
       create: false
+workflows:
+  - workflowName: global_workflow
 """
 
 
 def create_mock_manifest():
     """Create proper mock objects with attributes."""
     mock_domain = type(
-        "MockDomain", (), {"name": "test-domain", "region": "us-east-1"}
+        "MockDomain", (), {"name": "test-domain", "region": "${DEV_DOMAIN_REGION:us-east-1}"}
     )()
 
     mock_project_dev = type(
@@ -45,18 +48,34 @@ def create_mock_manifest():
         "MockProject", (), {"name": "test-project", "create": False}
     )()
 
-    mock_target_dev = type("MockTarget", (), {"project": mock_project_dev})()
+    mock_target_dev = type(
+        "MockTarget", 
+        (), 
+        {
+            "project": mock_project_dev, 
+            "domain": mock_domain,
+            "stage": "DEV"
+        }
+    )()
 
-    mock_target_test = type("MockTarget", (), {"project": mock_project_test})()
+    mock_target_test = type(
+        "MockTarget", 
+        (), 
+        {
+            "project": mock_project_test, 
+            "domain": mock_domain,
+            "stage": "TEST"
+        }
+    )()
 
     mock_manifest = type(
         "MockManifest",
         (),
         {
             "pipeline_name": "TestPipeline",
-            "domain": mock_domain,
             "targets": {"dev": mock_target_dev, "test": mock_target_test},
             "workflows": [],
+            "get_target_config": lambda target_name: mock_target_dev if target_name == "dev" else mock_target_test
         },
     )()
 
@@ -178,7 +197,6 @@ def test_monitor_no_domain(mock_from_file, mock_load_config, sample_manifest):
         (),
         {
             "pipeline_name": "TestPipeline",
-            "domain": None,
             "targets": {},
             "workflows": [],
         },

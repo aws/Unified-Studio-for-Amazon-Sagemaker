@@ -32,13 +32,13 @@ class TestDescribeCommand:
         """Test minimal valid manifest."""
         manifest = """
 pipelineName: MinimalPipeline
-domain:
-  name: minimal-domain
-  region: us-west-2
 bundle:
   bundlesDirectory: /tmp/bundles
 targets:
   staging:
+    domain:
+      name: minimal-domain
+      region: ${DEV_DOMAIN_REGION:us-east-1}
     stage: STAGING
     project:
       name: minimal-project
@@ -46,15 +46,12 @@ targets:
         result = self.run_describe(manifest)
         assert result.exit_code == 0
         assert "Pipeline: MinimalPipeline" in result.stdout
-        assert "Domain: minimal-domain (us-west-2)" in result.stdout
+        assert "Domain: minimal-domain" in result.stdout
 
     def test_complex_manifest_with_workflows(self):
         """Test complex manifest with multiple workflows and targets."""
         manifest = """
 pipelineName: ComplexPipeline
-domain:
-  name: complex-domain
-  region: eu-central-1
 bundle:
   bundlesDirectory: /tmp/bundles
   workflow:
@@ -67,12 +64,18 @@ bundle:
       include: ['notebooks/']
 targets:
   development:
+    domain:
+      name: complex-domain
+      region: ${DEV_DOMAIN_REGION:us-east-1}
     stage: DEVELOPMENT
     project:
       name: dev-project
       create: false
     default: true
   production:
+    domain:
+      name: complex-domain
+      region: ${DEV_DOMAIN_REGION:us-east-1}
     stage: PRODUCTION
     project:
       name: prod-project
@@ -95,7 +98,7 @@ workflows:
 
         # Check pipeline info
         assert "Pipeline: ComplexPipeline" in result.stdout
-        assert "Domain: complex-domain (eu-central-1)" in result.stdout
+        assert "Domain: complex-domain" in result.stdout
 
         # Check workflows
         assert "Workflows:" in result.stdout
@@ -125,13 +128,13 @@ workflows:
         for bundle_dir in test_cases:
             manifest = f"""
 pipelineName: BundleDirTest
-domain:
-  name: test-domain
-  region: us-east-1
 bundle:
   bundlesDirectory: {bundle_dir}
 targets:
   test:
+    domain:
+      name: test-domain
+      region: ${{DEV_DOMAIN_REGION:us-east-1}}
     stage: TEST
     project:
       name: test-project
@@ -141,49 +144,18 @@ targets:
             assert result.exit_code == 0
             assert "Pipeline: BundleDirTest" in result.stdout
 
-    def test_different_regions(self):
-        """Test that different AWS regions are not hardcoded."""
-        regions = [
-            "us-east-1",
-            "us-west-2",
-            "eu-west-1",
-            "eu-central-1",
-            "ap-southeast-1",
-            "ap-northeast-1",
-            "ca-central-1",
-        ]
-
-        for region in regions:
-            manifest = f"""
-pipelineName: RegionTest
-domain:
-  name: test-domain
-  region: {region}
-bundle:
-  bundlesDirectory: /tmp/bundles
-targets:
-  test:
-    stage: TEST
-    project:
-      name: test-project
-      create: false
-"""
-            result = self.run_describe(manifest)
-            assert result.exit_code == 0
-            assert f"Domain: test-domain ({region})" in result.stdout
-
     def test_various_project_configurations(self):
         """Test different project configuration formats."""
         # Object format
         manifest1 = """
 pipelineName: StringProject
-domain:
-  name: test-domain
-  region: us-east-1
 bundle:
   bundlesDirectory: /tmp/bundles
 targets:
   test:
+    domain:
+      name: test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-1}
     stage: TEST
     project:
       name: simple-project-name
@@ -196,13 +168,13 @@ targets:
         # Object format with all fields
         manifest2 = """
 pipelineName: ObjectProject
-domain:
-  name: test-domain
-  region: us-east-1
 bundle:
   bundlesDirectory: /tmp/bundles
 targets:
   test:
+    domain:
+      name: test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-1}
     stage: TEST
     project:
       name: complex-project
@@ -216,13 +188,13 @@ targets:
         """Test workflows with different parameter combinations."""
         manifest = """
 pipelineName: WorkflowParams
-domain:
-  name: test-domain
-  region: us-east-1
 bundle:
   bundlesDirectory: /tmp/bundles
 targets:
   test:
+    domain:
+      name: test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-1}
     stage: TEST
     project:
       name: test-project
@@ -256,13 +228,13 @@ workflows:
     def test_missing_pipeline_name(self):
         """Test error when pipelineName is missing."""
         manifest = """
-domain:
-  name: test-domain
-  region: us-east-1
 bundle:
   bundlesDirectory: /tmp/bundles
 targets:
   test:
+    domain:
+      name: test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-1}
     stage: TEST
     project:
       name: test-project
@@ -293,12 +265,12 @@ targets:
         """Test error when domain name is missing."""
         manifest = """
 pipelineName: TestPipeline
-domain:
-  region: us-east-1
 bundle:
   bundlesDirectory: /tmp/bundles
 targets:
   test:
+    domain:
+      region: ${DEV_DOMAIN_REGION:us-east-1}
     stage: TEST
     project:
       name: test-project
@@ -312,12 +284,12 @@ targets:
         """Test error when domain region is missing."""
         manifest = """
 pipelineName: TestPipeline
-domain:
-  name: test-domain
 bundle:
   bundlesDirectory: /tmp/bundles
 targets:
   test:
+    domain:
+      name: test-domain
     stage: TEST
     project:
       name: test-project
@@ -333,7 +305,7 @@ targets:
 pipelineName: TestPipeline
 domain:
   name: test-domain
-  region: us-east-1
+  region: ${DEV_DOMAIN_REGION:us-east-1}
 bundle:
   bundlesDirectory: /tmp/bundles
 """
@@ -348,7 +320,7 @@ bundle:
 pipelineName: TestPipeline
 domain:
   name: test-domain
-  region: us-east-1
+  region: ${DEV_DOMAIN_REGION:us-east-1}
 bundle:
   bundlesDirectory: /tmp/bundles
 targets: {}
@@ -364,7 +336,7 @@ targets: {}
 pipelineName: TestPipeline
 domain:
   name: test-domain
-  region: us-east-1
+  region: ${DEV_DOMAIN_REGION:us-east-1}
 bundle:
   bundlesDirectory: /tmp/bundles
 targets:
@@ -381,7 +353,7 @@ targets:
 pipelineName: TestPipeline
 domain:
   name: test-domain
-  region: us-east-1
+  region: ${DEV_DOMAIN_REGION:us-east-1}
 bundle:
   bundlesDirectory: /tmp/bundles
 targets:
@@ -404,7 +376,7 @@ workflows:
 pipelineName: TestPipeline
 domain:
   name: test-domain
-  region: us-east-1
+  region: ${DEV_DOMAIN_REGION:us-east-1}
 bundle:
   bundlesDirectory: /tmp/bundles
 targets:
@@ -427,7 +399,7 @@ workflows:
 pipelineName: TestPipeline
 domain:
   name: test-domain
-  region: us-east-1
+  region: ${DEV_DOMAIN_REGION:us-east-1}
 bundle:
   bundlesDirectory: /tmp/bundles
 targets:
@@ -457,11 +429,11 @@ targets:
         # Test minimal manifest to ensure defaults are applied
         manifest = """
 pipelineName: DefaultTest
-domain:
-  name: test-domain
-  region: us-east-1
 targets:
   test:
+    domain:
+      name: test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-1}
     stage: TEST
     project:
       name: test-project
@@ -479,11 +451,11 @@ targets:
         """Test bundle configuration defaults."""
         manifest = """
 pipelineName: BundleDefaultTest
-domain:
-  name: test-domain
-  region: us-east-1
 targets:
   test:
+    domain:
+      name: test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-1}
     stage: TEST
     project:
       name: test-project
@@ -497,13 +469,13 @@ targets:
         """Test workflow configuration defaults."""
         manifest = """
 pipelineName: WorkflowDefaultTest
-domain:
-  name: test-domain
-  region: us-east-1
 bundle:
   bundlesDirectory: /tmp/bundles
 targets:
   test:
+    domain:
+      name: test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-1}
     stage: TEST
     project:
       name: test-project
@@ -524,13 +496,13 @@ workflows:
         """Test handling of empty string values."""
         manifest = """
 pipelineName: ""
-domain:
-  name: ""
-  region: ""
 bundle:
   bundlesDirectory: "/tmp/bundles"
 targets:
   test:
+    domain:
+      name: ""
+      region: ""
     stage: TEST
     project:
       name: ""
@@ -543,13 +515,13 @@ targets:
         """Test handling of special characters in names."""
         manifest = """
 pipelineName: "Pipeline-With_Special_Characters123"
-domain:
-  name: "domain-with-dashes"
-  region: us-east-1
 bundle:
   bundlesDirectory: "/tmp/bundles-with-dashes"
 targets:
   "target-with-dashes":
+    domain:
+      name: "domain-with-dashes"
+      region: ${DEV_DOMAIN_REGION:us-east-1}
     stage: TEST
     project:
       name: "project_with_underscores"
@@ -561,7 +533,7 @@ workflows:
         result = self.run_describe(manifest, ["--connections"])
         assert result.exit_code == 0
         assert "Pipeline: Pipeline-With_Special_Characters123" in result.stdout
-        assert "Domain: domain-with-dashes (us-east-1)" in result.stdout
+        assert "Domain: domain-with-dashes" in result.stdout
         assert "target-with-dashes: project_with_underscores" in result.stdout
         assert "workflow_with_underscores" in result.stdout
         assert "Connection: connection_with_underscores" in result.stdout

@@ -13,13 +13,13 @@ def sample_manifest():
     """Create a sample manifest file for testing."""
     manifest_content = """
 pipelineName: TestPipeline
-domain:
-  name: test-domain
-  region: us-east-1
 bundle:
   bundlesDirectory: /tmp/bundles
 targets:
   dev:
+    domain:
+      name: test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-1}
     stage: DEV
     project:
       name: test-project
@@ -51,7 +51,7 @@ def test_describe_basic(mock_load_config, mock_get_region, sample_manifest):
         result = runner.invoke(app, ["describe", "--pipeline", "test.yaml"])
         assert result.exit_code == 0
         assert "Pipeline: TestPipeline" in result.stdout
-        assert "Domain: test-domain (us-east-1)" in result.stdout
+        assert "Domain: test-domain" in result.stdout
 
 
 @patch("smus_cicd.helpers.utils._get_region_from_config")

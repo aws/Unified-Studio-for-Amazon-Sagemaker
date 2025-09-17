@@ -1,10 +1,5 @@
 pipelineName: IntegrationTestMultiTarget
 
-# Domain configuration
-domain:
-  name: cicd-test-domain
-  region: ${DEV_DOMAIN_REGION:us-east-2}
-
 # What to include in deployment bundles
 bundle:
   bundlesDirectory: /tmp/bundles
@@ -24,20 +19,29 @@ targets:
   dev: 
     stage: DEV
     default: true
+    domain:
+      name: cicd-test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-2}
     project: 
       name: dev-marketing
+    bundle_target_configuration:
+      storage:
+        connectionName: default.s3_shared
+        directory: 'src'
+      workflows:
+        connectionName: default.s3_shared
+        directory: 'workflows'
 
   test: 
     stage: TEST
+    domain:
+      name: cicd-test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-2}
     project: 
       name: integration-test-test
     tests:
       folder: tests/integration/multi_target_pipeline/pipeline_tests/
     initialization:
-      domain:
-        name: cicd-test-domain
-        region: ${DEV_DOMAIN_REGION:us-east-2}
-        create: false
       project: 
         create: true  # Enable auto-create for integration tests
         profileName: 'All capabilities'
@@ -55,13 +59,12 @@ targets:
 
   prod:
     stage: PROD
+    domain:
+      name: cicd-test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-2}
     project: 
       name: integration-test-prod
     initialization:
-      domain:
-        name: cicd-test-domain
-        region: ${DEV_DOMAIN_REGION:us-east-2}
-        create: false
       project: 
         create: true
         profileName: 'All capabilities'

@@ -115,8 +115,8 @@ def _display_deployment_info(
     """
     typer.echo(f"Deploying to target: {target_name}")
     typer.echo(f"Project: {target_config.project.name}")
-    typer.echo(f"Domain: {manifest.domain.name}")
-    typer.echo(f"Region: {manifest.domain.region}")
+    typer.echo(f"Domain: {target_config.domain.name}")
+    typer.echo(f"Region: {target_config.domain.region}")
 
 
 def _deploy_bundle_to_target(
@@ -148,8 +148,11 @@ def _deploy_bundle_to_target(
         return False
 
     # Update config with domain info
-    config["domain"] = {"name": manifest.domain.name, "region": manifest.domain.region}
-    config["region"] = manifest.domain.region
+    config["domain"] = {
+        "name": target_config.domain.name,
+        "region": target_config.domain.region,
+    }
+    config["region"] = target_config.domain.region
 
     # Get bundle file
     if bundle_file:

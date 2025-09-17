@@ -51,17 +51,18 @@ def run_command(
         from ..helpers.mwaa import validate_mwaa_health
 
         config = load_config()
-        # Add domain information from manifest for proper connection retrieval
-        config["domain"] = {
-            "name": manifest.domain.name,
-            "region": manifest.domain.region,
-        }
-        config["region"] = manifest.domain.region
         mwaa_healthy = False
 
         for target_name in targets_to_check:
             target_config = manifest.get_target(target_name)
             project_name = target_config.project.name
+
+            # Add domain information from target for proper connection retrieval
+            config["domain"] = {
+                "name": target_config.domain.name,
+                "region": target_config.domain.region,
+            }
+            config["region"] = target_config.domain.region
 
             if output.upper() != "JSON":
                 typer.echo(
@@ -240,7 +241,7 @@ def _execute_command_on_target(
     Returns:
         List of execution results for this target
     """
-    config = _prepare_config(manifest)
+    config = _prepare_config(target_config)
     project_info = _get_project_info(target_config.project.name, config)
 
     if isinstance(project_info, str):
@@ -263,24 +264,27 @@ def _execute_command_on_target(
         return [error_result]
 
     return _execute_on_workflow_connections(
-        target_name, workflow_connections, command, manifest.domain.region, output
+        target_name, workflow_connections, command, target_config.domain.region, output
     )
 
 
-def _prepare_config(manifest: PipelineManifest) -> Dict[str, Any]:
+def _prepare_config(target_config) -> Dict[str, Any]:
     """
     Prepare configuration dictionary with domain information.
 
     Args:
-        manifest: Pipeline manifest object
+        target_config: Target configuration object
 
     Returns:
         Configuration dictionary
     """
     config = load_config()
-    config["domain"] = {"name": manifest.domain.name, "region": manifest.domain.region}
-    config["region"] = manifest.domain.region
-    config["domain_name"] = manifest.domain.name
+    config["domain"] = {
+        "name": target_config.domain.name,
+        "region": target_config.domain.region,
+    }
+    config["region"] = target_config.domain.region
+    config["domain_name"] = target_config.domain.name
 
     return config
 

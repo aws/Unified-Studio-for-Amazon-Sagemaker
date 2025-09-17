@@ -1,9 +1,5 @@
 pipelineName: BasicTestPipeline
 
-domain: 
-  name: cicd-test-domain
-  region: ${DEV_DOMAIN_REGION:us-east-2}
-
 workflows:
 - workflowName: test_dag
   connectionName: project.workflow_mwaa
@@ -41,6 +37,9 @@ targets:
     dev: 
        stage: DEV
        default: true
+       domain:
+         name: cicd-test-domain
+         region: ${DEV_DOMAIN_REGION:us-east-2}
        initialization:
           environments: 
             - EnvironmentConfigurationName: 'OnDemand Workflows'       
@@ -50,6 +49,9 @@ targets:
         - workflowName: prepareData        
     test:
        stage: TEST 
+       domain:
+         name: cicd-test-domain
+         region: ${DEV_DOMAIN_REGION:us-east-2}
        project: 
          name: test-marketing-8
        initialization:
@@ -80,6 +82,9 @@ targets:
               sampleSize: 5000     
     prod: 
        stage: PROD
+       domain:
+         name: cicd-test-domain
+         region: ${DEV_DOMAIN_REGION:us-east-2}
        project: 
          name: prod-marketing
        initialization:

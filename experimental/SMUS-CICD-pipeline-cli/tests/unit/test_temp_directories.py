@@ -13,9 +13,6 @@ runner = CliRunner()
 def sample_manifest():
     return """
 pipelineName: TestPipeline
-domain:
-  name: test-domain
-  region: us-east-1
 bundlesDirectory: /tmp/bundles
 bundle:
   workflow:
@@ -26,6 +23,9 @@ targets:
   dev:
     stage: DEV
     default: true
+    domain:
+      name: test-domain
+      region: us-east-1
     project:
       name: dev-project
 """

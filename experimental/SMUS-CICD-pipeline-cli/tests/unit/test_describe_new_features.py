@@ -14,21 +14,27 @@ class TestDescribeNewFeatures:
         """Create a test manifest file."""
         manifest_content = """
 pipelineName: TestPipeline
-domain:
-  name: test-domain
-  region: us-east-1
 targets:
   dev:
+    domain:
+      name: test-domain
+      region: us-east-1
     stage: DEV
     project:
       name: dev-project
       create: false
   test:
+    domain:
+      name: test-domain
+      region: us-east-1
     stage: TEST
     project:
       name: test-project
       create: false
   prod:
+    domain:
+      name: test-domain
+      region: us-east-1
     stage: PROD
     project:
       name: prod-project

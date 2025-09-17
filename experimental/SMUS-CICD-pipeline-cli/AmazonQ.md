@@ -7,7 +7,7 @@ When making any code changes to the SMUS CI/CD CLI, follow this automated workfl
 ### 0. AWS Credentials Setup (when needed)
 ```bash
 # Check AWS credentials using test runner
-python scripts/run_tests.py --type integration
+python tests/run_tests.py --type integration
 # If credentials are missing, you'll see a warning
 
 # Or manually:
@@ -18,8 +18,8 @@ aws sts get-caller-identity
 ### 1. Pre-Change Validation
 ```bash
 # Verify current state is clean
-python scripts/run_tests.py --type unit
-python scripts/run_tests.py --type integration
+python tests/run_tests.py --type unit
+python tests/run_tests.py --type integration
 git status
 ```
 
@@ -41,7 +41,7 @@ git status
 ### 3. Update Test Cases
 ```bash
 # Run tests to identify failures
-python scripts/run_tests.py --type unit
+python tests/run_tests.py --type unit
 
 # Fix any failing tests by:
 # - Updating test expectations to match new behavior
@@ -59,22 +59,22 @@ python scripts/run_tests.py --type unit
 # - Diagrams need modification
 
 # Verify examples work by running tests
-python scripts/run_tests.py --type all
+python tests/run_tests.py --type all
 ```
 
 ### 5. Integration Test Validation
 ```bash
 # Run integration tests
-python scripts/run_tests.py --type integration
+python tests/run_tests.py --type integration
 
 # For faster iteration, skip slow tests:
-python scripts/run_tests.py --type integration --skip-slow
+python tests/run_tests.py --type integration --skip-slow
 ```
 
 ### 6. Final Validation and Commit
 ```bash
 # Full validation with coverage
-python scripts/run_tests.py --type all
+python tests/run_tests.py --type all
 
 # Commit changes
 git add .
@@ -92,9 +92,9 @@ git status
 
 ```bash
 # Available test types:
-python scripts/run_tests.py --type unit           # Unit tests only
-python scripts/run_tests.py --type integration    # Integration tests only
-python scripts/run_tests.py --type all            # All tests (default)
+python tests/run_tests.py --type unit           # Unit tests only
+python tests/run_tests.py --type integration    # Integration tests only
+python tests/run_tests.py --type all            # All tests (default)
 
 # Additional options:
 --no-coverage        # Skip coverage analysis
@@ -176,7 +176,7 @@ Important Note: These are pytest-based integration tests, NOT Hydra tests. Do no
 ```
 smus_cicd/
 ├── pyproject.toml          # Modern Python project config
-├── scripts/
+├── tests/
 │   └── run_tests.py       # Test runner script
 ├── smus_cicd/             # Main package
 ├── tests/                 # Test suite
@@ -188,7 +188,7 @@ smus_cicd/
 When you need to refresh AWS credentials:
 1. Run `isenguardcli` to get fresh credentials
 2. Verify with `aws sts get-caller-identity`
-3. Run a test command to confirm: `python scripts/run_tests.py --type integration`
+3. Run a test command to confirm: `python tests/run_tests.py --type integration`
 
 This script ensures that every code change maintains the quality and consistency of the codebase using Python-native tools.
 

@@ -14,15 +14,15 @@ class TestTestCommand:
         """Create a test manifest with tests configuration."""
         manifest_content = """
 pipelineName: TestPipeline
-domain:
-  name: test-domain
-  region: us-east-1
 bundle:
   storage:
     - connectionName: default.s3_shared
       include: ["src/"]
 targets:
   dev:
+    domain:
+      name: test-domain
+      region: us-east-1
     project:
       name: test-project-dev
     stage: dev
@@ -42,15 +42,15 @@ workflows:
         """Create a test manifest without tests configuration."""
         manifest_content = """
 pipelineName: TestPipeline
-domain:
-  name: test-domain
-  region: us-east-1
 bundle:
   storage:
     - connectionName: default.s3_shared
       include: ["src/"]
 targets:
   dev:
+    domain:
+      name: test-domain
+      region: us-east-1
     project:
       name: test-project-dev
     stage: dev

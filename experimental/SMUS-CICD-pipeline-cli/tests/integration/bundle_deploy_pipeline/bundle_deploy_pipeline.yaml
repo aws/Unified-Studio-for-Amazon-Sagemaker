@@ -1,10 +1,5 @@
 pipelineName: IntegrationTestMultiTarget
 
-# Domain configuration
-domain:
-  name: cicd-test-domain
-  region: ${DEV_DOMAIN_REGION:us-east-2}
-
 # What to include in deployment bundles
 bundle:
   bundlesDirectory: /tmp/bundles
@@ -23,6 +18,9 @@ bundle:
 targets:
   test: 
     stage: TEST
+    domain:
+      name: cicd-test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-2}
     project: 
       name: integration-test-test
     tests:

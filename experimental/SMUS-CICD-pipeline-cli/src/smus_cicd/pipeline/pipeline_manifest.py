@@ -96,6 +96,7 @@ class TargetConfig:
     """Target configuration."""
 
     project: ProjectConfig
+    domain: DomainConfig
     stage: str
     default: bool = False
     initialization: Optional[InitializationConfig] = None
@@ -119,7 +120,6 @@ class PipelineManifest:
     """Complete pipeline manifest data model."""
 
     pipeline_name: str
-    domain: DomainConfig
     bundle: BundleConfig
     targets: Dict[str, TargetConfig]
     workflows: List[WorkflowConfig] = field(default_factory=list)
@@ -150,27 +150,12 @@ class PipelineManifest:
         if not data.get("pipelineName"):
             raise ValueError("pipelineName is required and cannot be empty")
 
-        if "domain" not in data:
-            raise ValueError("domain configuration is required")
-
-        domain_data = data.get("domain", {})
-        if not domain_data.get("name"):
-            raise ValueError("domain.name is required and cannot be empty")
-
-        if not domain_data.get("region"):
-            raise ValueError("domain.region is required and cannot be empty")
-
         if "targets" not in data:
             raise ValueError("targets configuration is required")
 
         targets_data = data.get("targets", {})
         if not targets_data:
             raise ValueError("at least one target must be defined")
-
-        # Parse domain
-        domain = DomainConfig(
-            name=domain_data.get("name", ""), region=domain_data.get("region", "")
-        )
 
         # Parse bundle configuration
         bundle_data = data.get("bundle", {})
@@ -186,6 +171,27 @@ class PipelineManifest:
             if not target_data:
                 raise ValueError(
                     f"target '{target_name}' configuration cannot be empty"
+                )
+
+            # Parse domain config
+            domain_data = target_data.get("domain")
+            if not domain_data:
+                raise ValueError(
+                    f"target '{target_name}' must have a domain configuration"
+                )
+
+            domain = DomainConfig(
+                name=domain_data.get("name", ""), region=domain_data.get("region", "")
+            )
+
+            if not domain.name.strip():
+                raise ValueError(
+                    f"target '{target_name}' domain.name is required and cannot be empty"
+                )
+
+            if not domain.region.strip():
+                raise ValueError(
+                    f"target '{target_name}' domain.region is required and cannot be empty"
                 )
 
             # Parse project config
@@ -245,7 +251,7 @@ class PipelineManifest:
                 initialization = InitializationConfig(
                     project=init_project,
                     domain=init_domain,
-                    environments=init_data.get("environments", [])
+                    environments=init_data.get("environments", []),
                 )
 
             # Parse bundle target configuration
@@ -270,6 +276,7 @@ class PipelineManifest:
 
             targets[target_name] = TargetConfig(
                 project=project,
+                domain=domain,
                 stage=stage,
                 default=target_data.get("default", False),
                 initialization=initialization,
@@ -304,7 +311,6 @@ class PipelineManifest:
 
         return cls(
             pipeline_name=data.get("pipelineName", ""),
-            domain=domain,
             bundle=bundle,
             targets=targets,
             workflows=workflows,

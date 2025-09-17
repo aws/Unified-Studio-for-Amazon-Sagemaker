@@ -3,10 +3,6 @@
 
 pipelineName: TestPipeline
 
-domain:
-  name: your-domain-name  # PLACEHOLDER: Replace with your SageMaker Unified Studio domain name
-  region: us-east-1       # PLACEHOLDER: Replace with your AWS region
-
 # Bundle configuration (optional)
 bundle:
   bundlesDirectory: /tmp/bundles
@@ -21,15 +17,24 @@ bundle:
 
 targets:
   dev:
+    domain:
+      name: your-domain-name  # PLACEHOLDER: Replace with your SageMaker Unified Studio domain name
+      region: us-east-1       # PLACEHOLDER: Replace with your AWS region
     project:
       name: dev-project-name  # PLACEHOLDER: Replace with your dev project name
     # default: true  # Uncomment to make this the default target
   
   test:
+    domain:
+      name: your-domain-name  # PLACEHOLDER: Replace with your SageMaker Unified Studio domain name
+      region: us-east-1       # PLACEHOLDER: Replace with your AWS region
     project:
       name: test-project-name  # PLACEHOLDER: Replace with your test project name
   
   prod:
+    domain:
+      name: your-domain-name  # PLACEHOLDER: Replace with your SageMaker Unified Studio domain name
+      region: us-east-1       # PLACEHOLDER: Replace with your AWS region
     project:
       name: prod-project-name  # PLACEHOLDER: Replace with your prod project name
 

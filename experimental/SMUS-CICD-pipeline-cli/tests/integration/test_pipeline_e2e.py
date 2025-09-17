@@ -21,32 +21,19 @@ def test_manifest():
     """Create a test manifest file."""
     manifest_content = """
 pipelineName: IntegrationTestPipeline
-domain:
-  name: test-domain
-  region: us-east-1
-bundle:
-  workflow:
-    - connectionName: default.s3_shared
-      append: true
-      include: ['workflows/']
-      exclude: ['.ipynb_checkpoints/', '__pycache__/']
-  storage:
-    - connectionName: default.s3_shared
-      append: false
-      include: ['src/']
-      exclude: ['.ipynb_checkpoints/', '__pycache__/']
-workflows:
-  - workflowName: integration_test_dag
-    connectionName: project.workflow_connection
-    logging: console
-    engine: MWAA
 targets:
   dev:
+    domain:
+      name: test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-1}
     default: true
     stage: dev
     project:
       name: integration-test-dev-project
   test:
+    domain:
+      name: test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-1}
     stage: test
     project:
       name: integration-test-project
@@ -69,6 +56,22 @@ targets:
       - workflowName: integration_test_dag
         parameters:
           test_param: integration_value
+bundle:
+  workflow:
+    - connectionName: default.s3_shared
+      append: true
+      include: ['workflows/']
+      exclude: ['.ipynb_checkpoints/', '__pycache__/']
+  storage:
+    - connectionName: default.s3_shared
+      append: false
+      include: ['src/']
+      exclude: ['.ipynb_checkpoints/', '__pycache__/']
+workflows:
+  - workflowName: integration_test_dag
+    connectionName: project.workflow_connection
+    logging: console
+    engine: MWAA
 """
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
@@ -163,6 +166,6 @@ pipelineName: MinimalPipeline
             result = runner.invoke(app, ["describe", "--pipeline", f.name])
             # Should fail validation due to missing required fields
             assert result.exit_code == 1
-            assert "domain" in result.output and "required property" in result.output
+            assert "targets" in result.output and "required property" in result.output
 
         os.unlink(f.name)

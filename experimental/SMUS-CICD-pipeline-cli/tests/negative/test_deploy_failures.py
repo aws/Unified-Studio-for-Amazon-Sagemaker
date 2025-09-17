@@ -47,7 +47,7 @@ class TestDeployFailures:
 pipelineName: TestPipeline
 domain:
   name: test-domain
-  region: us-east-1
+  region: ${DEV_DOMAIN_REGION:us-east-1}
 targets:
   dev:
     project:
@@ -76,7 +76,7 @@ targets:
 pipelineName: TestPipeline
 domain:
   name: test-domain
-  region: us-east-1
+  region: ${DEV_DOMAIN_REGION:us-east-1}
 targets:
   test:
     stage: TEST

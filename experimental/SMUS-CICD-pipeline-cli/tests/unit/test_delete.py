@@ -25,11 +25,12 @@ class TestDeleteCommand:
         # Setup mocks
         mock_manifest = MagicMock()
         mock_manifest.pipeline_name = "TestPipeline"
-        mock_manifest.domain.name = "test-domain"
-        mock_manifest.domain.region = "us-east-1"
         mock_manifest.targets = {"test": MagicMock()}
         mock_manifest.targets["test"].project = MagicMock()
         mock_manifest.targets["test"].project.name = "test-project"
+        mock_manifest.targets["test"].domain = MagicMock()
+        mock_manifest.targets["test"].domain.name = "test-domain"
+        mock_manifest.targets["test"].domain.region = "us-east-1"
 
         mock_manifest_class.from_file.return_value = mock_manifest
         mock_get_domain_id.return_value = "domain-123"
@@ -66,11 +67,12 @@ class TestDeleteCommand:
         # Setup mocks
         mock_manifest = MagicMock()
         mock_manifest.pipeline_name = "TestPipeline"
-        mock_manifest.domain.name = "test-domain"
-        mock_manifest.domain.region = "us-east-1"
         mock_manifest.targets = {"test": MagicMock()}
         mock_manifest.targets["test"].project = MagicMock()
         mock_manifest.targets["test"].project.name = "test-project"
+        mock_manifest.targets["test"].domain = MagicMock()
+        mock_manifest.targets["test"].domain.name = "test-domain"
+        mock_manifest.targets["test"].domain.region = "us-east-1"
 
         mock_manifest_class.from_file.return_value = mock_manifest
         mock_get_domain_id.return_value = "domain-123"
@@ -106,11 +108,12 @@ class TestDeleteCommand:
         # Setup mocks
         mock_manifest = MagicMock()
         mock_manifest.pipeline_name = "TestPipeline"
-        mock_manifest.domain.name = "test-domain"
-        mock_manifest.domain.region = "us-east-1"
         mock_manifest.targets = {"test": MagicMock()}
         mock_manifest.targets["test"].project = MagicMock()
         mock_manifest.targets["test"].project.name = "test-project"
+        mock_manifest.targets["test"].domain = MagicMock()
+        mock_manifest.targets["test"].domain.name = "test-domain"
+        mock_manifest.targets["test"].domain.region = "us-east-1"
 
         mock_manifest_class.from_file.return_value = mock_manifest
         mock_get_domain_id.return_value = "domain-123"
@@ -147,11 +150,12 @@ class TestDeleteCommand:
         # Setup mocks
         mock_manifest = MagicMock()
         mock_manifest.pipeline_name = "TestPipeline"
-        mock_manifest.domain.name = "test-domain"
-        mock_manifest.domain.region = "us-east-1"
         mock_manifest.targets = {"test": MagicMock()}
         mock_manifest.targets["test"].project = MagicMock()
         mock_manifest.targets["test"].project.name = "test-project"
+        mock_manifest.targets["test"].domain = MagicMock()
+        mock_manifest.targets["test"].domain.name = "test-domain"
+        mock_manifest.targets["test"].domain.region = "us-east-1"
 
         mock_manifest_class.from_file.return_value = mock_manifest
         mock_get_domain_id.return_value = "domain-123"
@@ -181,8 +185,6 @@ class TestDeleteCommand:
         # Setup mocks
         mock_manifest = MagicMock()
         mock_manifest.pipeline_name = "TestPipeline"
-        mock_manifest.domain.name = "test-domain"
-        mock_manifest.domain.region = "us-east-1"
         mock_manifest.targets = {"test": MagicMock()}
 
         mock_manifest_class.from_file.return_value = mock_manifest
@@ -214,11 +216,12 @@ class TestDeleteCommand:
         # Setup mocks
         mock_manifest = MagicMock()
         mock_manifest.pipeline_name = "TestPipeline"
-        mock_manifest.domain.name = "test-domain"
-        mock_manifest.domain.region = "us-east-1"
         mock_manifest.targets = {"test": MagicMock()}
         mock_manifest.targets["test"].project = MagicMock()
         mock_manifest.targets["test"].project.name = "test-project"
+        mock_manifest.targets["test"].domain = MagicMock()
+        mock_manifest.targets["test"].domain.name = "test-domain"
+        mock_manifest.targets["test"].domain.region = "us-east-1"
 
         mock_manifest_class.from_file.return_value = mock_manifest
         mock_get_domain_id.return_value = "domain-123"
@@ -248,7 +251,6 @@ class TestDeleteCommand:
         # Parse JSON output
         output_data = json.loads(result.stdout)
         assert output_data["pipeline"] == "TestPipeline"
-        assert output_data["domain"] == "test-domain"
         assert len(output_data["results"]) == 1
         assert output_data["results"][0]["target"] == "test"
         assert output_data["results"][0]["status"] == "deleted"
@@ -263,13 +265,17 @@ class TestDeleteCommand:
         # Setup mocks
         mock_manifest = MagicMock()
         mock_manifest.pipeline_name = "TestPipeline"
-        mock_manifest.domain.name = "test-domain"
-        mock_manifest.domain.region = "us-east-1"
         mock_manifest.targets = {"test": MagicMock(), "prod": MagicMock()}
         mock_manifest.targets["test"].project = MagicMock()
         mock_manifest.targets["test"].project.name = "test-project"
+        mock_manifest.targets["test"].domain = MagicMock()
+        mock_manifest.targets["test"].domain.name = "test-domain"
+        mock_manifest.targets["test"].domain.region = "us-east-1"
         mock_manifest.targets["prod"].project = MagicMock()
         mock_manifest.targets["prod"].project.name = "prod-project"
+        mock_manifest.targets["prod"].domain = MagicMock()
+        mock_manifest.targets["prod"].domain.name = "test-domain"
+        mock_manifest.targets["prod"].domain.region = "us-east-1"
 
         mock_manifest_class.from_file.return_value = mock_manifest
         mock_get_domain_id.return_value = "domain-123"
@@ -305,8 +311,6 @@ class TestDeleteCommand:
         # Setup mocks
         mock_manifest = MagicMock()
         mock_manifest.pipeline_name = "TestPipeline"
-        mock_manifest.domain.name = "test-domain"
-        mock_manifest.domain.region = "us-east-1"
         mock_manifest.targets = {"test": MagicMock()}
         mock_manifest.targets["test"].project = MagicMock()
         mock_manifest.targets["test"].project.name = "test-project"

@@ -1,17 +1,19 @@
 pipelineName: DeleteTestPipeline
 
-domain:
-  name: cicd-test-domain
-  region: ${DEV_DOMAIN_REGION:us-east-2}
-
 targets:
   dev: 
     stage: DEV
     default: true
+    domain:
+      name: cicd-test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-2}
     project: 
       name: dev-marketing
   delete-test:
     stage: TEST
+    domain:
+      name: cicd-test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-2}
     project:
       name: delete-test-project
     initialization:

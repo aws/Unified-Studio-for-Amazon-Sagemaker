@@ -5,7 +5,6 @@ description: "Schema for SageMaker Unified Studio CI/CD pipeline configuration"
 type: object
 required: 
   - pipelineName
-  - domain
   - targets
 properties:
   pipelineName:
@@ -14,27 +13,6 @@ properties:
     pattern: "^[A-Za-z][A-Za-z0-9_-]*$"
     minLength: 1
     maxLength: 64
-  domain:
-    type: object
-    description: "DataZone domain configuration"
-    required: 
-      - name
-      - region
-    properties:
-      name:
-        type: string
-        description: "DataZone domain name"
-        minLength: 1
-        maxLength: 64
-      region:
-        type: string
-        description: "AWS region for the domain"
-        pattern: "^[a-z0-9-]+$"
-        examples: 
-          - "us-east-1"
-          - "us-west-2"
-          - "eu-west-1"
-    additionalProperties: false
   bundle:
     type: object
     description: "Configuration for creating deployment bundles"
@@ -163,6 +141,7 @@ definitions:
     type: object
     required: 
       - project
+      - domain
       - stage
     properties:
       stage:
@@ -180,6 +159,27 @@ definitions:
         type: boolean
         description: "Whether this is the default target"
         default: false
+      domain:
+        type: object
+        description: "DataZone domain configuration"
+        required: 
+          - name
+          - region
+        properties:
+          name:
+            type: string
+            description: "DataZone domain name"
+            minLength: 1
+            maxLength: 64
+          region:
+            type: string
+            description: "AWS region for the domain. Supports environment variable substitution ${VAR_NAME:default_value}"
+            pattern: "^(\\$\\{[A-Za-z_][A-Za-z0-9_]*:[a-z0-9-]+\\}|[a-z0-9-]+)$"
+            examples: 
+              - "us-east-1"
+              - "us-west-2"
+              - "${DEV_DOMAIN_REGION:us-east-1}"
+        additionalProperties: false
       project:
         type: object
         description: "DataZone project configuration"

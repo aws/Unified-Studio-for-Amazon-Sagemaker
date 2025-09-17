@@ -35,13 +35,6 @@ def describe_command(
         # Load pipeline manifest using centralized parser
         manifest = PipelineManifest.from_file(manifest_file)
 
-        # Prepare output data structure for JSON format
-        output_data = {
-            "pipeline": manifest.pipeline_name,
-            "domain": {"name": manifest.domain.name, "region": manifest.domain.region},
-            "targets": {},
-        }
-
         # Determine which targets to show
         targets_to_show = {}
         if targets:
@@ -51,8 +44,10 @@ def describe_command(
                 error_msg = f"Target '{targets}' not found in manifest"
                 available_targets = list(manifest.targets.keys())
                 if output.upper() == "JSON":
-                    output_data["error"] = error_msg
-                    output_data["available_targets"] = available_targets
+                    output_data = {
+                        "error": error_msg,
+                        "available_targets": available_targets,
+                    }
                     typer.echo(json.dumps(output_data, indent=2))
                 else:
                     typer.echo(f"Error: {error_msg}", err=True)
@@ -63,15 +58,32 @@ def describe_command(
         else:
             targets_to_show = manifest.targets
 
+        # Get the first target's domain for display (they should all be the same)
+        first_target = next(iter(manifest.targets.values()))
+        domain_config = first_target.domain
+
+        # Prepare output data structure for JSON format
+        output_data = {
+            "pipeline": manifest.pipeline_name,
+            "domain": {"name": domain_config.name, "region": domain_config.region},
+            "targets": {},
+        }
+
         # TEXT output header
         if output.upper() != "JSON":
             typer.echo(f"Pipeline: {manifest.pipeline_name}")
-            typer.echo(f"Domain: {manifest.domain.name} ({manifest.domain.region})")
+            typer.echo(f"Domain: {domain_config.name} ({domain_config.region})")
             typer.echo("\nTargets:")
 
         # Process targets
         for target_name, target_config in targets_to_show.items():
-            target_data = {"project": {"name": target_config.project.name}}
+            target_data = {
+                "project": {"name": target_config.project.name},
+                "domain": {
+                    "name": target_config.domain.name,
+                    "region": target_config.domain.region,
+                },
+            }
 
             # Add initialization data if it exists
             if (
@@ -116,11 +128,11 @@ def describe_command(
                 try:
                     config = load_config()
                     config["domain"] = {
-                        "name": manifest.domain.name,
-                        "region": manifest.domain.region,
+                        "name": target_config.domain.name,
+                        "region": target_config.domain.region,
                     }
-                    config["region"] = manifest.domain.region
-                    config["domain_name"] = manifest.domain.name
+                    config["region"] = target_config.domain.region
+                    config["domain_name"] = target_config.domain.name
 
                     project_info = get_datazone_project_info(
                         target_config.project.name, config

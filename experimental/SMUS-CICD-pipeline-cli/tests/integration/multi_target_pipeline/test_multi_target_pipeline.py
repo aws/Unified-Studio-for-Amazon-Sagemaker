@@ -282,14 +282,14 @@ task = PythonOperator(
         # Create a manifest with a nonexistent project
         manifest_content = """
 pipelineName: NonexistentProjectTest
-domain:
-  name: cicd-test-domain
-  region: us-east-2
 bundle:
   bundlesDirectory: /tmp/bundles
 targets:
   test:
     stage: test
+    domain:
+      name: cicd-test-domain
+      region: us-east-2
     project:
       name: nonexistent-project-12345
 workflows:
@@ -334,14 +334,14 @@ workflows:
         # Create a manifest with wrong domain
         manifest_content = """
 pipelineName: WrongDomainTest
-domain:
-  name: nonexistent-domain-12345
-  region: us-east-2
 bundle:
   bundlesDirectory: /tmp/bundles
 targets:
   test:
     stage: test
+    domain:
+      name: nonexistent-domain-12345
+      region: ${DEV_DOMAIN_REGION:us-east-1}
     project:
       name: integration-test-test
 workflows:
@@ -384,14 +384,14 @@ workflows:
         # Create a manifest with parameterized region that defaults to wrong region
         manifest_content = """
 pipelineName: WrongRegionTest
-domain:
-  name: cicd-test-domain
-  region: ${DEV_DOMAIN_REGION:eu-west-1}
 bundle:
   bundlesDirectory: /tmp/bundles
 targets:
   test:
     stage: test
+    domain:
+      name: cicd-test-domain
+      region: ${DEV_DOMAIN_REGION:eu-west-1}
     project:
       name: integration-test-test
 workflows:
@@ -534,18 +534,21 @@ workflows:
 
         manifest_content = """
 pipelineName: MixedTargetsTest
-domain:
-  name: cicd-test-domain
-  region: us-east-2
 bundle:
   bundlesDirectory: /tmp/bundles
 targets:
   existing:
     stage: test
+    domain:
+      name: cicd-test-domain
+      region: us-east-2
     project:
       name: integration-test-test
   nonexistent:
     stage: test
+    domain:
+      name: cicd-test-domain
+      region: us-east-2
     project:
       name: definitely-does-not-exist-project-12345
 workflows:
@@ -595,14 +598,14 @@ workflows:
 
         manifest_content = """
 pipelineName: InvalidConnectionTest
-domain:
-  name: cicd-test-domain
-  region: us-east-2
 bundle:
   bundlesDirectory: /tmp/bundles
 targets:
   test:
     stage: test
+    domain:
+      name: cicd-test-domain
+      region: us-east-2
     project:
       name: integration-test-test
 workflows:
@@ -981,8 +984,10 @@ workflows:
             assert (
                 "Pipeline: IntegrationTestMultiTarget" in describe_output
             ), f"Describe output missing pipeline name: {describe_output}"
+            # Get the actual region from environment variable or default
+            expected_region = os.environ.get('DEV_DOMAIN_REGION', 'us-east-2')
             assert (
-                f"Domain: cicd-test-domain ({self.config['aws']['region']})"
+                f"Domain: cicd-test-domain ({expected_region})"
                 in describe_output
             ), f"Describe output missing domain info: {describe_output}"
             assert (

@@ -37,11 +37,11 @@ class TestManifestValidation:
         """Test validation of a valid manifest."""
         valid_manifest = """
 pipelineName: TestPipeline
-domain:
-  name: test-domain
-  region: us-east-1
 targets:
   dev:
+    domain:
+      name: test-domain
+      region: us-east-1
     stage: DEV
     project:
       name: dev-project
@@ -101,7 +101,7 @@ targets:
             os.unlink(manifest_file)
 
     def test_missing_required_field_domain(self):
-        """Test validation with missing required domain."""
+        """Test validation with missing required domain in target."""
         missing_domain = """
 pipelineName: TestPipeline
 targets:
@@ -138,11 +138,11 @@ domain:
         """Test validation with invalid pipelineName pattern."""
         invalid_name = """
 pipelineName: 123InvalidName
-domain:
-  name: test-domain
-  region: us-east-1
 targets:
   dev:
+    domain:
+      name: test-domain
+      region: us-east-1
     stage: DEV
     project:
       name: dev-project
@@ -159,11 +159,11 @@ targets:
         """Test validation with invalid region pattern."""
         invalid_region = """
 pipelineName: TestPipeline
-domain:
-  name: test-domain
-  region: INVALID_REGION
 targets:
   dev:
+    domain:
+      name: test-domain
+      region: INVALID_REGION
     stage: DEV
     project:
       name: dev-project
@@ -180,11 +180,11 @@ targets:
         """Test validation with invalid workflow engine."""
         invalid_engine = """
 pipelineName: TestPipeline
-domain:
-  name: test-domain
-  region: us-east-1
 targets:
   dev:
+    domain:
+      name: test-domain
+      region: us-east-1
     stage: DEV
     project:
       name: dev-project
@@ -239,6 +239,30 @@ targets: {}
         finally:
             os.unlink(manifest_file)
 
+    def test_top_level_domain_not_allowed(self):
+        """Test validation rejects top-level domain configuration."""
+        top_level_domain = """
+pipelineName: TestPipeline
+domain:
+  name: test-domain
+  region: us-east-1
+targets:
+  dev:
+    domain:
+      name: test-domain
+      region: us-east-1
+    stage: DEV
+    project:
+      name: dev-project
+"""
+        manifest_file = self.create_temp_manifest(top_level_domain)
+        try:
+            is_valid, errors, data = validate_manifest_file(manifest_file)
+            assert not is_valid
+            assert any("Additional properties are not allowed" in error and "'domain'" in error for error in errors)
+        finally:
+            os.unlink(manifest_file)
+
     def test_missing_bundle_target_config_required_fields(self):
         """Test validation with missing required fields in bundle_target_configuration."""
         missing_fields = """
@@ -280,11 +304,11 @@ class TestPipelineManifestValidation:
         """Test that a valid manifest loads without errors."""
         valid_manifest = """
 pipelineName: TestPipeline
-domain:
-  name: test-domain
-  region: us-east-1
 targets:
   dev:
+    domain:
+      name: test-domain
+      region: us-east-1
     stage: DEV
     project:
       name: dev-project
@@ -293,7 +317,7 @@ targets:
         try:
             manifest = PipelineManifest.from_file(manifest_file)
             assert manifest.pipeline_name == "TestPipeline"
-            assert manifest.domain.name == "test-domain"
+            assert manifest.targets["dev"].domain.name == "test-domain"
         finally:
             os.unlink(manifest_file)
 

@@ -13,11 +13,8 @@ runner = CliRunner()
 def sample_manifest():
     return """
 pipelineName: TestPipeline
-domain:
-  name: test-domain
-  region: us-east-1
-bundlesDirectory: /tmp/bundles
 bundle:
+  bundlesDirectory: /tmp/bundles
   workflow:
     - connectionName: default.s3_shared
       append: true
@@ -29,6 +26,9 @@ bundle:
 targets:
   dev:
     default: true
+    domain:
+      name: test-domain
+      region: us-east-1
     project:
       name: dev-project
 """
@@ -80,12 +80,12 @@ def test_bundle_no_bundle_section():
     """Test bundle with missing bundle section."""
     manifest = """
 pipelineName: TestPipeline
-domain:
-  name: test-domain
-  region: us-east-1
 targets:
   dev:
     default: true
+    domain:
+      name: test-domain
+      region: us-east-1
     project:
       name: dev-project
 """
@@ -98,22 +98,29 @@ targets:
                 "smus_cicd.helpers.utils.load_config",
                 return_value={"region": "us-east-1"},
             ):
-                result = runner.invoke(app, ["bundle"])
-                assert result.exit_code == 1
-                assert "No bundle section found" in result.output
+                with patch(
+                    "smus_cicd.helpers.utils.get_datazone_project_info",
+                    return_value={"connections": {}},
+                ):
+                    with patch("boto3.client"):
+                        with patch("tempfile.mkdtemp", return_value="/tmp/test"):
+                            with patch("os.makedirs"):
+                                result = runner.invoke(app, ["bundle"])
+                                assert result.exit_code == 1
+                                assert "No files found" in result.output
 
 
 def test_bundle_no_default_target():
     """Test bundle with no default target specified."""
     manifest = """
 pipelineName: TestPipeline
-domain:
-  name: test-domain
-  region: us-east-1
 bundle:
   workflow: []
 targets:
   test:
+    domain:
+      name: test-domain
+      region: us-east-1
     project:
       name: test-project
 """
