@@ -82,7 +82,7 @@ targets:
   
   prod:
     domain:
-      name: dzd_629k4alubnlko9
+      name: cicd-test-domain
       region: us-east-1
     stage: PROD
     project:
@@ -93,7 +93,7 @@ targets:
       project:
         create: true
         profileName: 'All capabilities'
-        owners: [arn:aws:iam::123456789012:role/GitHubActionsRole-SMUS-CLI-Tests, Eng1]
+        owners: [arn:aws:iam::588738596778:role/GitHubActionsRole-SMUS-CLI-Tests, Eng1]
         contributors: []
       environments: 
         - EnvironmentConfigurationName: 'OnDemand Workflows'     
