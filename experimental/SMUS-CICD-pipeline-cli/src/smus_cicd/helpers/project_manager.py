@@ -34,7 +34,7 @@ class ProjectManager:
 
         # Check if project exists in DataZone first
         # Ensure config has region for get_datazone_project_info
-        config_with_region = {**self.config, "region": region}
+        config_with_region = {**self.config, "domain": {"region": region}}
         project_info = get_datazone_project_info(project_name, config_with_region)
         logger.debug(f"project_info keys: {list(project_info.keys())}")
         logger.debug(f"project_info has error: {'error' in project_info}")
@@ -85,6 +85,7 @@ class ProjectManager:
                 print(
                     "🔍 DEBUG: Project creation failed - NOT calling _ensure_environments_exist"
                 )
+                raise Exception(f"Project creation failed: {project_info.get('error', 'Unknown error')}")
             return project_info
 
         # Project doesn't exist and we're not configured to create it
@@ -182,7 +183,7 @@ class ProjectManager:
             handle_error("Failed to manage project memberships")
 
         handle_success("Target infrastructure ready")
-        config_with_region = {**self.config, "region": region}
+        config_with_region = {**self.config, "domain": {"region": region}}
         final_project_info = get_datazone_project_info(project_name, config_with_region)
         print(
             f"🔍 DEBUG: Final project_info keys: {list(final_project_info.keys()) if isinstance(final_project_info, dict) else type(final_project_info)}"
@@ -192,6 +193,7 @@ class ProjectManager:
         )
         if isinstance(final_project_info, dict) and "error" in final_project_info:
             print(f"🔍 DEBUG: Actual error content: {final_project_info['error']}")
+            raise Exception(f"Project validation failed: {final_project_info['error']}")
         return final_project_info
 
     def _update_existing_project(
