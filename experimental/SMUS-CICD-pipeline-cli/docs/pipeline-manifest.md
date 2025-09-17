@@ -10,10 +10,14 @@ The pipeline manifest is a YAML file that defines your CI/CD pipeline configurat
 
 ### Basic Syntax
 ```yaml
-# Use environment variables with defaults
-domain:
-  name: ${DOMAIN_NAME:my-default-domain}
-  region: ${AWS_REGION:us-east-1}
+# Use environment variables with defaults in target configurations
+targets:
+  dev:
+    domain:
+      name: ${DOMAIN_NAME:my-default-domain}
+      region: ${AWS_REGION:us-east-1}
+    project:
+      name: ${PROJECT_PREFIX:myapp}-dev
 
 # Use environment variables without defaults (empty string if not set)
 database:
@@ -24,16 +28,18 @@ database:
 ```yaml
 pipelineName: ${PIPELINE_NAME:MyPipeline}
 
-domain:
-  name: ${DOMAIN_NAME}
-  region: ${DEV_DOMAIN_REGION:us-east-2}
-
 targets:
   dev:
+    domain:
+      name: ${DOMAIN_NAME}
+      region: ${DEV_DOMAIN_REGION:us-east-2}
     project:
       name: ${PROJECT_PREFIX:myapp}-dev-${TEAM_NAME}
   
   prod:
+    domain:
+      name: ${DOMAIN_NAME}
+      region: ${PROD_DOMAIN_REGION:us-east-1}
     project:
       name: ${PROJECT_PREFIX:myapp}-prod-${TEAM_NAME}
 ```
@@ -63,11 +69,6 @@ See the main [README Environment Variable section](../README.md#environment-vari
 pipelineName: MarketingDataPipeline
 bundlesDirectory: ./bundles
 
-# Domain configuration (supports environment variables)
-domain:
-  name: ${DOMAIN_NAME:my-studio-domain}
-  region: ${AWS_REGION:us-east-1}
-
 # What to include in deployment bundles
 bundle:
   workflow:
@@ -88,11 +89,17 @@ bundle:
 # Target environments
 targets:
   dev: 
+    domain:
+      name: ${DOMAIN_NAME:my-studio-domain}
+      region: ${AWS_REGION:us-east-1}
     default: true
     project: 
       name: dev-marketing
       
   test: 
+    domain:
+      name: ${DOMAIN_NAME:my-studio-domain}
+      region: ${AWS_REGION:us-east-1}
     project: 
       name: test-marketing
     initialization:
@@ -119,6 +126,9 @@ targets:
           debug_mode: true
 
   prod:
+    domain:
+      name: ${DOMAIN_NAME:my-studio-domain}
+      region: ${AWS_REGION:us-east-1}
     project: 
       name: prod-marketing
     initialization:
@@ -170,10 +180,16 @@ bundlesDirectory: s3://my-datazone-bucket/bundles  # S3 location
 
 ### Domain Configuration
 
+Each target must specify its domain configuration:
+
 ```yaml
-domain:
-  name: my-studio-domain
-  region: us-east-1
+targets:
+  dev:
+    domain:
+      name: my-studio-domain
+      region: us-east-1
+    project:
+      name: dev-project
 ```
 
 - **`domain.name`** (required): SageMaker Unified Studio domain name
@@ -233,6 +249,9 @@ Each target represents a deployment environment:
 ```yaml
 targets:
   dev:
+    domain:
+      name: my-studio-domain
+      region: us-east-1
     default: true
     project:
       name: dev-marketing
@@ -246,6 +265,9 @@ targets:
 ```yaml
 targets:
   test:
+    domain:
+      name: my-studio-domain
+      region: us-east-1
     initialization:
       project:
         create: true
@@ -275,6 +297,9 @@ targets:
 ```yaml
 targets:
   test:
+    domain:
+      name: my-studio-domain
+      region: us-east-1
     bundle_target_configuration:
       storage:
         connectionName: default.s3_shared
@@ -294,6 +319,9 @@ targets:
 ```yaml
 targets:
   test:
+    domain:
+      name: my-studio-domain
+      region: us-east-1
     workflows:
       - workflowName: marketing_etl_dag
         parameters:
@@ -309,6 +337,9 @@ targets:
 ```yaml
 targets:
   test:
+    domain:
+      name: my-studio-domain
+      region: us-east-1
     tests:
       folder: tests/integration/
 ```
@@ -347,8 +378,7 @@ workflows:
 
 ### Required Fields
 - `pipelineName`
-- `domain.name` and `domain.region`
-- At least one target with `project.name`
+- Each target must have `domain.name`, `domain.region`, and `project.name`
 
 ### Optional Sections
 - `bundle` - If omitted, no bundling operations
