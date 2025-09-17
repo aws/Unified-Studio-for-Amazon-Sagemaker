@@ -431,9 +431,12 @@ smus-cli create [OPTIONS]
 ```
 
 #### Options
-- **`-o, --output`**: Output file path for the new pipeline manifest (default: `pipeline.yaml`)
-- **`-n, --name`**: Pipeline name (optional, will use placeholder if not provided)
-- **`-t, --targets`**: Target name(s) - single target or comma-separated list (optional)
+- **`-o, --output`**: Output file path for the pipeline manifest (default: `pipeline.yaml`)
+- **`-n, --name`**: Pipeline name (optional, defaults to 'YourPipelineName')
+- **`--domain-id`**: SageMaker Unified Studio domain ID (optional)
+- **`--dev-project-id`**: Development project ID to base other targets on (optional)
+- **`--stages`**: Comma-separated list of stages to create targets for (default: `dev,test,prod`)
+- **`--region`**: AWS region (default: `us-east-1`)
 - **`--help`**: Show command help
 
 #### Examples
@@ -443,10 +446,10 @@ smus-cli create [OPTIONS]
 smus-cli create
 
 # Create with custom output file and name
-smus-cli create -o my-pipeline.yaml -n MyPipeline
+smus-cli create --output my-pipeline.yaml --name MyPipeline
 
-# Create with specific targets
-smus-cli create -o pipeline.yaml -t dev,test,prod
+# Create with specific stages and region
+smus-cli create --output pipeline.yaml --stages dev,test,prod --region us-west-2
 ```
 
 ### 1. describe - Describe Pipeline Configuration
@@ -487,7 +490,7 @@ smus-cli describe -p my-pipeline.yaml
 Creates bundle zip files by downloading from S3.
 
 ```bash
-smus-cli bundle [OPTIONS]
+smus-cli bundle [OPTIONS] [TARGET_POSITIONAL]
 ```
 
 #### Options
@@ -496,6 +499,9 @@ smus-cli bundle [OPTIONS]
 - **`-d, --output-dir`**: Output directory for bundle files (default: `./bundles`)
 - **`-o, --output`**: Output format: TEXT (default) or JSON
 - **`--help`**: Show command help
+
+#### Positional Arguments
+- **`TARGET_POSITIONAL`**: Target name (positional argument for backward compatibility)
 
 #### Bundle Storage Locations
 
@@ -524,13 +530,16 @@ bundlesDirectory: s3://my-datazone-bucket/bundles
 smus-cli bundle
 
 # Bundle specific targets
-smus-cli bundle -t dev,test
+smus-cli bundle --targets dev,test
 
 # Bundle to custom directory
-smus-cli bundle -d /path/to/bundles
+smus-cli bundle --output-dir /path/to/bundles
 
 # Bundle with JSON output
-smus-cli bundle -o JSON
+smus-cli bundle --output JSON
+
+# Bundle using positional argument (backward compatibility)
+smus-cli bundle dev
 ```
 
 ### 3. deploy - Deploy to Targets
@@ -538,13 +547,17 @@ smus-cli bundle -o JSON
 Deploys bundle files to target environments (auto-initializes if needed).
 
 ```bash
-smus-cli deploy [OPTIONS]
+smus-cli deploy [OPTIONS] [TARGET_POSITIONAL]
 ```
 
 #### Options
 - **`-p, --pipeline`**: Path to pipeline manifest file (default: `pipeline.yaml`)
 - **`-t, --targets`**: Target name(s) - single target or comma-separated list (uses default target if not specified)
+- **`-b, --bundle`**: Path to pre-created bundle file (optional)
 - **`--help`**: Show command help
+
+#### Positional Arguments
+- **`TARGET_POSITIONAL`**: Target name (positional argument for backward compatibility)
 
 #### Examples
 
@@ -553,10 +566,13 @@ smus-cli deploy [OPTIONS]
 smus-cli deploy
 
 # Deploy to specific targets
-smus-cli deploy -t test,prod
+smus-cli deploy --targets test,prod
 
-# Deploy specific pipeline
-smus-cli deploy -p my-pipeline.yaml -t prod
+# Deploy with pre-created bundle
+smus-cli deploy --targets test --bundle /path/to/bundle.zip
+
+# Deploy using positional argument (backward compatibility)
+smus-cli deploy test
 ```
 
 ### 4. monitor - Monitor Workflow Status
@@ -595,8 +611,8 @@ smus-cli run [OPTIONS]
 ```
 
 #### Options
-- **`-w, --workflow`**: Workflow name to target (required)
-- **`-c, --command`**: Airflow command to execute (required)
+- **`-w, --workflow`**: Workflow name to run (optional)
+- **`-c, --command`**: Airflow CLI command to execute (optional)
 - **`-t, --targets`**: Target name(s) - single target or comma-separated list (optional, defaults to first available)
 - **`-p, --pipeline`**: Path to pipeline manifest file (default: `pipeline.yaml`)
 - **`-o, --output`**: Output format: TEXT (default) or JSON
@@ -606,13 +622,13 @@ smus-cli run [OPTIONS]
 
 ```bash
 # Run Airflow version command
-smus-cli run -w my_dag -c version
+smus-cli run --workflow my_dag --command version
 
 # Run DAG list command on specific target
-smus-cli run -w my_dag -c "dags list" -t prod
+smus-cli run --workflow my_dag --command "dags list" --targets prod
 
 # Run with JSON output
-smus-cli run -w my_dag -c version -o JSON
+smus-cli run --workflow my_dag --command version --output JSON
 ```
 
 ### 6. delete - Delete Target Environments
