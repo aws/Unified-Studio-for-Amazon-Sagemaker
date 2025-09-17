@@ -65,7 +65,7 @@ jobs:
     - name: Run unit tests with coverage
       run: |
         cd experimental/SMUS-CICD-pipeline-cli
-        python scripts/run_tests.py --type unit --no-html-report
+        python tests/run_tests.py --type unit --no-html-report
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
