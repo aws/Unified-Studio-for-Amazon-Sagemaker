@@ -1,5 +1,6 @@
 import time
 from time import sleep
+from typing import Dict, List, Optional, Tuple
 
 """
 DataZone integration functions for SMUS CI/CD CLI.
@@ -21,6 +22,8 @@ def get_domain_id_by_name(domain_name, region):
             if domain.get("name") == domain_name:
                 return domain.get("id")
 
+        # Domain not found - this is a critical error
+        typer.echo(f"❌ Domain '{domain_name}' not found in region {region}", err=True)
         return None
 
     except Exception as e:
@@ -44,9 +47,10 @@ def get_domain_id_by_name(domain_name, region):
             )
         else:
             typer.echo(
-                f"Error finding domain by name {domain_name}: {str(e)}", err=True
+                f"❌ Error finding domain by name {domain_name}: {str(e)}", err=True
             )
-        return None
+        # Re-raise critical errors instead of returning None
+        raise Exception(f"Failed to get domain ID for {domain_name}: {e}")
 
 
 def get_project_id_by_name(project_name, domain_id, region):
@@ -61,6 +65,10 @@ def get_project_id_by_name(project_name, domain_id, region):
             if project.get("name") == project_name:
                 return project.get("id")
 
+        # Project not found - this is a critical error
+        typer.echo(
+            f"❌ Project '{project_name}' not found in domain {domain_id}", err=True
+        )
         return None
 
     except Exception as e:
@@ -84,9 +92,10 @@ def get_project_id_by_name(project_name, domain_id, region):
             )
         else:
             typer.echo(
-                f"Error finding project by name {project_name}: {str(e)}", err=True
+                f"❌ Error finding project by name {project_name}: {str(e)}", err=True
             )
-        return None
+        # Re-raise critical errors instead of returning None
+        raise Exception(f"Failed to get project ID for {project_name}: {e}")
 
 
 def create_environment_and_wait(domain_id, project_id, env_name, target_name, region):
@@ -877,3 +886,352 @@ def manage_project_memberships(
     except Exception as e:
         typer.echo(f"❌ Error managing project memberships: {str(e)}", err=True)
         return False
+
+
+# Asset Access Functions for DataZone Catalog Integration
+
+
+def search_asset_listing(
+    domain_id: str, identifier: str, region: str
+) -> Optional[Tuple[str, str]]:
+    """Search for asset listing and return (asset_id, listing_id)."""
+    try:
+        datazone_client = boto3.client("datazone", region_name=region)
+
+        response = datazone_client.search_listings(
+            domainIdentifier=domain_id, searchText=identifier
+        )
+
+        items = response.get("items", [])
+        if not items:
+            typer.echo(f"❌ No listings found for identifier: {identifier}")
+            return None
+
+        item = items[0]["assetListing"]
+        asset_id = item["entityId"]
+        listing_id = item["listingId"]
+
+        typer.echo(f"✅ Found asset: {asset_id}, listing: {listing_id}")
+        return asset_id, listing_id
+
+    except Exception as e:
+        typer.echo(f"❌ Error searching for asset {identifier}: {e}")
+        raise
+
+
+def check_existing_subscription(
+    domain_id: str, project_id: str, listing_id: str, region: str
+) -> Optional[str]:
+    """Check if subscription request already exists for the asset."""
+    try:
+        datazone_client = boto3.client("datazone", region_name=region)
+
+        # Check subscription requests
+        response = datazone_client.list_subscription_requests(
+            domainIdentifier=domain_id, owningProjectId=project_id
+        )
+
+        for request in response.get("items", []):
+            if request.get("subscribedListings", [{}])[0].get("id") == listing_id:
+                typer.echo(
+                    f"✅ Found existing subscription request: {request['id']} (status: {request.get('status', 'UNKNOWN')})"
+                )
+                return request["id"]
+
+        # Also check active subscriptions
+        try:
+            subs_response = datazone_client.list_subscriptions(
+                domainIdentifier=domain_id, owningProjectId=project_id
+            )
+
+            for sub in subs_response.get("items", []):
+                if sub.get("subscribedListing", {}).get("id") == listing_id:
+                    typer.echo(
+                        f"✅ Found existing active subscription: {sub['id']} (status: {sub.get('status', 'UNKNOWN')})"
+                    )
+                    return sub["id"]
+
+        except Exception as e:
+            typer.echo(f"⚠️ Could not check active subscriptions: {e}")
+
+        return None
+
+    except Exception as e:
+        typer.echo(f"❌ Error checking existing subscriptions: {e}")
+        raise
+
+
+def create_subscription_request(
+    domain_id: str, project_id: str, listing_id: str, reason: str, region: str
+) -> Optional[str]:
+    """Create subscription request for asset."""
+    try:
+        datazone_client = boto3.client("datazone", region_name=region)
+
+        response = datazone_client.create_subscription_request(
+            domainIdentifier=domain_id,
+            requestReason=reason,
+            subscribedListings=[{"identifier": listing_id}],
+            subscribedPrincipals=[{"project": {"identifier": project_id}}],
+        )
+
+        request_id = response["id"]
+        typer.echo(f"✅ Created subscription request: {request_id}")
+        return request_id
+
+    except Exception as e:
+        typer.echo(f"❌ Error creating subscription request: {e}")
+        raise
+
+
+def wait_for_subscription_approval(
+    domain_id: str, request_id: str, region: str, timeout: int = 300
+) -> bool:
+    """Wait for subscription approval with timeout."""
+    typer.echo(f"⏳ Waiting for subscription approval (timeout: {timeout}s)...")
+
+    datazone_client = boto3.client("datazone", region_name=region)
+    start_time = time.time()
+
+    while time.time() - start_time < timeout:
+        try:
+            response = datazone_client.get_subscription_request_details(
+                domainIdentifier=domain_id, identifier=request_id
+            )
+
+            status = response["status"]
+            typer.echo(f"📊 Subscription request {request_id} status: {status}")
+
+            if status in ["APPROVED", "ACCEPTED"]:
+                typer.echo("✅ Subscription approved!")
+                return True
+            elif status in ["REJECTED", "ERROR"]:
+                typer.echo(f"❌ Subscription failed with status: {status}")
+                return False
+
+            typer.echo("⏳ Waiting 30 seconds before next check...")
+            time.sleep(30)
+
+        except Exception as e:
+            typer.echo(f"❌ Error checking subscription status: {e}")
+            raise
+
+    typer.echo("⏰ Timeout waiting for subscription approval")
+    return False
+
+
+def check_subscription_grants(
+    domain_id: str, subscription_id: str, region: str
+) -> bool:
+    """Check subscription grant status with retry logic."""
+    try:
+        datazone_client = boto3.client("datazone", region_name=region)
+
+        # Wait up to 60 seconds for grants to be created after subscription approval
+        max_wait_time = 60
+        start_time = time.time()
+
+        while time.time() - start_time < max_wait_time:
+            response = datazone_client.list_subscription_grants(
+                domainIdentifier=domain_id, subscriptionId=subscription_id
+            )
+
+            grants = response.get("items", [])
+
+            if not grants:
+                # No grants yet - wait and retry
+                remaining_time = max_wait_time - (time.time() - start_time)
+                if remaining_time > 0:
+                    typer.echo(
+                        f"⏳ Waiting for grants to be created... ({remaining_time:.0f}s remaining)"
+                    )
+                    time.sleep(10)
+                    continue
+                else:
+                    typer.echo(
+                        "❌ No grants created within timeout period - this indicates an error"
+                    )
+                    return False
+
+            # Check grant status
+            all_completed = True
+            for grant in grants:
+                status = grant["status"]
+                grant_id = grant["id"]
+                typer.echo(f"📊 Grant {grant_id} status: {status}")
+
+                if status != "COMPLETED":
+                    all_completed = False
+
+            if all_completed:
+                return True
+            else:
+                # Grants exist but not all completed - wait and retry
+                remaining_time = max_wait_time - (time.time() - start_time)
+                if remaining_time > 0:
+                    typer.echo(
+                        f"⏳ Waiting for grants to complete... ({remaining_time:.0f}s remaining)"
+                    )
+                    time.sleep(10)
+                    continue
+                else:
+                    typer.echo("❌ Grants did not complete within timeout period")
+                    return False
+
+        return False
+
+    except Exception as e:
+        typer.echo(f"❌ Error checking subscription grants: {e}")
+        raise
+
+
+def process_asset_access(
+    domain_id: str, project_id: str, identifier: str, reason: str, region: str
+) -> bool:
+    """Complete asset access workflow for a single asset."""
+    typer.echo(f"\n🔍 Processing asset access for: {identifier}")
+
+    # Step 1: Search for asset
+    result = search_asset_listing(domain_id, identifier, region)
+    if not result:
+        return False
+
+    asset_id, listing_id = result
+
+    # Step 2: Check existing subscription
+    existing_id = check_existing_subscription(domain_id, project_id, listing_id, region)
+
+    # Step 3: Create subscription if needed
+    if not existing_id:
+        request_id = create_subscription_request(
+            domain_id, project_id, listing_id, reason, region
+        )
+
+        # Step 4: Wait for approval
+        wait_for_subscription_approval(domain_id, request_id, region)
+
+        # Step 5: Find the actual subscription ID by listing
+        subscription_id = find_subscription_by_listing(
+            domain_id, project_id, listing_id, region
+        )
+        if not subscription_id:
+            # Fallback to request ID
+            subscription_id = get_subscription_id_from_request(
+                domain_id, request_id, region
+            )
+    else:
+        # Use existing subscription
+        subscription_id = existing_id
+        typer.echo("✅ Using existing subscription")
+
+    # Step 6: Check grants
+    check_subscription_grants(domain_id, subscription_id, region)
+
+    typer.echo("✅ Asset access successfully configured!")
+    return True
+
+
+def get_subscription_id_from_request(
+    domain_id: str, request_id: str, region: str
+) -> str:
+    """Get actual subscription ID from request ID after approval."""
+    try:
+        datazone_client = boto3.client("datazone", region_name=region)
+
+        # First try to get subscription ID from request details
+        try:
+            response = datazone_client.get_subscription_request_details(
+                domainIdentifier=domain_id, identifier=request_id
+            )
+
+            subscription_id = response.get("subscriptionId")
+            if subscription_id:
+                typer.echo(f"📊 Subscription ID from request: {subscription_id}")
+                return subscription_id
+        except Exception as e:
+            typer.echo(f"⚠️ Could not get request details: {e}")
+
+        # If that fails, the request_id might actually be the subscription_id
+        # This happens when DataZone creates the subscription immediately
+        typer.echo(f"📊 Using request ID as subscription ID: {request_id}")
+        return request_id
+
+    except Exception as e:
+        typer.echo(f"⚠️ Error getting subscription ID: {e}")
+        raise
+
+
+def find_subscription_by_listing(
+    domain_id: str, project_id: str, listing_id: str, region: str
+) -> Optional[str]:
+    """Find subscription ID by matching listing ID."""
+    try:
+        datazone_client = boto3.client("datazone", region_name=region)
+
+        response = datazone_client.list_subscriptions(
+            domainIdentifier=domain_id, owningProjectId=project_id
+        )
+
+        for sub in response.get("items", []):
+            if sub.get("subscribedListing", {}).get("id") == listing_id:
+                if sub.get("status") == "APPROVED":
+                    return sub["id"]
+
+        return None
+
+    except Exception as e:
+        typer.echo(f"⚠️ Error finding subscription by listing: {e}")
+        raise
+
+
+def process_catalog_assets(
+    domain_id: str, project_id: str, assets: List[Dict], region: str
+) -> bool:
+    """Process all catalog assets for a deployment target."""
+    if not assets:
+        typer.echo("📋 No catalog assets to process")
+        return True
+
+    typer.echo(f"\n📦 Processing {len(assets)} catalog assets...")
+
+    success_count = 0
+    for i, asset in enumerate(assets, 1):
+        typer.echo(f"\n--- Asset {i}/{len(assets)} ---")
+
+        # Extract asset configuration
+        selector = asset.get("selector", {})
+        reason = asset.get("requestReason", "Required for pipeline deployment")
+
+        # Handle asset ID vs search
+        if "assetId" in selector:
+            typer.echo("⚠️ Direct assetId not yet supported, use search instead")
+            continue
+
+        search = selector.get("search", {})
+        if not search:
+            typer.echo("❌ No search configuration found in asset selector")
+            continue
+
+        asset_type = search.get("assetType")
+        identifier = search.get("identifier")
+
+        if not identifier:
+            typer.echo("❌ No identifier found in asset search configuration")
+            continue
+
+        # Skip non-Glue assets as specified in requirements
+        if asset_type and asset_type != "GlueTable":
+            typer.echo(f"⏭️ Skipping asset type {asset_type} (only GlueTable supported)")
+            continue
+
+        # Process asset access
+        if process_asset_access(domain_id, project_id, identifier, reason, region):
+            success_count += 1
+        else:
+            typer.echo(f"❌ Failed to process asset: {identifier}")
+            return False
+
+    typer.echo(
+        f"\n✅ Successfully processed {success_count}/{len(assets)} catalog assets"
+    )
+    return success_count == len(assets)

@@ -55,6 +55,60 @@ properties:
             type: string
             description: "Target directory for git content"
         additionalProperties: false
+      catalog:
+        type: object
+        description: "Catalog assets configuration for DataZone access"
+        properties:
+          connectionName:
+            type: string
+            description: "Connection name for catalog access"
+            examples:
+              - "default.domain"
+          assets:
+            type: array
+            description: "List of catalog assets to request access to"
+            items:
+              type: object
+              required:
+                - selector
+              properties:
+                selector:
+                  type: object
+                  description: "Asset selector configuration"
+                  properties:
+                    assetId:
+                      type: string
+                      description: "Direct asset ID"
+                    search:
+                      type: object
+                      description: "Search configuration for finding assets"
+                      properties:
+                        assetType:
+                          type: string
+                          description: "Type of asset to search for"
+                          examples:
+                            - "GlueTable"
+                        identifier:
+                          type: string
+                          description: "Asset identifier (e.g., database.table)"
+                          examples:
+                            - "covid19_db.countries_aggregated"
+                      additionalProperties: false
+                  additionalProperties: false
+                permission:
+                  type: string
+                  description: "Permission level requested"
+                  enum:
+                    - "READ"
+                    - "WRITE"
+                  default: "READ"
+                requestReason:
+                  type: string
+                  description: "Reason for requesting access"
+                  examples:
+                    - "Required access for pipeline deployment"
+              additionalProperties: false
+        additionalProperties: false
     additionalProperties: false
   workflows:
     type: array

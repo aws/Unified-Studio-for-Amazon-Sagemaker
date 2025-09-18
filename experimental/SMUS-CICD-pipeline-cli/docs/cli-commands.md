@@ -307,12 +307,24 @@ Deploying workflows to: default.s3_shared/workflows (append: True)
   Workflow files synced: 17
 ✅ Deployment complete! Total files synced: 18
 
+📦 Processing 1 catalog assets...
+
+--- Asset 1/1 ---
+🔍 Processing asset access for: covid19_db.countries_aggregated
+✅ Found asset: 3ljuj2gtiziwx3, listing: 3r1ch3l4y6dx9j
+✅ Using existing subscription
+⏳ Waiting for grants to be created... (60s remaining)
+📊 Grant bs1gp0rd7ud7l3 status: COMPLETED
+✅ Asset access successfully configured!
+
+✅ Successfully processed 1/1 catalog assets
+
 🚀 Starting workflow validation...
 ✅ MWAA environment is available
 🆕 New DAGs detected: runGettingStartedNotebook
 ```
 
-**What this shows:** The deploy command downloads the bundle from S3 (if using S3 bundle storage) and uploads the files to the target environment's SageMaker Unified Studio project storage and workflow connections. It shows the deployment progress, file counts, and validates that the MWAA environment can access the new workflows. This ensures your code changes are properly deployed and ready for execution.
+**What this shows:** The deploy command downloads the bundle from S3 (if using S3 bundle storage) and uploads the files to the target environment's SageMaker Unified Studio project storage and workflow connections. It also processes catalog assets defined in the pipeline manifest, requesting access to required data tables and waiting for subscription approval. The deployment shows progress for file uploads, catalog asset access, and validates that the MWAA environment can access the new workflows. This ensures your code changes and data access are properly configured and ready for execution.
 
 ### 4. Monitor Workflow Status
 ```bash
@@ -544,7 +556,16 @@ smus-cli bundle dev
 
 ### 3. deploy - Deploy to Targets
 
-Deploys bundle files to target environments (auto-initializes if needed).
+Deploys bundle files to target environments (auto-initializes if needed). The deploy command performs the following operations:
+
+1. **Bundle Deployment**: Uploads workflow and storage files to target project connections
+2. **Catalog Asset Access**: Processes catalog assets defined in the pipeline manifest:
+   - Searches for assets in the DataZone catalog
+   - Creates subscription requests for required access
+   - Waits for subscription approval (up to 5 minutes)
+   - Verifies subscription grants are completed
+   - Fails deployment if catalog access cannot be obtained
+3. **Workflow Validation**: Ensures deployed workflows are accessible by the target environment
 
 ```bash
 smus-cli deploy [OPTIONS] [TARGET_POSITIONAL]

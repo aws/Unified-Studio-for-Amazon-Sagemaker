@@ -12,6 +12,7 @@ This repository contains utilities for Amazon SageMaker Unified Studio. It is st
 - Expriemental CICD Pipeline support.  This library support creation of CICD pipeline using SageMaker Unified Studio that allows bundling and deploying code to diferent stages of development. 
     - [experimental/SMUS-CICD-pipeline-cli](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/tree/main/experimental/SMUS-CICD-pipeline-cli)
     - **New**: Environment variable parameterization in pipeline manifests for flexible multi-environment deployments
+    - **New**: DataZone catalog asset access integration with automated subscription management and approval workflows
 
 
 To read more about Amazon SageMaker Unified Studio, please refer to:

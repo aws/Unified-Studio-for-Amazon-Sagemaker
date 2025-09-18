@@ -103,6 +103,7 @@ The SMUS CI/CD CLI provides comprehensive pipeline management capabilities:
 - **Infrastructure Deployment**: Automatically deploy and configure SageMaker Unified Studio projects, connections, and AWS resources for test and production stages
 - **Artifact Bundling**: Package code, workflows, notebooks, data assets, and configuration files into deployable bundles
 - **Multi-Target Deployment**: Push bundled artifacts to multiple environments (dev, test, prod) with environment-specific configuration
+- **DataZone Catalog Integration**: Automatically request and manage access to catalog assets (tables, datasets) required by your pipelines with subscription management and approval workflows
 - **Workflow Orchestration**: Trigger, run, and monitor Airflow DAGs and ML pipelines across different stages
 - **Automated Testing**: Execute validation tests to verify deployment correctness and pipeline functionality
 - **Quality Gates**: Stop pipeline progression if tests fail, ensuring only validated changes reach production

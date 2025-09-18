@@ -13,6 +13,23 @@ bundle:
       append: false
       include: ['src']
       exclude: ['.ipynb_checkpoints/', '__pycache__/', '*.pyc']
+  catalog:
+    # connectionName: default.domain 
+    assets:
+    - selector: 
+        # assetId: xxxx
+        search: 
+          assetType: GlueTable
+          identifier: covid19_db.countries_aggregated
+      permission: READ 
+      requestReason: Required access for pipeline IntegrationTestMultiTarget
+    - selector:
+        search:
+          assetType: GlueTable
+          identifier: covid19_db.worldwide_aggregate
+      permission: READ
+      requestReason: Second table access for multi-asset testing
+
 
 # Target environments (dev, test, prod)
 targets:

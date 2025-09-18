@@ -182,10 +182,13 @@ def _deploy_bundle_to_target(
             workflows_config, target_config.project.name, config
         )
 
+    # Process catalog assets if configured
+    asset_success = _process_catalog_assets(target_config, manifest, config)
+
     # Return overall success
     storage_success = storage_result[0] is not None
     workflow_success = workflow_result[0] is not None
-    return storage_success and workflow_success
+    return storage_success and workflow_success and asset_success
 
 
 def _find_bundle_file(
@@ -459,3 +462,81 @@ def _validate_deployed_workflows(
     except Exception as e:
         typer.echo("⚠️ Workflow validation failed: " + str(e))
         # Don't fail deployment for validation issues
+
+
+def _process_catalog_assets(
+    target_config,
+    manifest: PipelineManifest,
+    config: Dict[str, Any],
+) -> bool:
+    """
+    Process catalog assets for DataZone access.
+
+    Args:
+        target_config: Target configuration object
+        manifest: Pipeline manifest object
+        config: Configuration dictionary
+
+    Returns:
+        True if all assets processed successfully, False otherwise
+    """
+    # Check if catalog assets are configured
+    if not manifest.bundle.catalog or not manifest.bundle.catalog.assets:
+        typer.echo("📋 No catalog assets configured")
+        return True
+
+    typer.echo("🔍 Processing catalog assets...")
+
+    # Import datazone helper functions
+    from ..helpers.datazone import (
+        get_domain_id_by_name,
+        get_project_id_by_name,
+        process_catalog_assets,
+    )
+
+    # Get domain and project IDs
+    domain_name = target_config.domain.name
+    project_name = target_config.project.name
+    region = target_config.domain.region
+
+    domain_id = get_domain_id_by_name(domain_name, region)
+    if not domain_id:
+        handle_error(f"Could not find domain ID for domain: {domain_name}")
+        return False
+
+    project_id = get_project_id_by_name(project_name, domain_id, region)
+    if not project_id:
+        handle_error(f"Could not find project ID for project: {project_name}")
+        return False
+
+    # Convert assets to dictionary format for processing
+    assets_data = []
+    for asset in manifest.bundle.catalog.assets:
+        asset_dict = {
+            "selector": {},
+            "permission": asset.permission,
+            "requestReason": asset.requestReason,
+        }
+
+        if asset.selector.assetId:
+            asset_dict["selector"]["assetId"] = asset.selector.assetId
+
+        if asset.selector.search:
+            asset_dict["selector"]["search"] = {
+                "assetType": asset.selector.search.assetType,
+                "identifier": asset.selector.search.identifier,
+            }
+
+        assets_data.append(asset_dict)
+
+    # Process all catalog assets
+    try:
+        success = process_catalog_assets(domain_id, project_id, assets_data, region)
+        if success:
+            typer.echo("✅ All catalog assets processed successfully")
+        else:
+            handle_error("Failed to process catalog assets")
+        return success
+    except Exception as e:
+        handle_error(f"Error processing catalog assets: {e}")
+        return False
