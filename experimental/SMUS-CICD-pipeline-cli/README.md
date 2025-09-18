@@ -68,6 +68,34 @@ graph LR
 
 ## Key Concepts
 
+### Core Components
+
+The SMUS CI/CD system is built around three fundamental concepts:
+
+#### Pipeline
+A **pipeline** represents your complete CI/CD workflow configuration, defined in a YAML manifest file. It specifies:
+- Pipeline name and metadata
+- Target environments (dev, test, prod)
+- Bundle configuration (what to deploy)
+- Workflow definitions and parameters
+- Environment-specific settings
+
+#### Bundle
+A **bundle** is a deployable package containing all artifacts needed for a specific deployment:
+- **Workflow files**: Airflow DAGs, Python scripts, configuration files
+- **Storage assets**: Jupyter notebooks, data files, ML models
+- **Git repositories**: External code dependencies
+- **Metadata**: Deployment instructions and environment mappings
+
+Bundles are created from source environments (typically dev) and deployed to target environments (test, prod).
+
+#### Target
+A **target** represents a deployment environment, mapping to a SageMaker Unified Studio project:
+- **Environment configuration**: Domain, region, project settings
+- **Resource definitions**: S3 connections, workflow engines, compute environments
+- **Deployment settings**: Bundle destinations, initialization parameters
+- **Access control**: Project owners, contributors, permissions
+
 ### CLI Capabilities
 
 The SMUS CI/CD CLI provides comprehensive pipeline management capabilities:
@@ -83,19 +111,19 @@ The SMUS CI/CD CLI provides comprehensive pipeline management capabilities:
 
 ### Pipeline Stages → SMUS Projects
 
-Each **pipeline stage** (dev, test, prod) maps to a **SageMaker Unified Studio Project**:
+Each **pipeline target** (dev, test, prod) maps to a **SageMaker Unified Studio Project**:
 
-- **Dev Stage** → **Dev Project** (`dev-marketing`)
+- **Dev Target** → **Dev Project** (`dev-marketing`)
   - Development and experimentation
   - Rapid iteration and testing
   - Individual developer workspaces
 
-- **Test Stage** → **Test Project** (`test-marketing`)
+- **Test Target** → **Test Project** (`test-marketing`)
   - Integration testing and validation
   - Staging environment for QA
   - Pre-production verification
 
-- **Prod Stage** → **Prod Project** (`prod-marketing`)
+- **Prod Target** → **Prod Project** (`prod-marketing`)
   - Production deployment
   - Live data processing
   - Business-critical workflows
@@ -160,169 +188,6 @@ smus-cli test --pipeline pipeline.yaml --targets marketing-test-stage
 # 7. Clean up resources (when needed)
 smus-cli delete --targets marketing-test-stage --pipeline pipeline.yaml --force
 ```
-
-## Environment Variable Parameterization
-
-The SMUS CLI supports **environment variable substitution** in pipeline manifest files, enabling flexible configuration across different environments and deployment contexts.
-
-### Syntax
-
-Use `${VARIABLE_NAME}` or `${VARIABLE_NAME:default_value}` syntax in your YAML manifests:
-
-```yaml
-# pipeline.yaml
-pipelineName: MyPipeline
-
-domain:
-  name: ${DOMAIN_NAME:my-default-domain}
-  region: ${AWS_REGION:us-east-1}
-
-targets:
-  dev:
-    project:
-      name: ${PROJECT_PREFIX:myapp}-dev
-  
-  prod:
-    project:
-      name: ${PROJECT_PREFIX:myapp}-prod
-
-database:
-  host: ${DB_HOST:localhost}
-  port: ${DB_PORT:5432}
-  user: ${DB_USER}
-  password: ${DB_PASSWORD}
-```
-
-### Usage Examples
-
-#### 1. Local Development
-```bash
-# Set environment variables
-export AWS_REGION=us-west-2
-export PROJECT_PREFIX=myteam
-export DB_HOST=dev-db.company.com
-
-# Run CLI commands - variables are automatically substituted
-smus-cli describe --pipeline pipeline.yaml
-smus-cli deploy --pipeline pipeline.yaml --target dev
-```
-
-#### 2. CI/CD Environments
-```bash
-# GitHub Actions / CI environment
-export AWS_REGION=us-east-2
-export PROJECT_PREFIX=production
-export DOMAIN_NAME=prod-datazone-domain
-
-# Deploy to production
-smus-cli deploy --pipeline pipeline.yaml --target prod
-```
-
-#### 3. Multi-Environment Configuration
-```yaml
-# Same pipeline.yaml works across environments
-domain:
-  name: ${DOMAIN_NAME}  # Required - no default
-  region: ${AWS_REGION:us-east-1}  # Optional - defaults to us-east-1
-
-targets:
-  dev:
-    project:
-      name: ${ENV_PREFIX:dev}-${TEAM_NAME}-project
-  
-  staging:
-    project:
-      name: ${ENV_PREFIX:staging}-${TEAM_NAME}-project
-  
-  prod:
-    project:
-      name: ${ENV_PREFIX:prod}-${TEAM_NAME}-project
-```
-
-### Variable Resolution Rules
-
-1. **Environment Variable Set**: Uses the environment variable value
-   ```bash
-   export AWS_REGION=us-west-2
-   # ${AWS_REGION:us-east-1} → "us-west-2"
-   ```
-
-2. **Environment Variable Not Set**: Uses default value if provided
-   ```bash
-   unset AWS_REGION
-   # ${AWS_REGION:us-east-1} → "us-east-1"
-   ```
-
-3. **No Default Value**: Uses empty string if variable not set
-   ```bash
-   unset DB_PASSWORD
-   # ${DB_PASSWORD} → ""
-   ```
-
-### Common Use Cases
-
-#### Multi-Region Deployments
-```yaml
-domain:
-  region: ${DEV_DOMAIN_REGION:us-east-2}
-
-# Deploy to different regions
-export DEV_DOMAIN_REGION=us-west-2  # West Coast
-export DEV_DOMAIN_REGION=eu-west-1  # Europe
-```
-
-#### Team-Specific Projects
-```yaml
-targets:
-  dev:
-    project:
-      name: ${TEAM_NAME}-dev-project
-      
-# Each team sets their identifier
-export TEAM_NAME=data-science    # → "data-science-dev-project"
-export TEAM_NAME=ml-platform     # → "ml-platform-dev-project"
-```
-
-#### Environment-Specific Configuration
-```yaml
-bundle:
-  storage:
-    connectionName: ${STORAGE_CONNECTION:default.s3_shared}
-  
-workflows:
-  - workflowName: ${WORKFLOW_NAME:default_workflow}
-    connectionName: ${MWAA_CONNECTION:project.workflow_mwaa}
-```
-
-### Integration Test Configuration
-
-The integration tests use environment variables for flexible testing:
-
-```yaml
-# tests/integration/*/pipeline.yaml
-domain:
-  name: cicd-test-domain
-  region: ${DEV_DOMAIN_REGION:us-east-2}
-```
-
-**GitHub Actions** automatically sets:
-```bash
-export DEV_DOMAIN_REGION=us-east-2
-```
-
-**Local testing** can override:
-```bash
-export DEV_DOMAIN_REGION=us-east-1  # Use local domain
-python -m pytest tests/integration/
-```
-
-### Best Practices
-
-1. **Always provide defaults** for optional configuration
-2. **Use descriptive variable names** (e.g., `DEV_DOMAIN_REGION` not `REGION`)
-3. **Document required variables** in your pipeline README
-4. **Group related variables** with consistent prefixes
-5. **Validate critical variables** are set before deployment
 
 ## Common Workflows
 
