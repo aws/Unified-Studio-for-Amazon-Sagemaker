@@ -385,6 +385,15 @@ definitions:
                 type: string
                 description: "Target directory"
             additionalProperties: false
+          catalog:
+            type: object
+            description: "Catalog configuration for this target"
+            properties:
+              disable:
+                type: boolean
+                description: "Disable catalog asset processing for this target"
+                default: false
+            additionalProperties: false
         additionalProperties: false
       workflows:
         type: array

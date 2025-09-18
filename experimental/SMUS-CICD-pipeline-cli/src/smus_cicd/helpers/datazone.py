@@ -11,7 +11,7 @@ import typer
 
 
 def get_domain_id_by_name(domain_name, region):
-    """Get DataZone domain ID by searching domains by name."""
+    """Get DataZone domain ID by searching domains by name. Returns None if not found."""
     try:
         datazone_client = boto3.client("datazone", region_name=region)
 
@@ -22,8 +22,7 @@ def get_domain_id_by_name(domain_name, region):
             if domain.get("name") == domain_name:
                 return domain.get("id")
 
-        # Domain not found - this is a critical error
-        typer.echo(f"❌ Domain '{domain_name}' not found in region {region}", err=True)
+        # Domain not found - return None for idempotent checks
         return None
 
     except Exception as e:
@@ -49,12 +48,12 @@ def get_domain_id_by_name(domain_name, region):
             typer.echo(
                 f"❌ Error finding domain by name {domain_name}: {str(e)}", err=True
             )
-        # Re-raise critical errors instead of returning None
-        raise Exception(f"Failed to get domain ID for {domain_name}: {e}")
+        # Re-raise permission/API errors, but not "not found" errors
+        raise Exception(f"Failed to lookup domain {domain_name}: {e}")
 
 
 def get_project_id_by_name(project_name, domain_id, region):
-    """Get DataZone project ID by searching projects by name."""
+    """Get DataZone project ID by searching projects by name. Returns None if not found."""
     try:
         datazone_client = boto3.client("datazone", region_name=region)
 
@@ -65,10 +64,7 @@ def get_project_id_by_name(project_name, domain_id, region):
             if project.get("name") == project_name:
                 return project.get("id")
 
-        # Project not found - this is a critical error
-        typer.echo(
-            f"❌ Project '{project_name}' not found in domain {domain_id}", err=True
-        )
+        # Project not found - return None for idempotent checks
         return None
 
     except Exception as e:
@@ -94,8 +90,8 @@ def get_project_id_by_name(project_name, domain_id, region):
             typer.echo(
                 f"❌ Error finding project by name {project_name}: {str(e)}", err=True
             )
-        # Re-raise critical errors instead of returning None
-        raise Exception(f"Failed to get project ID for {project_name}: {e}")
+        # Re-raise permission/API errors, but not "not found" errors
+        raise Exception(f"Failed to lookup project {project_name}: {e}")
 
 
 def create_environment_and_wait(domain_id, project_id, env_name, target_name, region):
@@ -905,7 +901,7 @@ def search_asset_listing(
         items = response.get("items", [])
         if not items:
             typer.echo(f"❌ No listings found for identifier: {identifier}")
-            return None
+            raise Exception(f"No listings found for identifier: {identifier}")
 
         item = items[0]["assetListing"]
         asset_id = item["entityId"]
@@ -1007,7 +1003,7 @@ def wait_for_subscription_approval(
                 return True
             elif status in ["REJECTED", "ERROR"]:
                 typer.echo(f"❌ Subscription failed with status: {status}")
-                return False
+                raise Exception(f"Subscription request failed with status: {status}")
 
             typer.echo("⏳ Waiting 30 seconds before next check...")
             time.sleep(30)
@@ -1017,7 +1013,7 @@ def wait_for_subscription_approval(
             raise
 
     typer.echo("⏰ Timeout waiting for subscription approval")
-    return False
+    raise Exception(f"Timeout waiting for subscription approval after {timeout}s")
 
 
 def check_subscription_grants(
@@ -1051,7 +1047,9 @@ def check_subscription_grants(
                     typer.echo(
                         "❌ No grants created within timeout period - this indicates an error"
                     )
-                    return False
+                    raise Exception(
+                        "No subscription grants created within timeout period"
+                    )
 
             # Check grant status
             all_completed = True
@@ -1076,7 +1074,9 @@ def check_subscription_grants(
                     continue
                 else:
                     typer.echo("❌ Grants did not complete within timeout period")
-                    return False
+                    raise Exception(
+                        "Subscription grants did not complete within timeout period"
+                    )
 
         return False
 
@@ -1093,9 +1093,6 @@ def process_asset_access(
 
     # Step 1: Search for asset
     result = search_asset_listing(domain_id, identifier, region)
-    if not result:
-        return False
-
     asset_id, listing_id = result
 
     # Step 2: Check existing subscription
@@ -1195,6 +1192,8 @@ def process_catalog_assets(
     typer.echo(f"\n📦 Processing {len(assets)} catalog assets...")
 
     success_count = 0
+    failed_assets = []
+
     for i, asset in enumerate(assets, 1):
         typer.echo(f"\n--- Asset {i}/{len(assets)} ---")
 
@@ -1210,6 +1209,7 @@ def process_catalog_assets(
         search = selector.get("search", {})
         if not search:
             typer.echo("❌ No search configuration found in asset selector")
+            failed_assets.append("No search configuration")
             continue
 
         asset_type = search.get("assetType")
@@ -1217,6 +1217,7 @@ def process_catalog_assets(
 
         if not identifier:
             typer.echo("❌ No identifier found in asset search configuration")
+            failed_assets.append("No identifier")
             continue
 
         # Skip non-Glue assets as specified in requirements
@@ -1225,15 +1226,23 @@ def process_catalog_assets(
             continue
 
         # Process asset access
-        if process_asset_access(domain_id, project_id, identifier, reason, region):
-            success_count += 1
-        else:
-            typer.echo(f"❌ Failed to process asset: {identifier}")
-            typer.echo(f"⚠️ Continuing with remaining assets...")
+        try:
+            if process_asset_access(domain_id, project_id, identifier, reason, region):
+                success_count += 1
+            else:
+                failed_assets.append(identifier)
+        except Exception as e:
+            typer.echo(f"❌ Failed to process asset: {identifier} - {e}")
+            failed_assets.append(f"{identifier}: {e}")
 
     typer.echo(
         f"\n✅ Processed {success_count}/{len(assets)} catalog assets successfully"
     )
-    if success_count < len(assets):
-        typer.echo("⚠️ Some assets failed but deployment will continue")
-    return True  # Always return True to allow deployment to continue
+
+    if failed_assets:
+        typer.echo(f"❌ Failed assets: {', '.join(failed_assets)}")
+        raise Exception(
+            f"Failed to process {len(failed_assets)} catalog assets: {', '.join(failed_assets)}"
+        )
+
+    return True

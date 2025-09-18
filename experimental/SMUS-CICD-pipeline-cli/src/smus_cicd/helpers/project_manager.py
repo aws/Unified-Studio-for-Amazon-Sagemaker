@@ -374,7 +374,9 @@ class ProjectManager:
 
         except Exception as e:
             print(f"🔍 DEBUG: Error listing environments: {e}")
-            return False
+            raise Exception(
+                f"Failed to list environments for project {project_id}: {e}"
+            )
 
         # Check each required environment
         all_environments_ready = True
@@ -509,7 +511,9 @@ class ProjectManager:
 
         except Exception as e:
             print(f"🔍 DEBUG: Error creating environment: {e}")
-            return False
+            raise Exception(
+                f"Failed to create environment for project {project_id}: {e}"
+            )
 
     def _validate_mwaa_environment(
         self, project_id: str, domain_id: str, region: str

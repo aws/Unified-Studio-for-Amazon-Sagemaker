@@ -480,6 +480,15 @@ def _process_catalog_assets(
     Returns:
         True if all assets processed successfully, False otherwise
     """
+    # Check if catalog processing is disabled in bundle target configuration
+    if (
+        target_config.bundle_target_configuration
+        and target_config.bundle_target_configuration.catalog
+        and target_config.bundle_target_configuration.catalog.get("disable", False)
+    ):
+        typer.echo("📋 Catalog asset processing disabled in target configuration")
+        return True
+
     # Check if catalog assets are configured
     if not manifest.bundle.catalog or not manifest.bundle.catalog.assets:
         typer.echo("📋 No catalog assets configured")

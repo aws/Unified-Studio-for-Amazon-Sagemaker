@@ -71,11 +71,11 @@ def create_project_via_cloudformation(
 
             if not domain_id:
                 typer.echo(f"Error: Domain '{domain_name}' not found", err=True)
-                return False
+                raise Exception(f"Domain '{domain_name}' not found")
 
         except Exception as e:
             typer.echo(f"Error finding domain by name {domain_name}: {e}", err=True)
-            return False
+            raise Exception(f"Failed to find domain {domain_name}: {e}")
 
         # Look up project profile ID from profile name
         try:
@@ -92,13 +92,13 @@ def create_project_via_cloudformation(
                 typer.echo(
                     f"Error: Project profile '{profile_name}' not found", err=True
                 )
-                return False
+                raise Exception(f"Project profile '{profile_name}' not found")
 
         except Exception as e:
             typer.echo(
                 f"Error finding project profile by name {profile_name}: {e}", err=True
             )
-            return False
+            raise Exception(f"Failed to find project profile {profile_name}: {e}")
 
         # Generate stack name: SMUS-{pipeline}-{target}-{project}-{template}
         clean_pipeline = pipeline_name.replace("_", "-").replace(" ", "-").lower()
