@@ -13,12 +13,46 @@ class DomainConfig:
 
 
 @dataclass
+class AssetSearchConfig:
+    """Asset search configuration."""
+
+    assetType: Optional[str] = None
+    identifier: str = ""
+
+
+@dataclass
+class AssetSelectorConfig:
+    """Asset selector configuration."""
+
+    assetId: Optional[str] = None
+    search: Optional[AssetSearchConfig] = None
+
+
+@dataclass
+class AssetConfig:
+    """Asset configuration for catalog access."""
+
+    selector: AssetSelectorConfig
+    permission: str = "READ"
+    requestReason: str = "Required for pipeline deployment"
+
+
+@dataclass
+class CatalogConfig:
+    """Catalog configuration for bundle."""
+
+    connectionName: Optional[str] = None
+    assets: List[AssetConfig] = field(default_factory=list)
+
+
+@dataclass
 class BundleConfig:
     """Bundle configuration."""
 
     bundles_directory: str = "./bundles"
     workflow: List[Dict[str, Any]] = field(default_factory=list)
     storage: List[Dict[str, Any]] = field(default_factory=list)
+    catalog: Optional[CatalogConfig] = None
 
 
 @dataclass
@@ -159,10 +193,46 @@ class PipelineManifest:
 
         # Parse bundle configuration
         bundle_data = data.get("bundle", {})
+
+        # Parse catalog configuration
+        catalog = None
+        catalog_data = bundle_data.get("catalog")
+        if catalog_data:
+            assets = []
+            for asset_data in catalog_data.get("assets", []):
+                selector_data = asset_data.get("selector", {})
+
+                # Parse search config if present
+                search = None
+                search_data = selector_data.get("search")
+                if search_data:
+                    search = AssetSearchConfig(
+                        assetType=search_data.get("assetType"),
+                        identifier=search_data.get("identifier", ""),
+                    )
+
+                selector = AssetSelectorConfig(
+                    assetId=selector_data.get("assetId"), search=search
+                )
+
+                asset = AssetConfig(
+                    selector=selector,
+                    permission=asset_data.get("permission", "READ"),
+                    requestReason=asset_data.get(
+                        "requestReason", "Required for pipeline deployment"
+                    ),
+                )
+                assets.append(asset)
+
+            catalog = CatalogConfig(
+                connectionName=catalog_data.get("connectionName"), assets=assets
+            )
+
         bundle = BundleConfig(
             bundles_directory=bundle_data.get("bundlesDirectory", "./bundles"),
             workflow=bundle_data.get("workflow", []),
             storage=bundle_data.get("storage", []),
+            catalog=catalog,
         )
 
         # Parse targets

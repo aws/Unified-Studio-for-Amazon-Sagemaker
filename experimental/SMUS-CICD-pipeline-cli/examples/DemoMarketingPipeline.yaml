@@ -24,6 +24,20 @@ bundle:
         - '__pycache__/'
         - '*.pyc'
         - '.libs.json'
+  catalog:
+    assets:
+    - selector:
+        search:
+          assetType: GlueTable
+          identifier: covid19_db.countries_aggregated
+      permission: READ
+      requestReason: Required access for DemoMarketingPipeline analytics
+    - selector:
+        search:
+          assetType: GlueTable
+          identifier: covid19_db.worldwide_aggregate
+      permission: READ
+      requestReason: Global data access for marketing insights
 
 targets:
   dev:

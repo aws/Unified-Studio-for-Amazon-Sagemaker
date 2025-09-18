@@ -110,6 +110,14 @@ bundle:
     repository: my-repo
     url: https://github.com/user/repo.git
     targetDir: ./src
+  catalog:                     # Optional: Catalog asset access
+    assets:                    # Required: List of assets
+      - selector:              # Required: Asset selector
+          search:              # Required: Search configuration
+            assetType: GlueTable  # Required: Asset type
+            identifier: db.table  # Required: Asset identifier
+        permission: READ       # Required: Access permission
+        requestReason: "Pipeline access"  # Required: Access justification
 ```
 
 ### Target Configuration

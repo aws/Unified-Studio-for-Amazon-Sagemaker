@@ -223,6 +223,14 @@ bundle:
     repository: MyDataPipeline
     url: https://github.com/myorg/data-pipeline.git
     targetDir: git
+  catalog:
+    assets:
+      - selector:
+          search:
+            assetType: GlueTable
+            identifier: covid19_db.countries_aggregated
+        permission: READ
+        requestReason: Required access for pipeline deployment
 
 # Target environments
 targets:
@@ -379,6 +387,39 @@ bundle:
 - **`repository`** (optional): Repository name for identification
 - **`url`** (required): Git repository URL
 - **`targetDir`** (optional): Directory name in bundle (default: `git`)
+
+#### Catalog Assets
+
+```yaml
+bundle:
+  catalog:
+    assets:
+      - selector:
+          search:
+            assetType: GlueTable
+            identifier: covid19_db.countries_aggregated
+        permission: READ
+        requestReason: Required access for pipeline deployment
+      - selector:
+          search:
+            assetType: GlueTable
+            identifier: sales_db.customer_data
+        permission: READ
+        requestReason: Customer analytics pipeline
+```
+
+- **`assets`** (required): List of catalog assets to request access to
+- **`selector.search.assetType`** (required): Type of asset (currently supports `GlueTable`)
+- **`selector.search.identifier`** (required): Asset identifier (e.g., `database.table`)
+- **`permission`** (required): Access level requested (e.g., `READ`)
+- **`requestReason`** (required): Business justification for access request
+
+**Note**: Catalog asset access is processed during deployment. The system will:
+1. Search for assets in the DataZone catalog
+2. Create subscription requests if needed
+3. Wait for approval (up to 5 minutes)
+4. Verify subscription grants are completed
+5. Fail deployment if access cannot be obtained
 
 ### Target Configuration
 
