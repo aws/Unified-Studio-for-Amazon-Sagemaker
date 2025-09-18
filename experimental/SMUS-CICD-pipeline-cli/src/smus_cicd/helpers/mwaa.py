@@ -216,7 +216,9 @@ def delete_dag_from_history(
         return False
 
     except Exception as e:
-        raise Exception(f"Failed to delete DAG {dag_id} from MWAA environment {environment_name}: {e}")
+        raise Exception(
+            f"Failed to delete DAG {dag_id} from MWAA environment {environment_name}: {e}"
+        )
 
 
 def delete_multiple_dags_from_history(
@@ -253,7 +255,9 @@ def get_airflow_ui_url(
         return None
 
     except Exception as e:
-        raise Exception(f"Failed to get webserver URL for MWAA environment {environment_name}: {e}")
+        raise Exception(
+            f"Failed to get webserver URL for MWAA environment {environment_name}: {e}"
+        )
 
 
 def get_dag_details(
@@ -423,7 +427,9 @@ def list_dags(
 
         return []
     except Exception as e:
-        raise Exception(f"Failed to list DAGs in MWAA environment {environment_name}: {e}")
+        raise Exception(
+            f"Failed to list DAGs in MWAA environment {environment_name}: {e}"
+        )
 
 
 def check_environment_available(
@@ -496,4 +502,6 @@ def validate_mwaa_health(project_name: str, config: Dict[str, Any]) -> bool:
 
     except Exception as e:
         logger.error(f"MWAA health check failed: {e}")
-        raise Exception(f"MWAA health validation failed for project {project_name}: {e}")
+        raise Exception(
+            f"MWAA health validation failed for project {project_name}: {e}"
+        )

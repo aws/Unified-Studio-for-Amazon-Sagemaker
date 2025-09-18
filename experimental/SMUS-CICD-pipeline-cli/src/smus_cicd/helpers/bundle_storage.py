@@ -136,7 +136,9 @@ def find_bundle_file(
                     return f"s3://{bucket}/{key}"
 
         except Exception as e:
-            raise Exception(f"Failed to search S3 bucket {bucket} for bundle files: {e}")
+            raise Exception(
+                f"Failed to search S3 bucket {bucket} for bundle files: {e}"
+            )
     else:
         # Search locally
         if not os.path.exists(bundles_directory):
