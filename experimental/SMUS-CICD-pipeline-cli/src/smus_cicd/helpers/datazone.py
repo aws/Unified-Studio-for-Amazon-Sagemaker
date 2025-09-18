@@ -11,7 +11,7 @@ import typer
 
 
 def get_domain_id_by_name(domain_name, region):
-    """Get DataZone domain ID by searching domains by name."""
+    """Get DataZone domain ID by searching domains by name. Returns None if not found."""
     try:
         datazone_client = boto3.client("datazone", region_name=region)
 
@@ -22,9 +22,8 @@ def get_domain_id_by_name(domain_name, region):
             if domain.get("name") == domain_name:
                 return domain.get("id")
 
-        # Domain not found - this is a critical error
-        typer.echo(f"❌ Domain '{domain_name}' not found in region {region}", err=True)
-        raise Exception(f"Domain '{domain_name}' not found in region {region}")
+        # Domain not found - return None for idempotent checks
+        return None
 
     except Exception as e:
         # Check if this is a permission error
@@ -49,12 +48,12 @@ def get_domain_id_by_name(domain_name, region):
             typer.echo(
                 f"❌ Error finding domain by name {domain_name}: {str(e)}", err=True
             )
-        # Re-raise critical errors instead of returning None
-        raise Exception(f"Failed to get domain ID for {domain_name}: {e}")
+        # Re-raise permission/API errors, but not "not found" errors
+        raise Exception(f"Failed to lookup domain {domain_name}: {e}")
 
 
 def get_project_id_by_name(project_name, domain_id, region):
-    """Get DataZone project ID by searching projects by name."""
+    """Get DataZone project ID by searching projects by name. Returns None if not found."""
     try:
         datazone_client = boto3.client("datazone", region_name=region)
 
@@ -65,11 +64,8 @@ def get_project_id_by_name(project_name, domain_id, region):
             if project.get("name") == project_name:
                 return project.get("id")
 
-        # Project not found - this is a critical error
-        typer.echo(
-            f"❌ Project '{project_name}' not found in domain {domain_id}", err=True
-        )
-        raise Exception(f"Project '{project_name}' not found in domain {domain_id}")
+        # Project not found - return None for idempotent checks
+        return None
 
     except Exception as e:
         # Check if this is a permission error
@@ -94,8 +90,8 @@ def get_project_id_by_name(project_name, domain_id, region):
             typer.echo(
                 f"❌ Error finding project by name {project_name}: {str(e)}", err=True
             )
-        # Re-raise critical errors instead of returning None
-        raise Exception(f"Failed to get project ID for {project_name}: {e}")
+        # Re-raise permission/API errors, but not "not found" errors
+        raise Exception(f"Failed to lookup project {project_name}: {e}")
 
 
 def create_environment_and_wait(domain_id, project_id, env_name, target_name, region):
