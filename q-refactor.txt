@@ -74,29 +74,43 @@ Found exception swallowing in multiple files:
 - [x] datazone.py - Fixed all critical asset access functions
 - [x] cloudformation.py - Fixed domain/profile lookup functions
 
-### ANALYSIS COMPLETE - ACCEPTABLE ✅
-- [x] airflow.py - Workflow functions with acceptable error handling
-- [x] bundle_storage.py - Search function with graceful fallback
-- [x] mwaa.py - Status/validation functions with acceptable error handling  
-- [x] project_manager.py - Environment validation with acceptable fallback
-- [x] airflow_parser.py - No exception handling (pure parsing)
-- [x] boto3_client.py - No exception handling (client creation)
-- [x] connections.py - No exception handling
-- [x] deployment.py - No exception handling
-- [x] error_handler.py - No exception handling (error utilities)
-- [x] logger.py - No exception handling (logging utilities)
-- [x] s3.py - No exception handling
-- [x] utils.py - No exception handling
+## Summary of Refactor
 
-## Key Fixes Applied
-1. **DataZone helpers**: All functions now raise exceptions instead of returning None/False
-2. **CloudFormation helpers**: Domain/profile lookup now raises exceptions instead of returning False
-3. **CLI Error Codes**: Proper exception propagation ensures CLI exits with error codes when operations fail
+### COMPLETED ✅
+- [x] datazone.py - Fixed all critical asset access functions
+- [x] cloudformation.py - Fixed domain/profile lookup functions
 
-## Result
-The GitHub workflow will now properly fail with clear error messages when:
-- Catalog assets are not found in target domain
-- Domain or project lookups fail during deployment
-- Any critical DataZone operations encounter errors
+### COMPLETED ✅
+- [x] datazone.py - Fixed all critical asset access functions
+- [x] cloudformation.py - Fixed domain/profile lookup functions
+- [x] airflow.py - Fixed all functions to raise exceptions instead of returning None/False
+- [x] bundle_storage.py - Fixed find_bundle_file() to raise exception instead of returning None
+- [x] mwaa.py - Fixed all validation functions to raise exceptions instead of returning False
+- [x] project_manager.py - Fixed environment functions to raise exceptions instead of returning False
 
-This resolves the original issue where workflows completed successfully despite missing required resources.
+## ALL EXCEPTION SWALLOWING FIXED ✅
+
+### Functions Fixed:
+**airflow.py:**
+- check_for_run() - now raises exception on failure
+- get_dag_run_status() - now raises exception instead of returning "unknown"
+- get_task_logs() - now raises exception instead of continuing
+- check_mwaa_environment_ready() - now raises exception instead of returning False
+- get_dag_last_parsed_time() - now raises exception instead of returning "Unknown"
+- validate_workflows_in_mwaa() - now raises exception instead of returning False
+- trigger_dag_run() - now raises exception instead of returning None
+
+**bundle_storage.py:**
+- find_bundle_file() - now raises exception on S3 errors instead of returning None
+
+**mwaa.py:**
+- delete_dag_from_history() - now raises exception instead of returning False
+- get_webserver_url() - now raises exception instead of returning None
+- list_dags_in_environment() - now raises exception instead of returning empty list
+- validate_mwaa_health() - now raises exception instead of returning False
+
+**project_manager.py:**
+- _ensure_environments_exist() - now raises exception on environment errors instead of returning False
+
+## Result: NO MORE SILENT FAILURES
+All CLI operations will now properly fail with clear error messages when any helper function encounters an error.

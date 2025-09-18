@@ -45,8 +45,8 @@ def capture_workflow_logs(mwaa_client, mwaa_env_name, dag_id, run_id, timeout=30
                     # If JSON parsing fails, try direct text
                     return response.text
             return None
-        except Exception:
-            return None
+        except Exception as e:
+            raise Exception(f"Failed to check DAG runs for {dag_id}: {e}")
 
     # Wait and check for the run to appear
     for attempt in range(6):  # Check for 30 seconds
@@ -95,8 +95,8 @@ def get_dag_run_status(mwaa_client, mwaa_env_name, dag_id, run_id):
         else:
             return "success"  # Assume success for demo
 
-    except Exception:
-        return "unknown"
+    except Exception as e:
+        raise Exception(f"Failed to get DAG run status for {dag_id}: {e}")
 
 
 def get_task_logs(mwaa_client, mwaa_env_name, dag_id, run_id):
@@ -155,8 +155,8 @@ def get_task_logs(mwaa_client, mwaa_env_name, dag_id, run_id):
                         ):
                             break
 
-            except Exception:
-                continue
+            except Exception as e:
+                raise Exception(f"Failed to get task logs for run {run_id}: {e}")
 
         if all_logs:
             return all_logs[:15]  # Return up to 15 relevant lines
@@ -183,8 +183,7 @@ def check_mwaa_environment(mwaa_client, mwaa_env_name):
             return False
 
     except Exception as e:
-        typer.echo(f"   ❌ Error checking MWAA environment: {str(e)}")
-        return False
+        raise Exception(f"Failed to check MWAA environment {mwaa_env_name}: {e}")
 
 
 def wait_for_dag_reparsing(mwaa_client, mwaa_env_name, workflows_config, max_wait=120):
@@ -247,8 +246,8 @@ def get_dag_last_parsed_time(mwaa_client, mwaa_env_name, dag_id):
             "%Y-%m-%d %H:%M:%S"
         )
 
-    except Exception:
-        return "Unknown"
+    except Exception as e:
+        raise Exception(f"Failed to get DAG last parsed time for {dag_id}: {e}")
 
 
 def wait_for_dags_available(mwaa_env_name, workflows_config, region, max_wait=90):
@@ -368,8 +367,7 @@ def validate_workflows_in_mwaa(workflows_config, project_name, config):
         return wait_for_dags_available(mwaa_env_name, workflows_config, region)
 
     except Exception as e:
-        print(f"⚠️ Workflow validation failed: {str(e)}")
-        return False
+        raise Exception(f"Workflow validation failed: {e}")
 
 
 def trigger_dag_run(mwaa_client, mwaa_env_name, dag_id, parameters=None):
@@ -410,4 +408,4 @@ def trigger_dag_run(mwaa_client, mwaa_env_name, dag_id, parameters=None):
 
     except Exception as e:
         typer.echo(f"Error triggering DAG {dag_id}: {str(e)}", err=True)
-        return None
+        raise Exception(f"Failed to trigger DAG {dag_id}: {e}")
