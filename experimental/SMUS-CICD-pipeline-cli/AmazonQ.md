@@ -88,6 +88,32 @@ git commit -m "Descriptive commit message
 git status
 ```
 
+### 7. Push Changes and Monitor PR
+```bash
+# Push changes to GitHub
+git push origin your_feature_branch
+
+# Wait 5 minutes for CI/CD to process
+sleep 300
+
+# Check PR status and analyze test results
+gh pr checks <PR-NUMBER>
+
+# Get detailed logs for any failing tests
+gh run view <RUN-ID> --job <JOB-NAME> --log
+
+# Analyze failures and provide summary:
+# - What tests are failing and why
+# - Root cause analysis of failures
+# - Recommended fixes needed
+# - Whether failures are related to code changes or infrastructure
+
+# IMPORTANT: Do not push additional changes without approval
+# - Present analysis of test failures first
+# - Wait for confirmation before implementing fixes
+# - Ensure all stakeholders understand the impact
+```
+
 ## Test Runner Options
 
 ```bash
@@ -152,6 +178,13 @@ Important Note: These are pytest-based integration tests, NOT Hydra tests. Do no
 - [ ] Check that lint is passing
 - [ ] Don't swallow exceptions, if an error is thrown, it must be logged or handled
 - [ ] All changes are committed
+- [ ] **PR Monitoring and Analysis:**
+  - [ ] Changes pushed to GitHub
+  - [ ] PR status monitored for 5+ minutes
+  - [ ] All CI/CD workflows analyzed
+  - [ ] Test failures documented with root cause analysis
+  - [ ] Summary of failures provided before additional changes
+  - [ ] Approval received before pushing fixes
 
 ## Common Test Patterns to Maintain
 

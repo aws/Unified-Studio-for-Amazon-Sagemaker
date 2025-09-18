@@ -21,3 +21,4 @@ override.tf.json
 terraform.rc
 experimental/SMUS-CICD-pipeline-cli/tests/reports/test-results.html
 experimental/SMUS-CICD-pipeline-cli/tests/reports/test-results.html
+q-tasks.txt

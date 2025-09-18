@@ -10,10 +10,14 @@ The pipeline manifest is a YAML file that defines your CI/CD pipeline configurat
 
 ### Basic Syntax
 ```yaml
-# Use environment variables with defaults
-domain:
-  name: ${DOMAIN_NAME:my-default-domain}
-  region: ${AWS_REGION:us-east-1}
+# Use environment variables with defaults in target configurations
+targets:
+  dev:
+    domain:
+      name: ${DOMAIN_NAME:my-default-domain}
+      region: ${AWS_REGION:us-east-1}
+    project:
+      name: ${PROJECT_PREFIX:myapp}-dev
 
 # Use environment variables without defaults (empty string if not set)
 database:
@@ -24,16 +28,18 @@ database:
 ```yaml
 pipelineName: ${PIPELINE_NAME:MyPipeline}
 
-domain:
-  name: ${DOMAIN_NAME}
-  region: ${DEV_DOMAIN_REGION:us-east-2}
-
 targets:
   dev:
+    domain:
+      name: ${DOMAIN_NAME}
+      region: ${DEV_DOMAIN_REGION:us-east-2}
     project:
       name: ${PROJECT_PREFIX:myapp}-dev-${TEAM_NAME}
   
   prod:
+    domain:
+      name: ${DOMAIN_NAME}
+      region: ${PROD_DOMAIN_REGION:us-east-1}
     project:
       name: ${PROJECT_PREFIX:myapp}-prod-${TEAM_NAME}
 ```
@@ -50,7 +56,145 @@ export TEAM_NAME=analytics
 smus-cli deploy --pipeline pipeline.yaml --target prod
 ```
 
-See the main [README Environment Variable section](../README.md#environment-variable-parameterization) for complete documentation and examples.
+### Usage Examples
+
+#### 1. Local Development
+```bash
+# Set environment variables
+export AWS_REGION=us-west-2
+export PROJECT_PREFIX=myteam
+export DB_HOST=dev-db.company.com
+
+# Run CLI commands - variables are automatically substituted
+smus-cli describe --pipeline pipeline.yaml
+smus-cli deploy --pipeline pipeline.yaml --targets dev
+```
+
+#### 2. CI/CD Environments
+```bash
+# GitHub Actions / CI environment
+export AWS_REGION=us-east-2
+export PROJECT_PREFIX=production
+export DOMAIN_NAME=prod-datazone-domain
+
+# Deploy to production
+smus-cli deploy --pipeline pipeline.yaml --targets prod
+```
+
+#### 3. Multi-Environment Configuration
+```yaml
+# Same pipeline.yaml works across environments
+targets:
+  dev:
+    domain:
+      name: ${DOMAIN_NAME}  # Required - no default
+      region: ${AWS_REGION:us-east-1}  # Optional - defaults to us-east-1
+    project:
+      name: ${ENV_PREFIX:dev}-${TEAM_NAME}-project
+  
+  staging:
+    domain:
+      name: ${DOMAIN_NAME}
+      region: ${AWS_REGION:us-east-1}
+    project:
+      name: ${ENV_PREFIX:staging}-${TEAM_NAME}-project
+  
+  prod:
+    domain:
+      name: ${DOMAIN_NAME}
+      region: ${AWS_REGION:us-east-1}
+    project:
+      name: ${ENV_PREFIX:prod}-${TEAM_NAME}-project
+```
+
+### Variable Resolution Rules
+
+1. **Environment Variable Set**: Uses the environment variable value
+   ```bash
+   export AWS_REGION=us-west-2
+   # ${AWS_REGION:us-east-1} → "us-west-2"
+   ```
+
+2. **Environment Variable Not Set**: Uses default value if provided
+   ```bash
+   unset AWS_REGION
+   # ${AWS_REGION:us-east-1} → "us-east-1"
+   ```
+
+3. **No Default Value**: Uses empty string if variable not set
+   ```bash
+   unset DB_PASSWORD
+   # ${DB_PASSWORD} → ""
+   ```
+
+### Common Use Cases
+
+#### Multi-Region Deployments
+```yaml
+targets:
+  dev:
+    domain:
+      region: ${DEV_DOMAIN_REGION:us-east-2}
+
+# Deploy to different regions
+export DEV_DOMAIN_REGION=us-west-2  # West Coast
+export DEV_DOMAIN_REGION=eu-west-1  # Europe
+```
+
+#### Team-Specific Projects
+```yaml
+targets:
+  dev:
+    project:
+      name: ${TEAM_NAME}-dev-project
+      
+# Each team sets their identifier
+export TEAM_NAME=data-science    # → "data-science-dev-project"
+export TEAM_NAME=ml-platform     # → "ml-platform-dev-project"
+```
+
+#### Environment-Specific Configuration
+```yaml
+bundle:
+  storage:
+    - connectionName: ${STORAGE_CONNECTION:default.s3_shared}
+  
+workflows:
+  - workflowName: ${WORKFLOW_NAME:default_workflow}
+    connectionName: ${MWAA_CONNECTION:project.workflow_mwaa}
+```
+
+### Integration Test Configuration
+
+The integration tests use environment variables for flexible testing:
+
+```yaml
+# tests/integration/*/pipeline.yaml
+targets:
+  test:
+    domain:
+      name: cicd-test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-2}
+```
+
+**GitHub Actions** automatically sets:
+```bash
+export DEV_DOMAIN_REGION=us-east-2
+```
+
+**Local testing** can override:
+```bash
+export DEV_DOMAIN_REGION=us-east-1  # Use local domain
+python -m pytest tests/integration/
+```
+
+### Best Practices
+
+1. **Always provide defaults** for optional configuration
+2. **Use descriptive variable names** (e.g., `DEV_DOMAIN_REGION` not `REGION`)
+3. **Document required variables** in your pipeline README
+4. **Group related variables** with consistent prefixes
+5. **Validate critical variables** are set before deployment
 
 ## Quick Links
 
@@ -62,11 +206,6 @@ See the main [README Environment Variable section](../README.md#environment-vari
 ```yaml
 pipelineName: MarketingDataPipeline
 bundlesDirectory: ./bundles
-
-# Domain configuration (supports environment variables)
-domain:
-  name: ${DOMAIN_NAME:my-studio-domain}
-  region: ${AWS_REGION:us-east-1}
 
 # What to include in deployment bundles
 bundle:
@@ -88,11 +227,17 @@ bundle:
 # Target environments
 targets:
   dev: 
+    domain:
+      name: ${DOMAIN_NAME:my-studio-domain}
+      region: ${AWS_REGION:us-east-1}
     default: true
     project: 
       name: dev-marketing
       
   test: 
+    domain:
+      name: ${DOMAIN_NAME:my-studio-domain}
+      region: ${AWS_REGION:us-east-1}
     project: 
       name: test-marketing
     initialization:
@@ -119,6 +264,9 @@ targets:
           debug_mode: true
 
   prod:
+    domain:
+      name: ${DOMAIN_NAME:my-studio-domain}
+      region: ${AWS_REGION:us-east-1}
     project: 
       name: prod-marketing
     initialization:
@@ -170,10 +318,16 @@ bundlesDirectory: s3://my-datazone-bucket/bundles  # S3 location
 
 ### Domain Configuration
 
+Each target must specify its domain configuration:
+
 ```yaml
-domain:
-  name: my-studio-domain
-  region: us-east-1
+targets:
+  dev:
+    domain:
+      name: my-studio-domain
+      region: us-east-1
+    project:
+      name: dev-project
 ```
 
 - **`domain.name`** (required): SageMaker Unified Studio domain name
@@ -233,6 +387,9 @@ Each target represents a deployment environment:
 ```yaml
 targets:
   dev:
+    domain:
+      name: my-studio-domain
+      region: us-east-1
     default: true
     project:
       name: dev-marketing
@@ -246,6 +403,9 @@ targets:
 ```yaml
 targets:
   test:
+    domain:
+      name: my-studio-domain
+      region: us-east-1
     initialization:
       project:
         create: true
@@ -275,6 +435,9 @@ targets:
 ```yaml
 targets:
   test:
+    domain:
+      name: my-studio-domain
+      region: us-east-1
     bundle_target_configuration:
       storage:
         connectionName: default.s3_shared
@@ -294,6 +457,9 @@ targets:
 ```yaml
 targets:
   test:
+    domain:
+      name: my-studio-domain
+      region: us-east-1
     workflows:
       - workflowName: marketing_etl_dag
         parameters:
@@ -309,6 +475,9 @@ targets:
 ```yaml
 targets:
   test:
+    domain:
+      name: my-studio-domain
+      region: us-east-1
     tests:
       folder: tests/integration/
 ```
@@ -347,8 +516,7 @@ workflows:
 
 ### Required Fields
 - `pipelineName`
-- `domain.name` and `domain.region`
-- At least one target with `project.name`
+- Each target must have `domain.name`, `domain.region`, and `project.name`
 
 ### Optional Sections
 - `bundle` - If omitted, no bundling operations
