@@ -119,7 +119,9 @@ targets:
       workflows:
         connectionName: default.s3_shared
         directory: 'workflows'
-    
+      catalog:
+        disable: True
+        
     # Test configuration
     tests:
       folder: ./tests

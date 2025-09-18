@@ -111,11 +111,13 @@ class InitializationConfig:
 
 
 @dataclass
+@dataclass
 class BundleTargetConfig:
     """Bundle target configuration."""
 
     storage: Optional[Dict[str, str]] = None
     workflows: Optional[Dict[str, str]] = None
+    catalog: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -329,7 +331,9 @@ class PipelineManifest:
             btc_data = target_data.get("bundle_target_configuration")
             if btc_data:
                 bundle_target_config = BundleTargetConfig(
-                    storage=btc_data.get("storage"), workflows=btc_data.get("workflows")
+                    storage=btc_data.get("storage"),
+                    workflows=btc_data.get("workflows"),
+                    catalog=btc_data.get("catalog"),
                 )
 
             # Parse stage - derive from target name if not provided

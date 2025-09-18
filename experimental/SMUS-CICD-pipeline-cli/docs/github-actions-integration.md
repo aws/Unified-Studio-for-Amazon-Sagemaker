@@ -2,52 +2,309 @@
 
 ← [Back to Main README](../README.md)
 
-This guide shows how to create GitHub Actions workflows for automated SMUS CI/CD pipeline management using the SMUS CLI.
+This guide shows how to create GitHub Actions workflows for automated SMUS CI/CD pipeline management using the SMUS CLI with multi-environment deployments, different AWS roles, and manual approval gates.
 
 ## Pipeline Overview
 
-The SMUS CI/CD pipeline automates the deployment and management of SageMaker Unified Studio projects across multiple environments:
+The SMUS CI/CD pipeline automates the deployment and management of SageMaker Unified Studio projects across multiple environments with proper security boundaries:
 
 ```mermaid
 graph LR
-    A[GitHub Repository] --> B[Step 1: Setup Environment]
-    B --> C[Step 2: Validate Manifest]
-    C --> D[Step 3: Bundle Code & Workflows]
-    D --> E[Step 4: Deploy to Test Environment]
-    E --> F[Step 5: Run Tests]
-    F --> G[Step 6: Deploy to Production]
-    G --> H[Step 7: Monitor Workflow]
+    A[GitHub Repository] --> B[Step 1: Setup & Validate]
+    B --> C[Step 2: Create Bundle]
+    C --> D[Step 3: Deploy to Test]
+    D --> E[Step 4: Run Tests]
+    E --> F[Step 5: Monitor Test]
+    F --> G[Manual Approval Gate]
+    G --> H[Step 6: Deploy to Production]
+    H --> I[Step 7: Production Tests]
+    I --> J[Step 8: Production Monitoring]
 ```
+
+## Multi-Environment Configuration
+
+### GitHub Environments
+
+The workflow uses different GitHub environments for different deployment stages, each with their own security configurations:
+
+#### Development Environment (`aws-env`)
+- **Purpose**: Development and testing deployments
+- **AWS Role**: `${{ secrets.AWS_ROLE_ARN_DEV }}`
+- **Region**: `${{ vars.DEV_DOMAIN_REGION }}`
+- **Protection Rules**: None (automatic deployment)
+- **Used for**: Setup, validation, bundling, test deployments
+
+#### Production Environment (`aws-env-amirbo-6778`)
+- **Purpose**: Production deployments
+- **AWS Role**: `${{ secrets.AWS_ROLE_ARN_PROD }}` (if different from dev)
+- **Region**: `${{ vars.PROD_DOMAIN_REGION }}`
+- **Protection Rules**: 
+  - Required reviewers
+  - Manual approval gates
+  - Deployment windows
+- **Used for**: Production deployments and monitoring
+
+### Environment Variables by Stage
+
+```yaml
+# Development Environment Variables
+environment: aws-env
+env:
+  DEV_DOMAIN_REGION: ${{ vars.DEV_DOMAIN_REGION }}
+  SMUS_LOG_LEVEL: WARNING
+
+# Production Environment Variables  
+environment: aws-env-amirbo-6778
+env:
+  PROD_DOMAIN_REGION: ${{ vars.PROD_DOMAIN_REGION }}
+  SMUS_LOG_LEVEL: WARNING
+```
+
+### AWS Role Configuration
+
+Different AWS roles provide appropriate permissions for each environment:
+
+```yaml
+# Development Role (broader permissions for testing)
+- name: Configure AWS credentials (Dev)
+  uses: aws-actions/configure-aws-credentials@v4
+  with:
+    aws-region: us-east-1
+    role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
+    role-session-name: smus-pipeline-lifecycle-dev
+    role-duration-seconds: 43200
+
+# Production Role (restricted permissions)
+- name: Configure AWS credentials (Prod)
+  uses: aws-actions/configure-aws-credentials@v4
+  with:
+    aws-region: us-east-1
+    role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
+    role-session-name: smus-pipeline-lifecycle-prod
+    role-duration-seconds: 43200
+```
+
+## Manual Approval Gates
+
+### GitHub Environment Protection Rules
+
+Configure manual approval for production deployments:
+
+1. **Repository Settings** → **Environments** → **aws-env-amirbo-6778**
+2. **Protection Rules**:
+   - ✅ **Required reviewers**: Add team members who can approve production deployments
+   - ✅ **Wait timer**: Optional delay before deployment (e.g., 5 minutes)
+   - ✅ **Deployment branches**: Restrict to `main` branch only
+
+### Approval Workflow
+
+```yaml
+deploy-prod:
+  name: "Step 7 - Deploy to Production Environment"
+  runs-on: ubuntu-latest
+  environment: aws-env-amirbo-6778  # Triggers manual approval
+  needs: [setup, execute-workflows-test-target]
+```
+
+When this job runs:
+1. **Workflow pauses** and shows "Waiting for approval"
+2. **Designated reviewers** receive notification
+3. **Reviewers can**:
+   - ✅ **Approve**: Continue to production deployment
+   - ❌ **Reject**: Stop the workflow
+   - 💬 **Comment**: Request changes or clarification
 
 ## Pipeline Steps Explained
 
-### Step 1: Setup Environment
-- Configures AWS credentials and permissions
-- Resolves DataZone domain ID from domain name
-- Sets up environment variables for subsequent steps
+### Step 1: Setup and Validation
+- **Environment**: `aws-env` (Development)
+- **AWS Role**: Development role with domain/project access
+- **Actions**:
+  - Validates environment variables
+  - Resolves DataZone domain and project IDs
+  - Validates pipeline configuration schema
+  - Sets up outputs for subsequent steps
 
-### Step 2: Validate Manifest
-- Validates pipeline configuration and schema
-- Substitutes environment variables (domain, project names, regions)
-- Optionally creates pipeline manifest if it doesn't exist
+### Step 2: Create Deployment Bundle
+- **Environment**: `aws-env` (Development)
+- **Actions**:
+  - Packages Airflow DAGs, notebooks, and data assets
+  - **Catalog Asset Integration**: Automatically includes DataZone catalog assets referenced in workflows
+  - Uploads bundles to S3 storage
+  - Validates workflow syntax and dependencies
 
-### Step 3: Bundle Code and Workflows
-- Packages Airflow DAGs, notebooks, and data assets
-- Uploads bundles to S3 storage
-- Validates workflow syntax and dependencies
+### Step 3: Deploy to Test Environment
+- **Environment**: `aws-env` (Development)
+- **Actions**:
+  - Creates or updates test SageMaker project
+  - Initializes project with required environments (Lakehouse, MWAA)
+  - **Catalog Asset Access**: CLI automatically requests subscriptions for catalog assets
+  - Deploys workflows and configurations
 
-### Step 4: Deploy to Test Environment
-- Creates or updates test SageMaker project
-- Initializes project with required environments (Lakehouse, MWAA)
-- Deploys workflows and configurations
+### Step 4: Run Tests on Test Environment
+- **Environment**: `aws-env` (Development)
+- **Actions**:
+  - Executes user-defined test suites
+  - Validates workflows function correctly
+  - Generates test reports
 
-### Step 5: Run Tests
-- Executes user-defined test suites to validate workflows
-- Runs tests against deployed resources to ensure workflows function correctly
-- Generates test reports and validates pipeline functionality
+### Step 5: Monitor Test Environment
+- **Environment**: `aws-env` (Development)
+- **Actions**:
+  - Monitors pipeline status and health
+  - Checks workflow execution status
+  - Validates test environment stability
 
-### Step 6: Deploy to Production
-- Promotes validated code to production environment
+### Step 6: Execute Test Workflows
+- **Environment**: `aws-env` (Development)
+- **Actions**:
+  - Triggers DAGs in test environment
+  - Lists and validates DAG tasks
+  - Checks task execution states
+
+### Step 7: Deploy to Production (Manual Approval Required)
+- **Environment**: `aws-env-amirbo-6778` (Production)
+- **Manual Approval**: ⚠️ **Workflow pauses for reviewer approval**
+- **Actions**:
+  - Downloads validated deployment bundle
+  - Deploys to production SageMaker project
+  - **Catalog Asset Access**: Ensures production access to required catalog assets
+
+### Step 8: Run Production Tests
+- **Environment**: `aws-env-amirbo-6778` (Production)
+- **Actions**:
+  - Executes production validation tests
+  - Verifies production deployment health
+
+### Step 9: Monitor Production Environment
+- **Environment**: `aws-env-amirbo-6778` (Production)
+- **Actions**:
+  - Monitors production pipeline status
+  - Validates production stability
+
+### Step 10: Execute Production Workflows
+- **Environment**: `aws-env-amirbo-6778` (Production)
+- **Actions**:
+  - Triggers production DAGs
+  - Validates production workflow execution
+
+## Security Best Practices
+
+### 1. Least Privilege Access
+```yaml
+# Development role permissions
+- DataZone: Full access to dev domain/projects
+- S3: Read/write to dev buckets
+- MWAA: Manage dev environments
+- CloudFormation: Create/update dev stacks
+
+# Production role permissions  
+- DataZone: Limited access to prod domain/projects
+- S3: Read/write to prod buckets only
+- MWAA: Manage prod environments only
+- CloudFormation: Update prod stacks only (no create)
+```
+
+### 2. Environment Isolation
+- **Separate AWS accounts** for dev/prod (recommended)
+- **Separate DataZone domains** for dev/prod
+- **Separate S3 buckets** for artifacts
+- **Network isolation** between environments
+
+### 3. Approval Gates
+- **Required reviewers** for production deployments
+- **Branch protection** rules (main branch only)
+- **Deployment windows** for production changes
+- **Audit logging** of all approvals
+
+## Catalog Asset Integration
+
+### Automatic Subscription Management
+
+The CLI automatically handles DataZone catalog asset access:
+
+```yaml
+- name: Deploy with catalog assets
+  run: |
+    smus-cli deploy \
+      --pipeline "pipeline.yaml" \
+      --targets prod
+    # CLI automatically:
+    # 1. Identifies catalog assets in bundle
+    # 2. Requests subscriptions for target project
+    # 3. Manages approval workflows
+    # 4. Ensures access before deployment
+```
+
+### Bundle Support for Catalog Assets
+
+Deployment bundles can include catalog asset references:
+
+```yaml
+# In pipeline.yaml
+catalog_assets:
+  - asset_id: "dzd_123abc.asset_456def"
+    subscription_required: true
+  - asset_id: "dzd_123abc.dataset_789ghi"
+    subscription_required: true
+```
+
+The CLI ensures these assets are accessible in the target environment before proceeding with deployment.
+
+## Example Workflow Configuration
+
+```yaml
+name: SMUS Pipeline with Multi-Environment Deployment
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-deploy:
+    environment: aws-env
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
+      # ... test deployment steps
+
+  prod-deploy:
+    environment: aws-env-prod  # Manual approval required
+    needs: [test-deploy]
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
+      # ... production deployment steps
+```
+
+## Repository Setup
+
+### 1. Create GitHub Environments
+```bash
+# Repository Settings → Environments
+- aws-env (Development)
+- aws-env-prod (Production with approval rules)
+```
+
+### 2. Configure Secrets
+```bash
+# Repository Settings → Secrets and Variables → Actions
+AWS_ROLE_ARN_DEV=arn:aws:iam::ACCOUNT:role/GitHubActions-Dev
+AWS_ROLE_ARN_PROD=arn:aws:iam::ACCOUNT:role/GitHubActions-Prod
+```
+
+### 3. Configure Variables
+```bash
+# Environment Variables
+DEV_DOMAIN_REGION=us-east-1
+PROD_DOMAIN_REGION=us-west-2
+```
+
+This setup provides a secure, auditable, and controlled deployment pipeline with proper separation between development and production environments.
 - Applies production-specific configurations
 - Monitors deployment status and health
 
