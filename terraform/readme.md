@@ -160,3 +160,15 @@ In the CloudFormation template sample, a lambda custom resource was used to crea
 ### Project Creation
 
 Module samples to create a Datazone project are currently on hold due to an [open issue for project profile creation](https://github.com/hashicorp/terraform-provider-awscc/issues/2380) through the AWS Cloud Control provider. We will monitor the issue and update the sample once this becomes available.
+
+### Below use case steps to automate process of account association and data onboarding.
+  
+1. Create IAM roles using CFN
+2. Create domain using CFN
+3. Add SSO/IAM users CFN
+4. Associate accountants TF
+5. Enable blue prints in associated account TF
+6. Project profile creation for associated account CFN
+7. Policy grants for blue prints and project profile CFN/TF
+8. Onboard data - CLI/Python, need validation.
+9. Create projects CFN 
