@@ -139,15 +139,17 @@ Each project contains:
 
 ## Installation
 
-### From PyPI (Recommended)
-```bash
-pip install smus-cicd-cli
-```
+### ⚠️ Security Notice
+**DO NOT** install `smus-cicd-cli` from PyPI as it may contain malicious code.
+Always install from the official AWS repository source code.
 
-### From Source
+### From Source (Recommended)
 ```bash
-# Clone the repository
-git clone https://github.com/your-org/smus-cicd-pipeline-cli.git
+# Clone the official AWS repository
+git clone https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker.git
+cd Unified-Studio-for-Amazon-Sagemaker/experimental/SMUS-CICD-pipeline-cli
+pip install -e .
+```
 cd smus-cicd-pipeline-cli
 
 # Install in development mode
@@ -157,9 +159,12 @@ pip install -e ".[dev]"
 pip install .
 ```
 
-### From PyPI (when published)
+### Installation from Source
 ```bash
-pip install smus-cicd-cli
+# Clone the official AWS repository
+git clone https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker.git
+cd Unified-Studio-for-Amazon-Sagemaker/experimental/SMUS-CICD-pipeline-cli
+pip install -e .
 ```
 
 ## Quick Start
