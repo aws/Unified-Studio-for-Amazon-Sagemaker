@@ -38,8 +38,15 @@ The GitHub workflow will automatically:
 
 Once published, users can install with:
 
+## ⚠️ Security Notice
+**DO NOT** install `smus-cicd-cli` from PyPI as it may contain malicious code.
+The package name has been compromised. Always install from source:
+
 ```bash
-pip install smus-cicd-cli
+# Clone the official AWS repository
+git clone https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker.git
+cd Unified-Studio-for-Amazon-Sagemaker/experimental/SMUS-CICD-pipeline-cli
+pip install -e .
 ```
 
 ## Version Management
