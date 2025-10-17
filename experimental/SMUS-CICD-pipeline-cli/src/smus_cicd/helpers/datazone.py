@@ -10,6 +10,45 @@ import boto3
 import typer
 
 
+def get_project_user_role_arn(project_name: str, domain_name: str, region: str) -> str:
+    """Get the user role ARN for a DataZone project from its tooling environment."""
+    try:
+        # Get domain and project IDs
+        domain_id = get_domain_id_by_name(domain_name, region)
+        if not domain_id:
+            return None
+            
+        project_id = get_project_id_by_name(project_name, domain_id, region)
+        if not project_id:
+            return None
+            
+        # List environments to find tooling environment
+        datazone_client = boto3.client("datazone", region_name=region)
+        environments_response = datazone_client.list_environments(
+            domainIdentifier=domain_id, 
+            projectIdentifier=project_id
+        )
+        
+        # Find tooling environment
+        for env in environments_response.get('items', []):
+            if 'tooling' in env.get('name', '').lower():
+                # Get environment details
+                env_detail = datazone_client.get_environment(
+                    domainIdentifier=domain_id,
+                    identifier=env.get('id')
+                )
+                
+                # Look for userRoleArn in provisioned resources
+                for resource in env_detail.get('provisionedResources', []):
+                    if resource.get('name') == 'userRoleArn':
+                        return resource.get('value')
+        
+        return None
+        
+    except Exception:
+        return None
+
+
 def get_domain_id_by_name(domain_name, region):
     """Get DataZone domain ID by searching domains by name. Returns None if not found."""
     try:

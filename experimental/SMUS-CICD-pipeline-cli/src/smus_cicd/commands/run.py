@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 
 import typer
 
-from ..helpers import mwaa
+from ..helpers import mwaa, airflow_serverless, datazone
 from ..helpers.airflow_parser import parse_airflow_output
 from ..helpers.utils import get_datazone_project_info, load_config
 from ..pipeline import PipelineManifest
@@ -19,18 +19,19 @@ def run_command(
     output: str,
 ) -> None:
     """
-    Run Airflow CLI commands in target environment.
+    Run workflow commands in target environment (supports both MWAA and Overdrive).
 
     Args:
         manifest_file: Path to pipeline manifest file
         workflow: Name of the workflow to run
-        command: Optional Airflow CLI command to execute (if not provided, triggers the workflow)
+        command: Optional command to execute (for MWAA only, ignored for Overdrive)
         targets: Comma-separated list of targets (optional, defaults to all)
         output: Output format (TEXT or JSON)
 
     Examples:
         smus-cli run -w test_dag
         smus-cli run -w test_dag -t prod
+        smus-cli run -w test_dag -c "dags list" -t dev  # MWAA only
     """
     # Configure logging based on output format
     import os
@@ -47,59 +48,81 @@ def run_command(
         manifest = PipelineManifest.from_file(manifest_file)
         targets_to_check = _resolve_targets(targets, manifest)
 
-        # Validate MWAA health for each target before executing commands
-        from ..helpers.mwaa import validate_mwaa_health
+        # Check if any workflow uses serverless Airflow
+        uses_airflow_serverless = False
+        
+        # Check bundle workflow configurations
+        if manifest.bundle.workflow:
+            for workflow_config in manifest.bundle.workflow:
+                if workflow_config.get("airflow-serverless", False):
+                    uses_airflow_serverless = True
+                    break
+        
+        # Check workflows section for airflow-serverless engine
+        if manifest.workflows:
+            for wf in manifest.workflows:
+                if wf.engine == "airflow-serverless":
+                    uses_airflow_serverless = True
+                    break
 
-        config = load_config()
-        mwaa_healthy = False
+        if uses_airflow_serverless:
+            results = _execute_airflow_serverless_workflows(
+                targets_to_check, manifest, workflow, output
+            )
+        else:
+            # Validate MWAA health for each target before executing commands
+            from ..helpers.mwaa import validate_mwaa_health
 
-        for target_name in targets_to_check:
-            target_config = manifest.get_target(target_name)
-            project_name = target_config.project.name
+            config = load_config()
+            mwaa_healthy = False
 
-            # Add domain information from target for proper connection retrieval
-            config["domain"] = {
-                "name": target_config.domain.name,
-                "region": target_config.domain.region,
-            }
-            config["region"] = target_config.domain.region
+            for target_name in targets_to_check:
+                target_config = manifest.get_target(target_name)
+                project_name = target_config.project.name
 
-            if output.upper() != "JSON":
-                typer.echo(
-                    f"🔍 Checking MWAA health for target '{target_name}' (project: {project_name})"
-                )
-            if validate_mwaa_health(project_name, config):
-                mwaa_healthy = True
-                break
+                # Add domain information from target for proper connection retrieval
+                config["domain"] = {
+                    "name": target_config.domain.name,
+                    "region": target_config.domain.region,
+                }
+                config["region"] = target_config.domain.region
 
-        if not mwaa_healthy:
-            if output.upper() == "JSON":
-                typer.echo(
-                    json.dumps(
-                        {
-                            "success": False,
-                            "error": "No healthy MWAA environments found",
-                        }
+                if output.upper() != "JSON":
+                    typer.echo(
+                        f"🔍 Checking MWAA health for target '{target_name}' (project: {project_name})"
                     )
-                )
-            else:
-                typer.echo(
-                    "❌ No healthy MWAA environments found. Cannot execute workflow commands."
-                )
-            raise typer.Exit(1)
+                if validate_mwaa_health(project_name, config):
+                    mwaa_healthy = True
+                    break
 
-        # If no command provided, trigger the workflow
-        if not command:
-            command = f"dags trigger {workflow}"
+            if not mwaa_healthy:
+                if output.upper() == "JSON":
+                    typer.echo(
+                        json.dumps(
+                            {
+                                "success": False,
+                                "error": "No healthy MWAA environments found",
+                            }
+                        )
+                    )
+                else:
+                    typer.echo(
+                        "❌ No healthy MWAA environments found. Cannot execute workflow commands."
+                    )
+                raise typer.Exit(1)
 
-        results = _execute_commands_on_targets(
-            targets_to_check, manifest, workflow, command, output
-        )
+            # If no command provided, trigger the workflow
+            if not command:
+                command = f"dags trigger {workflow}"
 
-        _output_results(results, workflow, command, output)
+            results = _execute_commands_on_targets(
+                targets_to_check, manifest, workflow, command, output
+            )
+
+        _output_results(results, workflow, command or "trigger", output)
 
     except Exception as e:
-        _handle_execution_error(e, workflow, command, output)
+        _handle_execution_error(e, workflow, command or "trigger", output)
 
 
 def _validate_required_parameters(workflow: str, output: str = "TEXT") -> None:
@@ -499,3 +522,98 @@ def _handle_execution_error(
     if output.upper() == "JSON":
         typer.echo(json.dumps({"success": False, "error": error_msg}))
     handle_error(error_msg, exit_code=1)
+
+
+def _execute_airflow_serverless_workflows(
+    targets_to_check: Dict[str, Any],
+    manifest: PipelineManifest,
+    workflow: str,
+    output: str,
+) -> List[Dict[str, Any]]:
+    """
+    Execute serverless Airflow workflow runs on specified targets.
+
+    Args:
+        targets_to_check: Dictionary of target configurations
+        manifest: Pipeline manifest object
+        workflow: Workflow name to trigger
+        output: Output format
+
+    Returns:
+        List of execution results
+    """
+    results = []
+
+    for target_name, target_config in targets_to_check.items():
+
+        if output.upper() != "JSON":
+            typer.echo(f"🎯 Target: {target_name} (Serverless Airflow)")
+
+        try:
+            # Generate expected workflow name based on naming pattern from deploy command
+            pipeline_name = manifest.pipeline_name
+            dag_name = workflow
+            target_name = target_config.project.name.replace("-", "_")
+            safe_pipeline = pipeline_name.replace("-", "_")
+            safe_dag = dag_name.replace("-", "_")
+            expected_workflow_name = f"{safe_pipeline}_{target_name}_{safe_dag}"
+            
+            # List existing workflows to find the actual ARN
+            region = airflow_serverless.AIRFLOW_SERVERLESS_REGION
+            workflows = airflow_serverless.list_workflows(region=region)
+            
+            # Find the workflow that matches our expected name
+            workflow_arn = None
+            for wf in workflows:
+                if wf['name'] == expected_workflow_name:
+                    workflow_arn = wf['workflow_arn']
+                    break
+            
+            if not workflow_arn:
+                raise Exception(f"Workflow '{expected_workflow_name}' not found. Available workflows: {[wf['name'] for wf in workflows]}")
+
+            if output.upper() != "JSON":
+                typer.echo(f"🚀 Starting workflow run: {expected_workflow_name}")
+                typer.echo(f"🔗 ARN: {workflow_arn}")
+
+            # Start workflow run (workflow uses role specified during creation)
+            result = airflow_serverless.start_workflow_run(workflow_arn, region=region)
+
+            if result.get('success'):
+                run_id = result.get('run_id')
+                if output.upper() != "JSON":
+                    typer.echo(f"✅ Workflow run started successfully")
+                    typer.echo(f"📋 Run ID: {run_id}")
+                    typer.echo(f"📊 Status: {result.get('status')}")
+                
+                results.append({
+                    "target": target_name,
+                    "workflow_arn": workflow_arn,
+                    "run_id": run_id,
+                    "status": result.get('status'),
+                    "success": True
+                })
+            else:
+                error_msg = result.get('error', 'Unknown error')
+                if output.upper() != "JSON":
+                    typer.echo(f"❌ Failed to start workflow run: {error_msg}")
+                
+                results.append({
+                    "target": target_name,
+                    "workflow_arn": workflow_arn,
+                    "success": False,
+                    "error": error_msg
+                })
+
+        except Exception as e:
+            error_msg = f"Error executing Overdrive workflow: {str(e)}"
+            if output.upper() != "JSON":
+                typer.echo(f"❌ {error_msg}")
+            
+            results.append({
+                "target": target_name,
+                "success": False,
+                "error": error_msg
+            })
+
+    return results

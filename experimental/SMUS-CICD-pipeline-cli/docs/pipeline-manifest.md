@@ -6,48 +6,85 @@ The pipeline manifest is a YAML file that defines your CI/CD pipeline configurat
 
 ## Environment Variable Parameterization
 
-**NEW**: Pipeline manifests support environment variable substitution using `${VARIABLE_NAME}` or `${VARIABLE_NAME:default_value}` syntax. This enables flexible configuration across different environments without maintaining separate manifest files.
+**NEW**: Pipeline manifests support environment variable substitution in workflow files using `${VARIABLE_NAME}` or `$VARIABLE_NAME` syntax. This enables flexible configuration across different environments without maintaining separate workflow files.
 
-### Basic Syntax
+### Target-Specific Environment Variables
+
+Define environment variables per target that will be substituted in workflow files during deployment:
+
 ```yaml
-# Use environment variables with defaults in target configurations
 targets:
   dev:
+    stage: DEV
     domain:
-      name: ${DOMAIN_NAME:my-default-domain}
-      region: ${AWS_REGION:us-east-1}
+      name: my-domain
+      region: us-east-1
     project:
-      name: ${PROJECT_PREFIX:myapp}-dev
-
-# Use environment variables without defaults (empty string if not set)
-database:
-  password: ${DB_PASSWORD}
+      name: dev-project
+    environment_variables:
+      S3_PREFIX: "dev"
+      DEBUG_MODE: true
+      MAX_RETRIES: 3
+      
+  test:
+    stage: TEST
+    domain:
+      name: my-domain
+      region: us-east-1
+    project:
+      name: test-project
+    environment_variables:
+      S3_PREFIX: "test"
+      DEBUG_MODE: false
+      MAX_RETRIES: 5
 ```
 
-### Multi-Environment Example
+### Workflow File Parameter Substitution
+
+Use environment variables in your workflow files with both supported syntaxes:
+
 ```yaml
-pipelineName: ${PIPELINE_NAME:MyPipeline}
-
-targets:
-  dev:
-    domain:
-      name: ${DOMAIN_NAME}
-      region: ${DEV_DOMAIN_REGION:us-east-2}
-    project:
-      name: ${PROJECT_PREFIX:myapp}-dev-${TEAM_NAME}
-  
-  prod:
-    domain:
-      name: ${DOMAIN_NAME}
-      region: ${PROD_DOMAIN_REGION:us-east-1}
-    project:
-      name: ${PROJECT_PREFIX:myapp}-prod-${TEAM_NAME}
+# In your DAG file (e.g., workflows/dags/my_dag.yaml)
+my_dag:
+  dag_id: "data_processing"
+  tasks:
+    extract_data:
+      operator: "airflow.providers.amazon.aws.operators.s3.S3ListOperator"
+      bucket: "my-data-bucket"
+      prefix: ${S3_PREFIX}        # Resolves to "dev" or "test"
+    
+    process_data:
+      operator: "airflow.operators.python.PythonOperator"
+      python_callable: "process_data"
+      op_kwargs:
+        debug: $DEBUG_MODE       # Resolves to true or false
+        retries: $MAX_RETRIES    # Resolves to 3 or 5
 ```
 
-**Usage:**
-```bash
-# Set environment variables
-export DOMAIN_NAME=production-domain
+### Supported Variable Types
+
+Environment variables support multiple data types:
+
+```yaml
+environment_variables:
+  STRING_VAR: "my-string"      # String value
+  BOOLEAN_VAR: true            # Boolean value  
+  NUMBER_VAR: 42               # Numeric value
+  PREFIX_VAR: "data/staging"   # Path/prefix strings
+```
+
+### Parameter Resolution
+
+During deployment, the CLI automatically:
+1. Reads the target's `environment_variables` configuration
+2. Scans workflow files for `${VAR_NAME}` and `$VAR_NAME` patterns
+3. Replaces variables with target-specific values
+4. Uploads resolved files to the deployment environment
+
+**Example Resolution:**
+- **Source**: `prefix: ${S3_PREFIX}`
+- **Dev Target**: `prefix: dev`
+- **Test Target**: `prefix: test`
 export DEV_DOMAIN_REGION=us-west-2
 export PROJECT_PREFIX=dataplatform
 export TEAM_NAME=analytics

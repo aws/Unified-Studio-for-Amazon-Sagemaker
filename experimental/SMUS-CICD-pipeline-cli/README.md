@@ -109,6 +109,7 @@ The SMUS CI/CD CLI provides comprehensive pipeline management capabilities:
 - **Quality Gates**: Stop pipeline progression if tests fail, ensuring only validated changes reach production
 - **CI/CD Integration**: Native support for GitHub Actions, GitLab CI, and other CI/CD providers through environment variables and CLI automation
 - **Environment Management**: Handle environment-specific configuration through variable substitution and target-based deployment
+- **Parameter Substitution**: Support for `${VAR_NAME}` and `$VAR_NAME` syntax in workflow files for flexible multi-environment deployments
 
 ### Pipeline Stages → SMUS Projects
 

@@ -6,6 +6,7 @@ from typing import Optional
 
 import typer
 
+from ..helpers import airflow_serverless
 from ..helpers.utils import get_datazone_project_info, load_config
 from ..pipeline import PipelineManifest
 
@@ -56,8 +57,8 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
         if output.upper() != "JSON":
             typer.echo(f"Pipeline: {manifest.pipeline_name}")
 
-        # Validate MWAA health for targets before monitoring
-        mwaa_healthy_targets = []
+        # Validate MWAA/Overdrive health for targets before monitoring
+        healthy_targets = []
         for target_name, target_config in targets_to_monitor.items():
             # Load AWS config
             config = load_config()
@@ -74,24 +75,41 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
                     f"   Domain: {target_config.domain.name} ({target_config.domain.region})"
                 )
 
-            # Validate MWAA health before monitoring
-            from ..helpers.mwaa import validate_mwaa_health
-
-            if validate_mwaa_health(project_name, config):
-                mwaa_healthy_targets.append(target_name)
+            # Check if this target uses serverless Airflow
+            uses_airflow_serverless = _target_uses_airflow_serverless(manifest, target_config)
+            
+            if uses_airflow_serverless:
+                # Validate serverless Airflow health
+                from ..helpers.airflow_serverless import validate_airflow_serverless_health
+                
+                if validate_airflow_serverless_health(project_name, config):
+                    healthy_targets.append(target_name)
+                    if output.upper() != "JSON":
+                        typer.echo("   🚀 Serverless Airflow service is healthy")
+                else:
+                    if output.upper() != "JSON":
+                        typer.echo(
+                            f"⚠️  Skipping monitoring for target '{target_name}' - Overdrive not healthy"
+                        )
             else:
-                if output.upper() != "JSON":
-                    typer.echo(
-                        f"⚠️  Skipping monitoring for target '{target_name}' - MWAA not healthy"
-                    )
+                # Validate MWAA health before monitoring
+                from ..helpers.mwaa import validate_mwaa_health
 
-        if not mwaa_healthy_targets:
+                if validate_mwaa_health(project_name, config):
+                    healthy_targets.append(target_name)
+                else:
+                    if output.upper() != "JSON":
+                        typer.echo(
+                            f"⚠️  Skipping monitoring for target '{target_name}' - MWAA not healthy"
+                        )
+
+        if not healthy_targets:
             if output.upper() == "JSON":
-                output_data["error"] = "No healthy MWAA environments found"
+                output_data["error"] = "No healthy workflow environments found"
                 typer.echo(json.dumps(output_data, indent=2))
             else:
                 typer.echo(
-                    "❌ No healthy MWAA environments found. Cannot monitor workflows."
+                    "❌ No healthy workflow environments found. Cannot monitor workflows."
                 )
             raise typer.Exit(1)
 
@@ -102,7 +120,7 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
         # Monitor each target
         for target_name, target_config in targets_to_monitor.items():
             # Skip unhealthy targets
-            if target_name not in mwaa_healthy_targets:
+            if target_name not in healthy_targets:
                 continue
 
             target_data = {
@@ -157,154 +175,22 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
                             owners_str = ", ".join(project_info["owners"])
                             typer.echo(f"   Owners: {owners_str}")
 
-                    # Monitor workflow connections
-                    workflow_connections = {
-                        name: info
-                        for name, info in project_connections.items()
-                        if info.get("type") in ["MWAA", "WORKFLOWS_MWAA"]
-                    }
-
-                    if workflow_connections:
-                        if output.upper() != "JSON":
-                            typer.echo("\n   📊 Workflow Status:")
-
-                        for conn_name, conn_info in workflow_connections.items():
-                            env_name = conn_info.get("environmentName")
-                            if env_name:
-                                workflow_data = {
-                                    "environment": env_name,
-                                    "connection_id": conn_info.get("connectionId"),
-                                    "status": "unknown",
-                                    "dags": {},
-                                }
-
-                                try:
-                                    from ..helpers import mwaa
-
-                                    # Get DAG list and details
-                                    existing_workflows = mwaa.list_dags(
-                                        env_name, target_config.domain.region, conn_info
-                                    )
-                                    all_dag_details = mwaa.get_all_dag_details(
-                                        env_name, target_config.domain.region, conn_info
-                                    )
-
-                                    workflow_data["status"] = "healthy"
-
-                                    if output.upper() != "JSON":
-                                        typer.echo(f"      🔧 {conn_name} ({env_name})")
-
-                                        # Get Airflow UI URL
-                                        airflow_url = mwaa.get_airflow_ui_url(
-                                            env_name,
-                                            target_config.domain.region,
-                                            conn_info,
-                                        )
-                                        if airflow_url:
-                                            # Format as clickable hyperlink
-                                            hyperlink = f"\033]8;;{airflow_url}\033\\{airflow_url}\033]8;;\033\\"
-                                            typer.echo(
-                                                f"         🌐 Airflow UI: {hyperlink}"
-                                            )
-
-                                    # Get manifest workflows for comparison
-                                    manifest_workflows = set()
-                                    if (
-                                        hasattr(manifest, "workflows")
-                                        and manifest.workflows
-                                    ):
-                                        manifest_workflows = {
-                                            w.workflow_name for w in manifest.workflows
-                                        }
-
-                                    # Monitor each DAG
-                                    for dag_name in sorted(existing_workflows):
-                                        dag_details = all_dag_details.get(dag_name, {})
-                                        schedule = dag_details.get(
-                                            "schedule_interval", "Unknown"
-                                        )
-                                        active = dag_details.get("active", None)
-                                        status = (
-                                            "ACTIVE"
-                                            if active
-                                            else (
-                                                "PAUSED"
-                                                if active is False
-                                                else "UNKNOWN"
-                                            )
-                                        )
-
-                                        # Get recent DAG runs for monitoring
-                                        try:
-                                            dag_runs = mwaa.get_dag_runs(
-                                                dag_name,
-                                                env_name,
-                                                target_config.domain.region,
-                                                conn_info,
-                                                limit=5,
-                                            )
-                                            recent_status = "No runs"
-                                            if dag_runs:
-                                                recent_run = dag_runs[0]
-                                                recent_status = recent_run.get(
-                                                    "state", "Unknown"
-                                                )
-                                        except Exception:
-                                            dag_runs = []
-                                            recent_status = "Unknown"
-
-                                        workflow_data["dags"][dag_name] = {
-                                            "schedule": schedule,
-                                            "status": status,
-                                            "recent_run_status": recent_status,
-                                            "in_manifest": dag_name
-                                            in manifest_workflows,
-                                            "recent_runs": (
-                                                dag_runs[:3] if dag_runs else []
-                                            ),
-                                        }
-
-                                        if output.upper() != "JSON":
-                                            status_icon = (
-                                                "✅"
-                                                if recent_status == "success"
-                                                else (
-                                                    "❌"
-                                                    if recent_status == "failed"
-                                                    else (
-                                                        "⏸️"
-                                                        if status == "PAUSED"
-                                                        else "🔄"
-                                                    )
-                                                )
-                                            )
-                                            manifest_icon = (
-                                                "✓"
-                                                if dag_name in manifest_workflows
-                                                else "-"
-                                            )
-
-                                            typer.echo(
-                                                f"         {status_icon} {manifest_icon} {dag_name}"
-                                            )
-                                            typer.echo(
-                                                f"            Schedule: {schedule} | Status: {status} | Recent: {recent_status}"
-                                            )
-
-                                except Exception as e:
-                                    workflow_data["status"] = "error"
-                                    workflow_data["error"] = str(e)
-
-                                    if output.upper() != "JSON":
-                                        typer.echo(
-                                            f"      ❌ Error monitoring {conn_name}: {e}"
-                                        )
-
-                                target_data["workflows"][conn_name] = workflow_data
+                    # Check if this target uses serverless Airflow
+                    uses_airflow_serverless = _target_uses_airflow_serverless(manifest, target_config)
+                    
+                    if uses_airflow_serverless:
+                        # Monitor serverless Airflow workflows
+                        airflow_serverless_data = _monitor_airflow_serverless_workflows(
+                            manifest, target_config, config, output
+                        )
+                        target_data["workflows"].update(airflow_serverless_data)
                     else:
-                        target_data["status"] = "no_workflows"
-                        if output.upper() != "JSON":
-                            typer.echo("   ❌ No workflow connections found")
+                        # Monitor MWAA workflow connections
+                        mwaa_data = _monitor_mwaa_workflows(
+                            manifest, target_config, project_connections, output
+                        )
+                        target_data["workflows"].update(mwaa_data)
+
                 else:
                     target_data["status"] = "error"
                     target_data["error"] = project_info.get("error", "Unknown error")
@@ -370,3 +256,318 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
         else:
             typer.echo(f"Error monitoring pipeline: {e}", err=True)
         raise typer.Exit(1)
+
+
+def _target_uses_airflow_serverless(manifest: PipelineManifest, target_config) -> bool:
+    """
+    Check if a target uses serverless Airflow workflows.
+    
+    Args:
+        manifest: Pipeline manifest object
+        target_config: Target configuration object
+        
+    Returns:
+        True if target uses serverless Airflow, False otherwise
+    """
+    # Check bundle workflow configurations for airflow-serverless flag
+    if manifest.bundle.workflow:
+        for workflow_config in manifest.bundle.workflow:
+            if workflow_config.get("airflow-serverless", False):
+                return True
+    
+    # Check workflows section for airflow-serverless engine
+    if manifest.workflows:
+        for workflow in manifest.workflows:
+            if workflow.engine == "airflow-serverless":
+                return True
+    
+    return False
+
+
+def _monitor_airflow_serverless_workflows(
+    manifest: PipelineManifest,
+    target_config,
+    config: dict,
+    output: str
+) -> dict:
+    """
+    Monitor serverless Airflow workflows for a target.
+    
+    Args:
+        manifest: Pipeline manifest object
+        target_config: Target configuration object
+        config: Configuration dictionary
+        output: Output format (JSON or TEXT)
+        
+    Returns:
+        Dictionary of workflow monitoring data
+    """
+    workflows_data = {}
+    
+    try:
+        from ..helpers import airflow_serverless
+        
+        if output.upper() != "JSON":
+            typer.echo("\n   🚀 Serverless Airflow Workflow Status:")
+        
+        # List all serverless Airflow workflows
+        all_workflows = airflow_serverless.list_workflows(region=config["region"])
+        
+        # Filter workflows that belong to this pipeline/target using tags
+        pipeline_name = manifest.pipeline_name
+        target_name = target_config.project.name
+        
+        relevant_workflows = []
+        for workflow in all_workflows:
+            workflow_tags = workflow.get("tags", {})
+            # Check if workflow tags match our pipeline and target
+            if (workflow_tags.get("Pipeline") == pipeline_name and 
+                workflow_tags.get("Target") == target_name):
+                relevant_workflows.append(workflow)
+        
+        if relevant_workflows:
+            overdrive_data = {
+                "service": "overdrive",
+                "status": "healthy",
+                "workflows": {}
+            }
+            
+            for workflow in relevant_workflows:
+                workflow_arn = workflow["workflow_arn"]
+                workflow_name = workflow["name"]
+                
+                # Get workflow details
+                workflow_status = airflow_serverless.get_workflow_status(
+                    workflow_arn, region=config["region"]
+                )
+                
+                # Get recent workflow runs
+                recent_runs = airflow_serverless.list_workflow_runs(
+                    workflow_arn, region=config["region"], max_results=5
+                )
+                
+                recent_status = "No runs"
+                if recent_runs:
+                    recent_status = recent_runs[0]["status"]
+                
+                workflow_data = {
+                    "workflow_arn": workflow_arn,
+                    "status": workflow_status.get("status", "UNKNOWN"),
+                    "trigger_mode": workflow_status.get("trigger_mode", "Unknown"),
+                    "recent_run_status": recent_status,
+                    "recent_runs": recent_runs[:3],
+                    "created_at": workflow_status.get("created_at"),
+                    "log_group": workflow_status.get("log_group")
+                }
+                
+                overdrive_data["workflows"][workflow_name] = workflow_data
+                
+                if output.upper() != "JSON":
+                    status_icon = (
+                        "✅" if recent_status == "SUCCESS"
+                        else "❌" if recent_status == "FAILED"
+                        else "🔄" if recent_status in ["STARTING", "QUEUED", "RUNNING"]
+                        else "⏸️"
+                    )
+                    
+                    typer.echo(f"      🚀 {workflow_name}")
+                    typer.echo(f"         {status_icon} Status: {workflow_status.get('status')} | Recent: {recent_status}")
+                    typer.echo(f"         ARN: {workflow_arn}")
+                    
+                    if workflow_status.get("log_group"):
+                        typer.echo(f"         📋 Logs: {workflow_status['log_group']}")
+            
+            workflows_data["overdrive"] = overdrive_data
+        else:
+            if output.upper() != "JSON":
+                typer.echo("      ℹ️  No Overdrive workflows found for this pipeline/target")
+            
+            workflows_data["overdrive"] = {
+                "service": "overdrive",
+                "status": "no_workflows",
+                "workflows": {}
+            }
+    
+    except Exception as e:
+        if output.upper() != "JSON":
+            typer.echo(f"      ❌ Error monitoring Overdrive workflows: {e}")
+        
+        workflows_data["overdrive"] = {
+            "service": "overdrive",
+            "status": "error",
+            "error": str(e),
+            "workflows": {}
+        }
+    
+    return workflows_data
+
+
+def _monitor_mwaa_workflows(
+    manifest: PipelineManifest,
+    target_config,
+    project_connections: dict,
+    output: str
+) -> dict:
+    """
+    Monitor MWAA workflows for a target.
+    
+    Args:
+        manifest: Pipeline manifest object
+        target_config: Target configuration object
+        project_connections: Project connection information
+        output: Output format (JSON or TEXT)
+        
+    Returns:
+        Dictionary of workflow monitoring data
+    """
+    workflows_data = {}
+    
+    # Monitor workflow connections
+    workflow_connections = {
+        name: info
+        for name, info in project_connections.items()
+        if info.get("type") in ["MWAA", "WORKFLOWS_MWAA"]
+    }
+
+    if workflow_connections:
+        if output.upper() != "JSON":
+            typer.echo("\n   📊 MWAA Workflow Status:")
+
+        for conn_name, conn_info in workflow_connections.items():
+            env_name = conn_info.get("environmentName")
+            if env_name:
+                workflow_data = {
+                    "environment": env_name,
+                    "connection_id": conn_info.get("connectionId"),
+                    "status": "unknown",
+                    "dags": {},
+                }
+
+                try:
+                    from ..helpers import mwaa
+
+                    # Get DAG list and details
+                    existing_workflows = mwaa.list_dags(
+                        env_name, target_config.domain.region, conn_info
+                    )
+                    all_dag_details = mwaa.get_all_dag_details(
+                        env_name, target_config.domain.region, conn_info
+                    )
+
+                    workflow_data["status"] = "healthy"
+
+                    if output.upper() != "JSON":
+                        typer.echo(f"      🔧 {conn_name} ({env_name})")
+
+                        # Get Airflow UI URL
+                        airflow_url = mwaa.get_airflow_ui_url(
+                            env_name,
+                            target_config.domain.region,
+                            conn_info,
+                        )
+                        if airflow_url:
+                            # Format as clickable hyperlink
+                            hyperlink = f"\033]8;;{airflow_url}\033\\{airflow_url}\033]8;;\033\\"
+                            typer.echo(
+                                f"         🌐 Airflow UI: {hyperlink}"
+                            )
+
+                    # Get manifest workflows for comparison
+                    manifest_workflows = set()
+                    if (
+                        hasattr(manifest, "workflows")
+                        and manifest.workflows
+                    ):
+                        manifest_workflows = {
+                            w.workflow_name for w in manifest.workflows
+                        }
+
+                    # Monitor each DAG
+                    for dag_name in sorted(existing_workflows):
+                        dag_details = all_dag_details.get(dag_name, {})
+                        schedule = dag_details.get(
+                            "schedule_interval", "Unknown"
+                        )
+                        active = dag_details.get("active", None)
+                        status = (
+                            "ACTIVE"
+                            if active
+                            else (
+                                "PAUSED"
+                                if active is False
+                                else "UNKNOWN"
+                            )
+                        )
+
+                        # Get recent DAG runs for monitoring
+                        try:
+                            dag_runs = mwaa.get_dag_runs(
+                                dag_name,
+                                env_name,
+                                target_config.domain.region,
+                                conn_info,
+                                limit=5,
+                            )
+                            recent_status = "No runs"
+                            if dag_runs:
+                                recent_run = dag_runs[0]
+                                recent_status = recent_run.get(
+                                    "state", "Unknown"
+                                )
+                        except Exception:
+                            dag_runs = []
+                            recent_status = "Unknown"
+
+                        workflow_data["dags"][dag_name] = {
+                            "schedule": schedule,
+                            "status": status,
+                            "recent_run_status": recent_status,
+                            "in_manifest": dag_name
+                            in manifest_workflows,
+                            "recent_runs": (
+                                dag_runs[:3] if dag_runs else []
+                            ),
+                        }
+
+                        if output.upper() != "JSON":
+                            status_icon = (
+                                "✅"
+                                if recent_status == "success"
+                                else (
+                                    "❌"
+                                    if recent_status == "failed"
+                                    else (
+                                        "⏸️"
+                                        if status == "PAUSED"
+                                        else "🔄"
+                                    )
+                                )
+                            )
+                            manifest_icon = (
+                                "✓"
+                                if dag_name in manifest_workflows
+                                else "-"
+                            )
+
+                            typer.echo(
+                                f"         {status_icon} {manifest_icon} {dag_name}"
+                            )
+                            typer.echo(
+                                f"            Schedule: {schedule} | Status: {status} | Recent: {recent_status}"
+                            )
+
+                except Exception as e:
+                    workflow_data["status"] = "error"
+                    workflow_data["error"] = str(e)
+
+                    if output.upper() != "JSON":
+                        typer.echo(
+                            f"      ❌ Error monitoring {conn_name}: {e}"
+                        )
+
+                workflows_data[conn_name] = workflow_data
+    else:
+        if output.upper() != "JSON":
+            typer.echo("   ❌ No MWAA workflow connections found")
+    
+    return workflows_data

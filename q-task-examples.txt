@@ -1,0 +1,67 @@
+SMUS CICD Pipeline Examples Refactoring Plan
+===========================================
+
+GOAL: Create two versions of DemoMarketingPipeline - one for MWAA and one for Airflow Serverless
+
+TASKS:
+✅ 1. Analyze current DemoMarketingPipeline.yaml structure
+✅ 2. Create DemoMarketingPipeline-MWAA.yaml (traditional MWAA version)
+✅ 3. Create DemoMarketingPipeline-Serverless.yaml (airflow-serverless version)
+✅ 4. Update serverless version based on multi_target_pipeline_overdrive example:
+    ✅ 4a. Add environment_variables to targets
+    ✅ 4b. Update bundle configuration with airflow-serverless: true
+    ✅ 4c. Update workflows section for serverless engine
+    ✅ 4d. Simplify project initialization
+✅ 5. Create supporting workflow files for both examples
+✅ 6. Update documentation/README for both examples
+✅ 7. Create example runner scripts
+
+PROGRESS:
+✅ COMPLETED ALL TASKS
+
+DELIVERABLES:
+✅ DemoMarketingPipeline-MWAA.yaml - Traditional MWAA pipeline
+✅ DemoMarketingPipeline-Serverless.yaml - Modern serverless pipeline with env vars
+✅ workflows-mwaa/dags/sample_dag.py - Python DAG for MWAA
+✅ workflows-serverless/dags/marketing_dag.yaml - YAML DAG with environment variables
+✅ src/marketing_utils.py - Shared utilities for both versions
+✅ run-mwaa-example.sh - MWAA example runner script
+✅ run-serverless-example.sh - Serverless example runner script
+✅ README-Examples.md - Comprehensive documentation
+
+KEY IMPROVEMENTS IN SERVERLESS VERSION:
+- Environment variables support (${ENV_NAME}, ${S3_PREFIX}, ${LOG_LEVEL})
+- Simplified project initialization (empty environments array)
+- YAML-based DAG definitions instead of Python
+- airflow-serverless: true in bundle configuration
+- Automatic parameter substitution during deployment
+
+✅ FINAL STATUS: Ready for Testing Phase
+
+COMPLETED DELIVERABLES:
+examples/
+├── mwaa-example/
+│   ├── DemoMarketingPipeline-MWAA.yaml
+│   ├── workflows/dags/sample_dag.py
+│   ├── src/marketing_utils.py
+│   ├── run-mwaa-example.sh (quick demo)
+│   ├── full-lifecycle-mwaa.sh (complete lifecycle)
+│   └── README.md
+└── serverless-example/
+    ├── DemoMarketingPipeline-Serverless.yaml
+    ├── workflows/dags/marketing_dag.yaml
+    ├── src/marketing_utils.py
+    ├── run-serverless-example.sh (quick demo)
+    ├── full-lifecycle-serverless.sh (complete lifecycle)
+    └── README.md
+
+🎯 READY FOR TESTING:
+- Two independent, self-contained examples
+- Each has quick runner + full lifecycle scripts
+- Environment variables configured for serverless version
+- All paths corrected for local workflows/ directories
+
+🔍 TESTING PHASE STARTING:
+- Will run scripts to identify and fix any issues
+- Focus on serverless example with environment variable resolution
+- Validate both MWAA and serverless deployment paths

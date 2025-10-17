@@ -138,6 +138,7 @@ class TargetConfig:
     initialization: Optional[InitializationConfig] = None
     bundle_target_configuration: Optional[BundleTargetConfig] = None
     tests: Optional[TestConfig] = None
+    environment_variables: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -356,6 +357,7 @@ class PipelineManifest:
                 initialization=initialization,
                 bundle_target_configuration=bundle_target_config,
                 tests=tests,
+                environment_variables=target_data.get("environment_variables"),
             )
 
         # Parse workflows
@@ -369,16 +371,19 @@ class PipelineManifest:
                 )
 
             connection_name = workflow_data.get("connectionName", "")
-            if not connection_name.strip():
+            engine = workflow_data.get("engine", "MWAA")
+            
+            # connectionName is required for MWAA but optional for airflow-serverless
+            if engine != "airflow-serverless" and not connection_name.strip():
                 raise ValueError(
-                    f"workflow[{i}].connectionName is required and cannot be empty"
+                    f"workflow[{i}].connectionName is required and cannot be empty for {engine} engine"
                 )
 
             workflow = WorkflowConfig(
                 workflow_name=workflow_name,
                 connection_name=connection_name,
                 logging=workflow_data.get("logging", "none"),
-                engine=workflow_data.get("engine", "Workflows"),
+                engine=engine,
                 parameters=workflow_data.get("parameters", {}),
             )
             workflows.append(workflow)

@@ -2,6 +2,7 @@
 *__pycache__*
 .idea
 .claude/
+*.log
 
 experimental/SMUS-CICD-pipeline-cli/tests/integration/multi_target_pipeline/code/workflows/dags/generated_test_dag_*.py
 

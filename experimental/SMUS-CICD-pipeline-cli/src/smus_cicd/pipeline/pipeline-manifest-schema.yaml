@@ -117,14 +117,13 @@ properties:
       type: object
       required: 
         - workflowName
-        - connectionName
       properties:
         workflowName:
           type: string
           description: "Name of the workflow to trigger"
         connectionName:
           type: string
-          description: "Connection to use for workflow execution"
+          description: "Connection to use for workflow execution (required for MWAA, optional for airflow-serverless)"
           examples: 
             - "project.workflow_mwaa"
         engine:
@@ -132,6 +131,7 @@ properties:
           description: "Workflow engine type"
           enum: 
             - "MWAA"
+            - "airflow-serverless"
           default: "MWAA"
         parameters:
           type: object
@@ -190,6 +190,10 @@ definitions:
           type: string
         examples: 
           - [".ipynb_checkpoints/", "__pycache__/", "*.pyc"]
+      airflow-serverless:
+        type: boolean
+        description: "Whether this bundle connection uses serverless Airflow engine"
+        default: false
     additionalProperties: false
   target:
     type: object
@@ -427,4 +431,16 @@ definitions:
               - "integration_tests/"
         required: ["folder"]
         additionalProperties: false
+      environment_variables:
+        type: object
+        description: "Environment variables for parameter substitution in workflows. Supports ${VAR_NAME} and $VAR_NAME syntax in workflow files."
+        additionalProperties:
+          type: 
+            - string
+            - number
+            - boolean
+        examples:
+          - S3_PREFIX: "dev"
+          - DEBUG_MODE: true
+          - MAX_RETRIES: 3
     additionalProperties: false

@@ -170,8 +170,8 @@ class ProjectManager:
         if not domain_id:
             handle_error(f"Failed to find domain ID for {domain_name}")
 
-        # Get project ID for membership management
-        project_id = datazone.get_project_id_by_name(project_name, domain_id, region)
+        # Get project ID for membership management with retry
+        project_id = self._get_project_id_with_retry(project_name, domain_id, region)
         if not project_id:
             handle_error(f"Failed to find project ID for {project_name}")
 
@@ -197,6 +197,22 @@ class ProjectManager:
             print(f"🔍 DEBUG: Actual error content: {final_project_info['error']}")
             raise Exception(f"Project validation failed: {final_project_info['error']}")
         return final_project_info
+
+    def _get_project_id_with_retry(self, project_name: str, domain_id: str, region: str, max_attempts: int = 10) -> str:
+        """Get project ID with retry logic for newly created projects."""
+        import time
+        
+        for attempt in range(max_attempts):
+            project_id = datazone.get_project_id_by_name(project_name, domain_id, region)
+            if project_id:
+                return project_id
+            
+            if attempt < max_attempts - 1:
+                wait_time = min(2 ** attempt, 30)  # Exponential backoff, max 30s
+                print(f"⏳ Project not found, retrying in {wait_time}s... (attempt {attempt + 1}/{max_attempts})")
+                time.sleep(wait_time)
+        
+        return None
 
     def _update_existing_project(
         self, target_name: str, target_config, project_name: str, region: str

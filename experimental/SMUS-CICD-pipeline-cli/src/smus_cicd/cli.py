@@ -14,6 +14,7 @@ from .commands.deploy import deploy_command
 
 # Import command functions
 from .commands.describe import describe_command
+from .commands.logs import logs_command
 from .commands.monitor import monitor_command
 from .commands.run import run_command
 from .commands.test import test_command
@@ -225,6 +226,29 @@ def create(
     create_command_with_output(
         name, output, domain_id, dev_project_id, stages_list, region
     )
+
+
+@app.command(
+    "logs",
+    help="5. Fetch workflow logs from CloudWatch. Example: smus-cli logs --workflow arn:aws:airflow-serverless:us-east-2:123456789012:workflow/my-workflow",
+    rich_help_panel="Pipeline Commands",
+)
+def logs(
+    workflow: str = typer.Option(
+        None, "--workflow", "-w", help="Workflow ARN to fetch logs for (required)"
+    ),
+    live: bool = typer.Option(
+        False, "--live", "-l", help="Keep fetching logs until workflow terminates"
+    ),
+    output: str = typer.Option(
+        "TEXT", "--output", "-o", help="Output format: TEXT (default) or JSON"
+    ),
+    lines: int = typer.Option(
+        100, "--lines", "-n", help="Number of log lines to fetch (default: 100)"
+    ),
+):
+    """Fetch and display workflow logs from CloudWatch."""
+    logs_command(workflow, live, output, lines)
 
 
 @app.command(

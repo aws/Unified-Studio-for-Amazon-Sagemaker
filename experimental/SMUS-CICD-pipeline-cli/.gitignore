@@ -149,3 +149,6 @@ tests/integration/bundles/*.zip
 q-tasks.txt
 create_pdf*.py
 cleanup.py
+
+# Overdrive test folder (private testing)
+tests/overdrive-test/

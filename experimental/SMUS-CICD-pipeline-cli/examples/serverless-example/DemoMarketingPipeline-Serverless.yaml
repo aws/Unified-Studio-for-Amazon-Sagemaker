@@ -1,0 +1,127 @@
+# SMUS CI/CD Pipeline Manifest - Airflow Serverless Version
+# Modern serverless pipeline with environment variables and simplified configuration
+
+pipelineName: DemoMarketingPipeline-Serverless
+
+# Bundle configuration for serverless
+bundle:
+  bundlesDirectory: ./bundles
+  workflow:
+    - connectionName: default.s3_shared
+      append: true
+      include: ['workflows']
+      exclude: ['.ipynb_checkpoints/', '__pycache__/', '*.pyc', '.libs.json']
+      airflow-serverless: true
+  storage:
+    - connectionName: default.s3_shared
+      append: false
+      include: ['src']
+      exclude: ['.ipynb_checkpoints/', '__pycache__/', '*.pyc', '.libs.json']
+  # catalog:
+  #   assets:
+  #   - selector:
+  #       search:
+  #         assetType: GlueTable
+  #         identifier: covid19_db.countries_aggregated
+  #     permission: READ
+  #     requestReason: Required access for DemoMarketingPipeline analytics
+  #   - selector:
+  #       search:
+  #         assetType: GlueTable
+  #         identifier: covid19_db.worldwide_aggregate
+  #     permission: READ
+  #     requestReason: Global data access for marketing insights
+
+# Target environments with environment variables
+targets:
+  dev: 
+    stage: DEV
+    default: true
+    domain:
+      name: cicd-test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-1}
+    project: 
+      name: dev-marketing
+    bundle_target_configuration:
+      storage:
+        connectionName: default.s3_shared
+        directory: 'src'
+      workflows:
+        connectionName: default.s3_shared
+        directory: 'workflows'
+    environment_variables:
+      ENV_NAME: dev
+      S3_PREFIX: dev-data
+      LOG_LEVEL: INFO
+
+  test: 
+    stage: TEST
+    domain:
+      name: cicd-test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-1}
+    project: 
+      name: test-marketing-demo
+    tests:
+      folder: ./tests
+    initialization:
+      project: 
+        create: true
+        profileName: 'All capabilities'
+        owners: [arn:aws:iam::123456789012:role/GitHubActionsRole-SMUS-CLI-Tests, Eng1]
+        contributors: []
+        userParameters: 
+          - EnvironmentConfigurationName: 'Lakehouse Database'
+            parameters:
+              - name: glueDbName
+                value: demo-serverless-db   
+      environments: []
+    bundle_target_configuration:
+      storage:
+        connectionName: default.s3_shared
+        directory: 'src'
+      workflows:
+        connectionName: default.s3_shared
+        directory: 'workflows'   
+    environment_variables:
+      ENV_NAME: test
+      S3_PREFIX: test-data
+      LOG_LEVEL: INFO
+
+  prod:
+    stage: PROD
+    domain:
+      name: cicd-test-domain
+      region: ${PROD_DOMAIN_REGION:us-east-1}
+    project: 
+      name: prod-marketing-demo
+    initialization:
+      project: 
+        create: true
+        profileName: 'All capabilities'
+        owners: [arn:aws:iam::588738596778:role/GitHubActionsRole-SMUS-CLI-Tests, Eng1]
+        contributors: []
+        userParameters: 
+          - EnvironmentConfigurationName: 'Lakehouse Database'
+            parameters:
+              - name: glueDbName
+                value: demo-serverless-prod-db        
+      environments: []
+    bundle_target_configuration:
+      storage:
+        connectionName: default.s3_shared
+        directory: 'src'
+      workflows:
+        connectionName: default.s3_shared
+        directory: 'workflows'
+      # catalog:
+      #   disable: True
+    environment_variables:
+      ENV_NAME: prod
+      S3_PREFIX: prod-data
+      LOG_LEVEL: WARN
+
+# Workflows configuration - Airflow Serverless Engine
+workflows:
+  - workflowName: marketing_dag2
+    logging: console
+    engine: airflow-serverless

@@ -1,0 +1,129 @@
+# SMUS CI/CD Pipeline Manifest - MWAA Version
+# Traditional MWAA-based pipeline with full project initialization
+
+pipelineName: DemoMarketingPipeline-MWAA
+
+# Bundle configuration
+bundle:
+  bundlesDirectory: ./bundles
+  workflow:
+    - connectionName: default.s3_shared
+      include: 
+        - 'workflows'
+      exclude: 
+        - '.ipynb_checkpoints/'
+        - '__pycache__/'
+        - '*.pyc'
+        - '.libs.json'    
+  storage:
+    - connectionName: default.s3_shared
+      include: 
+        - 'src'
+      exclude: 
+        - '.ipynb_checkpoints/'
+        - '__pycache__/'
+        - '*.pyc'
+        - '.libs.json'
+  catalog:
+    assets:
+    - selector:
+        search:
+          assetType: GlueTable
+          identifier: covid19_db.countries_aggregated
+      permission: READ
+      requestReason: Required access for DemoMarketingPipeline analytics
+    - selector:
+        search:
+          assetType: GlueTable
+          identifier: covid19_db.worldwide_aggregate
+      permission: READ
+      requestReason: Global data access for marketing insights
+
+targets:
+  dev:
+    domain:
+      name: cicd-test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-1}
+    stage: DEV
+    project:
+      name: dev-marketing
+      create: false  # Use existing project
+    default: true  # Default target for operations
+    
+    bundle_target_configuration:
+      storage:
+        connectionName: default.s3_shared
+        directory: 'src'        
+      workflows:
+        connectionName: default.s3_shared
+        directory: 'workflows'
+    
+    tests:
+      folder: ./tests
+  
+  test:
+    domain:
+      name: cicd-test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-1}
+    stage: TEST
+    project:
+      name: dev-marketing-test
+      create: true  # Auto-create project
+    
+    initialization:
+      project:
+        create: true
+        profileName: 'All capabilities'
+        owners: [arn:aws:iam::123456789012:role/GitHubActionsRole-SMUS-CLI-Tests, Eng1]
+        contributors: []
+      environments: 
+        - EnvironmentConfigurationName: 'OnDemand Workflows'     
+    
+    bundle_target_configuration:
+      storage:
+        connectionName: default.s3_shared
+        directory: 'src'        
+      workflows:
+        connectionName: default.s3_shared
+        directory: 'workflows'
+    
+    tests:
+      folder: ./tests
+  
+  prod:
+    domain:
+      name: cicd-test-domain
+      region: ${PROD_DOMAIN_REGION:us-east-1}
+    stage: PROD
+    project:
+      name: prod-marketing
+      create: true  # Auto-create project
+    
+    initialization:
+      project:
+        create: true
+        profileName: 'All capabilities'
+        owners: [arn:aws:iam::588738596778:role/GitHubActionsRole-SMUS-CLI-Tests, Eng1]
+        contributors: []
+      environments: 
+        - EnvironmentConfigurationName: 'OnDemand Workflows'     
+    
+    bundle_target_configuration:
+      storage:
+        connectionName: default.s3_shared
+        directory: 'src'        
+      workflows:
+        connectionName: default.s3_shared
+        directory: 'workflows'
+      catalog:
+        disable: True
+        
+    tests:
+      folder: ./tests
+
+# Workflows configuration - MWAA Engine
+workflows:
+  - workflowName: sample_dag
+    connectionName: project.workflow_mwaa
+    engine: MWAA
+    logging: console

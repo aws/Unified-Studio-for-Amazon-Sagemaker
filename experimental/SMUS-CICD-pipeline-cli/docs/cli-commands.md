@@ -2,7 +2,7 @@
 
 ← [Back to Main README](../README.md)
 
-The SMUS CLI provides seven main commands for managing CI/CD pipelines in SageMaker Unified Studio.
+The SMUS CLI provides eight main commands for managing CI/CD pipelines in SageMaker Unified Studio.
 
 ## Command Overview
 
@@ -12,7 +12,8 @@ The SMUS CLI provides seven main commands for managing CI/CD pipelines in SageMa
 | `describe` | Validate and show pipeline configuration | `smus-cli describe --pipeline pipeline.yaml --connect` |
 | `bundle` | Package files from source environment | `smus-cli bundle --targets dev` |
 | `deploy` | Deploy bundle to target environment | `smus-cli deploy --targets test --bundle bundle.zip` |
-| `run` | Execute Airflow commands or trigger workflows | `smus-cli run --command version` or `smus-cli run --workflows dag1,dag2` |
+| `run` | Execute workflow commands or trigger workflows | `smus-cli run --workflow my_dag` |
+| `logs` | Fetch workflow logs from CloudWatch | `smus-cli logs --workflow arn:aws:airflow-serverless:region:account:workflow/name` |
 | `monitor` | Monitor workflow status | `smus-cli monitor --pipeline pipeline.yaml` |
 | `test` | Run tests for pipeline targets | `smus-cli test --targets marketing-test-stage` |
 | `delete` | Remove target environments | `smus-cli delete --targets marketing-test-stage --force` |
@@ -87,37 +88,31 @@ smus-cli deploy --targets test --bundle bundle.zip --output JSON
 
 ### 4. Run Commands and Workflows
 
-#### Execute Airflow CLI Commands
+#### Execute Airflow CLI Commands (MWAA)
 ```bash
 # Get Airflow version
-smus-cli run --command version
+smus-cli run --workflow test_dag --command version
 
 # List all DAGs
-smus-cli run --command "dags list"
+smus-cli run --workflow test_dag --command "dags list"
 
 # Get DAG state
-smus-cli run --command "dags state my_dag"
+smus-cli run --workflow test_dag --command "dags state test_dag"
 ```
 
 #### Trigger Workflows
 ```bash
-# Trigger single workflow
-smus-cli run --workflows test_dag
+# Trigger single workflow (works with both MWAA and serverless Airflow)
+smus-cli run --workflow test_dag
 
-# Trigger multiple workflows
-smus-cli run --workflows test_dag,execute_notebooks_dag
+# Trigger workflow on specific target
+smus-cli run --workflow test_dag --targets prod
 
-# Trigger all manifest workflows
-smus-cli run --workflows all
+# Trigger with JSON output
+smus-cli run --workflow test_dag --output JSON
 ```
 
-#### Combined Usage
-```bash
-# Run command on specific workflow context
-smus-cli run --workflows test_dag --command "dags trigger test_dag"
-```
-
-**Example Output (TEXT format):**
+**Example Output (TEXT format - MWAA):**
 ```
 🔍 Checking MWAA health for target 'test' (project: integration-test-test)
 🎯 Target: test
@@ -127,6 +122,17 @@ smus-cli run --workflows test_dag --command "dags trigger test_dag"
 ✅ Command executed successfully
 📤 Output:
 2.10.1
+```
+
+**Example Output (TEXT format - Serverless Airflow):**
+```
+🎯 Target: test (Serverless Airflow)
+🚀 Starting workflow run: MyPipeline_test_test_dag
+🔗 ARN: arn:aws:airflow-serverless:us-east-2:123456789012:workflow/MyPipeline_test_test_dag
+✅ Workflow run started successfully
+📋 Run ID: manual__2025-10-15T15:45:00+00:00
+📊 Status: STARTING
+```
 ```
 
 **Example Output (JSON format):**
@@ -150,7 +156,38 @@ smus-cli run --workflows test_dag --command "dags trigger test_dag"
 }
 ```
 
-### 5. Monitor Workflows
+### 5. Fetch Workflow Logs
+```bash
+# Fetch logs for serverless Airflow workflow
+smus-cli logs --workflow arn:aws:airflow-serverless:us-east-2:123456789012:workflow/MyPipeline_test_test_dag
+
+# Fetch logs with live monitoring
+smus-cli logs --workflow arn:aws:airflow-serverless:us-east-2:123456789012:workflow/MyPipeline_test_test_dag --live
+
+# Fetch specific number of log lines
+smus-cli logs --workflow arn:aws:airflow-serverless:us-east-2:123456789012:workflow/MyPipeline_test_test_dag --lines 50
+
+# Fetch logs with JSON output
+smus-cli logs --workflow arn:aws:airflow-serverless:us-east-2:123456789012:workflow/MyPipeline_test_test_dag --output JSON
+```
+
+**Example Output:**
+```
+📋 Fetching logs for workflow: MyPipeline_test_test_dag
+🔗 ARN: arn:aws:airflow-serverless:us-east-2:123456789012:workflow/MyPipeline_test_test_dag
+🔄 Live monitoring enabled - Press Ctrl+C to stop
+================================================================================
+📁 Log Group: /aws/mwaa-serverless/MyPipeline_test_test_dag/
+📊 Workflow Status: ACTIVE
+--------------------------------------------------------------------------------
+📄 Showing 15 log events:
+
+[15:45:23] [scheduler] Starting workflow execution
+[15:45:24] [task-runner] Initializing S3ListOperator task
+[15:45:25] [task-runner] Task completed successfully
+```
+
+### 6. Monitor Workflows
 ```bash
 # Monitor all targets
 smus-cli monitor --pipeline pipeline.yaml
@@ -168,7 +205,7 @@ smus-cli test --pipeline pipeline.yaml
 smus-cli test --targets test --verbose
 ```
 
-### 7. Delete Resources
+### 8. Delete Resources
 ```bash
 # Delete with confirmation
 smus-cli delete --targets test
@@ -373,7 +410,7 @@ smus-cli run --pipeline pipeline.yaml --targets test --workflow test_dag --comma
 
 **What this shows:** The run command executes Airflow CLI commands against your MWAA environments. In this example, it triggers a workflow execution and returns the run ID for tracking. This allows you to programmatically control workflow execution, check status, and manage your data pipelines from the command line.
 
-### 6. Run Tests
+### 7. Run Tests
 ```bash
 smus-cli test --pipeline pipeline.yaml --targets marketing-test-stage
 ```
@@ -397,7 +434,7 @@ Domain: cicd-test-domain (us-east-1)
 
 **What this shows:** The test command runs Python tests from the configured test folder against your deployed pipeline. Tests receive environment variables with domain ID, project ID, and other context information to validate the deployment. This ensures your pipeline is working correctly after deployment and provides automated validation of your data workflows.
 
-### 7. Clean Up Resources
+### 8. Clean Up Resources
 ```bash
 smus-cli delete --targets test --pipeline pipeline.yaml --force
 ```
@@ -429,8 +466,9 @@ smus-cli --help
 2. **`bundle`** - Create deployment packages from source
 3. **`deploy`** - Deploy packages to targets (auto-initializes if needed)
 4. **`monitor`** - Monitor workflow status
-5. **`run`** - Run Airflow CLI commands
-6. **`delete`** - Delete projects and environments
+5. **`run`** - Run workflow commands
+6. **`logs`** - Fetch workflow logs from CloudWatch
+7. **`delete`** - Delete projects and environments
 
 ## Command Details
 
@@ -623,9 +661,9 @@ smus-cli monitor -t dev,test
 smus-cli monitor -o JSON
 ```
 
-### 5. run - Run Airflow CLI Commands
+### 5. run - Run Workflow Commands
 
-Executes Airflow CLI commands on target environments.
+Executes workflow commands on target environments (supports both MWAA and serverless Airflow).
 
 ```bash
 smus-cli run [OPTIONS]
@@ -642,17 +680,45 @@ smus-cli run [OPTIONS]
 #### Examples
 
 ```bash
-# Run Airflow version command
+# Trigger workflow (works with both MWAA and serverless Airflow)
+smus-cli run --workflow my_dag
+
+# Run Airflow CLI command (MWAA only)
 smus-cli run --workflow my_dag --command version
 
-# Run DAG list command on specific target
-smus-cli run --workflow my_dag --command "dags list" --targets prod
-
-# Run with JSON output
-smus-cli run --workflow my_dag --command version --output JSON
+# Run on specific target with JSON output
+smus-cli run --workflow my_dag --targets prod --output JSON
 ```
 
-### 6. delete - Delete Target Environments
+### 6. logs - Fetch Workflow Logs
+
+Fetches and displays workflow logs from CloudWatch (supports serverless Airflow workflows).
+
+```bash
+smus-cli logs [OPTIONS]
+```
+
+#### Options
+- **`-w, --workflow`**: Workflow ARN to fetch logs for (required)
+- **`-l, --live`**: Keep fetching logs until workflow terminates
+- **`-o, --output`**: Output format: TEXT (default) or JSON
+- **`-n, --lines`**: Number of log lines to fetch (default: 100)
+- **`--help`**: Show command help
+
+#### Examples
+
+```bash
+# Fetch logs for serverless Airflow workflow
+smus-cli logs --workflow arn:aws:airflow-serverless:us-east-2:123456789012:workflow/MyWorkflow
+
+# Live log monitoring
+smus-cli logs --workflow arn:aws:airflow-serverless:us-east-2:123456789012:workflow/MyWorkflow --live
+
+# Fetch specific number of lines with JSON output
+smus-cli logs --workflow arn:aws:airflow-serverless:us-east-2:123456789012:workflow/MyWorkflow --lines 50 --output JSON
+```
+
+### 8. delete - Delete Target Environments
 
 Deletes DataZone projects and associated resources for specified targets.
 

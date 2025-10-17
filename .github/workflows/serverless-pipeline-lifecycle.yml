@@ -1,0 +1,364 @@
+name: Serverless SMUS CICD Pipeline Lifecycle Demo
+
+on:
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'experimental/SMUS-CICD-pipeline-cli/**'
+  workflow_dispatch:
+    inputs:
+      domain_name:
+        description: 'SageMaker Unified Studio domain name'
+        required: true
+        default: 'cicd-test-domain'
+      project_name:
+        description: 'Development project name'
+        required: true
+        default: 'dev-marketing'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  setup:
+    name: "Step 1 - Setup Domain and Project IDs"
+    runs-on: ubuntu-latest
+    environment: aws-env
+    outputs:
+      domain-id: ${{ steps.resolve.outputs.domain-id }}
+      project-id: ${{ steps.resolve.outputs.project-id }}
+      pipeline-file: ${{ steps.resolve.outputs.pipeline-file }}
+      domain-name: ${{ steps.resolve.outputs.domain-name }}
+      project-name: ${{ steps.resolve.outputs.project-name }}
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Validate environment variables
+      env:
+        DEV_DOMAIN_REGION: ${{ vars.DEV_DOMAIN_REGION }}
+        PROD_DOMAIN_REGION: ${{ vars.PROD_DOMAIN_REGION }}
+      run: |
+        echo "Validating required environment variables..."
+        echo "DEV_DOMAIN_REGION: ${DEV_DOMAIN_REGION:-NOT_SET}"
+        echo "PROD_DOMAIN_REGION: ${PROD_DOMAIN_REGION:-NOT_SET}"
+        if [ -z "$DEV_DOMAIN_REGION" ] || [ -z "$PROD_DOMAIN_REGION" ]; then
+          echo "❌ ERROR: Required environment variables are not set in aws-env environment"
+          echo "Please set DEV_DOMAIN_REGION and PROD_DOMAIN_REGION in GitHub repository settings > Environments > aws-env"
+          exit 1
+        fi
+        echo "✅ All required environment variables are set"
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-region: us-east-1
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
+        role-session-name: smus-serverless-lifecycle-setup
+        role-duration-seconds: 43200
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+    
+    - name: Resolve Domain and Project IDs
+      id: resolve
+      run: |
+        DOMAIN_NAME="${{ github.event.inputs.domain_name || 'cicd-test-domain' }}"
+        PROJECT_NAME="${{ github.event.inputs.project_name || 'dev-marketing' }}"
+        
+        echo "🔍 Using domain: $DOMAIN_NAME"
+        echo "🔍 Using project: $PROJECT_NAME"
+        
+        # Resolve domain ID
+        DOMAIN_ID=$(aws datazone list-domains --query "items[?name=='$DOMAIN_NAME'].id" --output text)
+        if [ -z "$DOMAIN_ID" ] || [ "$DOMAIN_ID" = "None" ]; then
+          echo "❌ Domain '$DOMAIN_NAME' not found"
+          exit 1
+        fi
+        
+        # Resolve project ID
+        PROJECT_ID=$(aws datazone list-projects --domain-identifier "$DOMAIN_ID" --query "items[?name=='$PROJECT_NAME'].id" --output text)
+        if [ -z "$PROJECT_ID" ] || [ "$PROJECT_ID" = "None" ]; then
+          echo "❌ Project '$PROJECT_NAME' not found in domain"
+          exit 1
+        fi
+        
+        echo "✅ Domain ID: $DOMAIN_ID"
+        echo "✅ Project ID: $PROJECT_ID"
+        echo "✅ Using Serverless pipeline file: DemoMarketingPipeline-Serverless.yaml"
+        
+        # Set outputs
+        echo "domain-id=$DOMAIN_ID" >> $GITHUB_OUTPUT
+        echo "project-id=$PROJECT_ID" >> $GITHUB_OUTPUT
+        echo "pipeline-file=DemoMarketingPipeline-Serverless.yaml" >> $GITHUB_OUTPUT
+        echo "domain-name=$DOMAIN_NAME" >> $GITHUB_OUTPUT
+        echo "project-name=$PROJECT_NAME" >> $GITHUB_OUTPUT
+
+  validate-configuration:
+    name: "Step 2 - Validate Pipeline Configuration"
+    runs-on: ubuntu-latest
+    environment: aws-env
+    needs: [setup]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-region: us-east-1
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
+        role-session-name: smus-serverless-lifecycle-validate
+        role-duration-seconds: 43200
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+    
+    - name: Validate pipeline configuration
+      env:
+        DEV_DOMAIN_REGION: ${{ vars.DEV_DOMAIN_REGION }}
+        PROD_DOMAIN_REGION: ${{ vars.PROD_DOMAIN_REGION }}
+        SMUS_LOG_LEVEL: WARNING
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli/examples/serverless-example
+        python -m smus_cicd.cli describe \
+          --pipeline "${{ needs.setup.outputs.pipeline-file }}" \
+          --connect
+        
+        echo "✅ Serverless Pipeline configuration validated"
+
+  upload-files:
+    name: "Step 2.5 - Upload Local Files to S3"
+    runs-on: ubuntu-latest
+    environment: aws-env
+    needs: [setup, validate-configuration]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-region: us-east-1
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
+        role-session-name: smus-serverless-lifecycle-upload
+        role-duration-seconds: 43200
+    
+    - name: Upload DAG files to S3
+      env:
+        DEV_DOMAIN_REGION: ${{ vars.DEV_DOMAIN_REGION }}
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli/examples/serverless-example
+        
+        # Get S3 location from describe command
+        S3_LOCATION=$(python -m smus_cicd.cli describe --pipeline "${{ needs.setup.outputs.pipeline-file }}" --connect | grep "s3Uri:" | head -1 | awk '{print $2}')
+        
+        echo "📤 Uploading DAG files to S3..."
+        aws s3 sync workflows/dags/ ${S3_LOCATION}workflows/dags/
+        
+        echo "✅ DAG files uploaded to S3"
+
+  create-bundle:
+    name: "Step 3 - Create Deployment Bundle"
+    runs-on: ubuntu-latest
+    environment: aws-env
+    needs: [setup, upload-files]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-region: us-east-1
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
+        role-session-name: smus-serverless-lifecycle-bundle
+        role-duration-seconds: 43200
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+    
+    - name: Create deployment bundle
+      env:
+        DEV_DOMAIN_REGION: ${{ vars.DEV_DOMAIN_REGION }}
+        PROD_DOMAIN_REGION: ${{ vars.PROD_DOMAIN_REGION }}
+        SMUS_LOG_LEVEL: WARNING
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli/examples/serverless-example
+        python -m smus_cicd.cli bundle \
+          --pipeline "${{ needs.setup.outputs.pipeline-file }}"
+        
+        echo "✅ Serverless Deployment bundle created"
+    
+    - name: Upload deployment bundle
+      uses: actions/upload-artifact@v4
+      with:
+        name: serverless-deployment-bundle
+        path: experimental/SMUS-CICD-pipeline-cli/examples/serverless-example/bundles/DemoMarketingPipeline-Serverless.zip
+
+  deploy-test:
+    name: "Step 4 - Deploy to Test Environment"
+    runs-on: ubuntu-latest
+    environment: aws-env
+    needs: [setup, create-bundle]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-region: us-east-1
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
+        role-session-name: smus-serverless-lifecycle-deploy
+        role-duration-seconds: 43200
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+    
+    - name: Download deployment bundle
+      uses: actions/download-artifact@v4
+      with:
+        name: serverless-deployment-bundle
+        path: experimental/SMUS-CICD-pipeline-cli/examples/serverless-example/bundles/
+    
+    - name: Deploy to test environment
+      env:
+        DEV_DOMAIN_REGION: ${{ vars.DEV_DOMAIN_REGION }}
+        PROD_DOMAIN_REGION: ${{ vars.PROD_DOMAIN_REGION }}
+        SMUS_LOG_LEVEL: WARNING
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli/examples/serverless-example
+        python -m smus_cicd.cli deploy \
+          --pipeline "${{ needs.setup.outputs.pipeline-file }}" \
+          test
+        
+        echo "✅ Deployed to test environment"
+
+  deploy-prod:
+    name: "Step 5 - Deploy to Production Environment"
+    runs-on: ubuntu-latest
+    environment: aws-env-amirbo-6778
+    needs: [setup, deploy-test]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-region: us-east-1
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
+        role-session-name: smus-serverless-lifecycle-deploy-prod
+        role-duration-seconds: 43200
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+    
+    - name: Download deployment bundle
+      uses: actions/download-artifact@v4
+      with:
+        name: serverless-deployment-bundle
+        path: experimental/SMUS-CICD-pipeline-cli/examples/serverless-example/bundles/
+    
+    - name: Deploy to production environment
+      env:
+        DEV_DOMAIN_REGION: ${{ vars.DEV_DOMAIN_REGION }}
+        PROD_DOMAIN_REGION: ${{ vars.PROD_DOMAIN_REGION }}
+        SMUS_LOG_LEVEL: WARNING
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli/examples/serverless-example
+        python -m smus_cicd.cli deploy \
+          --pipeline "${{ needs.setup.outputs.pipeline-file }}" \
+          prod
+        
+        echo "✅ Deployed to production environment"
+
+  monitor-pipeline:
+    name: "Step 6 - Monitor Pipeline Status"
+    runs-on: ubuntu-latest
+    environment: aws-env-amirbo-6778
+    needs: [setup, deploy-prod]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-region: us-east-1
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
+        role-session-name: smus-serverless-lifecycle-monitor
+        role-duration-seconds: 43200
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+    
+    - name: Monitor pipeline status
+      env:
+        DEV_DOMAIN_REGION: ${{ vars.DEV_DOMAIN_REGION }}
+        PROD_DOMAIN_REGION: ${{ vars.PROD_DOMAIN_REGION }}
+        SMUS_LOG_LEVEL: WARNING
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli/examples/serverless-example
+        python -m smus_cicd.cli monitor \
+          --pipeline "${{ needs.setup.outputs.pipeline-file }}"
+        
+        echo "🎉 Serverless Pipeline lifecycle demo completed successfully!"
+        echo "📋 Resources deployed:"
+        echo "  - Test Project: test-marketing-demo"
+        echo "  - Production Project: prod-marketing-demo"
+        echo "  - Domain: ${{ needs.setup.outputs.domain-name }}"
+        echo "  - Serverless Airflow Workflows: Created with environment variables"
+        echo "  - Environment Variables Resolved:"
+        echo "    - test: ENV_NAME=test, S3_PREFIX=test-data, LOG_LEVEL=INFO"
+        echo "    - prod: ENV_NAME=prod, S3_PREFIX=prod-data, LOG_LEVEL=ERROR"
