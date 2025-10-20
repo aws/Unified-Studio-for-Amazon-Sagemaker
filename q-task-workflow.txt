@@ -1,0 +1,35 @@
+# Airflow Workflow Development Task
+
+## Objective
+Build a more complex Airflow workflow for the SageMaker Unified Studio (SMUS) project.
+
+Folder: experimental/SMUS-CICD-pipeline-cli/examples/analytic-workflow
+
+## Requirements Completed ✓
+1. ✓ Created Glue job that runs basic Python code (glue_s3_list_job.py)
+2. ✓ Built Airflow serverless workflow YAML (s3_analytics_workflow.yaml)
+3. ✓ Used available Airflow operators from docs
+4. ✓ Glue job accepts bucket parameter and lists/prints S3 content
+5. ✓ Created test script (test_workflow.py) for workflow validation and CloudWatch log checking
+
+## Files Created
+- glue_s3_list_job.py: Glue job script that lists S3 bucket contents
+- s3_analytics_workflow.yaml: Airflow workflow configuration
+- test_analytics_workflow.sh: Bash script for complete workflow lifecycle testing
+
+## Workflow Architecture
+- Glue Task: Lists S3 bucket contents and logs all paths
+- S3 Copy Task: Copies notebook file after Glue job completion
+- Dependencies: S3 task depends on Glue task completion
+
+## Bash Script Steps
+1. Upload Glue script to S3
+2. Create test file in S3
+3. Upload workflow YAML to S3
+4. Create Airflow Serverless workflow
+5. Start workflow run
+6. Monitor execution status
+7. Check CloudWatch logs for S3 paths
+8. Cleanup all resources
+
+## Status: COMPLETED ✓ 

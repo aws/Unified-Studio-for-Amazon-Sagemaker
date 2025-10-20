@@ -1,0 +1,42 @@
+s3_analytics_workflow_3:
+  dag_id: 'covid_analytics_workflow'
+  tasks:
+    covid_database_discovery:
+      operator: airflow.providers.amazon.aws.operators.glue.GlueJobOperator
+      job_name: covid-discovery-job
+      script_location: 's3://demo-bucket-smus-cicd-us-west-2-4947/glue-scripts/glue_s3_list_job.py'
+      s3_bucket: demo-bucket-smus-cicd-us-west-2-4947
+      iam_role_name: OverdriveExecutionRole
+      region_name: us-east-1
+      script_args:
+        '--BUCKET_NAME': 'datazone-058264284947-us-east-1-cicd-test-domain'
+        '--REGION_NAME': 'us-east-1'
+      create_job_kwargs:
+        GlueVersion: '4.0'
+        MaxRetries: 1
+        Timeout: 60
+        Command:
+          Name: 'glueetl'
+          PythonVersion: '3'
+          ScriptLocation: 's3://demo-bucket-smus-cicd-us-west-2-4947/glue-scripts/glue_s3_list_job.py'
+    
+    covid_data_summary:
+      dependencies:
+        - covid_database_discovery
+      operator: airflow.providers.amazon.aws.operators.glue.GlueJobOperator
+      job_name: covid-summary-job
+      script_location: 's3://demo-bucket-smus-cicd-us-west-2-4947/glue-scripts/glue_covid_summary_job.py'
+      s3_bucket: demo-bucket-smus-cicd-us-west-2-4947
+      iam_role_name: OverdriveExecutionRole
+      region_name: us-east-1
+      script_args:
+        '--DATABASE_NAME': 'covid19_db'
+        '--TABLE_NAME': 'worldwide_aggregate'
+      create_job_kwargs:
+        GlueVersion: '4.0'
+        MaxRetries: 1
+        Timeout: 300
+        Command:
+          Name: 'glueetl'
+          PythonVersion: '3'
+          ScriptLocation: 's3://demo-bucket-smus-cicd-us-west-2-4947/glue-scripts/glue_covid_summary_job.py'

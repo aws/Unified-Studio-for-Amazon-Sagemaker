@@ -198,20 +198,26 @@ class ProjectManager:
             raise Exception(f"Project validation failed: {final_project_info['error']}")
         return final_project_info
 
-    def _get_project_id_with_retry(self, project_name: str, domain_id: str, region: str, max_attempts: int = 10) -> str:
+    def _get_project_id_with_retry(
+        self, project_name: str, domain_id: str, region: str, max_attempts: int = 10
+    ) -> str:
         """Get project ID with retry logic for newly created projects."""
         import time
-        
+
         for attempt in range(max_attempts):
-            project_id = datazone.get_project_id_by_name(project_name, domain_id, region)
+            project_id = datazone.get_project_id_by_name(
+                project_name, domain_id, region
+            )
             if project_id:
                 return project_id
-            
+
             if attempt < max_attempts - 1:
-                wait_time = min(2 ** attempt, 30)  # Exponential backoff, max 30s
-                print(f"⏳ Project not found, retrying in {wait_time}s... (attempt {attempt + 1}/{max_attempts})")
+                wait_time = min(2**attempt, 30)  # Exponential backoff, max 30s
+                print(
+                    f"⏳ Project not found, retrying in {wait_time}s... (attempt {attempt + 1}/{max_attempts})"
+                )
                 time.sleep(wait_time)
-        
+
         return None
 
     def _update_existing_project(

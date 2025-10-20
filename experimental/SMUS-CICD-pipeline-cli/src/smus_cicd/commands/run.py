@@ -50,14 +50,14 @@ def run_command(
 
         # Check if any workflow uses serverless Airflow
         uses_airflow_serverless = False
-        
+
         # Check bundle workflow configurations
         if manifest.bundle.workflow:
             for workflow_config in manifest.bundle.workflow:
                 if workflow_config.get("airflow-serverless", False):
                     uses_airflow_serverless = True
                     break
-        
+
         # Check workflows section for airflow-serverless engine
         if manifest.workflows:
             for wf in manifest.workflows:
@@ -557,20 +557,22 @@ def _execute_airflow_serverless_workflows(
             safe_pipeline = pipeline_name.replace("-", "_")
             safe_dag = dag_name.replace("-", "_")
             expected_workflow_name = f"{safe_pipeline}_{target_name}_{safe_dag}"
-            
+
             # List existing workflows to find the actual ARN
             region = airflow_serverless.AIRFLOW_SERVERLESS_REGION
             workflows = airflow_serverless.list_workflows(region=region)
-            
+
             # Find the workflow that matches our expected name
             workflow_arn = None
             for wf in workflows:
-                if wf['name'] == expected_workflow_name:
-                    workflow_arn = wf['workflow_arn']
+                if wf["name"] == expected_workflow_name:
+                    workflow_arn = wf["workflow_arn"]
                     break
-            
+
             if not workflow_arn:
-                raise Exception(f"Workflow '{expected_workflow_name}' not found. Available workflows: {[wf['name'] for wf in workflows]}")
+                raise Exception(
+                    f"Workflow '{expected_workflow_name}' not found. Available workflows: {[wf['name'] for wf in workflows]}"
+                )
 
             if output.upper() != "JSON":
                 typer.echo(f"🚀 Starting workflow run: {expected_workflow_name}")
@@ -579,41 +581,43 @@ def _execute_airflow_serverless_workflows(
             # Start workflow run (workflow uses role specified during creation)
             result = airflow_serverless.start_workflow_run(workflow_arn, region=region)
 
-            if result.get('success'):
-                run_id = result.get('run_id')
+            if result.get("success"):
+                run_id = result.get("run_id")
                 if output.upper() != "JSON":
                     typer.echo(f"✅ Workflow run started successfully")
                     typer.echo(f"📋 Run ID: {run_id}")
                     typer.echo(f"📊 Status: {result.get('status')}")
-                
-                results.append({
-                    "target": target_name,
-                    "workflow_arn": workflow_arn,
-                    "run_id": run_id,
-                    "status": result.get('status'),
-                    "success": True
-                })
+
+                results.append(
+                    {
+                        "target": target_name,
+                        "workflow_arn": workflow_arn,
+                        "run_id": run_id,
+                        "status": result.get("status"),
+                        "success": True,
+                    }
+                )
             else:
-                error_msg = result.get('error', 'Unknown error')
+                error_msg = result.get("error", "Unknown error")
                 if output.upper() != "JSON":
                     typer.echo(f"❌ Failed to start workflow run: {error_msg}")
-                
-                results.append({
-                    "target": target_name,
-                    "workflow_arn": workflow_arn,
-                    "success": False,
-                    "error": error_msg
-                })
+
+                results.append(
+                    {
+                        "target": target_name,
+                        "workflow_arn": workflow_arn,
+                        "success": False,
+                        "error": error_msg,
+                    }
+                )
 
         except Exception as e:
             error_msg = f"Error executing Overdrive workflow: {str(e)}"
             if output.upper() != "JSON":
                 typer.echo(f"❌ {error_msg}")
-            
-            results.append({
-                "target": target_name,
-                "success": False,
-                "error": error_msg
-            })
+
+            results.append(
+                {"target": target_name, "success": False, "error": error_msg}
+            )
 
     return results

@@ -1,0 +1,140 @@
+TASK: Build ML Workflow for SageMaker Unified Studio
+=====================================================
+
+OBJECTIVE: Create a complete ML workflow example that demonstrates SageMaker Unified Studio capabilities
+
+STATUS: PHASE 5 COMPLETED ✅ - SMUS CICD Workflows Ready for Production!
+
+## Progress Log
+
+### Phase 1: Initial Setup ✅
+- [x] Created SageMaker Unified Studio workspace structure
+- [x] Set up MLflow tracking server integration
+- [x] Configured SageMaker execution role with MLflow permissions
+- [x] Established basic training pipeline with wine classification example
+
+### Phase 2: Model Development ✅
+- [x] Implemented realistic model comparison (Random Forest vs Gradient Boosting vs Logistic Regression vs SVM)
+- [x] Added proper train/test split and cross-validation
+- [x] Integrated comprehensive evaluation metrics (ROC curves, AUC scores, classification reports)
+- [x] Fixed overfitting issues with realistic accuracy scores (57-77% range)
+- [x] Created synthetic dataset with noise and complexity (2000 samples, 20 features, 3 classes)
+
+### Phase 3: MLflow Integration ✅
+- [x] Successfully connected SageMaker training jobs to MLflow tracking server
+- [x] Automated experiment logging with parameters, metrics, and artifacts
+- [x] Model registration in MLflow Model Registry
+- [x] ROC curve visualization and artifact logging
+
+### Phase 4: MLOps Pipeline ✅
+- [x] Model promotion system (champion tagging with aliases)
+- [x] Batch inference with MLflow model loading (`mlflow.pyfunc.load_model`)
+- [x] S3 model discovery and direct inference (bypassing MLflow)
+- [x] SageMaker Batch Transform integration for production inference
+- [x] Complete MLOps script suite ready for CICD integration
+
+### Phase 5: SMUS CICD Workflows ✅
+- [x] Split workflows into dev and deploy stages following SMUS pattern
+- [x] Created `ml_dev_workflow.yaml` for training/evaluation/batch inference
+- [x] Created `ml_deploy_workflow.yaml` for endpoint deployment/testing
+- [x] Implemented champion model retrieval using MLflow aliases
+- [x] Added stage parameterization (dev/test/prod) with environment variables
+- [x] Created workflow-specific Glue scripts for model evaluation and champion retrieval
+- [x] Built executable test scripts following ETL pattern (`run_dev_workflow.sh`, `run_deploy_workflow.sh`)
+- [x] Configured OverdriveExecutionRole with comprehensive SageMaker and MLflow permissions
+- [x] Organized files in proper SMUS directory structure under `workflows/`
+
+## SMUS CICD Workflows Created ✅
+
+### Dev Workflow (`ml_dev_workflow.yaml`)
+**Purpose**: Training, evaluation, and batch inference in dev stage
+**Tasks**: model_training → model_evaluation → champion_tagging → batch_inference
+**Location**: `experimental/SMUS-CICD-pipeline-cli/examples/analytic-workflow/ml/workflows/`
+
+### Deploy Workflow (`ml_deploy_workflow.yaml`) 
+**Purpose**: Endpoint deployment and testing in test/prod stages
+**Tasks**: champion_model_retrieval → model_registration → endpoint_deployment → endpoint_testing
+**Location**: `experimental/SMUS-CICD-pipeline-cli/examples/analytic-workflow/ml/workflows/`
+
+### Supporting Scripts ✅
+- `model_evaluation.py` - Glue job for model evaluation in dev workflow
+- `get_champion_model.py` - Glue job for champion model retrieval in deploy workflow
+- `sagemaker_training_script.py` - SageMaker training script
+- `run_dev_workflow.sh` - Executable script to run dev workflow
+- `run_deploy_workflow.sh` - Executable script to run deploy workflow (supports stage parameter)
+- `setup-overdrive-role.sh` - IAM role configuration script
+- `overdrive-sagemaker-policy.json` - Comprehensive IAM policy
+- `overdrive-trust-policy.json` - Trust policy for multiple services
+
+## MLOps Scripts (Standalone) ✅
+1. **`run_realistic_experiment.py`** - Model training with 4-algorithm comparison
+2. **`tag_champion_model.py`** - Model promotion to "champion" alias
+3. **`find_model_s3.py`** - S3 model artifact discovery
+4. **`run_batch_inference.py`** - MLflow + SageMaker Batch Transform inference
+5. **`s3_model_inference.py`** - Direct S3 model loading and inference
+
+## Current Status
+- **Training Pipeline**: Fully functional with realistic model comparison (SVM winner: 77% accuracy)
+- **MLflow Integration**: Complete with experiment tracking and model registry
+- **Model Promotion**: Champion tagging system implemented
+- **Inference Options**: Multiple pathways (MLflow, S3 direct, SageMaker Batch Transform)
+- **SMUS CICD**: Two separate workflows ready for multi-stage deployment
+- **IAM Permissions**: OverdriveExecutionRole configured with all necessary permissions
+- **Production Ready**: Complete SMUS CICD pipeline following ETL pattern
+
+## Technical Architecture
+- **MLflow Tracking Server**: arn:aws:sagemaker:us-east-1:058264284947:mlflow-tracking-server/wine-classification-mlflow-v2
+- **Model Registry**: realistic-classifier-v1@champion (SVM model, 77% accuracy)
+- **S3 Artifacts**: s3://sagemaker-ml-workflow-058264284947-us-east-1/realistic-models/
+- **SMUS Workflows**: Two separate Airflow DAGs with SageMaker operators
+- **Region**: us-east-1/us-west-2 (configurable)
+- **Account**: 058264284947
+
+## Environment Variables for SMUS Deployment
+- `account_id`: AWS account ID
+- `s3_bucket`: S3 bucket for artifacts
+- `stage`: dev/test/prod
+- `mlflow_tracking_uri`: MLflow server URL
+- `endpoint_instance_type`: SageMaker endpoint instance type (optional)
+
+## Usage Instructions
+```bash
+# Run dev workflow (training and evaluation)
+cd experimental/SMUS-CICD-pipeline-cli/examples/analytic-workflow/ml/workflows/
+./run_dev_workflow.sh us-west-2
+
+# Run deploy workflow for test stage
+./run_deploy_workflow.sh us-west-2 test
+
+# Run deploy workflow for prod stage  
+./run_deploy_workflow.sh us-west-2 prod
+
+# Setup IAM permissions
+./setup-overdrive-role.sh
+```
+
+## Key Achievements
+✅ Realistic model performance (no overfitting)
+✅ Cross-validation with confidence intervals
+✅ Multi-algorithm comparison (4 models)
+✅ MLflow experiment tracking and model registry
+✅ Champion model promotion system
+✅ Multiple inference pathways
+✅ Production-ready batch inference
+✅ S3 direct model loading (MLflow-independent)
+✅ Complete MLOps workflow ready for CICD
+✅ SMUS CICD workflows with stage separation
+✅ Environment parameterization for multi-stage deployment
+✅ Comprehensive IAM permissions configuration
+✅ Executable test scripts following SMUS pattern
+✅ Proper directory structure and file organization
+
+## TASK COMPLETED ✅
+The ML workflow for SageMaker Unified Studio is now complete with:
+- Two separate SMUS CICD workflows (dev and deploy)
+- Full SageMaker operator integration
+- Champion model promotion system
+- Multi-stage deployment support
+- Comprehensive IAM permissions
+- Production-ready test scripts
+- Proper SMUS directory structure

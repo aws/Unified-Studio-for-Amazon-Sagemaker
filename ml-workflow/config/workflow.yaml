@@ -1,0 +1,23 @@
+name: sagemaker-unified-studio-ml-workflow
+version: "1.0"
+description: "ML workflow for SageMaker Unified Studio"
+
+environment:
+  region: ${AWS_REGION:-us-east-1}
+  account_id: ${AWS_ACCOUNT_ID}
+  
+sagemaker:
+  role_arn: ${SAGEMAKER_EXECUTION_ROLE}
+  instance_type: ml.m5.large
+  
+data:
+  input_bucket: ${DATA_BUCKET}
+  output_bucket: ${OUTPUT_BUCKET}
+  
+pipeline:
+  name: ml-training-pipeline
+  steps:
+    - preprocess
+    - train
+    - evaluate
+    - deploy

@@ -1,0 +1,9 @@
+{
+  "job_name": "realistic-model-comparison-1760827975",
+  "model_data": "s3://sagemaker-ml-workflow-058264284947-us-east-1/realistic-models/realistic-model-comparison-1760827975/output/model.tar.gz",
+  "bucket_name": "sagemaker-ml-workflow-058264284947-us-east-1",
+  "mlflow_tracking_server_arn": "arn:aws:sagemaker:us-east-1:058264284947:mlflow-tracking-server/wine-classification-mlflow-v2",
+  "mlflow_experiment": "realistic-model-comparison-experiment",
+  "region": "us-east-1",
+  "experiment_type": "realistic_model_comparison"
+}

@@ -1,0 +1,10 @@
+{
+  "job_name": "wine-model-comparison-1760827176",
+  "model_data": "s3://sagemaker-ml-workflow-058264284947-us-east-1/model-comparison/wine-model-comparison-1760827176/output/model.tar.gz",
+  "bucket_name": "sagemaker-ml-workflow-058264284947-us-east-1",
+  "data_uri": "s3://sagemaker-ml-workflow-058264284947-us-east-1/data/wine_dataset.csv",
+  "mlflow_tracking_server_arn": "arn:aws:sagemaker:us-east-1:058264284947:mlflow-tracking-server/wine-classification-mlflow-v2",
+  "mlflow_experiment": "wine-model-comparison-experiment",
+  "region": "us-east-1",
+  "experiment_type": "model_comparison"
+}

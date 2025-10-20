@@ -115,32 +115,6 @@ gh run view <RUN-ID> --job <JOB-NAME> --log
 # - Ensure all stakeholders understand the impact
 ```
 
-## Key Features Implemented
-
-### DataZone Catalog Asset Access Integration
-The CLI now supports automated access to DataZone catalog assets during deployment:
-
-- **Pipeline Manifest Configuration**: Add catalog assets under `bundle.catalog.assets` section
-- **Automated Subscription Management**: Creates subscription requests for required data access
-- **Approval Workflow**: Waits for subscription approval with configurable timeout
-- **Grant Verification**: Ensures subscription grants are completed before proceeding
-- **Proper Error Handling**: CLI exits with error codes when catalog access fails
-
-Example pipeline manifest configuration:
-```yaml
-bundle:
-  catalog:
-    assets:
-      - selector:
-          search:
-            assetType: GlueTable
-            identifier: covid19_db.countries_aggregated
-        permission: READ
-        requestReason: Required access for pipeline deployment
-```
-
-**Testing DataZone Features**: Integration tests validate the complete workflow including asset search, subscription creation, approval monitoring, and grant verification.
-
 ## Test Runner Options
 
 ```bash

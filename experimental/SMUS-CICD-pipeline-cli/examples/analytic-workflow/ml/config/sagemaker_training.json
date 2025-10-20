@@ -1,0 +1,11 @@
+{
+  "job_name": "wine-classification-mlflow-1760824483",
+  "model_data": "s3://sagemaker-ml-workflow-058264284947-us-east-1/models/wine-classification-mlflow-1760824483/output/model.tar.gz",
+  "model_package_arn": "arn:aws:sagemaker:us-east-1:058264284947:model-package/wine-classifier-mlflow-v2/24",
+  "bucket_name": "sagemaker-ml-workflow-058264284947-us-east-1",
+  "data_uri": "s3://sagemaker-ml-workflow-058264284947-us-east-1/data/wine_dataset.csv",
+  "mlflow_tracking_uri": "https://t-rj96xf9sqzus.us-east-1.experiments.sagemaker.aws",
+  "mlflow_tracking_server_arn": "arn:aws:sagemaker:us-east-1:058264284947:mlflow-tracking-server/wine-classification-mlflow-v2",
+  "mlflow_experiment": "wine-classification-sagemaker-v2",
+  "region": "us-east-1"
+}

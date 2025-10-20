@@ -1,0 +1,3 @@
+mlflow==3.0
+sagemaker-mlflow
+matplotlib

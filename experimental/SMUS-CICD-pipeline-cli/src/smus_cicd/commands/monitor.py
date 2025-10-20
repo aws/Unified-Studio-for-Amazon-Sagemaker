@@ -76,12 +76,16 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
                 )
 
             # Check if this target uses serverless Airflow
-            uses_airflow_serverless = _target_uses_airflow_serverless(manifest, target_config)
-            
+            uses_airflow_serverless = _target_uses_airflow_serverless(
+                manifest, target_config
+            )
+
             if uses_airflow_serverless:
                 # Validate serverless Airflow health
-                from ..helpers.airflow_serverless import validate_airflow_serverless_health
-                
+                from ..helpers.airflow_serverless import (
+                    validate_airflow_serverless_health,
+                )
+
                 if validate_airflow_serverless_health(project_name, config):
                     healthy_targets.append(target_name)
                     if output.upper() != "JSON":
@@ -176,8 +180,10 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
                             typer.echo(f"   Owners: {owners_str}")
 
                     # Check if this target uses serverless Airflow
-                    uses_airflow_serverless = _target_uses_airflow_serverless(manifest, target_config)
-                    
+                    uses_airflow_serverless = _target_uses_airflow_serverless(
+                        manifest, target_config
+                    )
+
                     if uses_airflow_serverless:
                         # Monitor serverless Airflow workflows
                         airflow_serverless_data = _monitor_airflow_serverless_workflows(
@@ -261,11 +267,11 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
 def _target_uses_airflow_serverless(manifest: PipelineManifest, target_config) -> bool:
     """
     Check if a target uses serverless Airflow workflows.
-    
+
     Args:
         manifest: Pipeline manifest object
         target_config: Target configuration object
-        
+
     Returns:
         True if target uses serverless Airflow, False otherwise
     """
@@ -274,82 +280,81 @@ def _target_uses_airflow_serverless(manifest: PipelineManifest, target_config) -
         for workflow_config in manifest.bundle.workflow:
             if workflow_config.get("airflow-serverless", False):
                 return True
-    
+
     # Check workflows section for airflow-serverless engine
     if manifest.workflows:
         for workflow in manifest.workflows:
             if workflow.engine == "airflow-serverless":
                 return True
-    
+
     return False
 
 
 def _monitor_airflow_serverless_workflows(
-    manifest: PipelineManifest,
-    target_config,
-    config: dict,
-    output: str
+    manifest: PipelineManifest, target_config, config: dict, output: str
 ) -> dict:
     """
     Monitor serverless Airflow workflows for a target.
-    
+
     Args:
         manifest: Pipeline manifest object
         target_config: Target configuration object
         config: Configuration dictionary
         output: Output format (JSON or TEXT)
-        
+
     Returns:
         Dictionary of workflow monitoring data
     """
     workflows_data = {}
-    
+
     try:
         from ..helpers import airflow_serverless
-        
+
         if output.upper() != "JSON":
             typer.echo("\n   🚀 Serverless Airflow Workflow Status:")
-        
+
         # List all serverless Airflow workflows
         all_workflows = airflow_serverless.list_workflows(region=config["region"])
-        
+
         # Filter workflows that belong to this pipeline/target using tags
         pipeline_name = manifest.pipeline_name
         target_name = target_config.project.name
-        
+
         relevant_workflows = []
         for workflow in all_workflows:
             workflow_tags = workflow.get("tags", {})
             # Check if workflow tags match our pipeline and target
-            if (workflow_tags.get("Pipeline") == pipeline_name and 
-                workflow_tags.get("Target") == target_name):
+            if (
+                workflow_tags.get("Pipeline") == pipeline_name
+                and workflow_tags.get("Target") == target_name
+            ):
                 relevant_workflows.append(workflow)
-        
+
         if relevant_workflows:
             overdrive_data = {
                 "service": "overdrive",
                 "status": "healthy",
-                "workflows": {}
+                "workflows": {},
             }
-            
+
             for workflow in relevant_workflows:
                 workflow_arn = workflow["workflow_arn"]
                 workflow_name = workflow["name"]
-                
+
                 # Get workflow details
                 workflow_status = airflow_serverless.get_workflow_status(
                     workflow_arn, region=config["region"]
                 )
-                
+
                 # Get recent workflow runs
                 recent_runs = airflow_serverless.list_workflow_runs(
                     workflow_arn, region=config["region"], max_results=5
                 )
-                
+
                 recent_status = "No runs"
                 if recent_runs:
                     recent_status = recent_runs[0]["status"]
-                
+
                 workflow_data = {
                     "workflow_arn": workflow_arn,
                     "status": workflow_status.get("status", "UNKNOWN"),
@@ -357,71 +362,79 @@ def _monitor_airflow_serverless_workflows(
                     "recent_run_status": recent_status,
                     "recent_runs": recent_runs[:3],
                     "created_at": workflow_status.get("created_at"),
-                    "log_group": workflow_status.get("log_group")
+                    "log_group": workflow_status.get("log_group"),
                 }
-                
+
                 overdrive_data["workflows"][workflow_name] = workflow_data
-                
+
                 if output.upper() != "JSON":
                     status_icon = (
-                        "✅" if recent_status == "SUCCESS"
-                        else "❌" if recent_status == "FAILED"
-                        else "🔄" if recent_status in ["STARTING", "QUEUED", "RUNNING"]
-                        else "⏸️"
+                        "✅"
+                        if recent_status == "SUCCESS"
+                        else (
+                            "❌"
+                            if recent_status == "FAILED"
+                            else (
+                                "🔄"
+                                if recent_status in ["STARTING", "QUEUED", "RUNNING"]
+                                else "⏸️"
+                            )
+                        )
                     )
-                    
+
                     typer.echo(f"      🚀 {workflow_name}")
-                    typer.echo(f"         {status_icon} Status: {workflow_status.get('status')} | Recent: {recent_status}")
+                    typer.echo(
+                        f"         {status_icon} Status: {workflow_status.get('status')} | Recent: {recent_status}"
+                    )
                     typer.echo(f"         ARN: {workflow_arn}")
-                    
+
                     if workflow_status.get("log_group"):
                         typer.echo(f"         📋 Logs: {workflow_status['log_group']}")
-            
+
             workflows_data["overdrive"] = overdrive_data
         else:
             if output.upper() != "JSON":
-                typer.echo("      ℹ️  No Overdrive workflows found for this pipeline/target")
-            
+                typer.echo(
+                    "      ℹ️  No Overdrive workflows found for this pipeline/target"
+                )
+
             workflows_data["overdrive"] = {
                 "service": "overdrive",
                 "status": "no_workflows",
-                "workflows": {}
+                "workflows": {},
             }
-    
+
     except Exception as e:
         if output.upper() != "JSON":
             typer.echo(f"      ❌ Error monitoring Overdrive workflows: {e}")
-        
+
         workflows_data["overdrive"] = {
             "service": "overdrive",
             "status": "error",
             "error": str(e),
-            "workflows": {}
+            "workflows": {},
         }
-    
+
     return workflows_data
 
 
 def _monitor_mwaa_workflows(
-    manifest: PipelineManifest,
-    target_config,
-    project_connections: dict,
-    output: str
+    manifest: PipelineManifest, target_config, project_connections: dict, output: str
 ) -> dict:
     """
     Monitor MWAA workflows for a target.
-    
+
     Args:
         manifest: Pipeline manifest object
         target_config: Target configuration object
         project_connections: Project connection information
         output: Output format (JSON or TEXT)
-        
+
     Returns:
         Dictionary of workflow monitoring data
     """
     workflows_data = {}
-    
+
     # Monitor workflow connections
     workflow_connections = {
         name: info
@@ -468,16 +481,11 @@ def _monitor_mwaa_workflows(
                         if airflow_url:
                             # Format as clickable hyperlink
                             hyperlink = f"\033]8;;{airflow_url}\033\\{airflow_url}\033]8;;\033\\"
-                            typer.echo(
-                                f"         🌐 Airflow UI: {hyperlink}"
-                            )
+                            typer.echo(f"         🌐 Airflow UI: {hyperlink}")
 
                     # Get manifest workflows for comparison
                     manifest_workflows = set()
-                    if (
-                        hasattr(manifest, "workflows")
-                        and manifest.workflows
-                    ):
+                    if hasattr(manifest, "workflows") and manifest.workflows:
                         manifest_workflows = {
                             w.workflow_name for w in manifest.workflows
                         }
@@ -485,18 +493,12 @@ def _monitor_mwaa_workflows(
                     # Monitor each DAG
                     for dag_name in sorted(existing_workflows):
                         dag_details = all_dag_details.get(dag_name, {})
-                        schedule = dag_details.get(
-                            "schedule_interval", "Unknown"
-                        )
+                        schedule = dag_details.get("schedule_interval", "Unknown")
                         active = dag_details.get("active", None)
                         status = (
                             "ACTIVE"
                             if active
-                            else (
-                                "PAUSED"
-                                if active is False
-                                else "UNKNOWN"
-                            )
+                            else ("PAUSED" if active is False else "UNKNOWN")
                         )
 
                         # Get recent DAG runs for monitoring
@@ -511,9 +513,7 @@ def _monitor_mwaa_workflows(
                             recent_status = "No runs"
                             if dag_runs:
                                 recent_run = dag_runs[0]
-                                recent_status = recent_run.get(
-                                    "state", "Unknown"
-                                )
+                                recent_status = recent_run.get("state", "Unknown")
                         except Exception:
                             dag_runs = []
                             recent_status = "Unknown"
@@ -522,11 +522,8 @@ def _monitor_mwaa_workflows(
                             "schedule": schedule,
                             "status": status,
                             "recent_run_status": recent_status,
-                            "in_manifest": dag_name
-                            in manifest_workflows,
-                            "recent_runs": (
-                                dag_runs[:3] if dag_runs else []
-                            ),
+                            "in_manifest": dag_name in manifest_workflows,
+                            "recent_runs": (dag_runs[:3] if dag_runs else []),
                         }
 
                         if output.upper() != "JSON":
@@ -536,17 +533,11 @@ def _monitor_mwaa_workflows(
                                 else (
                                     "❌"
                                     if recent_status == "failed"
-                                    else (
-                                        "⏸️"
-                                        if status == "PAUSED"
-                                        else "🔄"
-                                    )
+                                    else ("⏸️" if status == "PAUSED" else "🔄")
                                 )
                             )
                             manifest_icon = (
-                                "✓"
-                                if dag_name in manifest_workflows
-                                else "-"
+                                "✓" if dag_name in manifest_workflows else "-"
                             )
 
                             typer.echo(
@@ -561,13 +552,11 @@ def _monitor_mwaa_workflows(
                     workflow_data["error"] = str(e)
 
                     if output.upper() != "JSON":
-                        typer.echo(
-                            f"      ❌ Error monitoring {conn_name}: {e}"
-                        )
+                        typer.echo(f"      ❌ Error monitoring {conn_name}: {e}")
 
                 workflows_data[conn_name] = workflow_data
     else:
         if output.upper() != "JSON":
             typer.echo("   ❌ No MWAA workflow connections found")
-    
+
     return workflows_data

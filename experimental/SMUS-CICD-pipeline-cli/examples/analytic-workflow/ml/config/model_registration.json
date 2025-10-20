@@ -1,0 +1,6 @@
+{
+  "model_package_arn": "arn:aws:sagemaker:us-east-1:058264284947:model-package/wine-classifier-model-group/1",
+  "model_package_group_name": "wine-classifier-model-group",
+  "model_data": "s3://sagemaker-ml-workflow-058264284947-us-east-1/models/wine-classification-1760789807/output/model.tar.gz",
+  "status": "Approved"
+}

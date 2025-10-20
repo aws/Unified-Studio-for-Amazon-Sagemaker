@@ -58,6 +58,14 @@ jobs:
         role-session-name: smus-serverless-lifecycle-setup
         role-duration-seconds: 43200
     
+    - name: Download and configure API model
+      run: |
+        echo "📥 Downloading API model..."
+        aws s3 cp s3://aws-api-models-us-east-1-058264284947/models/overdrive-2024-07-26.api.json ./overdrive-model.json
+        echo "🔧 Configuring AWS CLI to use model..."
+        aws configure add-model --service-model file://$(pwd)/overdrive-model.json
+        echo "✅ API model configured"
+    
     - name: Set up Python
       uses: actions/setup-python@v4
       with:

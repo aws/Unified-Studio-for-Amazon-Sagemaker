@@ -372,7 +372,7 @@ class PipelineManifest:
 
             connection_name = workflow_data.get("connectionName", "")
             engine = workflow_data.get("engine", "MWAA")
-            
+
             # connectionName is required for MWAA but optional for airflow-serverless
             if engine != "airflow-serverless" and not connection_name.strip():
                 raise ValueError(
