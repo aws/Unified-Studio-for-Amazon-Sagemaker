@@ -535,7 +535,8 @@ def _update_s3_lakeformation_registration(lakeformation, old_role_arn, new_role_
                         old_role_arn,
                     ]
                 },
-            ]
+            ],
+            NextToken=response['NextToken']
         )
         for resource in response['ResourceInfoList']:
             resources_list.append(resource)
