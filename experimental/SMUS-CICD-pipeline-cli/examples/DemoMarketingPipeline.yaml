@@ -48,7 +48,6 @@ targets:
     project:
       name: dev-marketing
       create: false  # Use existing project
-    default: true  # Default target for operations
     
     # Bundle target configuration
     bundle_target_configuration:
@@ -71,7 +70,6 @@ targets:
     project:
       name: dev-marketing-test
       create: true  # Auto-create project
-    # default: true  # Uncomment to make this the default target
     
     initialization:
       project:

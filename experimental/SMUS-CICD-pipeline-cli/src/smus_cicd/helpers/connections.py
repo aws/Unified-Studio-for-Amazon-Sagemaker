@@ -37,14 +37,25 @@ def extract_connection_properties(connection_detail: Dict[str, Any]) -> Dict[str
         conn_info["workgroupName"] = athena_props.get("workgroupName")
 
     elif connection_type == "SPARK":
-        spark_props = props.get("sparkGlueProperties", {})
+        spark_props = props.get("sparkGlueProperties", {}) or props.get("sparkEmrProperties", {})
         conn_info["glueVersion"] = spark_props.get("glueVersion")
         conn_info["workerType"] = spark_props.get("workerType")
         conn_info["numberOfWorkers"] = spark_props.get("numberOfWorkers")
+        conn_info["computeArn"] = spark_props.get("computeArn")
+        conn_info["runtimeRole"] = spark_props.get("runtimeRole")
+
+    elif connection_type == "REDSHIFT":
+        redshift_props = props.get("redshiftProperties", {})
+        conn_info["host"] = redshift_props.get("host")
+        conn_info["port"] = redshift_props.get("port")
+        conn_info["databaseName"] = redshift_props.get("databaseName")
+        storage = redshift_props.get("storage", {})
+        conn_info["clusterName"] = storage.get("clusterName")
+        conn_info["workgroupName"] = storage.get("workgroupName")
 
     elif connection_type in ["MWAA", "WORKFLOWS_MWAA"]:
-        mwaa_props = props.get("mwaaProperties", {})
-        env_name = mwaa_props.get("environmentName")
+        mwaa_props = props.get("workflowsMwaaProperties", {}) or props.get("mwaaProperties", {})
+        env_name = mwaa_props.get("mwaaEnvironmentName") or mwaa_props.get("environmentName")
 
         # If no environment name in properties, infer it from project structure
         if (
@@ -54,7 +65,12 @@ def extract_connection_properties(connection_detail: Dict[str, Any]) -> Dict[str
         ):
             env_name = f"DataZoneMWAAEnv-{connection_detail['domain_id']}-{connection_detail['project_id']}-dev"
 
-        conn_info["environmentName"] = env_name
+        conn_info["mwaaEnvironmentName"] = env_name
+
+    elif connection_type == "MLFLOW":
+        mlflow_props = props.get("mlflowProperties", {})
+        conn_info["trackingServerName"] = mlflow_props.get("trackingServerName")
+        conn_info["trackingServerArn"] = mlflow_props.get("trackingServerArn")
 
     elif connection_type == "IAM":
         iam_props = props.get("iamProperties", {})
@@ -96,6 +112,7 @@ def get_project_connections(
         )
 
     try:
+        # Get project-level connections
         response = datazone_client.list_connections(
             domainIdentifier=domain_id, projectIdentifier=project_id
         )
@@ -127,6 +144,64 @@ def get_project_connections(
                     "description": conn.get("description"),
                     "error": f"Could not get connection details: {str(e)}",
                 }
+
+        # Also get environment-level connections for the project's environments
+        try:
+            # Get environments for this project
+            env_response = datazone_client.list_environments(
+                domainIdentifier=domain_id, projectIdentifier=project_id
+            )
+            
+            for env in env_response.get("items", []):
+                env_id = env.get("id")
+                if env_id:
+                    try:
+                        # Get connections for this environment
+                        env_conn_response = datazone_client.list_connections(
+                            domainIdentifier=domain_id, 
+                            projectIdentifier=project_id,
+                            environmentIdentifier=env_id
+                        )
+                        
+                        for conn in env_conn_response.get("items", []):
+                            conn_name = conn.get("name", "unknown")
+                            
+                            # Skip if we already have this connection from project level
+                            if conn_name in connections:
+                                continue
+                                
+                            # Get detailed connection info
+                            try:
+                                detail_response = datazone_client.get_connection(
+                                    domainIdentifier=domain_id, identifier=conn.get("connectionId", "")
+                                )
+
+                                connection_detail = detail_response.copy()
+                                # Add context for environment name inference
+                                connection_detail["domain_id"] = domain_id
+                                connection_detail["project_id"] = project_id
+
+                                # Extract properties using centralized logic
+                                conn_info = extract_connection_properties(connection_detail)
+                                connections[conn_name] = conn_info
+
+                            except Exception as e:
+                                # If we can't get details, use basic info
+                                connections[conn_name] = {
+                                    "connectionId": conn.get("connectionId", ""),
+                                    "type": conn.get("type", ""),
+                                    "description": conn.get("description"),
+                                    "error": f"Could not get environment connection details: {str(e)}",
+                                }
+                                
+                    except Exception as e:
+                        if not is_json_output:
+                            print(f"🔍 DEBUG: Failed to list connections for environment {env_id}: {e}", file=sys.stderr)
+                        continue
+                        
+        except Exception as e:
+            if not is_json_output:
+                print(f"🔍 DEBUG: Failed to list environments for project: {e}", file=sys.stderr)
 
         return connections
 

@@ -14,6 +14,27 @@ class TestMultiTargetPipeline(IntegrationTestBase):
         """Set up test environment."""
         super().setup_method(method)
         self.setup_test_directory()
+        self.cleanup_glue_databases()
+
+    def cleanup_glue_databases(self):
+        """Delete Glue databases that might conflict with the test."""
+        import boto3
+        
+        glue_client = boto3.client('glue', region_name='us-east-1')
+        databases_to_delete = [
+            'multi_target_test_db',
+            'multi_target_prod_db',
+            'marketing_db'  # Default database name that could conflict
+        ]
+        
+        for db_name in databases_to_delete:
+            try:
+                glue_client.delete_database(Name=db_name)
+                print(f"✅ Deleted Glue database: {db_name}")
+            except glue_client.exceptions.EntityNotFoundException:
+                print(f"ℹ️  Glue database {db_name} does not exist (OK)")
+            except Exception as e:
+                print(f"⚠️  Could not delete Glue database {db_name}: {e}")
 
     def teardown_method(self, method):
         """Clean up test environment."""

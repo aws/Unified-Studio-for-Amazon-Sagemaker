@@ -102,12 +102,22 @@ class DomainInitConfig:
 
 
 @dataclass
+class ConnectionConfig:
+    """DataZone connection configuration."""
+
+    name: str
+    type: str
+    properties: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class InitializationConfig:
     """Initialization configuration."""
 
     project: Optional[ProjectConfig] = None
     domain: Optional[DomainInitConfig] = None
     environments: List[EnvironmentConfig] = field(default_factory=list)
+    connections: List[ConnectionConfig] = field(default_factory=list)
 
 
 @dataclass
@@ -134,7 +144,6 @@ class TargetConfig:
     project: ProjectConfig
     domain: DomainConfig
     stage: str
-    default: bool = False
     initialization: Optional[InitializationConfig] = None
     bundle_target_configuration: Optional[BundleTargetConfig] = None
     tests: Optional[TestConfig] = None
@@ -148,7 +157,7 @@ class WorkflowConfig:
     workflow_name: str
     connection_name: str
     logging: str = "none"
-    engine: str = "Workflows"
+    engine: str = "MWAA"
     parameters: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -321,10 +330,22 @@ class PipelineManifest:
                         create=domain_data.get("create", False),
                     )
 
+                # Parse connections
+                connections = []
+                connections_data = init_data.get("connections", [])
+                for conn_data in connections_data:
+                    connection = ConnectionConfig(
+                        name=conn_data.get("name", ""),
+                        type=conn_data.get("type", ""),
+                        properties=conn_data.get("properties", {}),
+                    )
+                    connections.append(connection)
+
                 initialization = InitializationConfig(
                     project=init_project,
                     domain=init_domain,
                     environments=init_data.get("environments", []),
+                    connections=connections,
                 )
 
             # Parse bundle target configuration
@@ -353,7 +374,6 @@ class PipelineManifest:
                 project=project,
                 domain=domain,
                 stage=stage,
-                default=target_data.get("default", False),
                 initialization=initialization,
                 bundle_target_configuration=bundle_target_config,
                 tests=tests,
@@ -394,13 +414,6 @@ class PipelineManifest:
             targets=targets,
             workflows=workflows,
         )
-
-    def get_default_target(self) -> Optional[str]:
-        """Get the default target name."""
-        for target_name, target_config in self.targets.items():
-            if target_config.default:
-                return target_name
-        return None
 
     def get_target(self, target_name: str) -> Optional[TargetConfig]:
         """Get target configuration by name."""

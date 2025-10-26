@@ -127,12 +127,15 @@ run_command "aws awsoverdriveservice start-workflow-run --workflow-arn \"$WORKFL
 # Step 9: Monitor workflow run with 10-minute timeout
 echo "👀 Step 9: Monitor workflow run (10-minute timeout)"
 START_TIME=$(date +%s)
+RUN_ID=""
 
 for i in {1..10}; do
     CURRENT_TIME=$(date +%s)
     ELAPSED=$((CURRENT_TIME - START_TIME))
     
-    STATUS=$(aws awsoverdriveservice list-workflow-runs --workflow-arn "$WORKFLOW_ARN" --region $REGION --endpoint-url $ENDPOINT_URL --query 'WorkflowRuns[0].RunDetailSummary.Status' --output text)
+    WORKFLOW_RUNS=$(aws awsoverdriveservice list-workflow-runs --workflow-arn "$WORKFLOW_ARN" --region $REGION --endpoint-url $ENDPOINT_URL)
+    STATUS=$(echo "$WORKFLOW_RUNS" | jq -r '.WorkflowRuns[0].RunDetailSummary.Status')
+    RUN_ID=$(echo "$WORKFLOW_RUNS" | jq -r '.WorkflowRuns[0].RunId')
     
     echo "[$i] $(date '+%H:%M:%S') - Elapsed: ${ELAPSED}s - Status: $STATUS"
     
@@ -149,8 +152,14 @@ for i in {1..10}; do
     sleep 60
 done
 
-# Step 9: Check CloudWatch logs for S3 paths
-echo "📋 Step 9: Check CloudWatch logs for S3 paths"
+# Step 10: Get detailed workflow run information
+echo "📊 Step 10: Get detailed workflow run information"
+if [ ! -z "$RUN_ID" ]; then
+    run_command "aws awsoverdriveservice get-workflow-run --workflow-arn \"$WORKFLOW_ARN\" --run-id \"$RUN_ID\" --region $REGION --endpoint-url $ENDPOINT_URL"
+fi
+
+# Step 11: Check CloudWatch logs for S3 paths
+echo "📋 Step 11: Check CloudWatch logs for S3 paths"
 WORKFLOW_LOG_NAME=$(echo "$WORKFLOW_ARN" | sed 's/.*workflow\///')
 LOG_GROUP="/aws/mwaa-serverless/$WORKFLOW_LOG_NAME/"
 

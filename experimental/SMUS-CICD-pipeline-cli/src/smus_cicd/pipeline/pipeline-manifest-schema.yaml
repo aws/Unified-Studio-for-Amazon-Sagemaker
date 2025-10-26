@@ -213,10 +213,6 @@ definitions:
           - "dev"
           - "test"
           - "prod"
-      default:
-        type: boolean
-        description: "Whether this is the default target"
-        default: false
       domain:
         type: object
         description: "DataZone domain configuration"
@@ -342,6 +338,31 @@ definitions:
                   examples: 
                     - "OnDemand Workflows"
               additionalProperties: false
+          connections:
+            type: array
+            description: "DataZone connections to create"
+            items:
+              type: object
+              required:
+                - name
+                - type
+                - properties
+              properties:
+                name:
+                  type: string
+                  description: "Connection name"
+                  examples:
+                    - "s3-data-lake"
+                    - "athena-analytics"
+                type:
+                  type: string
+                  description: "Connection type"
+                  enum: ["S3", "IAM", "SPARK_GLUE", "ATHENA", "REDSHIFT", "SPARK_EMR", "GLUE", "HYPERPOD", "MLFLOW", "WORKFLOWS_MWAA"]
+                properties:
+                  type: object
+                  description: "Connection-specific properties"
+                  additionalProperties: true
+              additionalProperties: false
         additionalProperties: false
       bundle_target_configuration:
         type: object
@@ -399,26 +420,6 @@ definitions:
                 default: false
             additionalProperties: false
         additionalProperties: false
-      workflows:
-        type: array
-        description: "Target-specific workflow configurations"
-        items:
-          type: object
-          required: 
-            - workflowName
-          properties:
-            workflowName:
-              type: string
-              description: "Name of the workflow"
-            parameters:
-              type: object
-              description: "Target-specific workflow parameters"
-              additionalProperties:
-                type: 
-                  - string
-                  - number
-                  - boolean
-          additionalProperties: false
       tests:
         type: object
         description: "Test configuration for this target"

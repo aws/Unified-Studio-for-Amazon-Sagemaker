@@ -15,6 +15,11 @@ from ..helpers.project_manager import ProjectManager
 from ..helpers.utils import get_datazone_project_info, load_config
 from ..pipeline import PipelineManifest
 
+# TEMPORARY: Airflow Serverless (Overdrive) configuration
+# TODO: Remove these overrides once service is available in all regions
+AIRFLOW_SERVERLESS_REGION = "us-west-2"  # Force us-west-2 for Airflow Serverless
+AIRFLOW_SERVERLESS_ENDPOINT_URL = "https://overdrive-gamma.us-west-2.api.aws"
+
 
 def _fix_airflow_role_trust_policy(role_arn: str, region: str) -> bool:
     """Fix IAM role trust policy to include airflow-serverless service principals."""
@@ -80,57 +85,72 @@ def _fix_airflow_role_cloudwatch_policy(role_arn: str, region: str) -> bool:
         # Extract role name from ARN
         role_name = role_arn.split("/")[-1]
 
-        # Check if policy already exists
-        policy_exists = False
+        # ⚠️ TEMPORARY WORKAROUND: Attach Admin policy for testing
+        # TODO: Replace with minimal required permissions once workflow requirements are known
         try:
-            iam.get_role_policy(
-                RoleName=role_name, PolicyName="AirflowServerlessCloudWatchLogs"
+            iam.attach_role_policy(
+                RoleName=role_name,
+                PolicyArn="arn:aws:iam::aws:policy/AdministratorAccess"
             )
-            policy_exists = True
+            typer.echo(f"⚠️ TEMPORARY: Attached Admin policy to {role_name} for testing")
+            typer.echo(f"⚠️ TODO: Replace with minimal permissions in production")
+            return True
         except iam.exceptions.NoSuchEntityException:
-            pass  # Policy doesn't exist, continue to create it
+            typer.echo(f"⚠️ Role {role_name} not found")
+            return False
 
-        # CloudWatch logs policy
-        cloudwatch_policy = {
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                    "Sid": "CloudWatchLogsAccess",
-                    "Effect": "Allow",
-                    "Action": [
-                        "logs:CreateLogGroup",
-                        "logs:CreateLogStream",
-                        "logs:PutLogEvents",
-                    ],
-                    "Resource": "arn:aws:logs:*:*:log-group:/aws/mwaa-serverless/*",
-                },
-                {
-                    "Sid": "KMSAccess",
-                    "Effect": "Allow",
-                    "Action": [
-                        "kms:Encrypt",
-                        "kms:Decrypt",
-                        "kms:ReEncrypt*",
-                        "kms:GenerateDataKey*",
-                        "kms:DescribeKey",
-                    ],
-                    "Resource": "*",
-                },
-            ],
-        }
+        # Original CloudWatch logs policy code (commented out for now)
+        # # Check if policy already exists
+        # policy_exists = False
+        # try:
+        #     iam.get_role_policy(
+        #         RoleName=role_name, PolicyName="AirflowServerlessCloudWatchLogs"
+        #     )
+        #     policy_exists = True
+        # except iam.exceptions.NoSuchEntityException:
+        #     pass  # Policy doesn't exist, continue to create it
 
-        iam.put_role_policy(
-            RoleName=role_name,
-            PolicyName="AirflowServerlessCloudWatchLogs",
-            PolicyDocument=json.dumps(cloudwatch_policy),
-        )
+        # # CloudWatch logs policy
+        # cloudwatch_policy = {
+        #     "Version": "2012-10-17",
+        #     "Statement": [
+        #         {
+        #             "Sid": "CloudWatchLogsAccess",
+        #             "Effect": "Allow",
+        #             "Action": [
+        #                 "logs:CreateLogGroup",
+        #                 "logs:CreateLogStream",
+        #                 "logs:PutLogEvents",
+        #             ],
+        #             "Resource": "arn:aws:logs:*:*:log-group:/aws/mwaa-serverless/*",
+        #         },
+        #         {
+        #             "Sid": "KMSAccess",
+        #             "Effect": "Allow",
+        #             "Action": [
+        #                 "kms:Encrypt",
+        #                 "kms:Decrypt",
+        #                 "kms:ReEncrypt*",
+        #                 "kms:GenerateDataKey*",
+        #                 "kms:DescribeKey",
+        #             ],
+        #             "Resource": "*",
+        #         },
+        #     ],
+        # }
 
-        action = "Updated" if policy_exists else "Added"
-        typer.echo(f"✅ {action} CloudWatch logs policy to IAM role {role_name}")
-        return True
+        # iam.put_role_policy(
+        #     RoleName=role_name,
+        #     PolicyName="AirflowServerlessCloudWatchLogs",
+        #     PolicyDocument=json.dumps(cloudwatch_policy),
+        # )
+
+        # action = "Updated" if policy_exists else "Added"
+        # typer.echo(f"✅ {action} CloudWatch logs policy to IAM role {role_name}")
+        # return True
 
     except Exception as e:
-        typer.echo(f"⚠️ Failed to add CloudWatch logs policy: {e}")
+        typer.echo(f"⚠️ Failed to add Admin policy: {e}")
         return False
 
 
@@ -177,7 +197,7 @@ def deploy_command(
 
 def _get_target_name(targets: Optional[str], manifest: PipelineManifest) -> str:
     """
-    Get target name from input or default.
+    Get target name from input.
 
     Args:
         targets: Comma-separated target names or None
@@ -187,18 +207,13 @@ def _get_target_name(targets: Optional[str], manifest: PipelineManifest) -> str:
         Target name to deploy to
 
     Raises:
-        SystemExit: If no target is found
+        SystemExit: If no target is specified
     """
-    if targets:
-        target_list = [t.strip() for t in targets.split(",")]
-        return target_list[0]  # Use first target for deployment
-
-    target_name = manifest.get_default_target()
-    if target_name:
-        typer.echo(f"Using default target: {target_name}")
-        return target_name
-
-    handle_error("No target specified and no default target found")
+    if not targets:
+        handle_error("No target specified. Use --targets to specify a target (e.g., --targets dev)")
+    
+    target_list = [t.strip() for t in targets.split(",")]
+    return target_list[0]  # Use first target for deployment
 
 
 def _get_target_config(target_name: str, manifest: PipelineManifest):
@@ -760,12 +775,10 @@ def _create_airflow_serverless_workflows(
                 with zipfile.ZipFile(local_bundle_path, "r") as zip_ref:
                     zip_ref.extractall(temp_dir)
 
-                # Look for DAG files in workflows directory
-                workflows_path = os.path.join(temp_dir, "workflows")
-                if os.path.exists(workflows_path):
-                    dag_files = _find_dag_files(workflows_path, manifest)
+                # Look for DAG files in all extracted directories
+                dag_files = _find_dag_files(temp_dir, manifest, target_config)
 
-                    for dag_file in dag_files:
+                for dag_file in dag_files:
                         workflow_name = _generate_workflow_name(
                             manifest.pipeline_name,
                             os.path.basename(dag_file).replace(".yaml", ""),
@@ -787,6 +800,8 @@ def _create_airflow_serverless_workflows(
                         typer.echo(f"🔍 DEBUG: workflow_name={workflow_name}")
                         typer.echo(f"🔍 DEBUG: dag_s3_location={s3_location}")
                         typer.echo(f"🔍 DEBUG: role_arn={role_arn}")
+                        typer.echo(f"🔍 DEBUG: datazone_domain_id={domain_id}")
+                        typer.echo(f"🔍 DEBUG: datazone_project_id={project_id}")
 
                         result = airflow_serverless.create_workflow(
                             workflow_name=workflow_name,
@@ -799,7 +814,10 @@ def _create_airflow_serverless_workflows(
                                 "STAGE": target_name.upper(),
                                 "CreatedBy": "SMUS-CICD",
                             },
-                            region=config["region"],
+                            datazone_domain_id=domain_id,
+                            datazone_domain_region=config.get("region"),
+                            datazone_project_id=project_id,
+                            region=AIRFLOW_SERVERLESS_REGION,
                         )
 
                         typer.echo(
@@ -831,7 +849,8 @@ def _create_airflow_serverless_workflows(
 
                             # Validate workflow status
                             workflow_status = airflow_serverless.get_workflow_status(
-                                workflow_arn, region=config["region"]
+                                workflow_arn, 
+                                region=AIRFLOW_SERVERLESS_REGION
                             )
                             if workflow_status.get("success"):
                                 status = workflow_status.get("status")
@@ -898,43 +917,77 @@ def _get_airflow_serverless_execution_role(config: Dict[str, Any]) -> Optional[s
     return f"arn:aws:iam::{account_id}:role/OverdriveExecutionRole"
 
 
-def _find_dag_files(workflows_path: str, manifest: PipelineManifest) -> List[str]:
+def _find_dag_files(bundle_root: str, manifest: PipelineManifest, target_config) -> List[str]:
     """
     Find DAG YAML files specified in the manifest workflows section.
+    Searches all directories configured in bundle_target_configuration.
 
     Args:
-        workflows_path: Path to workflows directory
+        bundle_root: Root directory of extracted bundle
         manifest: Pipeline manifest object
+        target_config: Target configuration with bundle_target_configuration
 
     Returns:
         List of DAG file paths for workflows specified in manifest
     """
     dag_files = []
 
-    # Only process workflows specified in the manifest
     if not manifest.workflows:
         return dag_files
 
-    # Look for YAML files in dags subdirectory that match manifest workflows
-    dags_path = os.path.join(workflows_path, "dags")
-    if os.path.exists(dags_path):
-        for workflow in manifest.workflows:
-            # Look for workflow file by name
-            workflow_file = f"{workflow.workflow_name}.yaml"
-            workflow_path = os.path.join(dags_path, workflow_file)
+    # Get directories to search from bundle_target_configuration
+    search_dirs = []
+    if hasattr(target_config, 'bundle_target_configuration'):
+        btc = target_config.bundle_target_configuration
+        # For serverless Airflow, search ALL configured directories
+        if hasattr(btc, 'workflows') and btc.workflows and hasattr(btc.workflows, 'directory'):
+            search_dirs.append(btc.workflows.directory)
+        if hasattr(btc, 'storage') and btc.storage and hasattr(btc.storage, 'directory'):
+            search_dirs.append(btc.storage.directory)
+    
+    # Fallback: search all directories in bundle root
+    if not search_dirs:
+        search_dirs = [d for d in os.listdir(bundle_root) if os.path.isdir(os.path.join(bundle_root, d))]
 
-            if os.path.exists(workflow_path):
-                dag_files.append(workflow_path)
-            else:
-                # Also try .yml extension
-                workflow_file_yml = f"{workflow.workflow_name}.yml"
-                workflow_path_yml = os.path.join(dags_path, workflow_file_yml)
-                if os.path.exists(workflow_path_yml):
-                    dag_files.append(workflow_path_yml)
-                else:
-                    typer.echo(
-                        f"⚠️ Workflow file not found: {workflow_file} or {workflow_file_yml}"
-                    )
+    # Search for each workflow specified in manifest
+    for workflow in manifest.workflows:
+        workflow_name = workflow.workflow_name
+        found = False
+        
+        # Search each configured directory
+        for search_dir in search_dirs:
+            dir_path = os.path.join(bundle_root, search_dir)
+            if not os.path.exists(dir_path):
+                continue
+            
+            # Search for YAML file with matching dag_id
+            for root, _, files in os.walk(dir_path):
+                for file in files:
+                    if file.endswith(('.yaml', '.yml')):
+                        file_path = os.path.join(root, file)
+                        # Check if file contains matching dag_id
+                        try:
+                            import yaml
+                            with open(file_path, 'r') as f:
+                                content = yaml.safe_load(f)
+                                if isinstance(content, dict):
+                                    # Check if any top-level key has dag_id matching workflow_name
+                                    for key, value in content.items():
+                                        if isinstance(value, dict) and value.get('dag_id') == workflow_name:
+                                            dag_files.append(file_path)
+                                            found = True
+                                            break
+                        except Exception:
+                            continue
+                    if found:
+                        break
+                if found:
+                    break
+            if found:
+                break
+        
+        if not found:
+            typer.echo(f"⚠️ Workflow YAML not found for: {workflow_name}")
 
     return dag_files
 
@@ -1005,7 +1058,8 @@ def _upload_dag_to_s3(
         import boto3
 
         # Use a default bucket pattern - in production this should be configurable
-        region = config.get("region", "us-east-2")
+        # Use Airflow Serverless region for S3 bucket (must match workflow region)
+        region = AIRFLOW_SERVERLESS_REGION
         account_id = config.get("aws", {}).get("account_id")
 
         if not account_id:

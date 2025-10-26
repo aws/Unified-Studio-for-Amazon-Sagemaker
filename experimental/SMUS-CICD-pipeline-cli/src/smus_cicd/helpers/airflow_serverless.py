@@ -1,14 +1,22 @@
 """AWS Airflow Serverless helper functions."""
 
+import boto3
+import os
 import time
 from typing import Any, Dict, List, Optional
 
 from . import boto3_client
 from .logger import get_logger
 
-# Airflow Serverless configuration
-AIRFLOW_SERVERLESS_ENDPOINT = "https://overdrive-gamma.us-west-2.api.aws"
-AIRFLOW_SERVERLESS_REGION = "us-east-1"
+# Airflow Serverless (Overdrive) configuration - configurable via environment variables
+AIRFLOW_SERVERLESS_ENDPOINT = os.environ.get(
+    "AIRFLOW_SERVERLESS_ENDPOINT", 
+    "https://overdrive-gamma.us-west-2.api.aws"
+)
+AIRFLOW_SERVERLESS_REGION = os.environ.get(
+    "AIRFLOW_SERVERLESS_REGION", 
+    "us-west-2"
+)
 AIRFLOW_SERVERLESS_SERVICE = "awsoverdriveservice"
 
 
@@ -39,8 +47,13 @@ def create_workflow(
     role_arn: str,
     description: str = None,
     tags: Dict[str, str] = None,
+    datazone_domain_id: str = None,
+    datazone_domain_region: str = None,
+    datazone_project_id: str = None,
     connection_info: Dict[str, Any] = None,
     region: str = None,
+    security_group_ids: List[str] = None,
+    subnet_ids: List[str] = None,
 ) -> Dict[str, Any]:
     """Create a new serverless Airflow workflow."""
     logger = get_logger("airflow_serverless")
@@ -54,6 +67,49 @@ def create_workflow(
             "RoleArn": role_arn,
             "OverdriveVersion": 1,
         }
+
+        # Add DataZone environment variables if provided
+        if datazone_domain_id and datazone_project_id:
+            from . import datazone
+            
+            env_vars = {}
+            env_vars["DataZoneDomainRegion"] = datazone_domain_region or region
+            env_vars["DataZoneDomainId"] = datazone_domain_id
+            env_vars["DataZoneProjectId"] = datazone_project_id
+            
+            # Get environment_id from IAM connection
+            try:
+                project_connections = datazone.get_project_connections(
+                    project_id=datazone_project_id,
+                    domain_id=datazone_domain_id,
+                    region=datazone_domain_region or region
+                )
+                
+                # Find IAM connection and extract environment_id
+                for conn_name, conn_info in project_connections.items():
+                    if conn_info.get("type") == "IAM":
+                        env_id = conn_info.get("environmentId")
+                        if env_id:
+                            env_vars["DataZoneEnvironmentId"] = env_id
+                            logger.info(f"Found DataZone environment ID from IAM connection: {env_id}")
+                            break
+            except Exception as e:
+                logger.warning(f"Could not get DataZone environment ID from connections: {e}")
+            
+            # Add DataZone stage and endpoint
+            env_vars["DataZoneStage"] = "prod"
+            env_vars["DataZoneEndpoint"] = f"https://datazone.{datazone_domain_region or region}.amazonaws.com"
+            
+            params["EnvironmentVariables"] = env_vars
+            logger.info(f"🔍 DEBUG: DataZone environment variables: {env_vars}")
+
+        # Network configuration - commented out for now
+        # if security_group_ids and subnet_ids:
+        #     params["NetworkConfiguration"] = {
+        #         "SecurityGroupIds": security_group_ids,
+        #         "SubnetIds": subnet_ids
+        #     }
+        #     logger.info(f"🔍 DEBUG: Network configuration: SecurityGroups={security_group_ids}, Subnets={subnet_ids}")
 
         if description:
             params["Description"] = description

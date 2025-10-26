@@ -12,6 +12,29 @@ from . import datazone
 from .logger import get_logger
 
 
+def get_project_id_from_stack(stack_name, region):
+    """Get DataZone project ID from CloudFormation stack outputs."""
+    try:
+        cf_client = boto3.client("cloudformation", region_name=region)
+        response = cf_client.describe_stacks(StackName=stack_name)
+        
+        if not response.get("Stacks"):
+            return None
+            
+        stack = response["Stacks"][0]
+        outputs = stack.get("Outputs", [])
+        
+        for output in outputs:
+            if output.get("OutputKey") == "ProjectId":
+                return output.get("OutputValue")
+                
+        return None
+    except Exception as e:
+        logger = get_logger("cloudformation")
+        logger.debug(f"Failed to get project ID from stack {stack_name}: {e}")
+        return None
+
+
 def create_project_via_cloudformation(
     project_name,
     profile_name,

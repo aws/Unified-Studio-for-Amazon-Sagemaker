@@ -118,7 +118,7 @@ def bundle(
         None,
         "--targets",
         "-t",
-        help="Target name(s) - single target or comma-separated list (uses default target if not specified)",
+        help="Target name(s) - single target or comma-separated list (required)",
     ),
     target_positional: str = typer.Argument(
         None, help="Target name (positional argument for backward compatibility)"
@@ -143,7 +143,7 @@ def deploy(
         None,
         "--targets",
         "-t",
-        help="Target name(s) - single target or comma-separated list (uses default target if not specified)",
+        help="Target name(s) - single target or comma-separated list (required)",
     ),
     bundle: str = typer.Option(
         None,

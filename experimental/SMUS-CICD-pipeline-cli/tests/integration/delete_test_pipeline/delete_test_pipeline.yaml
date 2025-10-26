@@ -3,7 +3,6 @@ pipelineName: DeleteTestPipeline
 targets:
   dev: 
     stage: DEV
-    default: true
     domain:
       name: cicd-test-domain
       region: ${DEV_DOMAIN_REGION:us-east-2}

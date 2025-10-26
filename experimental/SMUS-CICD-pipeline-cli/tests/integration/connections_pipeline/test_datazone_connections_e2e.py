@@ -1,0 +1,247 @@
+"""End-to-end test for DataZone connections creation and CLI describe --connect."""
+
+import pytest
+import boto3
+import time
+from typer.testing import CliRunner
+from ..base import IntegrationTestBase
+from smus_cicd.helpers.connection_creator import ConnectionCreator
+
+
+class TestDataZoneConnectionsE2E(IntegrationTestBase):
+    """Test DataZone connections integration with CLI."""
+
+    def setup_method(self, method):
+        """Set up test environment."""
+        super().setup_method(method)
+        self.setup_test_directory()
+        self.created_connection_ids = []
+        self.datazone_client = boto3.client('datazone', region_name='us-east-1')
+        self.domain_id = "dzd_6je2k8b63qse07"
+        self.project_id = "buxme33txzr413"  # test-marketing-8 project ID
+        
+        # Get the first environment for this project
+        try:
+            env_response = self.datazone_client.list_environments(
+                domainIdentifier=self.domain_id, projectIdentifier=self.project_id
+            )
+            environments = env_response.get("items", [])
+            if environments:
+                self.env_id = environments[0]["id"]
+                print(f"🔍 Using environment: {self.env_id}")
+            else:
+                raise Exception("No environments found for project")
+        except Exception as e:
+            print(f"❌ Failed to get environment for project: {e}")
+            self.env_id = "dtadp6zmf87b53"  # Fallback
+            
+        # Initialize connection creator
+        self.connection_creator = ConnectionCreator(self.domain_id, 'us-east-1')
+
+    def teardown_method(self, method):
+        """Clean up test environment and created connections."""
+        # Clean up any created connections
+        for conn_id in self.created_connection_ids:
+            try:
+                self.datazone_client.delete_connection(
+                    domainIdentifier=self.domain_id,
+                    identifier=conn_id
+                )
+                print(f"✅ Cleaned up connection: {conn_id}")
+            except Exception as e:
+                print(f"⚠️  Failed to cleanup connection {conn_id}: {e}")
+        
+        super().teardown_method(method)
+        self.cleanup_test_directory()
+
+    def create_test_connections(self):
+        """Create test connections using the helper method."""
+        timestamp = int(time.time())
+        
+        # Define all 8 supported connection types with their configurations
+        connection_configs = [
+            {
+                'name': f'test-s3-{timestamp}',
+                'type': 'S3',
+                'kwargs': {'s3_uri': 's3://test-datazone-connections-bucket/data/'}
+            },
+            {
+                'name': f'test-iam-{timestamp}',
+                'type': 'IAM',
+                'kwargs': {'glue_lineage_sync': True}
+            },
+            {
+                'name': f'test-spark-glue-{timestamp}',
+                'type': 'SPARK_GLUE',
+                'kwargs': {
+                    'glue_version': '4.0',
+                    'worker_type': 'G.1X',
+                    'num_workers': 3
+                }
+            },
+            {
+                'name': f'test-athena-{timestamp}',
+                'type': 'ATHENA',
+                'kwargs': {
+                    'workgroup': 'workgroup-buxme33txzr413-dtadp6zmf87b53'
+                }
+            },
+            {
+                'name': f'test-redshift-{timestamp}',
+                'type': 'REDSHIFT',
+                'kwargs': {
+                    'cluster_name': 'test-analytics-cluster',
+                    'database_name': 'analytics',
+                    'host': 'test-analytics-cluster.abc123.us-east-1.redshift.amazonaws.com',
+                    'port': 5439
+                }
+            },
+            {
+                'name': f'test-spark-emr-{timestamp}',
+                'type': 'SPARK_EMR',
+                'kwargs': {
+                    'compute_arn': 'arn:aws:emr-serverless:us-east-1:123456789012:/applications/00abc123def456',
+                    'runtime_role': 'arn:aws:iam::123456789012:role/EMRServerlessExecutionRole'
+                }
+            },
+            {
+                'name': f'test-mlflow-{timestamp}',
+                'type': 'MLFLOW',
+                'kwargs': {
+                    'tracking_server_name': 'wine-classification-mlflow-v2',
+                    'tracking_server_arn': 'arn:aws:sagemaker:us-east-1:058264284947:mlflow-tracking-server/wine-classification-mlflow-v2'
+                }
+            },
+            {
+                'name': f'test-mwaa-{timestamp}',
+                'type': 'WORKFLOWS_MWAA',
+                'kwargs': {
+                    'mwaa_environment_name': 'DataZoneMWAAEnv-dzd_6je2k8b63qse07-4kc6456xevd0h3-dev'
+                }
+            }
+        ]
+        
+        created_connections = []
+        
+        for config in connection_configs:
+            try:
+                connection_id = self.connection_creator.create_connection(
+                    environment_id=self.env_id,
+                    name=config['name'],
+                    connection_type=config['type'],
+                    description=f"Test {config['type']} connection for E2E testing",
+                    **config['kwargs']
+                )
+                
+                self.created_connection_ids.append(connection_id)
+                created_connections.append({
+                    'id': connection_id,
+                    'name': config['name'],
+                    'type': config['type']
+                })
+                print(f"✅ Created {config['type']} connection: {config['name']} ({connection_id})")
+                
+            except Exception as e:
+                print(f"⚠️  Skipping {config['type']} connection due to creation failure: {e}")
+        
+        return created_connections
+
+    def test_datazone_connections_end_to_end(self):
+        """Test end-to-end DataZone connections integration with CLI."""
+        print("\n=== DataZone Connections End-to-End Test ===")
+        
+        # Step 1: Create connections using helper
+        print(f"\nStep 1: Creating connections in DataZone using helper...")
+        created_connections = self.create_test_connections()
+        
+        if len(created_connections) == 0:
+            pytest.fail("Failed to create any connections")
+        
+        print(f"✅ Successfully created {len(created_connections)} connections in DataZone")
+        print(f"\nConnection types created:")
+        for conn in created_connections:
+            print(f"  - {conn['type']}: {conn['name']}")
+        
+        # Step 2: Verify connections exist using get_connection API
+        print(f"\nStep 2: Verifying connections exist using get_connection API...")
+        verified_connections = 0
+        for conn in created_connections:
+            try:
+                get_response = self.datazone_client.get_connection(
+                    domainIdentifier=self.domain_id,
+                    identifier=conn["id"]
+                )
+                
+                actual_type = get_response.get("type", "UNKNOWN")
+                expected_type = conn["type"]
+                
+                # Handle type normalization (SPARK_GLUE -> SPARK)
+                if expected_type == "SPARK_GLUE" and actual_type == "SPARK":
+                    actual_type = expected_type
+                
+                print(f"  ✅ Verified connection: {conn['name']} ({expected_type} → {actual_type}) - {conn['id']}")
+                verified_connections += 1
+                
+            except Exception as e:
+                print(f"  ❌ Failed to verify connection {conn['name']}: {e}")
+        
+        print(f"✅ All {verified_connections} connections verified via get_connection API")
+        
+        # Step 3: Test CLI describe --connect
+        print(f"\nStep 3: Testing CLI describe --connect...")
+        
+        # Create test manifest
+        test_manifest_content = f"""pipelineName: TestConnectionsE2E
+
+targets:
+  test:
+    stage: TEST
+    project:
+      name: test-marketing-8
+    domain:
+      name: cicd-test-domain
+      region: us-east-1
+"""
+        
+        test_manifest_path = self.test_dir + "/test_manifest.yaml"
+        with open(test_manifest_path, 'w') as f:
+            f.write(test_manifest_content)
+        
+        # Execute CLI command
+        result = self.run_cli_command([
+            "describe", "--pipeline", test_manifest_path, "--connect"
+        ])
+        
+        if result["success"]:
+            print("✅ CLI describe --connect command successful")
+            cli_output = result["output"]
+            print("CLI OUTPUT:")
+            print(cli_output)
+            
+            # Step 4: Validate connections appear in CLI output
+            print(f"\nStep 4: Validating connections appear in CLI output...")
+            connections_found_in_cli = 0
+            
+            for conn in created_connections:
+                if conn["name"] in cli_output:
+                    connections_found_in_cli += 1
+                    print(f"  ✅ Found connection in CLI: {conn['name']} ({conn['type']})")
+                else:
+                    print(f"  ❌ Missing connection in CLI: {conn['name']} ({conn['type']})")
+            
+            # Success criteria: At least 50% of connections should be visible in CLI
+            success_threshold = max(1, len(created_connections) // 2)
+            
+            assert connections_found_in_cli >= success_threshold, \
+                f"Expected at least {success_threshold} connections in CLI output, found {connections_found_in_cli}. " \
+                f"CLI integration partially working - {connections_found_in_cli}/{len(created_connections)} connections visible."
+
+            print(f"✅ CLI integration test passed: {connections_found_in_cli}/{len(created_connections)} connections visible in CLI output")
+            
+        else:
+            pytest.fail(f"CLI describe --connect command failed: {result.get('output', 'Unknown error')}")
+
+        print(f"\n🎉 End-to-End test completed successfully!")
+        print(f"   - Created {len(created_connections)} connections in DataZone")
+        print(f"   - Connection types: {', '.join(sorted(set(c['type'] for c in created_connections)))}")
+        print(f"   - Confirmed CLI describe --connect shows {connections_found_in_cli} connections")

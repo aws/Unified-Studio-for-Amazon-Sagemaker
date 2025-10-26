@@ -1,0 +1,100 @@
+pipelineName: ConnectionsTestPipeline
+
+workflows:
+- workflowName: connections_test_dag
+  connectionName: project.workflow_mwaa
+  engine: MWAA 
+  parameters: 
+    default-sql-connection: project.athena_analytics
+    default-spark-connection: project.spark_processing
+  logging: console 
+
+bundle:
+  bundlesDirectory: /tmp/bundles
+  workflow:
+    - connectionName: default.s3_shared
+      include: 
+        - 'workflows'
+      exclude: 
+        - '.ipynb_checkpoints/'
+        - '__pycache__/'
+        - '*.pyc'
+        - '.libs.json'    
+  storage:
+    - connectionName: default.s3_shared
+      include: 
+        - 'src'
+      exclude: 
+        - '.ipynb_checkpoints/'
+        - '__pycache__/'
+        - '*.pyc'
+        - '.libs.json'  
+
+targets:
+    test: 
+       stage: TEST
+       domain:
+         name: cicd-test-domain
+         region: ${DEV_DOMAIN_REGION:us-east-1}
+       initialization:
+          project: 
+            create: True
+            profileName: 'All capabilities'
+            owners: 
+            - Eng1
+            - arn:aws:iam::058264284947:role/Admin
+            contributors: []
+          environments: 
+            - EnvironmentConfigurationName: 'OnDemand Workflows'
+          # All 8 confirmed working connection types
+          connections:
+            - name: s3-data-lake
+              type: S3
+              properties:
+                s3Uri: "s3://test-connections-bucket/data/"
+            
+            - name: iam-lineage-sync
+              type: IAM
+              properties:
+                glueLineageSyncEnabled: true
+            
+            - name: spark-glue-processing
+              type: SPARK_GLUE
+              properties:
+                glueVersion: "4.0"
+                workerType: "G.1X"
+                numberOfWorkers: 5
+            
+            - name: athena-analytics
+              type: ATHENA
+              properties:
+                workgroupName: "primary"
+            
+            - name: redshift-warehouse
+              type: REDSHIFT
+              properties:
+                storage:
+                  clusterName: "test-analytics-cluster"
+                databaseName: "analytics"
+                host: "test-analytics-cluster.abc123.us-east-1.redshift.amazonaws.com"
+                port: 5439
+            
+            - name: spark-emr-processing
+              type: SPARK_EMR
+              properties:
+                computeArn: "arn:aws:emr-serverless:us-east-1:123456789012:/applications/00abc123def456"
+                runtimeRole: "arn:aws:iam::123456789012:role/EMRServerlessExecutionRole"
+            
+            - name: mlflow-experiments
+              type: MLFLOW
+              properties:
+                trackingServerName: "wine-classification-mlflow-v2"
+                trackingServerArn: "arn:aws:sagemaker:us-east-1:058264284947:mlflow-tracking-server/wine-classification-mlflow-v2"
+            
+            - name: mwaa-workflows
+              type: WORKFLOWS_MWAA
+              properties:
+                mwaaEnvironmentName: "DataZoneMWAAEnv-dzd_6je2k8b63qse07-4kc6456xevd0h3-dev"
+       
+       project: 
+         name: connections-test-project

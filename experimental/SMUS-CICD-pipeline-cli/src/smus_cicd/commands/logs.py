@@ -97,14 +97,9 @@ def _monitor_airflow_serverless_logs(
             typer.echo(f"❌ {error_msg}")
         raise typer.Exit(1)
 
-    log_group = workflow_status.get("log_group")
-    if not log_group:
-        error_msg = "No log group found for workflow"
-        if output.upper() == "JSON":
-            typer.echo(json.dumps({"error": error_msg}, indent=2))
-        else:
-            typer.echo(f"❌ {error_msg}")
-        raise typer.Exit(1)
+    # Construct log group name from workflow name
+    # Log group format: /aws/airflow-serverless/<workflow-name>
+    log_group = f"/aws/airflow-serverless/{workflow_name}"
 
     if output.upper() != "JSON":
         typer.echo(f"📁 Log Group: {log_group}")
@@ -139,8 +134,12 @@ def _fetch_static_logs(
     """
     from ..helpers import airflow_serverless
 
+    # Extract workflow name and construct log group
+    workflow_name = workflow_arn.split("/")[-1]
+    log_group = f"/aws/airflow-serverless/{workflow_name}"
+
     log_events = airflow_serverless.get_cloudwatch_logs(
-        workflow_arn, region=region, max_events=lines
+        log_group, region=region, limit=lines
     )
 
     if output.upper() == "JSON":
@@ -159,7 +158,7 @@ def _fetch_static_logs(
                 timestamp = time.strftime(
                     "%Y-%m-%d %H:%M:%S", time.localtime(event["timestamp"] / 1000)
                 )
-                stream = event["stream_name"]
+                stream = event.get("log_stream_name", "unknown")
                 message = event["message"]
 
                 typer.echo(f"[{timestamp}] [{stream}] {message}")
@@ -186,6 +185,10 @@ def _live_log_monitoring(
         typer.echo("   Press Ctrl+C to stop monitoring")
         typer.echo()
 
+    # Extract workflow name and construct log group
+    workflow_name = workflow_arn.split("/")[-1]
+    log_group = f"/aws/airflow-serverless/{workflow_name}"
+
     last_timestamp = None
     check_count = 0
 
@@ -206,7 +209,7 @@ def _live_log_monitoring(
 
             # Fetch new logs
             log_events = airflow_serverless.get_cloudwatch_logs(
-                workflow_arn, start_time=last_timestamp, region=region, max_events=50
+                log_group, start_time=last_timestamp, region=region, limit=50
             )
 
             # Display new log events
@@ -216,7 +219,7 @@ def _live_log_monitoring(
                     for event in log_events:
                         log_data = {
                             "timestamp": event["timestamp"],
-                            "stream_name": event["stream_name"],
+                            "stream_name": event.get("log_stream_name", "unknown"),
                             "message": event["message"],
                             "workflow_arn": workflow_arn,
                         }
@@ -226,15 +229,15 @@ def _live_log_monitoring(
                         timestamp = time.strftime(
                             "%H:%M:%S", time.localtime(event["timestamp"] / 1000)
                         )
-                        stream = event["stream_name"]
+                        stream = event.get("log_stream_name", "unknown")
                         message = event["message"]
 
                         typer.echo(f"[{timestamp}] [{stream}] {message}")
 
                 # Update last timestamp
                 if log_events:
-                    last_timestamp = (
-                        max(event["timestamp"] for event in log_events) / 1000
+                    last_timestamp = int(
+                        max(event["timestamp"] for event in log_events)
                     )
 
             # Check if we should continue monitoring

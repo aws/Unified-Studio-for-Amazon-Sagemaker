@@ -1,7 +1,7 @@
 pipelineName: BasicTestPipeline
 
 workflows:
-- workflowName: test_dag
+- workflowName: sample_dag
   connectionName: project.workflow_mwaa
   engine: MWAA 
   parameters: 
@@ -36,7 +36,6 @@ bundle:
 targets:
     dev: 
        stage: DEV
-       default: true
        domain:
          name: cicd-test-domain
          region: ${DEV_DOMAIN_REGION:us-east-2}
@@ -45,8 +44,6 @@ targets:
             - EnvironmentConfigurationName: 'OnDemand Workflows'       
        project: 
          name: dev-marketing
-       workflows:
-        - workflowName: prepareData        
     test:
        stage: TEST 
        domain:
@@ -75,11 +72,6 @@ targets:
             connectionName: default.s3_shared
             directory: 'src/git'                          
          
-       workflows:
-        - workflowName: prepareData        
-          parameters: 
-              stage_database: TestDB
-              sampleSize: 5000     
     prod: 
        stage: PROD
        domain:
@@ -106,9 +98,4 @@ targets:
             directory: 'workflows'
           git: 
             connectionName: default.s3_shared
-            directory: 'src/git'              
-
-       workflows:
-       - workflowName: prepareData        
-         parameters: 
-            stage_database: ProdDB
+            directory: 'src/git'

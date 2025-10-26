@@ -347,11 +347,8 @@ def _determine_project_config(stage: str, dev_project_name: str) -> Tuple[str, b
 
 
 def _get_default_comment(index: int) -> str:
-    """Get appropriate default comment for target based on its position."""
-    if index == 0:
-        return "    default: true  # Default target for operations"
-    else:
-        return "    # default: true  # Uncomment to make this the default target"
+    """Get appropriate default comment for target - removed as default is no longer supported."""
+    return ""
 
 
 def _write_manifest_file(pipeline_name: str, content: str) -> Path:

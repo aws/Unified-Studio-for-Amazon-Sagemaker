@@ -1,0 +1,95 @@
+# Working DataZone Connection Examples
+# Based on expected working connection types: S3, IAM, SPARK_GLUE
+
+# 1. S3 Connection - Simple and reliable
+s3_basic:
+  name: "s3-data-lake"
+  description: "S3 bucket for data lake storage"
+  props:
+    s3Properties:
+      s3Uri: "s3://my-data-bucket/data/"
+
+s3_with_prefix:
+  name: "s3-analytics-data"
+  description: "S3 bucket with specific prefix for analytics"
+  props:
+    s3Properties:
+      s3Uri: "s3://analytics-bucket/processed-data/"
+
+# 2. IAM Connection - Identity and access management
+iam_basic:
+  name: "iam-glue-lineage"
+  description: "IAM connection for Glue lineage sync"
+  props:
+    iamProperties:
+      glueLineageSyncEnabled: false
+
+iam_with_lineage:
+  name: "iam-lineage-enabled"
+  description: "IAM connection with lineage sync enabled"
+  props:
+    iamProperties:
+      glueLineageSyncEnabled: true
+
+# 3. SPARK GLUE Connection - Confirmed working from previous tests
+spark_glue_minimal:
+  name: "spark-glue-basic"
+  description: "Basic Spark Glue connection"
+  props:
+    sparkGlueProperties:
+      glueVersion: "4.0"
+      workerType: "G.1X"
+      numberOfWorkers: 2
+
+spark_glue_standard:
+  name: "spark-glue-analytics"
+  description: "Standard Spark Glue connection for analytics"
+  props:
+    sparkGlueProperties:
+      glueVersion: "4.0"
+      workerType: "G.1X"
+      numberOfWorkers: 10
+      maxRetries: 1
+
+spark_glue_advanced:
+  name: "spark-glue-production"
+  description: "Production Spark Glue connection with larger workers"
+  props:
+    sparkGlueProperties:
+      glueVersion: "5.0"
+      workerType: "G.2X"
+      numberOfWorkers: 20
+      maxRetries: 2
+
+# Manifest Integration Examples
+# These show how connections would be used in CICD pipeline manifests
+
+manifest_example:
+  apiVersion: v1
+  kind: Bundle
+  metadata:
+    name: analytics-pipeline
+    version: 1.0.0
+  
+  initialization:
+    environments:
+      - name: analytics-env
+        type: data-lake
+    
+    connections:
+      - name: raw-data-storage
+        type: S3
+        properties:
+          s3Uri: "s3://raw-data-bucket/incoming/"
+      
+      - name: spark-processing
+        type: SPARK_GLUE
+        properties:
+          glueVersion: "4.0"
+          workerType: "G.1X"
+          numberOfWorkers: 5
+      
+      - name: identity-management
+        type: IAM
+        properties:
+          glueLineageSyncEnabled: true

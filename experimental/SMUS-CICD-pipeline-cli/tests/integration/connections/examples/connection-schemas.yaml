@@ -1,0 +1,199 @@
+# DataZone Connection Type Schemas
+# Based on investigation of working connection types
+
+# 1. SPARK (Glue) Connection - CONFIRMED WORKING
+spark_glue_connection:
+  name: "spark-glue-analytics"
+  description: "Spark connection using AWS Glue for data processing"
+  environmentIdentifier: "env123"
+  props:
+    sparkGlueProperties:
+      glueVersion: "5.0"
+      workerType: "G.1X"
+      numberOfWorkers: 10
+      maxRetries: 1
+      timeout: 60
+      tags:
+        - key: "AmazonDataZoneProject"
+          value: "5mrkpk3iwpwx0n"
+      connectionProperties:
+        HOST: "glue-catalog"
+        PORT: "443"
+        DATABASE: "default"
+      physicalConnectionRequirements:
+        availabilityZone: "us-west-2a"
+        securityGroupIdList:
+          - "sg-12345678"
+        subnetId: "subnet-12345678"
+      authenticationType: "BASIC"
+      validateForComputeEnvironments:
+        - "SPARK"
+      roleArn: "arn:aws:iam::123456789012:role/GlueServiceRole"
+
+# 2. ATHENA Connection
+athena_connection:
+  name: "athena-analytics"
+  description: "Amazon Athena connection for SQL queries"
+  environmentIdentifier: "env123"
+  props:
+    athenaProperties:
+      workGroup: "primary"
+      outputLocation: "s3://my-athena-results-bucket/queries/"
+      encryptionConfiguration:
+        encryptionOption: "SSE_S3"
+      enforceWorkGroupConfiguration: true
+      publishCloudWatchMetrics: true
+      bytesScannedCutoffPerQuery: 1000000000
+      requesterPaysEnabled: false
+
+# 3. GLUE Connection
+glue_connection:
+  name: "glue-catalog"
+  description: "AWS Glue Data Catalog connection"
+  environmentIdentifier: "env123"
+  props:
+    glueProperties:
+      catalogId: "123456789012"
+      region: "us-west-2"
+      connectionProperties:
+        JDBC_CONNECTION_URL: "jdbc:mysql://mydb.cluster-xyz.us-west-2.rds.amazonaws.com:3306/mydb"
+        USERNAME: "admin"
+        PASSWORD: "{{resolve:secretsmanager:prod/mydb/credentials:SecretString:password}}"
+      physicalConnectionRequirements:
+        availabilityZone: "us-west-2a"
+        securityGroupIdList:
+          - "sg-12345678"
+        subnetId: "subnet-12345678"
+      tags:
+        - key: "Environment"
+          value: "production"
+
+# 4. REDSHIFT Connection
+redshift_connection:
+  name: "redshift-warehouse"
+  description: "Amazon Redshift data warehouse connection"
+  environmentIdentifier: "env123"
+  props:
+    redshiftProperties:
+      clusterIdentifier: "my-redshift-cluster"
+      database: "analytics"
+      host: "my-redshift-cluster.xyz.us-west-2.redshift.amazonaws.com"
+      port: 5439
+      username: "admin"
+      password: "{{resolve:secretsmanager:prod/redshift/credentials:SecretString:password}}"
+      ssl: true
+      sslMode: "require"
+      connectTimeout: 30
+      socketTimeout: 30
+      tcpKeepAlive: true
+      applicationName: "DataZone"
+
+# 5. S3 Connection
+s3_connection:
+  name: "s3-data-lake"
+  description: "Amazon S3 data lake connection"
+  environmentIdentifier: "env123"
+  props:
+    s3Properties:
+      bucket: "my-data-lake-bucket"
+      prefix: "data/"
+      region: "us-west-2"
+      storageClass: "STANDARD"
+      serverSideEncryption:
+        sseAlgorithm: "AES256"
+      accessPointArn: "arn:aws:s3:us-west-2:123456789012:accesspoint/my-access-point"
+      roleArn: "arn:aws:iam::123456789012:role/S3AccessRole"
+      externalId: "unique-external-id"
+
+# 6. SPARK EMR Connection
+spark_emr_connection:
+  name: "spark-emr-cluster"
+  description: "Spark connection using Amazon EMR"
+  environmentIdentifier: "env123"
+  props:
+    sparkEmrProperties:
+      clusterId: "j-1234567890123"
+      masterPublicDnsName: "ec2-xx-xx-xx-xx.us-west-2.compute.amazonaws.com"
+      sparkVersion: "3.4.0"
+      hadoopVersion: "3.3.3"
+      emrReleaseLabel: "emr-6.15.0"
+      applications:
+        - "Spark"
+        - "Hadoop"
+        - "Hive"
+      configurations:
+        - classification: "spark-defaults"
+          properties:
+            spark.sql.adaptive.enabled: "true"
+            spark.sql.adaptive.coalescePartitions.enabled: "true"
+      stepConcurrencyLevel: 1
+      keepJobFlowAliveWhenNoSteps: true
+      terminationProtected: false
+      autoScalingRole: "EMR_AutoScaling_DefaultRole"
+      serviceRole: "EMR_DefaultRole"
+      jobFlowRole: "EMR_EC2_DefaultRole"
+
+# 7. IAM Connection (for authentication/authorization)
+iam_connection:
+  name: "iam-auth"
+  description: "IAM-based authentication connection"
+  environmentIdentifier: "env123"
+  props:
+    iamProperties:
+      roleArn: "arn:aws:iam::123456789012:role/DataZoneAccessRole"
+      externalId: "unique-external-id"
+      sessionName: "DataZoneSession"
+      durationSeconds: 3600
+      policy: |
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "s3:GetObject",
+                "s3:PutObject",
+                "glue:GetTable",
+                "glue:GetPartitions"
+              ],
+              "Resource": "*"
+            }
+          ]
+        }
+      mfaRequired: false
+
+# 8. HyperPod Connection (for ML workloads)
+hyperpod_connection:
+  name: "hyperpod-ml"
+  description: "Amazon SageMaker HyperPod connection for ML training"
+  environmentIdentifier: "env123"
+  props:
+    hyperPodProperties:
+      clusterName: "my-hyperpod-cluster"
+      clusterArn: "arn:aws:sagemaker:us-west-2:123456789012:cluster/my-hyperpod-cluster"
+      instanceType: "ml.p4d.24xlarge"
+      instanceCount: 4
+      volumeSize: 500
+      maxRuntimeInSeconds: 86400
+      roleArn: "arn:aws:iam::123456789012:role/SageMakerExecutionRole"
+      vpcConfig:
+        securityGroupIds:
+          - "sg-12345678"
+        subnets:
+          - "subnet-12345678"
+          - "subnet-87654321"
+      tags:
+        - key: "Project"
+          value: "MLTraining"
+
+# Common AWS Location structure (used across connection types)
+common_aws_location:
+  awsLocation:
+    awsAccountId: "123456789012"
+    awsRegion: "us-west-2"
+    iamRoleArn: "arn:aws:iam::123456789012:role/DataZoneServiceRole"
+
+# Environment reference structure
+environment_reference:
+  environmentIdentifier: "env123"  # Required for all connections
+  domainIdentifier: "dzd_4s3r2q1p0o9n8m7l6k5j4i"  # Domain context

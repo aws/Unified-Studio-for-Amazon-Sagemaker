@@ -65,7 +65,15 @@ python tests/run_tests.py --type all
 
 ### 5. Integration Test Validation
 ```bash
-# Run integration tests
+# Run integration tests with detailed logging (RECOMMENDED)
+python run_integration_tests_with_logs.py
+
+# This creates:
+# - tests/test-outputs/{test_name}.log for each test's full output
+# - tests/test-outputs/test_results_summary.json with detailed results
+# - tests/test-outputs/test_results_summary.txt with human-readable summary
+
+# Alternative: Run integration tests without detailed logging
 python tests/run_tests.py --type integration
 
 # For faster iteration, skip slow tests:

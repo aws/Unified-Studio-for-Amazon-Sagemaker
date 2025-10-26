@@ -27,7 +27,6 @@ bundle:
 targets:
   dev:
     stage: DEV
-    default: true
     project:
       name: ${PROJECT_PREFIX:example}-dev-${TEAM_NAME:default}
     initialization:

@@ -1,0 +1,94 @@
+# DataZone Connection Examples
+# Simple examples for each of the 6 confirmed working connection types
+
+# 1. SPARK (Glue) - Our confirmed working example
+spark_example:
+  name: "analytics-spark-cluster"
+  description: "Spark cluster for data analytics workloads"
+  connection_type: "spark_glue"
+  glue_version: "5.0"
+  worker_type: "G.1X"
+  worker_count: 10
+  timeout_minutes: 60
+  database: "analytics_db"
+  role: "arn:aws:iam::123456789012:role/GlueServiceRole"
+
+# 2. ATHENA - SQL query engine
+athena_example:
+  name: "athena-query-engine"
+  description: "Athena for ad-hoc SQL queries"
+  connection_type: "athena"
+  workgroup: "primary"
+  output_location: "s3://my-athena-results/queries/"
+  encryption: "SSE_S3"
+
+# 3. GLUE - Data catalog
+glue_example:
+  name: "glue-data-catalog"
+  description: "AWS Glue Data Catalog connection"
+  connection_type: "glue"
+  catalog_id: "123456789012"
+  jdbc_url: "jdbc:mysql://mydb.cluster-xyz.us-west-2.rds.amazonaws.com:3306/mydb"
+  username: "admin"
+  password_secret: "prod/mydb/credentials"
+
+# 4. REDSHIFT - Data warehouse
+redshift_example:
+  name: "redshift-warehouse"
+  description: "Redshift data warehouse for analytics"
+  connection_type: "redshift"
+  cluster_id: "my-redshift-cluster"
+  database: "analytics"
+  host: "my-cluster.xyz.us-west-2.redshift.amazonaws.com"
+  port: 5439
+  username: "admin"
+  ssl_enabled: true
+
+# 5. S3 - Object storage
+s3_example:
+  name: "data-lake-storage"
+  description: "S3 bucket for data lake storage"
+  connection_type: "s3"
+  bucket: "my-data-lake-bucket"
+  prefix: "raw-data/"
+  region: "us-west-2"
+  encryption: "AES256"
+
+# 6. SPARK EMR - Managed Spark
+spark_emr_example:
+  name: "emr-spark-cluster"
+  description: "EMR cluster running Spark"
+  connection_type: "spark_emr"
+  cluster_id: "j-1234567890123"
+  spark_version: "3.4.0"
+  master_dns: "ec2-xx-xx-xx-xx.us-west-2.compute.amazonaws.com"
+  applications: ["Spark", "Hadoop", "Hive"]
+
+# 7. IAM - Authentication
+iam_example:
+  name: "cross-account-access"
+  description: "IAM role for cross-account access"
+  connection_type: "iam"
+  role_arn: "arn:aws:iam::123456789012:role/DataZoneAccessRole"
+  external_id: "unique-external-id"
+  session_duration: 3600
+
+# 8. HYPERPOD - ML training
+hyperpod_example:
+  name: "ml-training-cluster"
+  description: "HyperPod cluster for ML model training"
+  connection_type: "hyperpod"
+  cluster_name: "my-hyperpod-cluster"
+  instance_type: "ml.p4d.24xlarge"
+  instance_count: 4
+  volume_size_gb: 500
+
+# WORKFLOWS_MWAA - Exists in projects but not in API
+mwaa_example:
+  name: "airflow-workflows"
+  description: "MWAA Airflow environment for workflows"
+  connection_type: "workflows_mwaa"  # NOT AVAILABLE IN API
+  airflow_version: "2.4.3"
+  environment_arn: "arn:aws:mwaa:us-west-2:123456789012:environment/my-airflow-env"
+  execution_role: "arn:aws:iam::123456789012:role/service-role/AmazonMWAA-role"
+  region: "us-west-2"

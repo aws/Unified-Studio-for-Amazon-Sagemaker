@@ -10,6 +10,11 @@ from ..helpers.airflow_parser import parse_airflow_output
 from ..helpers.utils import get_datazone_project_info, load_config
 from ..pipeline import PipelineManifest
 
+# TEMPORARY: Airflow Serverless (Overdrive) configuration
+# TODO: Remove these overrides once service is available in all regions
+AIRFLOW_SERVERLESS_REGION = "us-west-2"  # Force us-west-2 for Airflow Serverless
+AIRFLOW_SERVERLESS_ENDPOINT_URL = "https://overdrive-gamma.us-west-2.api.aws"
+
 
 def run_command(
     manifest_file: str,
@@ -559,7 +564,7 @@ def _execute_airflow_serverless_workflows(
             expected_workflow_name = f"{safe_pipeline}_{target_name}_{safe_dag}"
 
             # List existing workflows to find the actual ARN
-            region = airflow_serverless.AIRFLOW_SERVERLESS_REGION
+            region = AIRFLOW_SERVERLESS_REGION
             workflows = airflow_serverless.list_workflows(region=region)
 
             # Find the workflow that matches our expected name

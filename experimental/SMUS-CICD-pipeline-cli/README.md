@@ -34,7 +34,7 @@ In the context of **SageMaker Unified Studio**, a CI/CD pipeline manages:
 
 The SMUS CI/CD system consists of CLI operations that manage target environments. Each target represents a complete deployment environment with its own resources.
 
-### CLI Operations Flow
+### Typical CICD Pipeline and CLI Operations Flow
 
 ```mermaid
 graph LR

@@ -89,20 +89,68 @@ def get_domain_id_by_name(domain_name, region):
         raise Exception(f"Failed to lookup domain {domain_name}: {e}")
 
 
+def list_all_projects(domain_id, region):
+    """List all projects in a domain with proper pagination handling."""
+    datazone_client = boto3.client("datazone", region_name=region)
+    all_projects = []
+    next_token = None
+    
+    while True:
+        params = {"domainIdentifier": domain_id}
+        if next_token:
+            params["nextToken"] = next_token
+            
+        response = datazone_client.list_projects(**params)
+        all_projects.extend(response.get("items", []))
+        
+        next_token = response.get("nextToken")
+        if not next_token:
+            break
+            
+    return all_projects
+
+
+def get_project_by_name(project_name, domain_id, region):
+    """Get DataZone project by name with proper pagination handling. Returns None if not found."""
+    try:
+        projects = list_all_projects(domain_id, region)
+        
+        for project in projects:
+            if project.get("name") == project_name:
+                return project
+                
+        return None
+    except Exception as e:
+        # Check if this is a permission error
+        error_str = str(e)
+        if any(
+            perm_error in error_str.lower()
+            for perm_error in [
+                "accessdenied",
+                "access denied", 
+                "unauthorized",
+                "forbidden",
+                "permission",
+                "not authorized",
+                "insufficient privileges",
+            ]
+        ):
+            typer.echo(
+                f"❌ Error: Insufficient permissions to list projects in domain {domain_id}: {str(e)}",
+                err=True,
+            )
+        else:
+            typer.echo(
+                f"❌ Error finding project {project_name}: {str(e)}", err=True
+            )
+        raise Exception(f"Failed to lookup project {project_name}: {e}")
+
+
 def get_project_id_by_name(project_name, domain_id, region):
     """Get DataZone project ID by searching projects by name. Returns None if not found."""
     try:
-        datazone_client = boto3.client("datazone", region_name=region)
-
-        # List all projects in the domain and find by name
-        response = datazone_client.list_projects(domainIdentifier=domain_id)
-
-        for project in response.get("items", []):
-            if project.get("name") == project_name:
-                return project.get("id")
-
-        # Project not found - return None for idempotent checks
-        return None
+        project = get_project_by_name(project_name, domain_id, region)
+        return project.get("id") if project else None
 
     except Exception as e:
         # Check if this is a permission error
@@ -644,18 +692,17 @@ def get_project_connections(project_id, domain_id, region):
                     domainIdentifier=domain_id, identifier=connection_id
                 )
 
-                connection_detail = detail_response.get("connection", {})
-                connection_type = connection_detail.get("type", "UNKNOWN")
+                connection_type = detail_response.get("type", "UNKNOWN")
 
                 conn_info = {
                     "connectionId": connection_id,
                     "type": connection_type,
-                    "description": connection_detail.get("description", ""),
-                    "status": connection_detail.get("status", "UNKNOWN"),
+                    "description": detail_response.get("description", ""),
+                    "environmentId": detail_response.get("environmentId"),
                 }
 
                 # Add type-specific properties
-                props = connection_detail.get("props", {})
+                props = detail_response.get("props", {})
                 if connection_type == "S3":
                     s3_props = props.get("s3Properties", {})
                     conn_info["s3Uri"] = s3_props.get("s3Uri", "")

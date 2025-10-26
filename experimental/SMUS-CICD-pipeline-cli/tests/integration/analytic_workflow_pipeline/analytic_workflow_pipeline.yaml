@@ -1,0 +1,62 @@
+pipelineName: IntegrationTestAnalyticWorkflowBundle
+
+# What to include in deployment bundles
+bundle:
+  bundlesDirectory: /tmp/bundles
+  storage:
+    - connectionName: default.s3_shared
+      append: false
+      include: ['code']
+      exclude: ['.ipynb_checkpoints/', '__pycache__/', '*.pyc']
+
+# Target environments (dev, test)
+targets:
+  dev: 
+    stage: DEV
+    domain:
+      name: cicd-test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-2}
+    project: 
+      name: dev-marketing
+    bundle_target_configuration:
+      storage:
+        connectionName: default.s3_shared
+        directory: 'scripts'
+      workflows:
+        connectionName: default.s3_shared
+        directory: 'workflows'
+    environment_variables:
+      S3_PREFIX: dev
+
+  test: 
+    stage: TEST
+    domain:
+      name: cicd-test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-2}
+    project: 
+      name: analytic-workflow-test
+    tests:
+      folder: tests/integration/analytic_workflow_bundle/pipeline_tests/
+    initialization:
+      project: 
+        create: true  # Enable auto-create for integration tests
+        profileName: 'All capabilities'
+        owners: [Eng1, arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests, Admin]
+        contributors: []
+        userParameters: 
+          - EnvironmentConfigurationName: 'Lakehouse Database'
+            parameters:
+              - name: glueDbName
+                value: analytic_workflow_test_db                     
+    bundle_target_configuration:
+      storage:
+        connectionName: default.s3_shared
+        directory: 'code'
+    environment_variables:
+      S3_PREFIX: test
+
+# Workflows to trigger after deployment
+workflows:
+  - workflowName: ml_dev_workflow
+    logging: console
+    engine: airflow-serverless

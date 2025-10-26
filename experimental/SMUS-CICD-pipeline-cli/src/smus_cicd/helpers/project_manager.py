@@ -170,8 +170,15 @@ class ProjectManager:
         if not domain_id:
             handle_error(f"Failed to find domain ID for {domain_name}")
 
-        # Get project ID for membership management with retry
-        project_id = self._get_project_id_with_retry(project_name, domain_id, region)
+        # Get project ID from CloudFormation stack outputs first
+        stack_name = f"SMUS-{self.manifest.pipeline_name.lower()}-{target_name}-{project_name}-project"
+        project_id = cloudformation.get_project_id_from_stack(stack_name, region)
+        
+        # Fallback to DataZone API lookup if stack output not available
+        if not project_id:
+            print("🔍 DEBUG: Stack output not available, falling back to DataZone API lookup")
+            project_id = self._get_project_id_with_retry(project_name, domain_id, region)
+            
         if not project_id:
             handle_error(f"Failed to find project ID for {project_name}")
 

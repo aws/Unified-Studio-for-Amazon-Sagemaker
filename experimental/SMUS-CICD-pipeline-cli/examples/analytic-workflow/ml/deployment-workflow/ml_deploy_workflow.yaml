@@ -1,0 +1,22 @@
+ml_deploy_workflow:
+  dag_id: 'sagemaker_deploy_pipeline'
+  tasks:
+    ml_deployment_orchestrator:
+      operator: airflow.providers.amazon.aws.operators.sagemaker.SageMakerTrainingOperator
+      config:
+        TrainingJobName: 'ml-deployment-orchestrator-20251020'
+        AlgorithmSpecification:
+          TrainingImage: '246618743249.dkr.ecr.us-west-2.amazonaws.com/sagemaker-scikit-learn:1.2-1-cpu-py3'
+          TrainingInputMode: 'File'
+        RoleArn: 'arn:aws:iam::058264284947:role/service-role/AmazonSageMaker-ExecutionRole-20241115T121975'
+        HyperParameters:
+          sagemaker_program: 'sagemaker_deploy_orchestrator.py'
+          sagemaker_submit_directory: 's3://demo-bucket-smus-ml-us-west-2/deploy_orchestrator_code.tar.gz'
+        OutputDataConfig:
+          S3OutputPath: 's3://demo-bucket-smus-ml-us-west-2/deployment-results/'
+        ResourceConfig:
+          InstanceType: 'ml.m5.large'
+          InstanceCount: 1
+          VolumeSizeInGB: 30
+        StoppingCondition:
+          MaxRuntimeInSeconds: 7200

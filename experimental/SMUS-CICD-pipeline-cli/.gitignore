@@ -50,6 +50,7 @@ coverage.xml
 *.py,cover
 .hypothesis/
 .pytest_cache/
+tests/test-outputs/
 
 # Translations
 *.mo
@@ -151,4 +152,4 @@ create_pdf*.py
 cleanup.py
 
 # Overdrive test folder (private testing)
-tests/overdrive-test/
+tests/airless-test/

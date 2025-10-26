@@ -92,19 +92,12 @@ def bundle_command(
         # Get target configuration
         targets = manifest.get("targets", {})
 
-        # If no target specified, find the default target
+        # Require target to be specified
         if not target_name:
-            for name, target_config in targets.items():
-                if target_config.get("default", False):
-                    target_name = name
-                    typer.echo(f"Using default target: {target_name}")
-                    break
-
-            if not target_name:
-                typer.echo(
-                    "Error: No target specified and no default target found", err=True
-                )
-                raise typer.Exit(1)
+            typer.echo(
+                "Error: No target specified. Use --targets to specify a target (e.g., --targets dev)", err=True
+            )
+            raise typer.Exit(1)
 
         if target_name not in targets:
             typer.echo(f"Error: Target '{target_name}' not found in manifest", err=True)

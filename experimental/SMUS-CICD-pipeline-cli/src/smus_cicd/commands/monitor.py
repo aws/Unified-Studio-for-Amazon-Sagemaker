@@ -10,6 +10,11 @@ from ..helpers import airflow_serverless
 from ..helpers.utils import get_datazone_project_info, load_config
 from ..pipeline import PipelineManifest
 
+# TEMPORARY: Airflow Serverless (Overdrive) configuration
+# TODO: Remove these overrides once service is available in all regions
+AIRFLOW_SERVERLESS_REGION = "us-west-2"  # Force us-west-2 for Airflow Serverless
+AIRFLOW_SERVERLESS_ENDPOINT_URL = "https://overdrive-gamma.us-west-2.api.aws"
+
 
 def monitor_command(targets: Optional[str], manifest_file: str, output: str):
     """Monitor workflow status across target environments."""
@@ -314,7 +319,7 @@ def _monitor_airflow_serverless_workflows(
             typer.echo("\n   🚀 Serverless Airflow Workflow Status:")
 
         # List all serverless Airflow workflows
-        all_workflows = airflow_serverless.list_workflows(region=config["region"])
+        all_workflows = airflow_serverless.list_workflows(region=AIRFLOW_SERVERLESS_REGION)
 
         # Filter workflows that belong to this pipeline/target using tags
         pipeline_name = manifest.pipeline_name
@@ -331,7 +336,7 @@ def _monitor_airflow_serverless_workflows(
                 relevant_workflows.append(workflow)
 
         if relevant_workflows:
-            overdrive_data = {
+            serverlessairflow_data = {
                 "service": "overdrive",
                 "status": "healthy",
                 "workflows": {},
@@ -343,12 +348,12 @@ def _monitor_airflow_serverless_workflows(
 
                 # Get workflow details
                 workflow_status = airflow_serverless.get_workflow_status(
-                    workflow_arn, region=config["region"]
+                    workflow_arn, region=AIRFLOW_SERVERLESS_REGION
                 )
 
                 # Get recent workflow runs
                 recent_runs = airflow_serverless.list_workflow_runs(
-                    workflow_arn, region=config["region"], max_results=5
+                    workflow_arn, region=AIRFLOW_SERVERLESS_REGION, max_results=5
                 )
 
                 recent_status = "No runs"
@@ -365,7 +370,7 @@ def _monitor_airflow_serverless_workflows(
                     "log_group": workflow_status.get("log_group"),
                 }
 
-                overdrive_data["workflows"][workflow_name] = workflow_data
+                serverlessairflow_data["workflows"][workflow_name] = workflow_data
 
                 if output.upper() != "JSON":
                     status_icon = (
@@ -391,7 +396,7 @@ def _monitor_airflow_serverless_workflows(
                     if workflow_status.get("log_group"):
                         typer.echo(f"         📋 Logs: {workflow_status['log_group']}")
 
-            workflows_data["overdrive"] = overdrive_data
+            workflows_data["overdrive"] = serverlessairflow_data
         else:
             if output.upper() != "JSON":
                 typer.echo(

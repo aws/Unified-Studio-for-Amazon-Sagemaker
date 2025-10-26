@@ -1,72 +1,17 @@
 ml_dev_workflow:
-  dag_id: 'sagemaker_dev_pipeline'
+  dag_id: "ml_dev_workflow"
   tasks:
-    model_training:
-      operator: airflow.providers.amazon.aws.operators.sagemaker.SageMakerTrainingOperator
-      config:
-        TrainingJobName: 'realistic-model-comparison-20251020'
-        AlgorithmSpecification:
-          TrainingImage: '246618743249.dkr.ecr.us-west-2.amazonaws.com/sagemaker-scikit-learn:1.2-1-cpu-py3'
-          TrainingInputMode: 'File'
-        RoleArn: 'arn:aws:iam::058264284947:role/service-role/AmazonSageMaker-ExecutionRole-20241115T121975'
-        InputDataConfig:
-          - ChannelName: 'training'
-            DataSource:
-              S3DataSource:
-                S3DataType: 'S3Prefix'
-                S3Uri: 's3://demo-bucket-smus-ml-us-west-2/training-data/'
-                S3DataDistributionType: 'FullyReplicated'
-            ContentType: 'text/csv'
-        OutputDataConfig:
-          S3OutputPath: 's3://demo-bucket-smus-ml-us-west-2/model-artifacts/'
-        ResourceConfig:
-          InstanceType: 'ml.m5.large'
-          InstanceCount: 1
-          VolumeSizeInGB: 30
-        StoppingCondition:
-          MaxRuntimeInSeconds: 3600
-      wait_for_completion: true
-
-    model_evaluation:
-      dependencies:
-        - model_training
-      operator: airflow.providers.amazon.aws.operators.glue.GlueJobOperator
-      job_name: 'model-evaluation-20251020'
-      script_location: 's3://demo-bucket-smus-ml-us-west-2/scripts/model_evaluation.py'
-      s3_bucket: 'demo-bucket-smus-ml-us-west-2'
-      iam_role_name: 'OverdriveExecutionRole'
-      script_args:
-        '--MODEL_S3_PATH': 's3://demo-bucket-smus-ml-us-west-2/model-artifacts/realistic-model-comparison-20251020/output/model.tar.gz'
-        '--MLFLOW_TRACKING_URI': 'arn:aws:sagemaker:us-east-1:058264284947:mlflow-tracking-server/wine-classification-mlflow-v2'
-
-    champion_tagging:
-      dependencies:
-        - model_evaluation
-      operator: airflow.providers.amazon.aws.operators.glue.GlueJobOperator
-      job_name: 'champion-tagging-20251020'
-      script_location: 's3://demo-bucket-smus-ml-us-west-2/scripts/tag_champion_model.py'
-      s3_bucket: 'demo-bucket-smus-ml-us-west-2'
-      iam_role_name: 'OverdriveExecutionRole'
-      script_args:
-        '--MODEL_NAME': 'realistic-classifier-v1'
-        '--MLFLOW_TRACKING_URI': 'arn:aws:sagemaker:us-east-1:058264284947:mlflow-tracking-server/wine-classification-mlflow-v2'
-
-    batch_inference:
-      dependencies:
-        - champion_tagging
-      operator: airflow.providers.amazon.aws.operators.sagemaker.SageMakerTransformOperator
-      config:
-        TransformJobName: 'dev-batch-inference-20251020'
-        ModelName: 'realistic-classifier-20251020'
-        TransformInput:
-          DataSource:
-            S3DataSource:
-              S3DataType: 'S3Prefix'
-              S3Uri: 's3://demo-bucket-smus-ml-us-west-2/inference-data/'
-          ContentType: 'text/csv'
-        TransformOutput:
-          S3OutputPath: 's3://demo-bucket-smus-ml-us-west-2/dev-inference-results/'
-        TransformResources:
-          InstanceType: 'ml.m5.large'
-          InstanceCount: 1
-      wait_for_completion: true
+    ml_orchestrator_notebook:
+      operator: "airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator"
+      retries: 0
+      input_config:
+        input_path: "ml_orchestrator_notebook.ipynb"
+        input_params: {}
+      output_config:
+        output_formats: 
+          ['NOTEBOOK']
+      compute:
+        instance_type: "ml.c5.xlarge"
+        image_details:
+          ecr_uri: "885854791233.dkr.ecr.us-east-1.amazonaws.com/sagemaker-distribution-prod:1-cpu"
+      wait_for_completion: True

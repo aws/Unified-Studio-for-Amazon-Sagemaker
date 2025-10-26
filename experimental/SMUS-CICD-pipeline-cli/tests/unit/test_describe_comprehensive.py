@@ -374,14 +374,12 @@ workflows:
         """Test error when workflow is missing connection."""
         manifest = """
 pipelineName: TestPipeline
-domain:
-  name: test-domain
-  region: ${DEV_DOMAIN_REGION:us-east-1}
-bundle:
-  bundlesDirectory: /tmp/bundles
 targets:
   test:
     stage: TEST
+    domain:
+      name: test-domain
+      region: us-east-1
     project:
       name: test-project
       create: false
@@ -391,7 +389,7 @@ workflows:
         result = self.run_describe(manifest)
         assert result.exit_code == 1
         assert "Error describing manifest" in result.stderr
-        assert "'connectionName' is a required property" in result.stderr
+        assert "connectionName is required and cannot be empty" in result.stderr
 
     def test_invalid_yaml_syntax(self):
         """Test error with invalid YAML syntax."""
@@ -490,7 +488,7 @@ workflows:
         assert "Pipeline:" in result.stdout
         assert "Targets:" in result.stdout
         assert "Connection: test-connection" in result.stdout
-        assert "Engine: Workflows" in result.stdout  # Default value
+        assert "Engine: MWAA" in result.stdout  # Default value
 
     def test_edge_case_empty_strings(self):
         """Test handling of empty string values."""

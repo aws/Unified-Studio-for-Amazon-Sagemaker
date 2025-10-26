@@ -23,7 +23,17 @@ class IntegrationTestBase:
     def setup_debug_logging(self):
         """Set up debug logging to file and console."""
         if not hasattr(self, "debug_log_file"):
-            self.debug_log_file = f"/tmp/smus_integration_debug_{int(time.time())}.log"
+            # Use pytest's configured log directory instead of /tmp/
+            log_dir = "tests/test-outputs"
+            os.makedirs(log_dir, exist_ok=True)
+            
+            # Use current_test_name if available, otherwise use timestamp
+            if hasattr(self, 'current_test_name'):
+                test_name = self.current_test_name
+            else:
+                test_name = f"integration_test_{int(time.time())}"
+            
+            self.debug_log_file = os.path.join(log_dir, f"{test_name}.log")
 
         self.logger = logging.getLogger("integration_test_debug")
         self.logger.setLevel(logging.DEBUG)
@@ -31,8 +41,8 @@ class IntegrationTestBase:
         # Clear existing handlers
         self.logger.handlers.clear()
 
-        # File handler
-        file_handler = logging.FileHandler(self.debug_log_file)
+        # File handler (mode='w' to overwrite, not append)
+        file_handler = logging.FileHandler(self.debug_log_file, mode='w')
         file_handler.setLevel(logging.DEBUG)
         formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
         file_handler.setFormatter(formatter)
@@ -53,6 +63,10 @@ class IntegrationTestBase:
         if IntegrationTestBase._test_start_time is None:
             IntegrationTestBase._test_start_time = time.time()
 
+        # Set test name first for log file naming
+        test_name = f"{self.__class__.__name__}__{method.__name__}"
+        self.current_test_name = test_name
+        
         self.setup_debug_logging()
         self.config = self._load_config()
         self.runner = CliRunner()
@@ -60,8 +74,6 @@ class IntegrationTestBase:
         self.created_resources = []
         self.setup_aws_session()
 
-        test_name = f"{self.__class__.__name__}::{method.__name__}"
-        self.current_test_name = test_name
         self.test_commands = []
         self.logger.info(f"=== Starting test: {method.__name__} ===")
 
@@ -116,7 +128,13 @@ class IntegrationTestBase:
 
             for test in tests:
                 test_status = "✅" if test["success"] else "❌"
-                method_name = test["name"].split("::")[1]
+                # Handle both :: and __ separators
+                if "::" in test["name"]:
+                    method_name = test["name"].split("::")[1]
+                elif "__" in test["name"]:
+                    method_name = test["name"].split("__")[1]
+                else:
+                    method_name = test["name"]
                 print(
                     f"   {test_status} {method_name} ({test['commands']} cmds, {test['duration']:.1f}s)"
                 )
@@ -266,6 +284,13 @@ class IntegrationTestBase:
         end_time = time.time()
 
         duration = end_time - start_time
+        
+        # Log the full output to both console and file
+        if result.output:
+            # Split output into lines and log each
+            for line in result.output.splitlines():
+                self.logger.info(f"  {line}")
+        
         self.logger.info(
             f"COMMAND COMPLETED in {duration:.2f}s - Exit code: {result.exit_code}"
         )
@@ -286,9 +311,6 @@ class IntegrationTestBase:
             self.logger.error(
                 f"COMMAND FAILED - Expected exit code {expected_exit_code}, got {result.exit_code}"
             )
-            self.logger.error(f"STDOUT: {result.stdout}")
-            if hasattr(result, "stderr") and result.stderr:
-                self.logger.error(f"STDERR: {result.stderr}")
 
         return command_result
 

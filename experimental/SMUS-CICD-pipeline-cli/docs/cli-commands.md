@@ -94,10 +94,10 @@ smus-cli deploy --targets test --bundle bundle.zip --output JSON
 smus-cli run --workflow test_dag --command version
 
 # List all DAGs
-smus-cli run --workflow test_dag --command "dags list"
+smus-cli run --workflow sample_dag --command "dags list"
 
 # Get DAG state
-smus-cli run --workflow test_dag --command "dags state test_dag"
+smus-cli run --workflow sample_dag --command "dags state sample_dag"
 ```
 
 #### Trigger Workflows

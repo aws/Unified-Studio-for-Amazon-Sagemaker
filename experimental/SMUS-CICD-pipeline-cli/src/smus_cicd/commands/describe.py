@@ -120,6 +120,20 @@ def describe_command(
                             "userParameters"
                         ] = project_init.userParameters
 
+                # Add connections from initialization
+                if (
+                    hasattr(target_config.initialization, "connections")
+                    and target_config.initialization.connections
+                ):
+                    target_data["initialization"]["connections"] = []
+                    for conn in target_config.initialization.connections:
+                        conn_data = {
+                            "name": conn.name,
+                            "type": conn.type,
+                            "properties": conn.properties,
+                        }
+                        target_data["initialization"]["connections"].append(conn_data)
+
             if output.upper() != "JSON":
                 typer.echo(f"  - {target_name}: {target_config.project.name}")
 
@@ -249,56 +263,70 @@ def describe_command(
 
                                     # Display connection-specific properties
                                     conn_type = conn_info.get("type", "")
-                                    if conn_type == "WORKFLOWS_MWAA" and conn_info.get(
-                                        "environmentName"
-                                    ):
-                                        typer.echo(
-                                            f"        environmentName: {conn_info['environmentName']}"
-                                        )
-                                    elif conn_type == "ATHENA" and (
-                                        conn_info.get("workgroup")
-                                        or conn_info.get("workgroupName")
-                                    ):
-                                        workgroup = conn_info.get(
-                                            "workgroup"
-                                        ) or conn_info.get("workgroupName")
-                                        typer.echo(f"        workgroup: {workgroup}")
-                                    elif conn_type == "S3" and conn_info.get("s3Uri"):
-                                        typer.echo(
-                                            f"        s3Uri: {conn_info['s3Uri']}"
-                                        )
-                                    elif conn_type == "LAKEHOUSE" and conn_info.get(
-                                        "databaseName"
-                                    ):
-                                        typer.echo(
-                                            f"        databaseName: {conn_info['databaseName']}"
-                                        )
+                                    
+                                    if conn_type == "S3":
+                                        if conn_info.get("s3Uri"):
+                                            typer.echo(f"        s3Uri: {conn_info['s3Uri']}")
+                                        if conn_info.get("status"):
+                                            typer.echo(f"        status: {conn_info['status']}")
+                                    
+                                    elif conn_type == "ATHENA":
+                                        if conn_info.get("workgroupName"):
+                                            typer.echo(f"        workgroupName: {conn_info['workgroupName']}")
+                                    
                                     elif conn_type == "SPARK":
-                                        if conn_info.get("jobRole"):
-                                            typer.echo(
-                                                f"        jobRole: {conn_info['jobRole']}"
-                                            )
-                                        if conn_info.get("permissionMode"):
-                                            typer.echo(
-                                                f"        permissionMode: {conn_info['permissionMode']}"
-                                            )
+                                        if conn_info.get("glueVersion"):
+                                            typer.echo(f"        glueVersion: {conn_info['glueVersion']}")
+                                        if conn_info.get("workerType"):
+                                            typer.echo(f"        workerType: {conn_info['workerType']}")
+                                        if conn_info.get("numberOfWorkers"):
+                                            typer.echo(f"        numberOfWorkers: {conn_info['numberOfWorkers']}")
+                                        if conn_info.get("computeArn"):
+                                            typer.echo(f"        computeArn: {conn_info['computeArn']}")
+                                        if conn_info.get("runtimeRole"):
+                                            typer.echo(f"        runtimeRole: {conn_info['runtimeRole']}")
+                                    
+                                    elif conn_type == "REDSHIFT":
+                                        if conn_info.get("host"):
+                                            typer.echo(f"        host: {conn_info['host']}")
+                                        if conn_info.get("port"):
+                                            typer.echo(f"        port: {conn_info['port']}")
+                                        if conn_info.get("databaseName"):
+                                            typer.echo(f"        databaseName: {conn_info['databaseName']}")
+                                        if conn_info.get("clusterName"):
+                                            typer.echo(f"        clusterName: {conn_info['clusterName']}")
+                                        if conn_info.get("workgroupName"):
+                                            typer.echo(f"        workgroupName: {conn_info['workgroupName']}")
+                                    
+                                    elif conn_type in ["WORKFLOWS_MWAA", "MWAA"]:
+                                        if conn_info.get("mwaaEnvironmentName"):
+                                            typer.echo(f"        mwaaEnvironmentName: {conn_info['mwaaEnvironmentName']}")
+                                    
+                                    elif conn_type == "MLFLOW":
+                                        if conn_info.get("trackingServerName"):
+                                            typer.echo(f"        trackingServerName: {conn_info['trackingServerName']}")
+                                        if conn_info.get("trackingServerArn"):
+                                            typer.echo(f"        trackingServerArn: {conn_info['trackingServerArn']}")
+                                    
+                                    elif conn_type == "IAM":
+                                        if conn_info.get("glueLineageSyncEnabled") is not None:
+                                            typer.echo(f"        glueLineageSyncEnabled: {conn_info['glueLineageSyncEnabled']}")
+                                    
+                                    elif conn_type == "LAKEHOUSE":
+                                        if conn_info.get("databaseName"):
+                                            typer.echo(f"        databaseName: {conn_info['databaseName']}")
 
-                                    # Display any other specific properties that might exist
+                                    # Display any other properties not already shown
+                                    displayed_keys = {
+                                        "connectionId", "type", "region", "awsAccountId", "description",
+                                        "physicalEndpoints", "s3Uri", "status", "workgroupName",
+                                        "glueVersion", "workerType", "numberOfWorkers", "computeArn", "runtimeRole",
+                                        "host", "port", "databaseName", "clusterName",
+                                        "mwaaEnvironmentName", "trackingServerName", "trackingServerArn",
+                                        "glueLineageSyncEnabled", "error"
+                                    }
                                     for key, value in conn_info.items():
-                                        if key not in [
-                                            "connectionId",
-                                            "type",
-                                            "region",
-                                            "awsAccountId",
-                                            "description",
-                                            "environmentName",
-                                            "workgroup",
-                                            "workgroupName",
-                                            "s3Uri",
-                                            "databaseName",
-                                            "jobRole",
-                                            "permissionMode",
-                                        ]:
+                                        if key not in displayed_keys and value is not None:
                                             typer.echo(f"        {key}: {value}")
 
                         target_data["connections"] = project_connections
@@ -336,6 +364,27 @@ def describe_command(
                 typer.echo(f"    Engine: {workflow.engine}")
                 if hasattr(workflow, "parameters") and workflow.parameters:
                     typer.echo(f"    Parameters: {workflow.parameters}")
+
+        # Show connections from initialization if they exist
+        connections_found = False
+        if output.upper() != "JSON":
+            for target_name, target_config in manifest.targets.items():
+                if (
+                    hasattr(target_config, "initialization")
+                    and target_config.initialization
+                    and hasattr(target_config.initialization, "connections")
+                    and target_config.initialization.connections
+                ):
+                    if not connections_found:
+                        typer.echo("\nInitialization Connections:")
+                        connections_found = True
+                    
+                    typer.echo(f"  Target: {target_name}")
+                    for conn in target_config.initialization.connections:
+                        typer.echo(f"    - {conn.name} ({conn.type})")
+                        if conn.properties:
+                            for key, value in conn.properties.items():
+                                typer.echo(f"      {key}: {value}")
 
         # Output JSON if requested
         if output.upper() == "JSON":

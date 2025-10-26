@@ -36,48 +36,35 @@ workflows:
 
 def create_mock_manifest():
     """Create proper mock objects with attributes."""
-    mock_domain = type(
-        "MockDomain", (), {"name": "test-domain", "region": "${DEV_DOMAIN_REGION:us-east-1}"}
-    )()
+    from unittest.mock import MagicMock
+    
+    mock_domain = MagicMock()
+    mock_domain.name = "test-domain"
+    mock_domain.region = "${DEV_DOMAIN_REGION:us-east-1}"
 
-    mock_project_dev = type(
-        "MockProject", (), {"name": "dev-project", "create": False}
-    )()
+    mock_project_dev = MagicMock()
+    mock_project_dev.name = "dev-project"
+    mock_project_dev.create = False
 
-    mock_project_test = type(
-        "MockProject", (), {"name": "test-project", "create": False}
-    )()
+    mock_project_test = MagicMock()
+    mock_project_test.name = "test-project"
+    mock_project_test.create = False
 
-    mock_target_dev = type(
-        "MockTarget", 
-        (), 
-        {
-            "project": mock_project_dev, 
-            "domain": mock_domain,
-            "stage": "DEV"
-        }
-    )()
+    mock_target_dev = MagicMock()
+    mock_target_dev.project = mock_project_dev
+    mock_target_dev.domain = mock_domain
+    mock_target_dev.stage = "DEV"
 
-    mock_target_test = type(
-        "MockTarget", 
-        (), 
-        {
-            "project": mock_project_test, 
-            "domain": mock_domain,
-            "stage": "TEST"
-        }
-    )()
+    mock_target_test = MagicMock()
+    mock_target_test.project = mock_project_test
+    mock_target_test.domain = mock_domain
+    mock_target_test.stage = "TEST"
 
-    mock_manifest = type(
-        "MockManifest",
-        (),
-        {
-            "pipeline_name": "TestPipeline",
-            "targets": {"dev": mock_target_dev, "test": mock_target_test},
-            "workflows": [],
-            "get_target_config": lambda target_name: mock_target_dev if target_name == "dev" else mock_target_test
-        },
-    )()
+    mock_manifest = MagicMock()
+    mock_manifest.pipeline_name = "TestPipeline"
+    mock_manifest.targets = {"dev": mock_target_dev, "test": mock_target_test}
+    mock_manifest.workflows = []
+    mock_manifest.get_target_config = lambda target_name: mock_target_dev if target_name == "dev" else mock_target_test
 
     return mock_manifest
 
@@ -182,7 +169,7 @@ def test_monitor_inactive_project(
         )
         assert result.exit_code == 1  # Should fail when no healthy MWAA environments
         assert "Pipeline: TestPipeline" in result.stdout
-        assert "No healthy MWAA environments found" in result.stdout
+        assert "No healthy workflow environments found" in result.stdout
 
 
 @patch("smus_cicd.helpers.utils.load_config")
