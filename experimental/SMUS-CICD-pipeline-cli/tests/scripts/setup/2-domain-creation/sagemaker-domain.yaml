@@ -6,6 +6,11 @@ Parameters:
     Type: String
     Default: 'unified-studio-domain'
     Description: 'Name for the DataZone domain'
+  
+  DomainTags:
+    Type: String
+    Default: 'purpose=smus-cicd-testing'
+    Description: 'Comma-separated key=value pairs for domain tags (e.g., purpose=smus-cicd-testing,STAGE=DEV)'
 
 Resources:
   # Domain Execution Role

@@ -26,35 +26,16 @@ properties:
           - "./tests/integration/bundles"
           - "s3://my-bucket/bundles"
           - "s3://sagemaker-unified-studio-<aws-account-id>-us-east-1-domain/bundles"
-      workflow:
-        type: array
-        description: "Workflow bundle configuration"
-        items:
-          $ref: "#/definitions/bundleConnection"
       storage:
         type: array
-        description: "Storage bundle configuration"
+        description: "Storage bundle configuration (unified - includes workflows)"
         items:
-          $ref: "#/definitions/bundleConnection"
+          $ref: "#/definitions/bundleStorageItem"
       git:
-        type: object
-        description: "Git repository to include in bundle"
-        required: 
-          - repository
-          - url
-          - targetDir
-        properties:
-          repository:
-            type: string
-            description: "Repository name"
-          url:
-            type: string
-            format: uri
-            description: "Git repository URL"
-          targetDir:
-            type: string
-            description: "Target directory for git content"
-        additionalProperties: false
+        type: array
+        description: "Git repositories to include in bundle"
+        items:
+          $ref: "#/definitions/bundleGitItem"
       catalog:
         type: object
         description: "Catalog assets configuration for DataZone access"
@@ -141,14 +122,6 @@ properties:
               - string
               - number
               - boolean
-        logging:
-          type: string
-          description: "Logging configuration"
-          enum: 
-            - "console"
-            - "file"
-            - "none"
-          default: "console"
       additionalProperties: false
   targets:
     type: object
@@ -217,14 +190,22 @@ definitions:
         type: object
         description: "DataZone domain configuration"
         required: 
-          - name
           - region
         properties:
           name:
             type: string
-            description: "DataZone domain name"
+            description: "DataZone domain name (optional - can use tags or auto-detect instead)"
             minLength: 1
             maxLength: 64
+          tags:
+            type: object
+            description: "DataZone domain tags for discovery (all tags must match)"
+            additionalProperties:
+              type: string
+            examples:
+              - purpose: "smus-cicd-testing"
+              - purpose: "smus-cicd-testing"
+                STAGE: "DEV"
           region:
             type: string
             description: "AWS region for the domain. Supports environment variable substitution ${VAR_NAME:default_value}"
@@ -297,6 +278,17 @@ definitions:
                 items:
                   type: string
                 default: []
+              role:
+                type: object
+                description: "Customer-provided IAM role configuration"
+                properties:
+                  arn:
+                    type: string
+                    description: "IAM role ARN to use for the project (use * as wildcard for account ID)"
+                    pattern: "^arn:aws:iam::([0-9]{12}|\\*):role/.+"
+                    examples:
+                      - "arn:aws:iam::123456789012:role/MyProjectRole"
+                      - "arn:aws:iam::*:role/MyProjectRole"
               userParameters:
                 type: array
                 description: "User parameters to override during project creation, organized by environment configuration"
@@ -357,7 +349,7 @@ definitions:
                 type:
                   type: string
                   description: "Connection type"
-                  enum: ["S3", "IAM", "SPARK_GLUE", "ATHENA", "REDSHIFT", "SPARK_EMR", "GLUE", "HYPERPOD", "MLFLOW", "WORKFLOWS_MWAA"]
+                  enum: ["S3", "IAM", "SPARK_GLUE", "ATHENA", "REDSHIFT", "SPARK_EMR", "GLUE", "HYPERPOD", "MLFLOW", "WORKFLOWS_MWAA", "WORKFLOWS_SERVERLESS"]
                 properties:
                   type: object
                   description: "Connection-specific properties"
@@ -369,47 +361,15 @@ definitions:
         description: "Target-specific bundle configuration"
         properties:
           storage:
-            type: object
-            description: "Storage configuration for this target"
-            required: 
-              - connectionName
-              - directory
-            properties:
-              connectionName:
-                type: string
-                description: "DataZone connection name"
-              directory:
-                type: string
-                description: "Target directory"
-            additionalProperties: false
-          workflows:
-            type: object
-            description: "Workflow configuration for this target"
-            required: 
-              - connectionName
-              - directory
-            properties:
-              connectionName:
-                type: string
-                description: "DataZone connection name"
-              directory:
-                type: string
-                description: "Target directory"
-            additionalProperties: false
+            type: array
+            description: "Storage deployment configuration for this target"
+            items:
+              $ref: "#/definitions/bundleTargetStorageItem"
           git:
-            type: object
-            description: "Git configuration for this target"
-            required: 
-              - connectionName
-              - directory
-            properties:
-              connectionName:
-                type: string
-                description: "DataZone connection name"
-              directory:
-                type: string
-                description: "Target directory"
-            additionalProperties: false
+            type: array
+            description: "Git deployment configuration for this target"
+            items:
+              $ref: "#/definitions/bundleTargetGitItem"
           catalog:
             type: object
             description: "Catalog configuration for this target"
@@ -444,4 +404,96 @@ definitions:
           - S3_PREFIX: "dev"
           - DEBUG_MODE: true
           - MAX_RETRIES: 3
+    additionalProperties: false
+  
+  bundleStorageItem:
+    type: object
+    required: 
+      - name
+      - connectionName
+    properties:
+      name:
+        type: string
+        description: "Unique name for this bundle item"
+        examples:
+          - "code"
+          - "workflows"
+          - "data"
+      connectionName:
+        type: string
+        description: "DataZone connection name"
+        examples: 
+          - "default.s3_shared"
+          - "project.s3_default_folder"
+      append:
+        type: boolean
+        description: "Whether to append to existing files or replace"
+        default: false
+      include:
+        type: array
+        description: "Patterns for files/directories to include"
+        items:
+          type: string
+        examples: 
+          - ["workflows/", "src/"]
+      exclude:
+        type: array
+        description: "Patterns for files/directories to exclude"
+        items:
+          type: string
+        examples: 
+          - [".ipynb_checkpoints/", "__pycache__/", "*.pyc"]
+    additionalProperties: false
+  
+  bundleGitItem:
+    type: object
+    required: 
+      - repository
+      - url
+    properties:
+      repository:
+        type: string
+        description: "Repository name (will be cloned to repositories/{repository-name})"
+      url:
+        type: string
+        format: uri
+        description: "Git repository URL"
+    additionalProperties: false
+  
+  bundleTargetStorageItem:
+    type: object
+    required: 
+      - name
+      - connectionName
+      - targetDirectory
+    properties:
+      name:
+        type: string
+        description: "Name matching bundle storage item"
+        examples:
+          - "code"
+          - "workflows"
+      connectionName:
+        type: string
+        description: "DataZone connection name for deployment"
+      targetDirectory:
+        type: string
+        description: "Target directory on connection"
+    additionalProperties: false
+  
+  bundleTargetGitItem:
+    type: object
+    required: 
+      - connectionName
+      - targetDirectory
+    properties:
+      name:
+        type: string
+        description: "Optional name for git repo"
+      connectionName:
+        type: string
+        description: "DataZone connection name for deployment"
+      targetDirectory:
+        type: string
+        description: "Target directory on connection"
     additionalProperties: false

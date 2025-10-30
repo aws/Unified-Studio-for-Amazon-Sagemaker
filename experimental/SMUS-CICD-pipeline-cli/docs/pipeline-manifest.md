@@ -20,7 +20,8 @@ pipelineName: SimpleDataPipeline
 bundle:
   bundlesDirectory: ./bundles
   storage:
-    - connectionName: default.s3_shared
+    - name: code
+      connectionName: default.s3_shared
       include: ['src/']
 
 # Where to deploy
@@ -34,8 +35,9 @@ targets:
       name: test-project
     bundle_target_configuration:
       storage:
-        connectionName: default.s3_shared
-        directory: 'src'
+        - name: code
+          connectionName: default.s3_shared
+          targetDirectory: 'src'
 
 # Workflows to create after deployment
 workflows:
@@ -44,14 +46,14 @@ workflows:
 ```
 
 This minimal example:
-- Bundles source files from the `src/` directory
+- Bundles source files from the `src/` directory with name "code"
 - Deploys to a single `test` target
 - Creates a serverless Airflow workflow after deployment
 - Uses an existing project (no initialization needed)
 - No connections creation, no catalog assets, no tests
 - Perfect for serverless Airflow pipelines
 
-**Note:** The `bundle.workflow` section is only needed for MWAA. For serverless Airflow, use `bundle.storage` to deploy your code, and the `workflows` section tells the CLI which workflows to create after deployment.
+**Note:** For workflows (DAGs), add them as storage items with `append: true`. The `workflows` section at the root tells the CLI which workflows to create after deployment.
 
 ## Comprehensive Example
 
@@ -65,25 +67,24 @@ bundlesDirectory: s3://sagemaker-unified-studio-123456789012-us-east-1-domain/bu
 
 # Bundle configuration - what to include in deployments
 bundle:
-  # Workflow files (DAGs, scripts)
-  workflow:
-    - connectionName: default.s3_shared
+  # Storage files (unified - includes workflows and source code)
+  storage:
+    - name: code
+      connectionName: default.s3_shared
+      append: false
+      include: ['src/', 'data/']
+      exclude: ['.ipynb_checkpoints/', '__pycache__/', '*.pyc', '.DS_Store']
+    
+    - name: workflows
+      connectionName: default.s3_shared
       append: true
       include: ['workflows/']
       exclude: ['.ipynb_checkpoints/', '__pycache__/', '*.pyc']
   
-  # Storage files (source code, data)
-  storage:
-    - connectionName: default.s3_shared
-      append: false
-      include: ['src/', 'data/']
-      exclude: ['.ipynb_checkpoints/', '__pycache__/', '*.pyc', '.DS_Store']
-  
-  # Git repository
+  # Git repositories
   git:
-    repository: MarketingDataPipeline
-    url: https://github.com/myorg/marketing-pipeline.git
-    targetDir: git
+    - repository: MarketingDataPipeline
+      url: https://github.com/myorg/marketing-pipeline.git
   
   # DataZone catalog assets
   catalog:
@@ -108,11 +109,12 @@ targets:
     # Target-specific bundle destinations
     bundle_target_configuration:
       storage:
-        connectionName: default.s3_shared
-        directory: 'src'
-      workflows:
-        connectionName: default.s3_shared
-        directory: 'workflows'
+        - name: code
+          connectionName: default.s3_shared
+          targetDirectory: 'src'
+        - name: workflows
+          connectionName: default.s3_shared
+          targetDirectory: 'workflows'
     
     # Target-specific workflow parameters
     environment_variables:
@@ -139,6 +141,8 @@ targets:
         profileName: 'All capabilities'
         owners: ['alice@company.com']
         contributors: ['bob@company.com']
+        role:
+          arn: arn:aws:iam::123456789012:role/MyProjectRole
         userParameters:
           - EnvironmentConfigurationName: 'Lakehouse Database'
             parameters:
@@ -171,14 +175,19 @@ targets:
           type: WORKFLOWS_MWAA
           properties:
             mwaaEnvironmentName: "test-airflow-env"
+        
+        - name: serverless-workflows
+          type: WORKFLOWS_SERVERLESS
+          properties: {}
     
     bundle_target_configuration:
       storage:
-        connectionName: default.s3_shared
-        directory: 'src'
-      workflows:
-        connectionName: default.s3_shared
-        directory: 'workflows'
+        - name: code
+          connectionName: default.s3_shared
+          targetDirectory: 'src'
+        - name: workflows
+          connectionName: default.s3_shared
+          targetDirectory: 'workflows'
     
     environment_variables:
       S3_PREFIX: "test"
@@ -207,11 +216,12 @@ targets:
     
     bundle_target_configuration:
       storage:
-        connectionName: default.s3_shared
-        directory: 'src'
-      workflows:
-        connectionName: default.s3_shared
-        directory: 'workflows'
+        - name: code
+          connectionName: default.s3_shared
+          targetDirectory: 'src'
+        - name: workflows
+          connectionName: default.s3_shared
+          targetDirectory: 'workflows'
       catalog:
         disable: true  # Disable catalog processing for prod
     
@@ -253,39 +263,28 @@ bundlesDirectory: s3://my-bucket/bundles  # S3 location
   - Cross-region access
   - Integration with DataZone domain S3 buckets
 
-### Workflow Bundles
+### Storage Bundles
 
-Package workflow files (DAGs, scripts, configurations):
+Package source code, libraries, data files, and workflows (unified configuration):
 
 ```yaml
 bundle:
-  workflow:
-    - connectionName: default.s3_shared
+  storage:
+    - name: code
+      connectionName: default.s3_shared
+      append: false
+      include: ['src/', 'lib/', 'data/']
+      exclude: ['.ipynb_checkpoints/', '__pycache__/', '*.pyc', '.DS_Store']
+    
+    - name: workflows
+      connectionName: default.s3_shared
       append: true
       include: ['workflows/', 'dags/']
       exclude: ['.ipynb_checkpoints/', '__pycache__/', '*.pyc']
 ```
 
 **Properties:**
-- `connectionName` (required): S3 connection name in source project
-- `append` (optional): Append to existing files (default: `true`)
-- `include` (optional): Paths/patterns to include
-- `exclude` (optional): Paths/patterns to exclude
-
-### Storage Bundles
-
-Package source code, libraries, and data files:
-
-```yaml
-bundle:
-  storage:
-    - connectionName: default.s3_shared
-      append: false
-      include: ['src/', 'lib/', 'data/']
-      exclude: ['.ipynb_checkpoints/', '__pycache__/', '*.pyc', '.DS_Store']
-```
-
-**Properties:**
+- `name` (required): Unique identifier for this bundle item
 - `connectionName` (required): S3 connection name in source project
 - `append` (optional): Append to existing files (default: `false`)
 - `include` (optional): Paths/patterns to include
@@ -293,8 +292,11 @@ bundle:
 
 **Best Practices:**
 - Use `append: true` for workflows (incremental updates)
-- Use `append: false` for storage (clean deployments)
+- Use `append: false` for source code (clean deployments)
 - Always exclude temporary files: `.ipynb_checkpoints/`, `__pycache__/`, `*.pyc`
+- Use descriptive names: `code`, `workflows`, `data`, `models`
+
+**Note:** Workflows are now part of the unified storage configuration. Use `append: true` for workflow items to enable incremental updates.
 
 ### Git Repositories
 
@@ -303,15 +305,17 @@ Include Git repositories in bundles:
 ```yaml
 bundle:
   git:
-    repository: MyDataPipeline
-    url: https://github.com/myorg/data-pipeline.git
-    targetDir: git
+    - repository: MyDataPipeline
+      url: https://github.com/myorg/data-pipeline.git
+    - repository: SharedLibraries
+      url: https://github.com/myorg/shared-libs.git
 ```
 
 **Properties:**
-- `repository` (optional): Repository name for identification
+- `repository` (required): Repository name (used in bundle path: `repositories/{repository-name}/`)
 - `url` (required): Git repository URL
-- `targetDir` (optional): Directory name in bundle (default: `git`)
+
+**Note:** Git repositories are always cloned to `repositories/{repository-name}/` in the bundle. No `targetDir` configuration needed.
 
 ### Catalog Assets
 
@@ -416,7 +420,13 @@ targets:
 - `create` (optional): Auto-create project (default: `false`)
 - `profileName` (required if create=true): Project profile name
 - `owners` (optional): List of owner email addresses or IAM ARNs
+  - Use `*` as wildcard for account ID: `arn:aws:iam::*:role/MyRole` (replaced with current account)
 - `contributors` (optional): List of contributor email addresses or IAM ARNs
+  - Use `*` as wildcard for account ID: `arn:aws:iam::*:role/MyRole` (replaced with current account)
+- `role` (optional): Customer-provided IAM role for the project
+  - `arn`: IAM role ARN (e.g., `arn:aws:iam::123456789012:role/MyProjectRole`)
+  - Use `*` as wildcard for account ID: `arn:aws:iam::*:role/MyProjectRole` (replaced with current account)
+  - The role must have a trust policy allowing DataZone and Airflow Serverless service principals
 - `userParameters` (optional): Override project profile parameters
   - `EnvironmentConfigurationName`: Environment configuration to override
   - `parameters`: Array of name/value pairs
@@ -430,7 +440,7 @@ targets:
 
 ### Bundle Target Configuration
 
-Specify where bundles are deployed in each target:
+Specify where bundles are deployed in each target using name-based matching:
 
 ```yaml
 targets:
@@ -444,26 +454,30 @@ targets:
     
     bundle_target_configuration:
       storage:
-        connectionName: default.s3_shared
-        directory: 'src'
-      workflows:
-        connectionName: default.s3_shared
-        directory: 'workflows'
+        - name: code                    # Matches bundle.storage[name=code]
+          connectionName: default.s3_shared
+          targetDirectory: 'src'
+        - name: workflows               # Matches bundle.storage[name=workflows]
+          connectionName: default.s3_shared
+          targetDirectory: 'workflows'
       git:
-        connectionName: default.s3_shared
-        directory: 'git'
+        - connectionName: default.s3_shared
+          targetDirectory: 'repos'      # All git repos deploy here
       catalog:
         disable: false
 ```
 
 **Properties:**
-- `storage.connectionName` (required): Target S3 connection for storage files
-- `storage.directory` (optional): Target directory path
-- `workflows.connectionName` (required): Target S3 connection for workflow files
-- `workflows.directory` (optional): Target directory path
-- `git.connectionName` (optional): Target S3 connection for git files
-- `git.directory` (optional): Target directory path
+- `storage` (list): Storage deployment configuration
+  - `name` (required): Name matching bundle storage item
+  - `connectionName` (required): Target S3 connection
+  - `targetDirectory` (required): Target directory path (use `.` or `''` for root)
+- `git` (list): Git deployment configuration
+  - `connectionName` (required): Target S3 connection
+  - `targetDirectory` (required): Target directory path
 - `catalog.disable` (optional): Disable catalog asset processing (default: `false`)
+
+**Note:** Use `targetDirectory: '.'` or `targetDirectory: ''` to deploy to the connection root without a subdirectory.
 
 ### Target Tests
 
@@ -659,6 +673,17 @@ initialization:
 **Properties:**
 - `mwaaEnvironmentName` (required): MWAA environment name
 
+#### WORKFLOWS_SERVERLESS - Serverless Airflow Workflows
+
+```yaml
+- name: serverless-workflows
+  type: WORKFLOWS_SERVERLESS
+  properties: {}
+```
+
+**Properties:**
+- No properties required (empty structure)
+
 ### Connection Examples
 
 Complete example with multiple connection types:
@@ -713,6 +738,10 @@ initialization:
       type: WORKFLOWS_MWAA
       properties:
         mwaaEnvironmentName: "production-airflow-env"
+    
+    - name: serverless-workflows
+      type: WORKFLOWS_SERVERLESS
+      properties: {}
 ```
 
 ---

@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 
 import typer
 
-from ..helpers import mwaa, airflow_serverless, datazone
+from ..helpers import airflow_serverless, mwaa
 from ..helpers.airflow_parser import parse_airflow_output
 from ..helpers.utils import get_datazone_project_info, load_config
 from ..pipeline import PipelineManifest
@@ -589,7 +589,7 @@ def _execute_airflow_serverless_workflows(
             if result.get("success"):
                 run_id = result.get("run_id")
                 if output.upper() != "JSON":
-                    typer.echo(f"✅ Workflow run started successfully")
+                    typer.echo("✅ Workflow run started successfully")
                     typer.echo(f"📋 Run ID: {run_id}")
                     typer.echo(f"📊 Status: {result.get('status')}")
 

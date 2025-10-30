@@ -34,7 +34,7 @@ Resources:
   SageMakerExecutionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'AmazonSageMaker-ExecutionRole-${AWS::StackName}'
+      RoleName: !Sub 'SageMaker-ExecutionRole-${AWS::Region}'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:

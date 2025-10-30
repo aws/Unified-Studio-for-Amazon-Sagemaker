@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Integration test for all confirmed working DataZone connection types.
-Tests: S3, IAM, SPARK_GLUE, ATHENA, REDSHIFT, SPARK_EMR, MLFLOW, WORKFLOWS_MWAA
+Tests: S3, IAM, SPARK_GLUE, ATHENA, REDSHIFT, SPARK_EMR, MLFLOW, WORKFLOWS_MWAA, WORKFLOWS_SERVERLESS
 """
 
 import boto3
@@ -159,6 +159,17 @@ def main():
             }
         },
         "Test MWAA connection"
+    )
+    
+    time.sleep(1)
+    
+    # 9. WORKFLOWS_SERVERLESS
+    print("\n9. Testing WORKFLOWS_SERVERLESS Connection...")
+    results['WORKFLOWS_SERVERLESS'] = test_connection(
+        client,
+        f"test-serverless-{timestamp}",
+        {"workflowsServerlessProperties": {}},
+        "Test serverless workflows connection"
     )
     
     # Summary

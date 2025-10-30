@@ -7,7 +7,6 @@ workflows:
   parameters: 
     default-sql-connection: project.athena_analytics
     default-spark-connection: project.spark_processing
-  logging: console 
 
 bundle:
   bundlesDirectory: /tmp/bundles
@@ -34,7 +33,8 @@ targets:
     test: 
        stage: TEST
        domain:
-         name: cicd-test-domain
+         tags:
+          purpose: smus-cicd-testing
          region: ${DEV_DOMAIN_REGION:us-east-1}
        initialization:
           project: 
@@ -95,6 +95,10 @@ targets:
               type: WORKFLOWS_MWAA
               properties:
                 mwaaEnvironmentName: "DataZoneMWAAEnv-dzd_6je2k8b63qse07-4kc6456xevd0h3-dev"
+            
+            - name: serverless-workflows
+              type: WORKFLOWS_SERVERLESS
+              properties: {}
        
        project: 
          name: connections-test-project

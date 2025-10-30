@@ -1,22 +1,19 @@
 """AWS Airflow Serverless helper functions."""
 
-import boto3
 import os
 import time
 from typing import Any, Dict, List, Optional
+
+import boto3
 
 from . import boto3_client
 from .logger import get_logger
 
 # Airflow Serverless (Overdrive) configuration - configurable via environment variables
 AIRFLOW_SERVERLESS_ENDPOINT = os.environ.get(
-    "AIRFLOW_SERVERLESS_ENDPOINT", 
-    "https://overdrive-gamma.us-west-2.api.aws"
+    "AIRFLOW_SERVERLESS_ENDPOINT", "https://overdrive-gamma.us-west-2.api.aws"
 )
-AIRFLOW_SERVERLESS_REGION = os.environ.get(
-    "AIRFLOW_SERVERLESS_REGION", 
-    "us-west-2"
-)
+AIRFLOW_SERVERLESS_REGION = os.environ.get("AIRFLOW_SERVERLESS_REGION", "us-west-2")
 AIRFLOW_SERVERLESS_SERVICE = "awsoverdriveservice"
 
 
@@ -30,9 +27,9 @@ def create_airflow_serverless_client(
     # Build endpoint URL based on the actual region
     endpoint_url = f"https://overdrive-gamma.{client_region}.api.aws"
 
-    # Create client with region-specific endpoint URL
-    import boto3
+    print(f"🔍 DEBUG: Creating Airflow Serverless client with region={client_region}, endpoint={endpoint_url}")
 
+    # Create client with region-specific endpoint URL
     session = boto3.Session()
     client = session.client(
         AIRFLOW_SERVERLESS_SERVICE, region_name=client_region, endpoint_url=endpoint_url
@@ -71,35 +68,41 @@ def create_workflow(
         # Add DataZone environment variables if provided
         if datazone_domain_id and datazone_project_id:
             from . import datazone
-            
+
             env_vars = {}
             env_vars["DataZoneDomainRegion"] = datazone_domain_region or region
             env_vars["DataZoneDomainId"] = datazone_domain_id
             env_vars["DataZoneProjectId"] = datazone_project_id
-            
+
             # Get environment_id from IAM connection
             try:
                 project_connections = datazone.get_project_connections(
                     project_id=datazone_project_id,
                     domain_id=datazone_domain_id,
-                    region=datazone_domain_region or region
+                    region=datazone_domain_region or region,
                 )
-                
+
                 # Find IAM connection and extract environment_id
                 for conn_name, conn_info in project_connections.items():
                     if conn_info.get("type") == "IAM":
                         env_id = conn_info.get("environmentId")
                         if env_id:
                             env_vars["DataZoneEnvironmentId"] = env_id
-                            logger.info(f"Found DataZone environment ID from IAM connection: {env_id}")
+                            logger.info(
+                                f"Found DataZone environment ID from IAM connection: {env_id}"
+                            )
                             break
             except Exception as e:
-                logger.warning(f"Could not get DataZone environment ID from connections: {e}")
-            
-            # Add DataZone stage and endpoint
-            env_vars["DataZoneStage"] = "prod"
-            env_vars["DataZoneEndpoint"] = f"https://datazone.{datazone_domain_region or region}.amazonaws.com"
-            
+                logger.warning(
+                    f"Could not get DataZone environment ID from connections: {e}"
+                )
+
+            # Add DataZone stage and endpoint - COMMENTED OUT FOR TESTING
+            # env_vars["DataZoneStage"] = "prod"
+            # env_vars["DataZoneEndpoint"] = (
+            #     f"https://datazone.{datazone_domain_region or region}.amazonaws.com"
+            # )
+
             params["EnvironmentVariables"] = env_vars
             logger.info(f"🔍 DEBUG: DataZone environment variables: {env_vars}")
 
@@ -116,10 +119,15 @@ def create_workflow(
         if tags:
             params["Tags"] = tags
 
+        import typer
+        typer.echo(f"🔍 DEBUG: Client region: {region or AIRFLOW_SERVERLESS_REGION}")
+        typer.echo(f"🔍 DEBUG: Client endpoint: https://overdrive-gamma.{region or AIRFLOW_SERVERLESS_REGION}.api.aws")
+        typer.echo(f"🔍 DEBUG: Create workflow request params: {params}")
+        
         logger.info(f"Creating serverless Airflow workflow: {workflow_name}")
-        logger.info(f"🔍 DEBUG: Create workflow request params: {params}")
         response = client.create_workflow(**params)
-        logger.info(f"🔍 DEBUG: Create workflow response: {response}")
+        
+        typer.echo(f"🔍 DEBUG: Create workflow response: {response}")
 
         workflow_arn = response["WorkflowArn"]
         logger.info(f"Successfully created workflow: {workflow_arn}")
@@ -398,7 +406,7 @@ def delete_workflow(
         client = create_airflow_serverless_client(connection_info, region)
 
         logger.info(f"Deleting workflow: {workflow_arn}")
-        response = client.delete_workflow(WorkflowArn=workflow_arn)
+        client.delete_workflow(WorkflowArn=workflow_arn)
 
         logger.info(f"Successfully deleted workflow: {workflow_arn}")
         return {"success": True, "workflow_arn": workflow_arn}
@@ -479,7 +487,7 @@ def validate_airflow_serverless_health(
     """Validate serverless Airflow service health."""
     try:
         # Simple health check by listing workflows
-        workflows = list_workflows(region=config.get("region"))
+        list_workflows(region=config.get("region"))
         return True  # If we can list workflows, service is healthy
 
     except Exception as e:
@@ -577,7 +585,7 @@ def stop_workflow_run(
         client = create_airflow_serverless_client(connection_info, region)
 
         logger.info(f"Stopping workflow run: {run_id}")
-        response = client.stop_workflow_run(WorkflowArn=workflow_arn, RunId=run_id)
+        client.stop_workflow_run(WorkflowArn=workflow_arn, RunId=run_id)
 
         logger.info(f"Successfully stopped workflow run: {run_id}")
         return {"success": True, "run_id": run_id}

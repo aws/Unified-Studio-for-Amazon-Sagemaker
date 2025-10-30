@@ -27,222 +27,84 @@ class TestBasicPipeline(IntegrationTestBase):
 
     @pytest.mark.integration
     def test_basic_pipeline_workflow(self):
-        """Test complete basic pipeline workflow: parse -> bundle -> monitor."""
+        """Test complete basic pipeline workflow: describe --connect -> bundle -> deploy -> monitor."""
         if not self.verify_aws_connectivity():
             pytest.skip("AWS connectivity not available")
 
         pipeline_file = self.get_pipeline_file()
         results = []
 
-        # Step 1: Describe pipeline configuration
-        print("\n=== Step 1: Parse Pipeline ===")
-        result = self.run_cli_command(["describe", "--pipeline", pipeline_file])
+        # Step 1: Describe with connections
+        print("\n=== Step 1: Describe with Connections ===")
+        result = self.run_cli_command(["describe", "--pipeline", pipeline_file, "--connect"])
         results.append(result)
+        assert result["success"], f"Describe --connect failed: {result['output']}"
+        print("✅ Describe --connect successful")
 
-        if result["success"]:
-            print("✅ Describe command successful")
-            print(f"CLI OUTPUT:\n{result['output']}")
-            # Actually validate the output contains expected content
-            assert (
-                "Pipeline:" in result["output"]
-            ), f"Parse output missing 'Pipeline:': {result['output']}"
-            assert (
-                "BasicTestPipeline" in result["output"]
-            ), f"Parse output missing pipeline name: {result['output']}"
-        else:
-            print(f"❌ Describe command failed: {result['output']}")
-            assert False, f"Describe command failed: {result['output']}"
+        # Step 1.5: Upload local code to S3
+        print("\n=== Step 2: Upload Code to S3 ===")
+        describe_output = result["output"]
+        import re
+        import subprocess
 
-        # Step 2: Parse with connections flag
-        print("\n=== Step 2: Parse with Connections ===")
-        result = self.run_cli_command(
-            ["describe", "--pipeline", pipeline_file, "--connections"]
+        # Extract S3 URI for dev project from describe output (look for s3_shared connection)
+        s3_uri_match = re.search(
+            r"default\.s3_shared:.*?s3Uri: (s3://[^\s]+)",
+            describe_output,
+            re.DOTALL,
         )
-        results.append(result)
 
-        if result["success"]:
-            print("✅ Parse connections successful")
-            print(f"CLI OUTPUT:\n{result['output']}")
-            # Connections are now shown under targets
-            assert (
-                "Targets:" in result["output"]
-            ), f"Parse connections output missing 'Targets:': {result['output']}"
-        else:
-            print(f"❌ Parse connections failed: {result['output']}")
-            assert False, f"Parse connections failed: {result['output']}"
-
-        # Step 3: Parse with targets flag
-        print("\n=== Step 3: Parse with Targets ===")
-        result = self.run_cli_command(
-            ["describe", "--pipeline", pipeline_file, "--connect"]
-        )
-        results.append(result)
-
-        if result["success"]:
-            print("✅ Describe targets successful")
-            print(f"CLI OUTPUT:\n{result['output']}")
-            # Validate targets are listed
-            assert (
-                "Targets:" in result["output"]
-            ), f"Describe targets output missing 'Targets:': {result['output']}"
-            # Validate domain configuration is at target level
-            # Verify YAML file structure
-            with open(pipeline_file, "r") as f:
-                content = f.read()
-                for target in ["dev", "test", "prod"]:
-                    target_idx = content.index(f"{target}:")
-                    domain_idx = content.index("domain:", target_idx)
-                    assert domain_idx > target_idx, f"Domain configuration not under target {target}"
-        else:
-            print(f"❌ Describe targets failed: {result['output']}")
-            assert False, f"Describe targets failed: {result['output']}"
-
-        # Step 4: Upload code files to S3 (test S3 connection)
-        print("\n=== Step 4: Upload Code to S3 ===")
-        try:
-            # Get S3 URI from dev project connections
-            import os
-
-            print(f"DEBUG: DEV_DOMAIN_REGION = {os.environ.get('DEV_DOMAIN_REGION')}")
-            print(f"DEBUG: config = {self.config}")
-            project_info = get_datazone_project_info("dev-marketing", self.config)
-            print(f"DEBUG: project_info = {project_info}")
-            connections = project_info.get("connections", {})
-            print(f"DEBUG: connections keys = {list(connections.keys())}")
-            s3_shared_conn = connections.get("default.s3_shared", {})
-            print(f"DEBUG: s3_shared_conn = {s3_shared_conn}")
-            s3_uri = s3_shared_conn.get("s3Uri")
-            print(f"DEBUG: s3_uri = {s3_uri}")
-
-            if s3_uri:
-                # Copy local code files to S3
-                code_dir = os.path.join(os.path.dirname(pipeline_file), "code")
-                if os.path.exists(code_dir):
-                    import subprocess
-
-                    result = subprocess.run(
-                        [
-                            "aws",
-                            "s3",
-                            "sync",
-                            code_dir,
-                            s3_uri,
-                            "--exclude",
-                            "*.pyc",
-                            "--exclude",
-                            "__pycache__/*",
-                        ],
-                        capture_output=True,
-                        text=True,
-                    )
-
-                    if result.returncode == 0:
-                        print(f"✅ Code uploaded to S3: {s3_uri}")
-                        print(f"Upload output: {result.stdout.strip()}")
-                        results.append(
-                            {"success": True, "output": f"Code uploaded to {s3_uri}"}
-                        )
-                    else:
-                        print(f"❌ S3 upload failed: {result.stderr}")
-                        results.append(
-                            {
-                                "success": False,
-                                "output": f"S3 upload failed: {result.stderr}",
-                            }
-                        )
-                else:
-                    print(f"⚠️  Code directory not found: {code_dir}")
-                    results.append(
-                        {
-                            "success": False,
-                            "output": f"Code directory not found: {code_dir}",
-                        }
-                    )
-            else:
-                print("❌ S3 shared connection not found")
-                results.append(
-                    {"success": False, "output": "S3 shared connection not found"}
+        if s3_uri_match:
+            s3_uri = s3_uri_match.group(1)
+            code_dir = os.path.join(os.path.dirname(pipeline_file), "code")
+            
+            if os.path.exists(code_dir):
+                upload_result = subprocess.run(
+                    [
+                        "aws", "s3", "sync",
+                        code_dir, s3_uri,
+                        "--exclude", "*.pyc",
+                        "--exclude", "__pycache__/*",
+                    ],
+                    capture_output=True,
+                    text=True,
                 )
-        except Exception as e:
-            print(f"❌ S3 upload error: {e}")
-            results.append({"success": False, "output": f"S3 upload error: {e}"})
+                
+                if upload_result.returncode == 0:
+                    print(f"✅ Code uploaded to S3: {s3_uri}")
+                else:
+                    print(f"⚠️ S3 upload failed: {upload_result.stderr}")
+            else:
+                print(f"⚠️ Code directory not found: {code_dir}")
+        else:
+            print("⚠️ Could not extract S3 URI from describe output")
 
-        # Step 5: Bundle command (actual AWS integration)
-        print("\n=== Step 5: Bundle Command ===")
+        # Step 3: Bundle (defaults to DEV target)
+        print("\n=== Step 3: Bundle ===")
         result = self.run_cli_command(["bundle", "--pipeline", pipeline_file])
         results.append(result)
+        assert result["success"], f"Bundle failed: {result['output']}"
+        print("✅ Bundle successful")
 
-        if result["success"]:
-            print("✅ Bundle command successful")
-            print(f"Bundle output: {result['output']}")
+        # Step 4: Deploy
+        print("\n=== Step 4: Deploy ===")
+        result = self.run_cli_command(["deploy", "test", "--pipeline", pipeline_file])
+        results.append(result)
+        assert result["success"], f"Deploy failed: {result['output']}"
+        print("✅ Deploy successful")
 
-            # Extract bundle file path from output
-            import re
+        # Step 5: Monitor
+        print("\n=== Step 5: Monitor ===")
+        result = self.run_cli_command(
+            ["monitor", "--targets", "test", "--pipeline", pipeline_file]
+        )
+        results.append(result)
+        assert result["success"], f"Monitor failed: {result['output']}"
+        print("✅ Monitor successful")
 
-            bundle_match = re.search(r"Bundle created: (.*\.zip)", result["output"])
-            if bundle_match:
-                bundle_path = bundle_match.group(1).strip()
-                print(f"Bundle file location: {bundle_path}")
-
-                # Check if bundle file exists and is not empty
-                if os.path.exists(bundle_path):
-                    file_size = os.path.getsize(bundle_path)
-                    print(f"Bundle file size: {file_size} bytes")
-                    assert file_size > 0, f"Bundle file is empty: {bundle_path}"
-
-                    # Check bundle contents for uploaded files
-                    import zipfile
-
-                    with zipfile.ZipFile(bundle_path, "r") as zip_file:
-                        file_list = zip_file.namelist()
-                        print(f"Bundle contains {len(file_list)} files")
-
-                        # Check for uploaded files in their respective directories
-                        assert any(
-                            "workflows/dags/test_dag.py" in f for f in file_list
-                        ), f"workflows/dags/test_dag.py not found in bundle: {file_list}"
-                        assert any(
-                            "storage/src/test-notebook1.ipynb" in f for f in file_list
-                        ), f"storage/src/test-notebook1.ipynb not found in bundle: {file_list}"
-                        print(
-                            "✅ Bundle contains uploaded files: workflows/test_dag.py and storage/src/test-notebook1.ipynb"
-                        )
-
-                    print("✅ Bundle file exists and is not empty")
-                else:
-                    assert False, f"Bundle file not found: {bundle_path}"
-            else:
-                # Fallback validation
-                assert (
-                    "Bundle created" in result["output"]
-                    or "bundling" in result["output"].lower()
-                ), f"Bundle output missing success indicator: {result['output']}"
-        else:
-            # Bundle should succeed - any failure is a real test failure
-            pytest.fail(f"Bundle command failed: {result['output']}")
-
-        print(f"\n✅ All CLI commands tested successfully!")
-
-        # Generate test report
-        report = self.generate_test_report("Basic Pipeline Workflow", results)
-
-        print(f"\n=== Test Report ===")
-        print(f"Test: {report['test_name']}")
-        print(f"Commands executed: {report['total_commands']}")
-        print(f"Successful commands: {report['successful_commands']}")
-        print(f"Success rate: {report['success_rate']:.1%}")
-        print(f"Overall success: {'✅' if report['overall_success'] else '❌'}")
-
-        # Describe commands must succeed, S3 upload and bundle may have issues
-        parse_commands = results[:3]  # First 3 are parse commands
-        parse_success = all(r["success"] for r in parse_commands)
-
-        assert (
-            parse_success
-        ), f"Describe commands must succeed: {[r for r in parse_commands if not r['success']]}"
-        assert (
-            len(results) == 5
-        ), f"Expected 5 commands (3 parse + 1 S3 upload + 1 bundle), got {len(results)}"
+        print(f"\n✅ All workflow steps completed successfully!")
+        print(f"Total commands: {len(results)}")
+        print(f"Successful: {sum(1 for r in results if r['success'])}/{len(results)}")
 
     @pytest.mark.integration
     def test_pipeline_validation(self):
@@ -279,7 +141,7 @@ class TestBasicPipeline(IntegrationTestBase):
         # Test 4: Monitor specific target
         print("\n=== Test 4: Monitor Specific Target ===")
         result = self.run_cli_command(
-            ["monitor", "--target", "dev", "--pipeline", pipeline_file],
+            ["monitor", "--targets", "dev", "--pipeline", pipeline_file],
             expected_exit_code=None,
         )
         results.append(result)

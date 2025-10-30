@@ -147,6 +147,7 @@ tests/integration/bundles/*.zip
 *.zip
 
 # Temporary files and scripts
+q-tasks/
 q-tasks.txt
 create_pdf*.py
 cleanup.py

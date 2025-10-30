@@ -1,0 +1,7 @@
+basic_test_workflow:
+  dag_id: "basic_test_workflow"
+  default_args:
+    owner: "test-user"
+  tasks:
+    start_task:
+      operator: "airflow.operators.empty.EmptyOperator"

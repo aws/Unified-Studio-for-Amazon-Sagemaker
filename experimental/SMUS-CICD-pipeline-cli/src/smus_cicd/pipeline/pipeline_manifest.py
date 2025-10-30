@@ -8,8 +8,9 @@ from typing import Any, Dict, List, Optional
 class DomainConfig:
     """Domain configuration."""
 
-    name: str
     region: str
+    name: Optional[str] = None
+    tags: Optional[Dict[str, str]] = None
 
 
 @dataclass
@@ -50,8 +51,8 @@ class BundleConfig:
     """Bundle configuration."""
 
     bundles_directory: str = "./bundles"
-    workflow: List[Dict[str, Any]] = field(default_factory=list)
-    storage: List[Dict[str, Any]] = field(default_factory=list)
+    storage: List[Dict[str, Any]] = field(default_factory=list)  # Unified storage (includes workflows)
+    git: List[Dict[str, Any]] = field(default_factory=list)  # Changed from dict to list
     catalog: Optional[CatalogConfig] = None
 
 
@@ -77,11 +78,12 @@ class ProjectConfig:
 
     name: str
     create: bool = False
-    profile_name: str = "All capabilities"
+    profile_name: Optional[str] = None
     owners: List[str] = field(default_factory=list)
     contributors: List[str] = field(default_factory=list)
     user_parameters: List[UserParameter] = field(default_factory=list)
     userParameters: List[EnvironmentUserParameters] = field(default_factory=list)
+    role: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -121,12 +123,11 @@ class InitializationConfig:
 
 
 @dataclass
-@dataclass
 class BundleTargetConfig:
     """Bundle target configuration."""
 
-    storage: Optional[Dict[str, str]] = None
-    workflows: Optional[Dict[str, str]] = None
+    storage: List[Dict[str, str]] = field(default_factory=list)  # Changed to list
+    git: List[Dict[str, str]] = field(default_factory=list)  # Changed to list
     catalog: Optional[Dict[str, Any]] = None
 
 
@@ -156,7 +157,6 @@ class WorkflowConfig:
 
     workflow_name: str
     connection_name: str
-    logging: str = "none"
     engine: str = "MWAA"
     parameters: Dict[str, Any] = field(default_factory=dict)
 
@@ -242,8 +242,8 @@ class PipelineManifest:
 
         bundle = BundleConfig(
             bundles_directory=bundle_data.get("bundlesDirectory", "./bundles"),
-            workflow=bundle_data.get("workflow", []),
             storage=bundle_data.get("storage", []),
+            git=bundle_data.get("git", []),
             catalog=catalog,
         )
 
@@ -263,13 +263,10 @@ class PipelineManifest:
                 )
 
             domain = DomainConfig(
-                name=domain_data.get("name", ""), region=domain_data.get("region", "")
+                region=domain_data.get("region", ""),
+                name=domain_data.get("name"),
+                tags=domain_data.get("tags")
             )
-
-            if not domain.name.strip():
-                raise ValueError(
-                    f"target '{target_name}' domain.name is required and cannot be empty"
-                )
 
             if not domain.region.strip():
                 raise ValueError(
@@ -301,7 +298,7 @@ class PipelineManifest:
                 project = ProjectConfig(
                     name=project_name,
                     create=project_data.get("create", False),
-                    profile_name=project_data.get("profileName", "All capabilities"),
+                    profile_name=project_data.get("profileName"),
                     owners=project_data.get("owners", []),
                     contributors=project_data.get("contributors", []),
                 )
@@ -317,9 +314,10 @@ class PipelineManifest:
                     init_project = ProjectConfig(
                         name=proj_data.get("name", project.name),
                         create=proj_data.get("create", False),
-                        profile_name=proj_data.get("profileName", "All capabilities"),
+                        profile_name=proj_data.get("profileName"),
                         owners=proj_data.get("owners", []),
                         contributors=proj_data.get("contributors", []),
+                        role=proj_data.get("role"),
                     )
 
                 if "domain" in init_data:
@@ -353,8 +351,8 @@ class PipelineManifest:
             btc_data = target_data.get("bundle_target_configuration")
             if btc_data:
                 bundle_target_config = BundleTargetConfig(
-                    storage=btc_data.get("storage"),
-                    workflows=btc_data.get("workflows"),
+                    storage=btc_data.get("storage", []),
+                    git=btc_data.get("git", []),
                     catalog=btc_data.get("catalog"),
                 )
 
@@ -402,7 +400,6 @@ class PipelineManifest:
             workflow = WorkflowConfig(
                 workflow_name=workflow_name,
                 connection_name=connection_name,
-                logging=workflow_data.get("logging", "none"),
                 engine=engine,
                 parameters=workflow_data.get("parameters", {}),
             )

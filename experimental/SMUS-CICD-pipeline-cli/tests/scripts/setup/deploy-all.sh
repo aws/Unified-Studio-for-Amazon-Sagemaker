@@ -19,7 +19,7 @@ if ! command -v yq &> /dev/null; then
     exit 1
 fi
 
-ACCOUNT_ID=$(yq '.account_id' "$CONFIG_FILE")
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 PRIMARY_REGION=$(yq '.regions.primary.name' "$CONFIG_FILE")
 
 echo "╔════════════════════════════════════════════════════════════════╗"

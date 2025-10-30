@@ -43,7 +43,7 @@ mlflow.set_tracking_uri(f"aws://{MLFLOW_ARN}")
 
 ## Test Data Setup Scripts
 
-This folder also contains COVID-19 test data setup scripts:
+### COVID-19 Test Data
 - `download-covid-data.py` - Download COVID-19 dataset
 - `setup-covid-data.py` - Set up DataZone data sources
 - `publish-covid-assets.py` - Publish assets to catalog
@@ -52,6 +52,30 @@ This folder also contains COVID-19 test data setup scripts:
 - `set-covid-assets-no-approval.py` - Configure auto-approval
 - `fix-datasource-covid.py` - Fix data source issues
 - `update-datasource-covid.py` - Update data source configuration
+
+### ML Workflow Test Data
+- `setup-ml-resources.py` - Setup ML workflow testing resources
+
+**Usage:**
+```bash
+# Setup ML resources in us-east-1
+./setup-ml-resources.py --region us-east-1
+
+# Setup ML resources in us-west-2
+./setup-ml-resources.py --region us-west-2
+
+# Custom bucket name
+./setup-ml-resources.py --region us-east-1 --bucket my-custom-bucket
+```
+
+**What it creates:**
+- S3 bucket: `demo-bucket-smus-ml-{region}`
+- Training data: `s3://{bucket}/training-data/training_data.csv` (1000 samples, 20 features)
+- Inference data: `s3://{bucket}/inference-data/inference_data.csv` (100 samples, 20 features)
+- Training code: `s3://{bucket}/training_code.tar.gz` (packaged SageMaker training script)
+
+**Output:**
+- `/tmp/ml_bucket_{region}.txt` - Bucket name for use in tests
 
 ## MLflow Server Configuration
 
@@ -62,11 +86,3 @@ This folder also contains COVID-19 test data setup scripts:
 ## Independent Usage
 
 This stage can be run independently of other stages for testing purposes.
-
-## Future Enhancements
-
-Planned additions:
-- Serverless Redshift cluster
-- Lake Formation configuration
-- RDS test databases
-- DynamoDB tables

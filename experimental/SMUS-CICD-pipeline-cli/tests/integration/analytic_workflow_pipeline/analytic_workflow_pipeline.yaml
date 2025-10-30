@@ -14,7 +14,8 @@ targets:
   dev: 
     stage: DEV
     domain:
-      name: cicd-test-domain
+      tags:
+          purpose: smus-cicd-testing
       region: ${DEV_DOMAIN_REGION:us-east-2}
     project: 
       name: dev-marketing
@@ -31,7 +32,8 @@ targets:
   test: 
     stage: TEST
     domain:
-      name: cicd-test-domain
+      tags:
+          purpose: smus-cicd-testing
       region: ${DEV_DOMAIN_REGION:us-east-2}
     project: 
       name: analytic-workflow-test
@@ -58,5 +60,4 @@ targets:
 # Workflows to trigger after deployment
 workflows:
   - workflowName: ml_dev_workflow
-    logging: console
     engine: airflow-serverless

@@ -25,27 +25,6 @@ The schema defines the structure for SMUS CI/CD pipeline manifests with the foll
 - **`bundle`** - Bundle creation configuration
 - **`workflows`** - Global workflow definitions
 
-### Recent Schema Updates
-
-#### User Parameters Support
-The schema now supports `userParameters` for overriding DataZone project profile parameters during creation:
-
-```yaml
-targets:
-  test:
-    initialization:
-      project:
-        create: true
-        profileName: 'All capabilities'
-        userParameters:
-          - EnvironmentConfigurationName: 'Lakehouse Database'
-            parameters:
-              - name: glueDbName
-                value: my_unique_db_name
-```
-
-This allows customization of project profile settings like database names, preventing conflicts during project creation.
-
 ## Usage
 
 ### Validate All Manifests
@@ -134,6 +113,8 @@ targets:
         profileName: 'All capabilities'
         owners: [Eng1]         # Optional: Project owners
         contributors: []       # Optional: Project contributors
+        role:                  # Optional: Customer-provided IAM role
+          arn: arn:aws:iam::123456789012:role/MyProjectRole
       environments:            # Optional: Environment configs
         - EnvironmentConfigurationName: 'OnDemand Workflows'
     bundle_target_configuration: # Optional: Target-specific bundle config
@@ -239,11 +220,4 @@ Example error output:
      Error: 'name' is a required property
 ```
 
-## Future Enhancements
 
-1. **IDE Integration**: Add schema reference to YAML files for IDE validation
-2. **CLI Integration**: Integrate validation into describe/bundle commands
-3. **Schema Versioning**: Add version field and backward compatibility
-4. **Custom Validators**: Add business logic validation beyond JSON Schema
-5. **Documentation Generation**: Auto-generate docs from schema
-6. **Template Generation**: Create manifest templates from schema

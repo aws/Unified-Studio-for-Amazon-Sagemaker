@@ -6,8 +6,7 @@ from typing import Optional
 
 import typer
 
-from ..helpers import airflow_serverless
-from ..helpers.utils import get_datazone_project_info, load_config
+from ..helpers.utils import build_domain_config, get_datazone_project_info, load_config
 from ..pipeline import PipelineManifest
 
 # TEMPORARY: Airflow Serverless (Overdrive) configuration
@@ -66,12 +65,7 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
         healthy_targets = []
         for target_name, target_config in targets_to_monitor.items():
             # Load AWS config
-            config = load_config()
-            config["domain"] = {
-                "name": target_config.domain.name,
-                "region": target_config.domain.region,
-            }
-            config["region"] = target_config.domain.region
+            config = build_domain_config(target_config)
 
             project_name = target_config.project.name
             if output.upper() != "JSON":
@@ -126,6 +120,9 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
         timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
         output_data["monitoring_timestamp"] = timestamp
 
+        # Track errors to exit with proper code
+        has_errors = False
+
         # Monitor each target
         for target_name, target_config in targets_to_monitor.items():
             # Skip unhealthy targets
@@ -148,13 +145,7 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
                 typer.echo(f"   Project: {target_config.project.name}")
 
             try:
-                config = load_config()
-                config["domain"] = {
-                    "name": target_config.domain.name,
-                    "region": target_config.domain.region,
-                }
-                config["region"] = target_config.domain.region
-                config["domain_name"] = target_config.domain.name
+                config = build_domain_config(target_config)
 
                 project_info = get_datazone_project_info(
                     target_config.project.name, config
@@ -203,6 +194,7 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
                         target_data["workflows"].update(mwaa_data)
 
                 else:
+                    has_errors = True
                     target_data["status"] = "error"
                     target_data["error"] = project_info.get("error", "Unknown error")
                     if output.upper() != "JSON":
@@ -211,6 +203,7 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
                         )
 
             except Exception as e:
+                has_errors = True
                 target_data["status"] = "error"
                 target_data["error"] = str(e)
                 if output.upper() != "JSON":
@@ -261,6 +254,14 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
                 )
             raise typer.Exit(1)
 
+        # Exit with error code if any errors occurred
+        if has_errors:
+            if output.upper() != "JSON":
+                typer.echo("\n❌ Command failed due to errors above", err=True)
+            raise typer.Exit(1)
+
+    except typer.Exit:
+        raise
     except Exception as e:
         if output.upper() == "JSON":
             typer.echo(json.dumps({"error": str(e)}, indent=2))
@@ -319,7 +320,9 @@ def _monitor_airflow_serverless_workflows(
             typer.echo("\n   🚀 Serverless Airflow Workflow Status:")
 
         # List all serverless Airflow workflows
-        all_workflows = airflow_serverless.list_workflows(region=AIRFLOW_SERVERLESS_REGION)
+        all_workflows = airflow_serverless.list_workflows(
+            region=AIRFLOW_SERVERLESS_REGION
+        )
 
         # Filter workflows that belong to this pipeline/target using tags
         pipeline_name = manifest.pipeline_name

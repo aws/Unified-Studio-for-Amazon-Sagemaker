@@ -118,6 +118,11 @@ class TestDataZoneConnectionsE2E(IntegrationTestBase):
                 'kwargs': {
                     'mwaa_environment_name': 'DataZoneMWAAEnv-dzd_6je2k8b63qse07-4kc6456xevd0h3-dev'
                 }
+            },
+            {
+                'name': f'test-serverless-{timestamp}',
+                'type': 'WORKFLOWS_SERVERLESS',
+                'kwargs': {}
             }
         ]
         

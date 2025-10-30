@@ -5,7 +5,7 @@ import json
 import boto3
 import typer
 
-from ..helpers.utils import get_datazone_project_info, load_config
+from ..helpers.utils import build_domain_config, get_datazone_project_info, load_config
 from ..pipeline import PipelineManifest
 
 
@@ -75,6 +75,9 @@ def describe_command(
             typer.echo(f"Domain: {domain_config.name} ({domain_config.region})")
             typer.echo("\nTargets:")
 
+        # Track errors to exit with proper code
+        has_errors = False
+
         # Process targets
         for target_name, target_config in targets_to_show.items():
             target_data = {
@@ -140,19 +143,30 @@ def describe_command(
             # Add connections if requested or if connect flag is used
             if connections or connect:
                 try:
-                    config = load_config()
-                    config["domain"] = {
-                        "name": target_config.domain.name,
-                        "region": target_config.domain.region,
-                    }
-                    config["region"] = target_config.domain.region
-                    config["domain_name"] = target_config.domain.name
+                    config = build_domain_config(target_config)
 
                     project_info = get_datazone_project_info(
                         target_config.project.name, config
                     )
 
-                    if project_info.get("project_id") and "error" not in project_info:
+                    # Check if project exists
+                    if project_info.get("status") == "NOT_FOUND":
+                        # Project doesn't exist - check if it will be created
+                        should_create = False
+                        if target_config.initialization and target_config.initialization.project:
+                            should_create = getattr(target_config.initialization.project, "create", False)
+                        
+                        if output.upper() != "JSON":
+                            typer.echo(f"    ⚠️  Project does not exist yet")
+                            if should_create:
+                                typer.echo("    ℹ️  Project will be created during deployment (create: true)")
+                            else:
+                                typer.echo("    ℹ️  Project must be created before deployment (create: false)")
+                        
+                        target_data["project"]["status"] = "NOT_FOUND"
+                        target_data["project"]["will_create"] = should_create
+                    
+                    elif project_info.get("project_id") and "error" not in project_info:
                         project_connections = project_info.get("connections", {})
 
                         target_data["project"]["id"] = project_info["project_id"]
@@ -163,6 +177,12 @@ def describe_command(
                             "owners", []
                         )
                         target_data["connections"] = project_connections
+
+                        # Validate that project has connections when using --connect
+                        if connect and not project_connections:
+                            has_errors = True
+                            if output.upper() != "JSON":
+                                typer.echo(f"    ❌ Error: Project has no connections configured", err=True)
 
                         if output.upper() != "JSON":
                             typer.echo(f"    Project ID: {project_info['project_id']}")
@@ -179,6 +199,7 @@ def describe_command(
                                     typer.echo(f"      {conn_name}:")
                                     # Handle error case where conn_info might be a string
                                     if isinstance(conn_info, str):
+                                        has_errors = True
                                         # Check for AccessDeniedException and provide helpful message
                                         if (
                                             "AccessDeniedException" in conn_info
@@ -212,6 +233,7 @@ def describe_command(
                                         isinstance(conn_info, dict)
                                         and "error" in conn_info
                                     ):
+                                        has_errors = True
                                         error_msg = conn_info["error"]
                                         # Check for AccessDeniedException and provide helpful message
                                         if (
@@ -263,70 +285,129 @@ def describe_command(
 
                                     # Display connection-specific properties
                                     conn_type = conn_info.get("type", "")
-                                    
+
                                     if conn_type == "S3":
                                         if conn_info.get("s3Uri"):
-                                            typer.echo(f"        s3Uri: {conn_info['s3Uri']}")
+                                            typer.echo(
+                                                f"        s3Uri: {conn_info['s3Uri']}"
+                                            )
                                         if conn_info.get("status"):
-                                            typer.echo(f"        status: {conn_info['status']}")
-                                    
+                                            typer.echo(
+                                                f"        status: {conn_info['status']}"
+                                            )
+
                                     elif conn_type == "ATHENA":
                                         if conn_info.get("workgroupName"):
-                                            typer.echo(f"        workgroupName: {conn_info['workgroupName']}")
-                                    
+                                            typer.echo(
+                                                f"        workgroupName: {conn_info['workgroupName']}"
+                                            )
+
                                     elif conn_type == "SPARK":
                                         if conn_info.get("glueVersion"):
-                                            typer.echo(f"        glueVersion: {conn_info['glueVersion']}")
+                                            typer.echo(
+                                                f"        glueVersion: {conn_info['glueVersion']}"
+                                            )
                                         if conn_info.get("workerType"):
-                                            typer.echo(f"        workerType: {conn_info['workerType']}")
+                                            typer.echo(
+                                                f"        workerType: {conn_info['workerType']}"
+                                            )
                                         if conn_info.get("numberOfWorkers"):
-                                            typer.echo(f"        numberOfWorkers: {conn_info['numberOfWorkers']}")
+                                            typer.echo(
+                                                f"        numberOfWorkers: {conn_info['numberOfWorkers']}"
+                                            )
                                         if conn_info.get("computeArn"):
-                                            typer.echo(f"        computeArn: {conn_info['computeArn']}")
+                                            typer.echo(
+                                                f"        computeArn: {conn_info['computeArn']}"
+                                            )
                                         if conn_info.get("runtimeRole"):
-                                            typer.echo(f"        runtimeRole: {conn_info['runtimeRole']}")
-                                    
+                                            typer.echo(
+                                                f"        runtimeRole: {conn_info['runtimeRole']}"
+                                            )
+
                                     elif conn_type == "REDSHIFT":
                                         if conn_info.get("host"):
-                                            typer.echo(f"        host: {conn_info['host']}")
+                                            typer.echo(
+                                                f"        host: {conn_info['host']}"
+                                            )
                                         if conn_info.get("port"):
-                                            typer.echo(f"        port: {conn_info['port']}")
+                                            typer.echo(
+                                                f"        port: {conn_info['port']}"
+                                            )
                                         if conn_info.get("databaseName"):
-                                            typer.echo(f"        databaseName: {conn_info['databaseName']}")
+                                            typer.echo(
+                                                f"        databaseName: {conn_info['databaseName']}"
+                                            )
                                         if conn_info.get("clusterName"):
-                                            typer.echo(f"        clusterName: {conn_info['clusterName']}")
+                                            typer.echo(
+                                                f"        clusterName: {conn_info['clusterName']}"
+                                            )
                                         if conn_info.get("workgroupName"):
-                                            typer.echo(f"        workgroupName: {conn_info['workgroupName']}")
-                                    
+                                            typer.echo(
+                                                f"        workgroupName: {conn_info['workgroupName']}"
+                                            )
+
                                     elif conn_type in ["WORKFLOWS_MWAA", "MWAA"]:
                                         if conn_info.get("mwaaEnvironmentName"):
-                                            typer.echo(f"        mwaaEnvironmentName: {conn_info['mwaaEnvironmentName']}")
-                                    
+                                            typer.echo(
+                                                f"        mwaaEnvironmentName: {conn_info['mwaaEnvironmentName']}"
+                                            )
+
                                     elif conn_type == "MLFLOW":
                                         if conn_info.get("trackingServerName"):
-                                            typer.echo(f"        trackingServerName: {conn_info['trackingServerName']}")
+                                            typer.echo(
+                                                f"        trackingServerName: {conn_info['trackingServerName']}"
+                                            )
                                         if conn_info.get("trackingServerArn"):
-                                            typer.echo(f"        trackingServerArn: {conn_info['trackingServerArn']}")
-                                    
+                                            typer.echo(
+                                                f"        trackingServerArn: {conn_info['trackingServerArn']}"
+                                            )
+
                                     elif conn_type == "IAM":
-                                        if conn_info.get("glueLineageSyncEnabled") is not None:
-                                            typer.echo(f"        glueLineageSyncEnabled: {conn_info['glueLineageSyncEnabled']}")
-                                    
+                                        if (
+                                            conn_info.get("glueLineageSyncEnabled")
+                                            is not None
+                                        ):
+                                            typer.echo(
+                                                f"        glueLineageSyncEnabled: {conn_info['glueLineageSyncEnabled']}"
+                                            )
+
                                     elif conn_type == "LAKEHOUSE":
                                         if conn_info.get("databaseName"):
-                                            typer.echo(f"        databaseName: {conn_info['databaseName']}")
+                                            typer.echo(
+                                                f"        databaseName: {conn_info['databaseName']}"
+                                            )
 
                                     # Display any other properties not already shown
                                     displayed_keys = {
-                                        "connectionId", "type", "region", "awsAccountId", "description",
-                                        "physicalEndpoints", "s3Uri", "status", "workgroupName",
-                                        "glueVersion", "workerType", "numberOfWorkers", "computeArn", "runtimeRole",
-                                        "host", "port", "databaseName", "clusterName",
-                                        "mwaaEnvironmentName", "trackingServerName", "trackingServerArn",
-                                        "glueLineageSyncEnabled", "error"
+                                        "connectionId",
+                                        "type",
+                                        "region",
+                                        "awsAccountId",
+                                        "description",
+                                        "physicalEndpoints",
+                                        "s3Uri",
+                                        "status",
+                                        "workgroupName",
+                                        "glueVersion",
+                                        "workerType",
+                                        "numberOfWorkers",
+                                        "computeArn",
+                                        "runtimeRole",
+                                        "host",
+                                        "port",
+                                        "databaseName",
+                                        "clusterName",
+                                        "mwaaEnvironmentName",
+                                        "trackingServerName",
+                                        "trackingServerArn",
+                                        "glueLineageSyncEnabled",
+                                        "error",
                                     }
                                     for key, value in conn_info.items():
-                                        if key not in displayed_keys and value is not None:
+                                        if (
+                                            key not in displayed_keys
+                                            and value is not None
+                                        ):
                                             typer.echo(f"        {key}: {value}")
 
                         target_data["connections"] = project_connections
@@ -341,11 +422,13 @@ def describe_command(
                                     "    ℹ️  Project will be created during deployment (create: true)"
                                 )
                             else:
+                                has_errors = True
                                 typer.echo(
                                     f"    ❌ Error getting project info: {project_info.get('error', 'Unknown error')}"
                                 )
 
                 except Exception as e:
+                    has_errors = True
                     if output.upper() != "JSON":
                         typer.echo(f"    ❌ Error connecting to AWS: {e}")
 
@@ -378,7 +461,7 @@ def describe_command(
                     if not connections_found:
                         typer.echo("\nInitialization Connections:")
                         connections_found = True
-                    
+
                     typer.echo(f"  Target: {target_name}")
                     for conn in target_config.initialization.connections:
                         typer.echo(f"    - {conn.name} ({conn.type})")
@@ -403,6 +486,14 @@ def describe_command(
 
             typer.echo(json.dumps(output_data, indent=2))
 
+        # Exit with error code if any errors occurred
+        if has_errors:
+            if output.upper() != "JSON":
+                typer.echo("\n❌ Command failed due to errors above", err=True)
+            raise typer.Exit(1)
+
+    except typer.Exit:
+        raise
     except Exception as e:
         if output.upper() == "JSON":
             typer.echo(json.dumps({"error": str(e)}, indent=2))

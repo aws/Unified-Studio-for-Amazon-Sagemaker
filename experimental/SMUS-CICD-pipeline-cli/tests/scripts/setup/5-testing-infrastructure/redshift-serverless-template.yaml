@@ -40,7 +40,7 @@ Resources:
         SecretStringTemplate: !Sub '{"username": "${AdminUsername}"}'
         GenerateStringKey: password
         PasswordLength: 32
-        ExcludeCharacters: '"@/\'
+        ExcludeCharacters: '"@/\ '''
         RequireEachIncludedType: true
 
   RedshiftSecurityGroup:
@@ -62,7 +62,7 @@ Resources:
   RedshiftNamespaceRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub 'RedshiftServerless-${NamespaceName}-Role'
+      RoleName: !Sub 'RedshiftServerless-${NamespaceName}-Role-${AWS::Region}'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:

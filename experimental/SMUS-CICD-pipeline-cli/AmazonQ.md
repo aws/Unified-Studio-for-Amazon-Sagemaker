@@ -1,5 +1,13 @@
 # Code Assist Script
 
+## Q Task Tracking
+
+Task progress and context are tracked in the `q-tasks/` folder:
+- Location: `experimental/SMUS-CICD-pipeline-cli/q-tasks/`
+- Files: `q-task-*.txt` (e.g., `q-task-build-ml-workflow.txt`)
+- Purpose: Track progress, environment setup, debugging steps, and next actions
+- Note: This folder is git-ignored for local development tracking only
+
 ## Automated Workflow for Code Changes
 
 When making any code changes to the SMUS CI/CD CLI, follow this automated workflow to ensure consistency and quality:

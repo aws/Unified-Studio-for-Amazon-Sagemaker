@@ -1,0 +1,38 @@
+# Configuration file for DataZone CI/CD deployment - Dev Account
+# Stage: dev
+
+# Service Endpoints (optional - only for non-prod environments)
+service_endpoints:
+  datazone: https://iceland-gamma.us-east-1.api.aws
+
+# Multi-region configuration
+regions:
+  primary:
+    name: us-east-1
+    enabled: true
+
+# DataZone Domain Tags (for auto-discovery - all tags must match)
+domain_tags:
+  purpose: smus-cicd-testing
+
+# # Stack Names
+# stacks:
+#   domain: cicd-test-domain-stack
+#   blueprints_profiles: sagemaker-blueprints-profiles-stack
+#   projects: sagemaker-projects-stack
+#   memberships: sagemaker-project-memberships-stack
+
+# Project Configuration
+projects:
+  dev:
+    name: dev-marketing
+    description: Development environment for marketing team
+
+# User Configuration
+users:
+  admin_username: amirbo
+  owners:
+    - amirbo
+  owner_roles:
+    - Admin
+    - GitHubActionsRole-SMUS-CLI-Tests

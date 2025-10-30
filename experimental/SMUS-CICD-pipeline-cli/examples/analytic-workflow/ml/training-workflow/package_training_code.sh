@@ -14,12 +14,13 @@ echo "📦 Packaging training code for SageMaker workflow..."
 rm -rf "$TEMP_DIR"
 mkdir -p "$TEMP_DIR"
 
-# Copy training script to temp directory
+# Copy training script and inference script to temp directory
 cp "$SCRIPT_DIR/sagemaker_training_script.py" "$TEMP_DIR/"
+cp "$SCRIPT_DIR/inference.py" "$TEMP_DIR/"
 
 # Create tar.gz package
 cd "$TEMP_DIR"
-tar -czf training_code.tar.gz sagemaker_training_script.py
+tar -czf training_code.tar.gz sagemaker_training_script.py inference.py
 
 # Upload to S3
 echo "⬆️ Uploading training_code.tar.gz to s3://$BUCKET/"

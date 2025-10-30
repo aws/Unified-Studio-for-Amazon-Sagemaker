@@ -1,55 +1,65 @@
 pipelineName: DeleteTestPipeline
-
 targets:
-  dev: 
+  dev:
     stage: DEV
     domain:
-      name: cicd-test-domain
+      tags:
+        purpose: smus-cicd-testing
       region: ${DEV_DOMAIN_REGION:us-east-2}
-    project: 
+    project:
       name: dev-marketing
   delete-test:
     stage: TEST
     domain:
-      name: cicd-test-domain
+      tags:
+        purpose: smus-cicd-testing
       region: ${DEV_DOMAIN_REGION:us-east-2}
     project:
       name: delete-test-project
     initialization:
-      project: 
+      project:
         create: true
-        profileName: 'All capabilities'
-        owners: [Eng1, arn:aws:iam::058264284947:role/Admin, arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests]
+        profileName: All capabilities
+        owners:
+        - Eng1
+        - arn:aws:iam::058264284947:role/Admin
+        - arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests
         contributors: []
-        userParameters: 
-          - EnvironmentConfigurationName: 'Lakehouse Database'
-            parameters:
-              - name: glueDbName
-                value: delete_test_db        
-      # environments: 
-      #   - EnvironmentConfigurationName: 'OnDemand Workflows'
+        userParameters:
+        - EnvironmentConfigurationName: Lakehouse Database
+          parameters:
+          - name: glueDbName
+            value: delete_test_db
     bundle_target_configuration:
       storage:
-        connectionName: default.s3_shared
-        directory: 'src'
-      workflows:
-        connectionName: default.s3_shared
-        directory: 'workflows'
-
+      - connectionName: default.s3_shared
+        name: code
+        targetDirectory: src
+      - connectionName: default.s3_shared
+        name: workflows
+        targetDirectory: workflows
 workflows:
-  - workflowName: simple_dag
-    connectionName: project.workflow_mwaa
-    engine: MWAA
-
+- workflowName: simple_dag
+  connectionName: project.workflow_mwaa
+  engine: MWAA
 bundle:
   bundlesDirectory: /tmp/bundles
-  workflow:
-    - connectionName: default.s3_shared
-      append: true
-      include: ['workflows']
-      exclude: ['.ipynb_checkpoints/', '__pycache__/', '*.pyc']
   storage:
-    - connectionName: default.s3_shared
-      append: false
-      include: ['src']
-      exclude: ['.ipynb_checkpoints/', '__pycache__/', '*.pyc']
+  - connectionName: default.s3_shared
+    append: false
+    include:
+    - src
+    exclude:
+    - .ipynb_checkpoints/
+    - __pycache__/
+    - '*.pyc'
+    name: code
+  - connectionName: default.s3_shared
+    append: true
+    include:
+    - workflows
+    exclude:
+    - .ipynb_checkpoints/
+    - __pycache__/
+    - '*.pyc'
+    name: workflows

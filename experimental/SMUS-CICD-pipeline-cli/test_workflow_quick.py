@@ -7,6 +7,7 @@ import os
 import json
 import time
 import logging
+import subprocess
 
 # Enable logging to see API calls
 logging.basicConfig(level=logging.INFO, format='%(message)s')
@@ -64,36 +65,62 @@ os.environ["AIRFLOW_SERVERLESS_REGION"] = REGION
 # ============================================================================
 
 def fix_role_policy():
-    """Fix IAM role trust policy and attach Admin policy."""
+    """Fix IAM role trust policy by merging airflow principals."""
     import json
     
     iam = boto3.client("iam", region_name=DATAZONE_REGION)
     role_name = ROLE_ARN.split("/")[-1]
     
-    # Fix trust policy
+    # Get current trust policy
     try:
-        trust_policy = {
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                    "Effect": "Allow",
-                    "Principal": {
-                        "Service": [
-                            "airflow-serverless.amazonaws.com",
-                            "airflow-serverless-gamma.amazonaws.com"
-                        ]
-                    },
-                    "Action": "sts:AssumeRole"
-                }
-            ]
-        }
+        response = iam.get_role(RoleName=role_name)
+        current_policy = response["Role"]["AssumeRolePolicyDocument"]
         
-        iam.update_assume_role_policy(
-            RoleName=role_name,
-            PolicyDocument=json.dumps(trust_policy)
-        )
-    except Exception:
-        pass  # May already be set
+        required_principals = [
+            "airflow-serverless.amazonaws.com",
+            "airflow-serverless-gamma.amazonaws.com"
+        ]
+        
+        # Check if airflow principals already exist
+        has_airflow = False
+        for statement in current_policy.get("Statement", []):
+            principal = statement.get("Principal", {})
+            if isinstance(principal, dict) and "Service" in principal:
+                services = principal["Service"]
+                if isinstance(services, str):
+                    services = [services]
+                if any(svc in required_principals for svc in services):
+                    has_airflow = True
+                    break
+        
+        if has_airflow:
+            print(f"✅ Role {role_name} already has airflow principals")
+            return
+        
+        # Add airflow principals to the service statement
+        updated = False
+        for statement in current_policy.get("Statement", []):
+            principal = statement.get("Principal", {})
+            if isinstance(principal, dict) and "Service" in principal:
+                services = principal["Service"]
+                if isinstance(services, str):
+                    services = [services]
+                # Add airflow principals if not present
+                for req_principal in required_principals:
+                    if req_principal not in services:
+                        services.append(req_principal)
+                        updated = True
+                statement["Principal"]["Service"] = services
+        
+        if updated:
+            iam.update_assume_role_policy(
+                RoleName=role_name,
+                PolicyDocument=json.dumps(current_policy)
+            )
+            print(f"✅ Updated trust policy for {role_name}")
+        
+    except Exception as e:
+        print(f"⚠️ Failed to update trust policy: {e}")
     
     # Attach Admin policy
     try:
@@ -215,10 +242,27 @@ def show_cloudwatch_logs(workflow_arn, run_id):
     except Exception as e:
         print(f"⚠️ Could not retrieve logs: {e}")
 
+def setup_ml_resources():
+    """Setup ML testing resources (bucket, data, training code)."""
+    print("\n📦 Setting up ML resources...")
+    
+    setup_script = os.path.join(
+        os.path.dirname(__file__),
+        'tests/scripts/setup/5-testing-infrastructure/setup-ml-resources.py'
+    )
+    
+    try:
+        subprocess.run([sys.executable, setup_script, '--region', REGION], check=True)
+        print("✅ ML resources ready")
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Failed to setup ML resources: {e}")
+        sys.exit(1)
+
 def main():
     print("Quick Workflow Test")
     print("=" * 80)
     
+    setup_ml_resources()
     fix_role_policy()
     dag_s3_location = upload_workflow_to_s3()
     result = create_workflow(dag_s3_location)

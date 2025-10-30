@@ -17,17 +17,17 @@ def get_project_id_from_stack(stack_name, region):
     try:
         cf_client = boto3.client("cloudformation", region_name=region)
         response = cf_client.describe_stacks(StackName=stack_name)
-        
+
         if not response.get("Stacks"):
             return None
-            
+
         stack = response["Stacks"][0]
         outputs = stack.get("Outputs", [])
-        
+
         for output in outputs:
             if output.get("OutputKey") == "ProjectId":
                 return output.get("OutputValue")
-                
+
         return None
     except Exception as e:
         logger = get_logger("cloudformation")
@@ -47,6 +47,7 @@ def create_project_via_cloudformation(
     owners=None,
     contributors=None,
     environments=None,
+    role_arn=None,
 ):
     """Create DataZone project using CloudFormation template (without memberships)."""
     logger = get_logger("cloudformation")
@@ -200,6 +201,18 @@ def create_project_via_cloudformation(
             template_dict["Resources"]["DataZoneProject"]["Properties"][
                 "UserParameters"
             ] = user_parameters_cf
+
+        # Add CustomerProvidedRoleConfigs if role_arn is provided
+        if role_arn:
+            template_dict["Resources"]["DataZoneProject"]["Properties"][
+                "CustomerProvidedRoleConfigs"
+            ] = [
+                {
+                    "RoleArn": role_arn,
+                    "RoleDesignation": "PROJECT_OWNER"
+                }
+            ]
+            typer.echo(f"✓ Using customer-provided role: {role_arn}")
 
         # Convert template to JSON
         template_body = json.dumps(template_dict)
@@ -468,9 +481,18 @@ def delete_project_stack(
 
 
 def update_project_stack_tags(stack_name, region, tags):
-    """Update CloudFormation stack tags."""
+    """Update CloudFormation stack tags if stack exists."""
     try:
         cf_client = boto3.client("cloudformation", region_name=region)
+
+        # Check if stack exists first
+        try:
+            cf_client.describe_stacks(StackName=stack_name)
+        except cf_client.exceptions.ClientError as e:
+            if "does not exist" in str(e):
+                typer.echo(f"⚠️  Stack {stack_name} not found - project was created outside CICD, skipping tag update")
+                return True
+            raise
 
         typer.echo(f"Updating CloudFormation stack tags: {stack_name}")
         cf_client.update_stack(

@@ -22,7 +22,7 @@ def display_bundle_tree(zip_path: str, output: str):
 
     try:
         with zipfile.ZipFile(zip_path, "r") as zipf:
-            # Filter out Python cache files
+            # Filter out Python cache files and dot directories
             file_list = sorted(
                 [
                     f
@@ -30,6 +30,7 @@ def display_bundle_tree(zip_path: str, output: str):
                     if not f.endswith(".pyc")
                     and "__pycache__" not in f
                     and ".ipynb_checkpoints" not in f
+                    and not any(part.startswith(".") for part in f.split("/"))
                 ]
             )
 
@@ -90,20 +91,29 @@ def bundle_command(
         target_name = target_list[0] if target_list else None
 
         # Get target configuration
-        targets = manifest.get("targets", {})
+        targets_dict = manifest.get("targets", {})
 
-        # Require target to be specified
+        # If no target specified, default to target with STAGE=DEV
+        if not target_name:
+            for name, config_data in targets_dict.items():
+                if config_data.get("stage", "").upper() == "DEV":
+                    target_name = name
+                    typer.echo(f"No target specified, defaulting to DEV target: {target_name}")
+                    break
+        
+        # Require target to be specified or found
         if not target_name:
             typer.echo(
-                "Error: No target specified. Use --targets to specify a target (e.g., --targets dev)", err=True
+                "Error: No target specified and no DEV stage target found. Use --targets to specify a target (e.g., --targets dev)",
+                err=True,
             )
             raise typer.Exit(1)
 
-        if target_name not in targets:
+        if target_name not in targets_dict:
             typer.echo(f"Error: Target '{target_name}' not found in manifest", err=True)
             raise typer.Exit(1)
 
-        target_config = targets[target_name]
+        target_config = targets_dict[target_name]
         project_name = target_config.get("project", {}).get("name")
 
         # Get region from target's domain configuration
@@ -158,40 +168,7 @@ def bundle_command(
 
             s3_client = boto3.client("s3", region_name=region)
 
-            # Process workflow bundles
-            workflow_config = bundle_config.get("workflow", [])
-            if isinstance(workflow_config, list):
-                workflow_bundles = workflow_config
-            else:
-                workflow_bundles = [workflow_config] if workflow_config else []
-
-            for bundle_def in workflow_bundles:
-                connection_name = bundle_def.get("connectionName")
-                include_patterns = bundle_def.get("include", [])
-                append_flag = bundle_def.get("append", True)
-
-                if not connection_name or connection_name not in connections:
-                    continue
-
-                connection = connections[connection_name]
-                s3_uri = connection.get("s3Uri")
-                if not s3_uri:
-                    continue
-
-                typer.echo(
-                    f"Downloading workflows from S3: {connection_name} (append: {append_flag})"
-                )
-
-                # List S3 contents first
-                deployment.list_s3_contents(s3_client, s3_uri, "Workflows")
-
-                files_added = deployment.download_s3_files(
-                    s3_client, s3_uri, include_patterns, temp_bundle_dir, ""
-                )
-                total_files_added += files_added
-                typer.echo(f"  Downloaded {files_added} workflow files from S3")
-
-            # Process storage bundles
+            # Process storage bundles (unified - includes workflows)
             storage_config = bundle_config.get("storage", [])
             if isinstance(storage_config, list):
                 storage_bundles = storage_config
@@ -199,6 +176,7 @@ def bundle_command(
                 storage_bundles = [storage_config] if storage_config else []
 
             for bundle_def in storage_bundles:
+                name = bundle_def.get("name", "unnamed")
                 connection_name = bundle_def.get("connectionName")
                 include_patterns = bundle_def.get("include", [])
                 append_flag = bundle_def.get("append", False)
@@ -212,80 +190,89 @@ def bundle_command(
                     continue
 
                 typer.echo(
-                    f"Downloading storage from S3: {connection_name} (append: {append_flag})"
+                    f"Downloading '{name}' from S3: {connection_name} (append: {append_flag})"
                 )
 
                 # List S3 contents first
-                deployment.list_s3_contents(s3_client, s3_uri, "Storage")
+                deployment.list_s3_contents(s3_client, s3_uri, f"Storage[{name}]")
 
+                # Download to bundle root with name as subdirectory
                 files_added = deployment.download_s3_files(
-                    s3_client, s3_uri, include_patterns, temp_bundle_dir, "storage"
+                    s3_client, s3_uri, include_patterns, temp_bundle_dir, name
                 )
                 total_files_added += files_added
-                typer.echo(f"  Downloaded {files_added} storage files from S3")
+                typer.echo(f"  Downloaded {files_added} files for '{name}'")
 
-            # Process Git repositories
-            git_config = bundle_config.get("git", {})
+            # Process Git repositories (supports both dict and list formats)
+            git_config = bundle_config.get("git")
             if git_config:
-                repository = git_config.get("repository")
-                url = git_config.get("url")
-                target_dir = git_config.get("targetDir", "git")
+                # Convert single dict to list for uniform processing
+                git_repos = git_config if isinstance(git_config, list) else [git_config]
+                
+                for repo_config in git_repos:
+                    repository = repo_config.get("repository")
+                    url = repo_config.get("url")
 
-                if url:
-                    typer.echo(f"Cloning Git repository: {repository or url}")
+                    if url and repository:
+                        typer.echo(f"Cloning Git repository: {repository}")
 
-                    try:
-                        clone_path = os.path.join(
-                            temp_bundle_dir, target_dir.lstrip("./")
-                        )
-                        os.makedirs(os.path.dirname(clone_path), exist_ok=True)
+                        try:
+                            # Always clone to repositories/{repository-name}
+                            clone_path = os.path.join(
+                                temp_bundle_dir, "repositories", repository
+                            )
+                            os.makedirs(os.path.dirname(clone_path), exist_ok=True)
 
-                        subprocess.run(
-                            ["git", "clone", "--depth", "1", url, clone_path],
-                            check=True,
-                            capture_output=True,
-                            text=True,
-                            timeout=60,
-                        )
+                            subprocess.run(
+                                ["git", "clone", "--depth", "1", url, clone_path],
+                                check=True,
+                                capture_output=True,
+                                text=True,
+                                timeout=60,
+                            )
 
-                        # Remove .git directory and Python cache files
-                        git_dir = os.path.join(clone_path, ".git")
-                        if os.path.exists(git_dir):
-                            shutil.rmtree(git_dir)
+                            # Remove .git directory and Python cache files
+                            git_dir = os.path.join(clone_path, ".git")
+                            if os.path.exists(git_dir):
+                                shutil.rmtree(git_dir)
 
-                        # Remove Python cache files and directories
-                        for root, dirs, files in os.walk(clone_path, topdown=False):
-                            # Remove __pycache__ directories
-                            dirs_to_remove = [
-                                d
-                                for d in dirs
-                                if d == "__pycache__" or d == ".ipynb_checkpoints"
-                            ]
-                            for d in dirs_to_remove:
-                                shutil.rmtree(os.path.join(root, d))
-                                dirs.remove(d)
+                            # Remove Python cache files and directories
+                            for root, dirs, files in os.walk(clone_path, topdown=False):
+                                # Remove __pycache__ and dot directories
+                                dirs_to_remove = [
+                                    d
+                                    for d in dirs
+                                    if d == "__pycache__" or d == ".ipynb_checkpoints" or d.startswith(".")
+                                ]
+                                for d in dirs_to_remove:
+                                    shutil.rmtree(os.path.join(root, d))
+                                    dirs.remove(d)
 
-                            # Remove .pyc files
-                            files_to_remove = [f for f in files if f.endswith(".pyc")]
-                            for f in files_to_remove:
-                                os.remove(os.path.join(root, f))
+                                # Remove .pyc and .DS_Store files
+                                files_to_remove = [
+                                    f
+                                    for f in files
+                                    if f.endswith(".pyc") or f == ".DS_Store"
+                                ]
+                                for f in files_to_remove:
+                                    os.remove(os.path.join(root, f))
 
-                        # Count files (after cleanup)
-                        git_files_added = 0
-                        for root, dirs, files in os.walk(clone_path):
-                            git_files_added += len(files)
+                            # Count files (after cleanup)
+                            git_files_added = 0
+                            for root, dirs, files in os.walk(clone_path):
+                                git_files_added += len(files)
 
-                        total_files_added += git_files_added
-                        typer.echo(
-                            f"  Cloned {git_files_added} files from Git repository"
-                        )
+                            total_files_added += git_files_added
+                            typer.echo(
+                                f"  Cloned {git_files_added} files from {repository}"
+                            )
 
-                    except subprocess.TimeoutExpired:
-                        typer.echo(
-                            "Error: Git clone timed out after 60 seconds", err=True
-                        )
-                    except Exception as e:
-                        typer.echo(f"Error cloning Git repository: {str(e)}", err=True)
+                        except subprocess.TimeoutExpired:
+                            typer.echo(
+                                "Error: Git clone timed out after 60 seconds", err=True
+                            )
+                        except Exception as e:
+                            typer.echo(f"Error cloning Git repository: {str(e)}", err=True)
 
             # Create or update zip archive from temp directory
             if total_files_added > 0:
@@ -297,16 +284,16 @@ def bundle_command(
 
                 with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
                     for root, dirs, files in os.walk(temp_bundle_dir):
-                        # Filter out __pycache__ directories
+                        # Filter out __pycache__ and dot directories
                         dirs[:] = [
                             d
                             for d in dirs
-                            if d != "__pycache__" and d != ".ipynb_checkpoints"
+                            if d != "__pycache__" and d != ".ipynb_checkpoints" and not d.startswith(".")
                         ]
 
                         for file in files:
-                            # Skip .pyc files
-                            if file.endswith(".pyc"):
+                            # Skip .pyc and .DS_Store files
+                            if file.endswith(".pyc") or file == ".DS_Store":
                                 continue
 
                             file_path = os.path.join(root, file)

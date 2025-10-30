@@ -47,6 +47,12 @@ Targets:
         awsAccountId: <aws-account-id>
         description: Connection for MWAA environment
         environmentName: DataZoneMWAAEnv-<domain-id>-<project-id>-dev
+      project.workflow_serverless:
+        connectionId: 7g69fnqi3hukjw
+        type: WORKFLOWS_SERVERLESS
+        region: us-east-1
+        awsAccountId: <aws-account-id>
+        description: Serverless workflows connection
       default.s3_shared:
         connectionId: dqbxjn28zehzjb
         type: S3
@@ -270,6 +276,12 @@ The CLI automatically validates MWAA environment health before executing workflo
         awsAccountId: <aws-account-id>
         description: Connection for MWAA environment
         environmentName: SageMaker Unified StudioMWAAEnv-<domain-id>-<dev-project-id>-dev
+      project.workflow_serverless:
+        connectionId: e6kr4wt5pm0t24
+        type: WORKFLOWS_SERVERLESS
+        region: us-east-1
+        awsAccountId: <aws-account-id>
+        description: Serverless workflows connection
 
 Manifest Workflows:
   - test_dag (Connection: project.workflow_mwaa, Engine: MWAA)

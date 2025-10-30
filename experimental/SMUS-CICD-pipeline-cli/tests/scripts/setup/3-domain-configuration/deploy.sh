@@ -10,7 +10,7 @@ if [ ! -f "$CONFIG_FILE" ]; then
 fi
 
 # Parse config
-ACCOUNT_ID=$(yq '.account_id' "$CONFIG_FILE")
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 REGION=$(yq '.regions.primary.name' "$CONFIG_FILE")
 REGION2=$(yq '.regions.secondary.name // ""' "$CONFIG_FILE")
 REGION3=$(yq '.regions.tertiary.name // ""' "$CONFIG_FILE")

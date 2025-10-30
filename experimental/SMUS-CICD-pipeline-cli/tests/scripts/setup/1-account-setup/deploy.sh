@@ -12,7 +12,7 @@ if [ ! -f "$CONFIG_FILE" ]; then
 fi
 
 # Parse config - use domain region for GitHub role deployment
-ACCOUNT_ID=$(yq '.account_id' "$CONFIG_FILE")
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 REGION=$(yq '.regions.primary.name' "$CONFIG_FILE")
 STACK_NAME="smus-cli-github-integration"
 TEMPLATE_FILE="$SCRIPT_DIR/github-oidc-role.yaml"
@@ -177,7 +177,7 @@ deploy_vpc_in_region() {
 }
 
 # Parse config
-ACCOUNT_ID=$(yq '.account_id' "$CONFIG_FILE")
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 PRIMARY_REGION=$(yq '.regions.primary.name' "$CONFIG_FILE")
 PRIMARY_ENABLED=$(yq '.regions.primary.enabled' "$CONFIG_FILE")
 SECONDARY_REGION=$(yq '.regions.secondary.name // ""' "$CONFIG_FILE")

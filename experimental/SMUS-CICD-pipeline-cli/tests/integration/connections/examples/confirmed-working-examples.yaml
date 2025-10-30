@@ -138,6 +138,19 @@ mwaa_production:
     workflowsMwaaProperties:
       mwaaEnvironmentName: "production-airflow-env"
 
+# 9. WORKFLOWS_SERVERLESS - Serverless Airflow Workflows ✅
+workflows_serverless_basic:
+  name: "serverless-workflows"
+  description: "Serverless Airflow workflows"
+  props:
+    workflowsServerlessProperties: {}
+
+workflows_serverless_dev:
+  name: "dev-serverless-workflows"
+  description: "Development serverless workflows"
+  props:
+    workflowsServerlessProperties: {}
+
 # CICD Pipeline Manifest Example
 manifest_example:
   apiVersion: v1
@@ -199,3 +212,7 @@ manifest_example:
         type: WORKFLOWS_MWAA
         properties:
           mwaaEnvironmentName: "DataZoneMWAAEnv-dzd_6je2k8b63qse07-4kc6456xevd0h3-dev"
+      
+      - name: serverless-workflows
+        type: WORKFLOWS_SERVERLESS
+        properties: {}

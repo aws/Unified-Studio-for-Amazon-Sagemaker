@@ -28,18 +28,28 @@ class ProjectManager:
         domain_name = target_config.domain.name
         region = target_config.domain.region
 
+        # Resolve domain name if not provided (using tags)
+        if not domain_name:
+            domain_id, domain_name = datazone.resolve_domain_id(
+                domain_name=None,
+                domain_tags=target_config.domain.tags,
+                region=region
+            )
+            if not domain_name:
+                handle_error("Could not resolve domain name from tags")
+
         logger.debug(f"project_name: {project_name}")
         logger.debug(f"domain_name: {domain_name}")
         logger.debug(f"region: {region}")
 
         # Check if project exists in DataZone first
-        # Ensure config has region for get_datazone_project_info
-        config_with_region = {**self.config, "domain": {"region": region}}
-        project_info = get_datazone_project_info(project_name, config_with_region)
+        # Use the config passed in (already has domain info from build_domain_config)
+        project_info = get_datazone_project_info(project_name, self.config)
         logger.debug(f"project_info keys: {list(project_info.keys())}")
         logger.debug(f"project_info has error: {'error' in project_info}")
+        logger.debug(f"project_info status: {project_info.get('status')}")
 
-        if "error" not in project_info:
+        if "error" not in project_info and project_info.get("status") != "NOT_FOUND":
             # Project exists - check and create missing environments
             logger.debug("Project exists path - calling _ensure_environments_exist")
             handle_success(f"✅ Project '{project_name}' already exists")
@@ -118,7 +128,7 @@ class ProjectManager:
         # Double-check project doesn't exist (race condition protection)
         config_with_region = {**self.config, "region": region}
         project_info = get_datazone_project_info(project_name, config_with_region)
-        if "error" not in project_info:
+        if "error" not in project_info and project_info.get("status") != "NOT_FOUND":
             handle_success(
                 f"✅ Project '{project_name}' was created by another process"
             )
@@ -133,6 +143,7 @@ class ProjectManager:
         profile_name = self._get_profile_name(target_config)
         user_parameters = self._extract_user_parameters(target_config, target_name)
         owners, contributors = self._extract_memberships(target_config)
+        role_arn = self._get_role_arn(target_config)
 
         # Extract environments for environment creation
         environments = None
@@ -141,58 +152,65 @@ class ProjectManager:
         ):
             environments = target_config.initialization.environments
 
-        typer.echo(f"Creating project '{project_name}' via CloudFormation...")
-        success = cloudformation.create_project_via_cloudformation(
+        # TODO: Re-enable CloudFormation path once service role permissions are configured for gamma endpoints
+        # typer.echo(f"Creating project '{project_name}' via CloudFormation...")
+        # success = cloudformation.create_project_via_cloudformation(
+        #     project_name,
+        #     profile_name,
+        #     domain_name,
+        #     region,
+        #     self.manifest.pipeline_name,
+        #     target_name,
+        #     target_config.stage,
+        #     user_parameters,
+        #     owners,
+        #     contributors,
+        #     environments,
+        #     role_arn,
+        # )
+        
+        # Temporary: Use DataZone API directly for gamma endpoints
+        typer.echo(f"Creating project '{project_name}' via DataZone API...")
+        success = self._create_project_via_datazone_api(
             project_name,
             profile_name,
             domain_name,
             region,
-            self.manifest.pipeline_name,
-            target_name,
-            target_config.stage,
-            user_parameters,
+            role_arn,
             owners,
-            contributors,
-            environments,
+            contributors
         )
 
         print(
-            f"🔍 DEBUG: CloudFormation create_project_via_cloudformation returned: {success}"
+            f"🔍 DEBUG: DataZone API create_project returned: {success}"
         )
         if not success:
-            print("🔍 DEBUG: CloudFormation creation failed - returning error")
+            print("🔍 DEBUG: Project creation failed - returning error")
             handle_error("Failed to create project")
 
-        print("🔍 DEBUG: CloudFormation creation succeeded - managing memberships")
+        print("🔍 DEBUG: Project creation succeeded")
 
-        # Get domain ID for membership management
+        # Get domain ID for final project info lookup
         domain_id = datazone.get_domain_id_by_name(domain_name, region)
         if not domain_id:
             handle_error(f"Failed to find domain ID for {domain_name}")
 
-        # Get project ID from CloudFormation stack outputs first
-        stack_name = f"SMUS-{self.manifest.pipeline_name.lower()}-{target_name}-{project_name}-project"
-        project_id = cloudformation.get_project_id_from_stack(stack_name, region)
-        
-        # Fallback to DataZone API lookup if stack output not available
-        if not project_id:
-            print("🔍 DEBUG: Stack output not available, falling back to DataZone API lookup")
-            project_id = self._get_project_id_with_retry(project_name, domain_id, region)
-            
+        # Get project ID via DataZone API lookup
+        project_id = self._get_project_id_with_retry(
+            project_name, domain_id, region
+        )
+
         if not project_id:
             handle_error(f"Failed to find project ID for {project_name}")
 
-        # Manage project memberships via DataZone API
-        typer.echo("🔧 Managing project memberships...")
-        membership_success = datazone.manage_project_memberships(
-            project_id, domain_id, region, owners, contributors
-        )
-
-        if not membership_success:
-            handle_error("Failed to manage project memberships")
+        # Wait for environment deployment to complete
+        typer.echo("⏳ Waiting for environment deployment...")
+        env_success = self._wait_for_environments(project_id, domain_id, region)
+        if not env_success:
+            handle_error("Environment deployment failed")
 
         handle_success("Target infrastructure ready")
-        config_with_region = {**self.config, "domain": {"region": region}}
+        config_with_region = {**self.config, "region": region, "domain_name": domain_name}
         final_project_info = get_datazone_project_info(project_name, config_with_region)
         print(
             f"🔍 DEBUG: Final project_info keys: {list(final_project_info.keys()) if isinstance(final_project_info, dict) else type(final_project_info)}"
@@ -257,7 +275,194 @@ class ProjectManager:
             profile_name = (
                 profile_name or target_config.initialization.project.profile_name
             )
+        
+        # If no profile name provided, auto-detect from domain
+        if not profile_name:
+            from . import datazone
+            domain_name = target_config.domain.name
+            region = self.config.get("region")
+            
+            # Get domain ID
+            domain_id = datazone.get_domain_id_by_name(domain_name, region)
+            if not domain_id:
+                handle_error(f"Domain '{domain_name}' not found")
+            
+            # List project profiles
+            import boto3
+            dz_client = boto3.client("datazone", region_name=region)
+            response = dz_client.list_project_profiles(domainIdentifier=domain_id)
+            profiles = response.get("items", [])
+            
+            if len(profiles) == 0:
+                handle_error(
+                    f"No project profiles found in domain '{domain_name}'. "
+                    f"Please specify 'profileName' in your manifest under targets.{target_config.project.name}.project.profileName"
+                )
+            elif len(profiles) == 1:
+                profile_name = profiles[0]["name"]
+                typer.echo(f"✓ Auto-detected project profile: {profile_name}")
+            else:
+                profile_names = [p["name"] for p in profiles]
+                handle_error(
+                    f"Multiple project profiles found in domain '{domain_name}': {', '.join(profile_names)}. "
+                    f"Please specify one of these profiles using 'profileName' in your manifest under targets.{target_config.project.name}.project.profileName"
+                )
+        
         return profile_name
+
+    def _create_project_via_datazone_api(
+        self, project_name, profile_name, domain_name, region, role_arn, owners, contributors
+    ):
+        """Create project using DataZone API directly (for gamma endpoints)."""
+        import boto3
+        
+        # Get domain ID
+        domain_id = datazone.get_domain_id_by_name(domain_name, region)
+        if not domain_id:
+            handle_error(f"Domain '{domain_name}' not found")
+            return False
+        
+        # Get profile ID
+        dz_client = boto3.client("datazone", region_name=region)
+        response = dz_client.list_project_profiles(domainIdentifier=domain_id)
+        profile_id = None
+        for profile in response.get("items", []):
+            if profile["name"] == profile_name:
+                profile_id = profile["id"]
+                break
+        
+        if not profile_id:
+            handle_error(f"Project profile '{profile_name}' not found")
+            return False
+        
+        # Prepare create project parameters
+        params = {
+            "domainIdentifier": domain_id,
+            "name": project_name,
+            "projectProfileId": profile_id,
+        }
+        
+        # Add customer-provided role if specified
+        if role_arn:
+            params["customerProvidedRoleConfigs"] = [
+                {
+                    "roleArn": role_arn,
+                    "roleDesignation": "PROJECT_OWNER"
+                }
+            ]
+            typer.echo(f"✓ Using customer-provided role: {role_arn}")
+        
+        try:
+            response = dz_client.create_project(**params)
+            project_id = response["id"]
+            typer.echo(f"✅ Project created: {project_id}")
+            
+            # Manage memberships if provided
+            if owners or contributors:
+                typer.echo("🔧 Managing project memberships...")
+                datazone.manage_project_memberships(
+                    project_id, domain_id, region, owners, contributors
+                )
+            
+            return True
+        except Exception as e:
+            typer.echo(f"❌ Error creating project: {e}")
+            return False
+
+    def _get_role_arn(self, target_config) -> Optional[str]:
+        """Extract role ARN from target configuration."""
+        role_arn = None
+        
+        # Check initialization.project.role.arn first
+        if target_config.initialization and target_config.initialization.project:
+            init_project = target_config.initialization.project
+            if hasattr(init_project, 'role') and init_project.role:
+                if isinstance(init_project.role, dict):
+                    role_arn = init_project.role.get('arn')
+                elif hasattr(init_project.role, 'arn'):
+                    role_arn = init_project.role.arn
+        
+        # Fallback to target_config.project.role.arn
+        if not role_arn and hasattr(target_config.project, 'role') and target_config.project.role:
+            if isinstance(target_config.project.role, dict):
+                role_arn = target_config.project.role.get('arn')
+            elif hasattr(target_config.project.role, 'arn'):
+                role_arn = target_config.project.role.arn
+        
+        # Replace wildcard account ID with current account
+        if role_arn and ':*:' in role_arn:
+            import boto3
+            sts = boto3.client('sts')
+            account_id = sts.get_caller_identity()['Account']
+            role_arn = role_arn.replace(':*:', f':{account_id}:')
+        
+        return role_arn
+
+    def _wait_for_environments(self, project_id, domain_id, region, max_wait_seconds=300):
+        """Wait for project environments to be fully deployed."""
+        import boto3
+        import time
+        import json
+        
+        dz_client = boto3.client("datazone", region_name=region)
+        start_time = time.time()
+        
+        while time.time() - start_time < max_wait_seconds:
+            response = dz_client.get_project(
+                domainIdentifier=domain_id,
+                identifier=project_id
+            )
+            
+            print(f"🔍 DEBUG get_project response: {json.dumps(response, indent=2, default=str)}")
+            
+            project_status = response.get("projectStatus")
+            env_deployment = response.get("environmentDeploymentDetails", {})
+            overall_status = env_deployment.get("overallDeploymentStatus")
+            
+            typer.echo(f"  Project status: {project_status}, Environment deployment: {overall_status}")
+            
+            if project_status in ["UPDATE_FAILED", "DELETE_FAILED"]:
+                typer.echo(f"  ❌ Project status failed: {project_status}")
+                failure_reasons = response.get("failureReasons", [])
+                if failure_reasons:
+                    for reason in failure_reasons:
+                        typer.echo(f"    Failure: {reason}")
+                return False
+            
+            # Check environment deployment status
+            if overall_status == "SUCCESSFUL":
+                typer.echo(f"  ✅ Environment deployment: {overall_status}")
+                
+                # Verify project has connections
+                typer.echo("  Verifying project connections...")
+                connections_response = dz_client.list_connections(
+                    domainIdentifier=domain_id,
+                    projectIdentifier=project_id
+                )
+                connections = connections_response.get("items", [])
+                print(f"🔍 DEBUG: Found {len(connections)} connections")
+                
+                if not connections:
+                    typer.echo("  ❌ Project has no connections - environments not ready")
+                    return False
+                
+                typer.echo(f"  ✅ Project has {len(connections)} connections")
+                return True
+            elif overall_status == "FAILED":
+                typer.echo(f"  ❌ Environment deployment failed")
+                env_failures = env_deployment.get("environmentFailureReasons", {})
+                if env_failures:
+                    for env_id, reason in env_failures.items():
+                        typer.echo(f"    Environment {env_id}: {reason}")
+                return False
+            elif overall_status in ["IN_PROGRESS", "PENDING_DEPLOYMENT"]:
+                time.sleep(10)
+            else:
+                # No deployment details yet or unknown status
+                time.sleep(10)
+        
+        typer.echo(f"⚠️  Timeout waiting for environment deployment after {max_wait_seconds}s")
+        return False
 
     def _extract_user_parameters(
         self, target_config, target_name: str
@@ -590,5 +795,13 @@ class ProjectManager:
         else:
             owners = target_config.project.owners or []
             contributors = target_config.project.contributors or []
+
+        # Replace wildcard account ID in IAM ARNs
+        import boto3
+        sts = boto3.client('sts')
+        account_id = sts.get_caller_identity()['Account']
+        
+        owners = [owner.replace(':*:', f':{account_id}:') if ':*:' in owner else owner for owner in owners]
+        contributors = [contrib.replace(':*:', f':{account_id}:') if ':*:' in contrib else contrib for contrib in contributors]
 
         return owners, contributors

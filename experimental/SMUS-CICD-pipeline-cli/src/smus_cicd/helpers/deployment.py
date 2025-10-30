@@ -27,8 +27,16 @@ def deploy_files(
         typer.echo(f"  ❌ No S3 URI found for connection {conn_id} (type: {conn_type})")
         return False  # Return False to indicate failure
 
+    # Normalize target_directory: treat ".", "", or None as root
+    if target_directory in (".", "", None):
+        target_directory = ""
+    
     # Construct full S3 path
-    full_s3_path = f"{s3_uri.rstrip('/')}/{target_directory}/"
+    if target_directory:
+        full_s3_path = f"{s3_uri.rstrip('/')}/{target_directory}/"
+    else:
+        full_s3_path = s3_uri if s3_uri.endswith("/") else f"{s3_uri}/"
+    
     typer.echo(f"  S3 Location: {full_s3_path}")
 
     # Parse S3 URI for clearing if needed
@@ -37,7 +45,8 @@ def deploy_files(
     s3_prefix = "/".join(s3_parts[1:])
     if s3_prefix and not s3_prefix.endswith("/"):
         s3_prefix += "/"
-    s3_prefix += f"{target_directory}/"
+    if target_directory:
+        s3_prefix += f"{target_directory}/"
 
     # Clear directory if append is False
     if not append_flag:
@@ -76,6 +85,8 @@ def deploy_files(
                 "__pycache__/*",
                 "--exclude",
                 ".ipynb_checkpoints/*",
+                "--exclude",
+                ".DS_Store",
             ]
 
             result = subprocess.run(cmd, capture_output=True, text=True)
@@ -105,6 +116,7 @@ def deploy_files(
                         for file in files:
                             if (
                                 not file.endswith(".pyc")
+                                and file != ".DS_Store"
                                 and "__pycache__" not in root
                                 and ".ipynb_checkpoints" not in root
                             ):
@@ -365,7 +377,6 @@ def clone_git_repository(git_config, temp_bundle_dir):
 
     repository_name = git_config.get("repository", "unknown")
     git_url = git_config.get("url")
-    target_dir = git_config.get("targetDir", "./src")
 
     if not git_url:
         typer.echo(f"⚠️  No Git URL specified for repository {repository_name}")
@@ -373,8 +384,8 @@ def clone_git_repository(git_config, temp_bundle_dir):
 
     typer.echo(f"Cloning Git repository: {repository_name}")
 
-    # Create target directory in temp bundle
-    git_target_path = Path(temp_bundle_dir) / target_dir.lstrip("./")
+    # Always clone to repositories/{repository-name}
+    git_target_path = Path(temp_bundle_dir) / "repositories" / repository_name
     git_target_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:

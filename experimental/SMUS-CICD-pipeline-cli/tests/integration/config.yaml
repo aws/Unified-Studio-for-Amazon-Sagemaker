@@ -10,7 +10,8 @@ aws:
 
 # Test environment settings
 test_environment:
-  domain_name: cicd-test-domain  # DataZone domain for tests
+  domain_tags:
+          purpose: smus-cicd-testing  # DataZone domain for tests
   project_prefix: integration-test      # Prefix for test projects
   cleanup_after_tests: true            # Whether to clean up resources after tests
 

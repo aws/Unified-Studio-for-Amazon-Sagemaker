@@ -4,77 +4,22 @@ import json
 import os
 import tempfile
 import zipfile
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import boto3
 import typer
 
-from ..helpers import deployment, datazone
+from ..helpers import datazone, deployment
 from ..helpers.error_handler import handle_error, handle_success
 from ..helpers.project_manager import ProjectManager
-from ..helpers.utils import get_datazone_project_info, load_config
+from ..helpers.utils import build_domain_config, get_datazone_project_info, load_config
 from ..pipeline import PipelineManifest
 
 # TEMPORARY: Airflow Serverless (Overdrive) configuration
 # TODO: Remove these overrides once service is available in all regions
 AIRFLOW_SERVERLESS_REGION = "us-west-2"  # Force us-west-2 for Airflow Serverless
 AIRFLOW_SERVERLESS_ENDPOINT_URL = "https://overdrive-gamma.us-west-2.api.aws"
-
-
-def _fix_airflow_role_trust_policy(role_arn: str, region: str) -> bool:
-    """Fix IAM role trust policy to include airflow-serverless service principals."""
-    try:
-        iam = boto3.client("iam", region_name=region)
-
-        # Extract role name from ARN
-        role_name = role_arn.split("/")[-1]
-
-        # Get current trust policy
-        response = iam.get_role(RoleName=role_name)
-        current_policy = response["Role"]["AssumeRolePolicyDocument"]
-
-        # Check if airflow-serverless principals are already present
-        required_principals = [
-            "airflow-serverless.amazonaws.com",
-            "airflow-serverless-gamma.amazonaws.com",
-        ]
-
-        has_airflow_principals = False
-        for statement in current_policy.get("Statement", []):
-            principal = statement.get("Principal", {})
-            if isinstance(principal, dict) and "Service" in principal:
-                services = principal["Service"]
-                if isinstance(services, str):
-                    services = [services]
-                if any(svc in required_principals for svc in services):
-                    has_airflow_principals = True
-                    break
-
-        if has_airflow_principals:
-            return True
-
-        # Update trust policy with airflow-serverless principals
-        trust_policy = {
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                    "Effect": "Allow",
-                    "Principal": {"Service": required_principals},
-                    "Action": "sts:AssumeRole",
-                }
-            ],
-        }
-
-        iam.update_assume_role_policy(
-            RoleName=role_name, PolicyDocument=json.dumps(trust_policy)
-        )
-
-        typer.echo(f"✅ Updated IAM role trust policy for {role_name}")
-        return True
-
-    except Exception as e:
-        typer.echo(f"⚠️ Failed to update IAM role trust policy: {e}")
-        return False
 
 
 def _fix_airflow_role_cloudwatch_policy(role_arn: str, region: str) -> bool:
@@ -90,10 +35,10 @@ def _fix_airflow_role_cloudwatch_policy(role_arn: str, region: str) -> bool:
         try:
             iam.attach_role_policy(
                 RoleName=role_name,
-                PolicyArn="arn:aws:iam::aws:policy/AdministratorAccess"
+                PolicyArn="arn:aws:iam::aws:policy/AdministratorAccess",
             )
             typer.echo(f"⚠️ TEMPORARY: Attached Admin policy to {role_name} for testing")
-            typer.echo(f"⚠️ TODO: Replace with minimal permissions in production")
+            typer.echo("⚠️ TODO: Replace with minimal permissions in production")
             return True
         except iam.exceptions.NoSuchEntityException:
             typer.echo(f"⚠️ Role {role_name} not found")
@@ -169,13 +114,15 @@ def deploy_command(
         bundle: Optional path to pre-created bundle file
     """
     try:
-        config = load_config()
         manifest = PipelineManifest.from_file(manifest_file)
 
         target_name = _get_target_name(targets, manifest)
         target_config = _get_target_config(target_name, manifest)
 
         _display_deployment_info(target_name, target_config, manifest)
+
+        # Build config with domain info
+        config = build_domain_config(target_config)
 
         # Initialize project if needed
         project_manager = ProjectManager(manifest, config)
@@ -210,8 +157,10 @@ def _get_target_name(targets: Optional[str], manifest: PipelineManifest) -> str:
         SystemExit: If no target is specified
     """
     if not targets:
-        handle_error("No target specified. Use --targets to specify a target (e.g., --targets dev)")
-    
+        handle_error(
+            "No target specified. Use --targets to specify a target (e.g., --targets dev)"
+        )
+
     target_list = [t.strip() for t in targets.split(",")]
     return target_list[0]  # Use first target for deployment
 
@@ -278,21 +227,17 @@ def _deploy_bundle_to_target(
         True if deployment succeeded, False otherwise
     """
     bundle_target_config = target_config.bundle_target_configuration
-    storage_config = bundle_target_config.storage or {}
-    workflows_config = bundle_target_config.workflows or {}
+    storage_configs = bundle_target_config.storage or []
+    git_configs = bundle_target_config.git or []
 
-    if not storage_config and not workflows_config:
+    if not storage_configs and not git_configs:
         handle_error(
-            "No storage or workflows configuration found in bundle_target_configuration"
+            "No storage or git configuration found in bundle_target_configuration"
         )
         return False
 
     # Update config with domain info
-    config["domain"] = {
-        "name": target_config.domain.name,
-        "region": target_config.domain.region,
-    }
-    config["region"] = target_config.domain.region
+    config = build_domain_config(target_config)
 
     # Get bundle file
     if bundle_file:
@@ -305,16 +250,24 @@ def _deploy_bundle_to_target(
 
     typer.echo(f"Bundle file: {bundle_path}")
 
-    # Deploy storage and workflows, track success and files
-    storage_result = _deploy_storage_files(
-        bundle_path, storage_config, target_config.project.name, config
-    )
-    workflow_result = _deploy_workflow_files(
-        bundle_path, workflows_config, target_config.project.name, config
-    )
+    # Deploy storage items (includes workflows)
+    storage_results = []
+    for storage_config in storage_configs:
+        result = _deploy_storage_item(
+            bundle_path, storage_config, target_config.project.name, config
+        )
+        storage_results.append(result)
 
-    # Display deployment tree
-    _display_deployment_summary(bundle_path, storage_result, workflow_result)
+    # Deploy git items
+    git_results = []
+    for git_config in git_configs:
+        result = _deploy_git_item(
+            bundle_path, git_config, target_config.project.name, config
+        )
+        git_results.append(result)
+
+    # Display deployment summary
+    _display_deployment_summary_new(bundle_path, storage_results, git_results)
 
     # Create serverless Airflow workflows if configured
     effective_target_name = target_name or target_config.name
@@ -322,24 +275,12 @@ def _deploy_bundle_to_target(
         bundle_path, manifest, target_config, config, effective_target_name
     )
 
-    # Validate workflows if configured
-    if workflows_config:
-        _validate_deployed_workflows(
-            workflows_config, target_config.project.name, config
-        )
-
     # Process catalog assets if configured
     asset_success = _process_catalog_assets(target_config, manifest, config)
 
     # Return overall success
-    storage_success = storage_result[0] is not None
-    workflow_success = workflow_result[0] is not None
-    return (
-        storage_success
-        and workflow_success
-        and asset_success
-        and airflow_serverless_success
-    )
+    all_success = all(r[0] is not None for r in storage_results + git_results)
+    return all_success and asset_success and airflow_serverless_success
 
 
 def _find_bundle_file(
@@ -387,6 +328,64 @@ def _deploy_storage_files(
 
     return _deploy_files_from_bundle(
         bundle_file, storage_config, project_name, config, "storage"
+    )
+
+
+def _deploy_storage_item(
+    bundle_file: str,
+    storage_config: Dict[str, Any],
+    project_name: str,
+    config: Dict[str, Any],
+) -> Tuple[Optional[List[str]], Optional[str]]:
+    """
+    Deploy a named storage item from bundle.
+
+    Args:
+        bundle_file: Path to bundle file
+        storage_config: Storage item configuration with name, connectionName, targetDirectory
+        project_name: Name of the target project
+        config: Configuration dictionary
+
+    Returns:
+        Tuple of (deployed_files_list, s3_uri) or (None, None) if failed
+    """
+    name = storage_config.get("name", "unnamed")
+    target_dir = storage_config.get("targetDirectory", "")
+    
+    typer.echo(f"Deploying storage item '{name}' to {target_dir}...")
+
+    return _deploy_named_item_from_bundle(
+        bundle_file, storage_config, project_name, config, name, target_dir
+    )
+
+
+def _deploy_git_item(
+    bundle_file: str,
+    git_config: Dict[str, Any],
+    project_name: str,
+    config: Dict[str, Any],
+) -> Tuple[Optional[List[str]], Optional[str]]:
+    """
+    Deploy a git repository from bundle.
+
+    Args:
+        bundle_file: Path to bundle file
+        git_config: Git item configuration with connectionName, targetDirectory
+        project_name: Name of the target project
+        config: Configuration dictionary
+
+    Returns:
+        Tuple of (deployed_files_list, s3_uri) or (None, None) if failed
+    """
+    name = git_config.get("name", "git")
+    target_dir = git_config.get("targetDirectory", "")
+    
+    typer.echo(f"Deploying git repository to {target_dir}...")
+
+    # Git items are in bundle under their targetDir structure
+    # We need to find the git content in the bundle
+    return _deploy_git_from_bundle(
+        bundle_file, git_config, project_name, config, target_dir
     )
 
 
@@ -492,6 +491,114 @@ def _get_files_list(files_path: str) -> List[str]:
             rel_path = os.path.relpath(file_path, files_path)
             deployed_files.append(rel_path)
     return deployed_files
+
+
+def _deploy_named_item_from_bundle(
+    bundle_file: str,
+    item_config: Dict[str, Any],
+    project_name: str,
+    config: Dict[str, Any],
+    item_name: str,
+    target_dir: str,
+) -> Tuple[Optional[List[str]], Optional[str]]:
+    """Deploy a named item from bundle to target directory."""
+    from ..helpers.bundle_storage import download_bundle, is_s3_url
+
+    local_bundle_path = download_bundle(bundle_file, config["region"])
+
+    try:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with zipfile.ZipFile(local_bundle_path, "r") as zip_ref:
+                zip_ref.extractall(temp_dir)
+
+            # Item is in bundle under its name
+            item_path = os.path.join(temp_dir, item_name)
+            if os.path.exists(item_path):
+                connection = _get_project_connection(project_name, item_config, config)
+                region = config.get("region", "us-east-1")
+
+                deployed_files = _get_files_list(item_path)
+
+                success = deployment.deploy_files(
+                    item_path, connection, target_dir, region, item_path
+                )
+                s3_uri = connection.get("s3Uri", "")
+
+                return deployed_files if success else None, s3_uri
+            else:
+                typer.echo(f"  No files found for '{item_name}' in bundle")
+                return [], None
+    finally:
+        if is_s3_url(bundle_file) and local_bundle_path != bundle_file:
+            os.unlink(local_bundle_path)
+
+    return None, None
+
+
+def _deploy_git_from_bundle(
+    bundle_file: str,
+    git_config: Dict[str, Any],
+    project_name: str,
+    config: Dict[str, Any],
+    target_dir: str,
+) -> Tuple[Optional[List[str]], Optional[str]]:
+    """Deploy git repository from bundle to target directory."""
+    from ..helpers.bundle_storage import download_bundle, is_s3_url
+
+    local_bundle_path = download_bundle(bundle_file, config["region"])
+
+    try:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with zipfile.ZipFile(local_bundle_path, "r") as zip_ref:
+                zip_ref.extractall(temp_dir)
+
+            # Git repos are in bundle under repositories/{repository-name}
+            repositories_dir = Path(temp_dir) / "repositories"
+            if not repositories_dir.exists():
+                typer.echo("⚠️  No repositories directory found in bundle")
+                return None, None
+            
+            deployed_files = []
+            connection = _get_project_connection(project_name, git_config, config)
+            region = config.get("region", "us-east-1")
+            
+            # Deploy all repositories
+            for repo_dir in repositories_dir.iterdir():
+                if repo_dir.is_dir():
+                    success = deployment.deploy_files(
+                        str(repo_dir), connection, target_dir, region, str(repo_dir)
+                    )
+                    if success:
+                        deployed_files.extend(_get_files_list(str(repo_dir)))
+            
+            s3_uri = connection.get("s3Uri", "")
+            return deployed_files if deployed_files else None, s3_uri
+    finally:
+        if is_s3_url(bundle_file) and local_bundle_path != bundle_file:
+            os.unlink(local_bundle_path)
+
+    return None, None
+
+
+def _display_deployment_summary_new(
+    bundle_path: str,
+    storage_results: List[Tuple[Optional[List[str]], Optional[str]]],
+    git_results: List[Tuple[Optional[List[str]], Optional[str]]],
+):
+    """Display deployment summary for new structure."""
+    typer.echo("\n📦 Deployment Summary:")
+    
+    for i, (files, s3_uri) in enumerate(storage_results):
+        if files is not None:
+            typer.echo(f"  ✅ Storage item {i+1}: {len(files)} files → {s3_uri}")
+        else:
+            typer.echo(f"  ❌ Storage item {i+1}: Failed")
+    
+    for i, (files, s3_uri) in enumerate(git_results):
+        if files is not None:
+            typer.echo(f"  ✅ Git item {i+1}: {len(files)} files → {s3_uri}")
+        else:
+            typer.echo(f"  ❌ Git item {i+1}: Failed")
 
 
 def _get_project_connection(
@@ -655,14 +762,21 @@ def _process_catalog_assets(
     )
 
     # Get domain and project IDs
-    domain_name = target_config.domain.name
-    project_name = target_config.project.name
     region = target_config.domain.region
-
-    domain_id = get_domain_id_by_name(domain_name, region)
+    
+    # Resolve domain using name, tags, or auto-detect
+    from ..helpers.datazone import resolve_domain_id
+    domain_id, domain_name = resolve_domain_id(
+        domain_name=target_config.domain.name,
+        domain_tags=target_config.domain.tags,
+        region=region
+    )
+    
     if not domain_id:
-        handle_error(f"Could not find domain ID for domain: {domain_name}")
+        handle_error(f"Could not resolve domain in region {region}")
         return False
+    
+    project_name = target_config.project.name
 
     project_id = get_project_id_by_name(project_name, domain_id, region)
     if not project_id:
@@ -724,10 +838,10 @@ def _create_airflow_serverless_workflows(
     # Check if any workflow configuration has airflow-serverless enabled
     airflow_serverless_enabled = False
 
-    # Check bundle workflow configurations
-    if manifest.bundle.workflow:
-        for workflow_config in manifest.bundle.workflow:
-            if workflow_config.get("airflow-serverless", False):
+    # Check bundle storage configurations for airflow-serverless flag
+    if manifest.bundle.storage:
+        for storage_config in manifest.bundle.storage:
+            if storage_config.get("airflow-serverless", False):
                 airflow_serverless_enabled = True
                 break
 
@@ -747,25 +861,37 @@ def _create_airflow_serverless_workflows(
     try:
         from ..helpers import airflow_serverless
         from ..helpers.bundle_storage import download_bundle, is_s3_url
+        from ..helpers.datazone import resolve_domain_id
 
         # Download bundle to local temp file if it's on S3
         local_bundle_path = download_bundle(bundle_path, config["region"])
 
         # Get project user role ARN for serverless Airflow execution
         project_name = target_config.project.name
-        domain_name = target_config.domain.name
-        role_arn = datazone.get_project_user_role_arn(
-            project_name, domain_name, config["region"]
+        region = config["region"]
+        
+        # Resolve domain
+        domain_id, domain_name = resolve_domain_id(
+            domain_name=target_config.domain.name,
+            domain_tags=target_config.domain.tags,
+            region=region
         )
+
+        role_arn = datazone.get_project_user_role_arn(project_name, domain_name, region)
         if not role_arn:
             typer.echo("❌ No project user role found")
             return False
 
-        # Fix IAM role trust policy for airflow-serverless
-        _fix_airflow_role_trust_policy(role_arn, config["region"])
+        # Get domain and project IDs for workflow creation
+        domain_id = datazone.get_domain_id_by_name(domain_name, region)
+        if not domain_id:
+            typer.echo(f"❌ Could not find domain ID for domain: {domain_name}")
+            return False
 
-        # Fix IAM role CloudWatch logs policy for airflow-serverless
-        _fix_airflow_role_cloudwatch_policy(role_arn, config["region"])
+        project_id = datazone.get_project_id_by_name(project_name, domain_id, region)
+        if not project_id:
+            typer.echo(f"❌ Could not find project ID for project: {project_name}")
+            return False
 
         workflows_created = []
 
@@ -779,96 +905,93 @@ def _create_airflow_serverless_workflows(
                 dag_files = _find_dag_files(temp_dir, manifest, target_config)
 
                 for dag_file in dag_files:
-                        workflow_name = _generate_workflow_name(
-                            manifest.pipeline_name,
-                            os.path.basename(dag_file).replace(".yaml", ""),
-                            target_config,
-                        )
+                    workflow_name = _generate_workflow_name(
+                        manifest.pipeline_name,
+                        os.path.basename(dag_file).replace(".yaml", ""),
+                        target_config,
+                    )
 
-                        # Upload DAG file to S3 for serverless Airflow
-                        s3_location = _upload_dag_to_s3(
-                            dag_file, workflow_name, config, target_config
-                        )
-                        if not s3_location:
-                            typer.echo(f"❌ Failed to upload DAG file: {dag_file}")
-                            continue
+                    # Upload DAG file to S3 for serverless Airflow
+                    s3_location = _upload_dag_to_s3(
+                        dag_file, workflow_name, config, target_config, project_id, domain_id
+                    )
+                    if not s3_location:
+                        typer.echo(f"❌ Failed to upload DAG file: {dag_file}")
+                        continue
 
-                        # Create serverless Airflow workflow
+                    # Create serverless Airflow workflow
+                    typer.echo(
+                        "🔍 DEBUG: About to call airflow_serverless.create_workflow with:"
+                    )
+                    typer.echo(f"🔍 DEBUG: workflow_name={workflow_name}")
+                    typer.echo(f"🔍 DEBUG: dag_s3_location={s3_location}")
+                    typer.echo(f"🔍 DEBUG: role_arn={role_arn}")
+                    typer.echo(f"🔍 DEBUG: datazone_domain_id={domain_id}")
+                    typer.echo(f"🔍 DEBUG: datazone_project_id={project_id}")
+
+                    result = airflow_serverless.create_workflow(
+                        workflow_name=workflow_name,
+                        dag_s3_location=s3_location,
+                        role_arn=role_arn,
+                        description=f"SMUS CI/CD workflow for {manifest.pipeline_name}",
+                        tags={
+                            "Pipeline": manifest.pipeline_name,
+                            "Target": target_config.project.name,
+                            "STAGE": target_name.upper(),
+                            "CreatedBy": "SMUS-CICD",
+                        },
+                        datazone_domain_id=domain_id,
+                        datazone_domain_region=config.get("region"),
+                        datazone_project_id=project_id,
+                        region=config.get("region"),
+                    )
+
+                    typer.echo(
+                        f"🔍 DEBUG: airflow_serverless.create_workflow returned: {result}"
+                    )
+                    typer.echo(f"🔍 DEBUG: result type: {type(result)}")
+                    if isinstance(result, dict):
+                        typer.echo(f"🔍 DEBUG: result keys: {list(result.keys())}")
                         typer.echo(
-                            f"🔍 DEBUG: About to call airflow_serverless.create_workflow with:"
+                            f"🔍 DEBUG: result.get('success'): {result.get('success')}"
                         )
-                        typer.echo(f"🔍 DEBUG: workflow_name={workflow_name}")
-                        typer.echo(f"🔍 DEBUG: dag_s3_location={s3_location}")
-                        typer.echo(f"🔍 DEBUG: role_arn={role_arn}")
-                        typer.echo(f"🔍 DEBUG: datazone_domain_id={domain_id}")
-                        typer.echo(f"🔍 DEBUG: datazone_project_id={project_id}")
-
-                        result = airflow_serverless.create_workflow(
-                            workflow_name=workflow_name,
-                            dag_s3_location=s3_location,
-                            role_arn=role_arn,
-                            description=f"SMUS CI/CD workflow for {manifest.pipeline_name}",
-                            tags={
-                                "Pipeline": manifest.pipeline_name,
-                                "Target": target_config.project.name,
-                                "STAGE": target_name.upper(),
-                                "CreatedBy": "SMUS-CICD",
-                            },
-                            datazone_domain_id=domain_id,
-                            datazone_domain_region=config.get("region"),
-                            datazone_project_id=project_id,
-                            region=AIRFLOW_SERVERLESS_REGION,
-                        )
-
                         typer.echo(
-                            f"🔍 DEBUG: airflow_serverless.create_workflow returned: {result}"
+                            f"🔍 DEBUG: result.get('error'): {result.get('error')}"
                         )
-                        typer.echo(f"🔍 DEBUG: result type: {type(result)}")
-                        if isinstance(result, dict):
-                            typer.echo(f"🔍 DEBUG: result keys: {list(result.keys())}")
-                            typer.echo(
-                                f"🔍 DEBUG: result.get('success'): {result.get('success')}"
-                            )
-                            typer.echo(
-                                f"🔍 DEBUG: result.get('error'): {result.get('error')}"
-                            )
 
-                        if result.get("success"):
-                            workflow_arn = result["workflow_arn"]
-                            workflows_created.append(
-                                {
-                                    "name": workflow_name,
-                                    "arn": workflow_arn,
-                                    "dag_file": dag_file,
-                                }
-                            )
-                            typer.echo(
-                                f"✅ Created Overdrive workflow: {workflow_name}"
-                            )
-                            typer.echo(f"   ARN: {workflow_arn}")
+                    if result.get("success"):
+                        workflow_arn = result["workflow_arn"]
+                        workflows_created.append(
+                            {
+                                "name": workflow_name,
+                                "arn": workflow_arn,
+                                "dag_file": dag_file,
+                            }
+                        )
+                        typer.echo(f"✅ Created Overdrive workflow: {workflow_name}")
+                        typer.echo(f"   ARN: {workflow_arn}")
 
-                            # Validate workflow status
-                            workflow_status = airflow_serverless.get_workflow_status(
-                                workflow_arn, 
-                                region=AIRFLOW_SERVERLESS_REGION
-                            )
-                            if workflow_status.get("success"):
-                                status = workflow_status.get("status")
-                                typer.echo(f"   Status: {status}")
-                                if status == "FAILED":
-                                    typer.echo(
-                                        f"❌ Workflow {workflow_name} is in FAILED state"
-                                    )
-                                    return False
-                            else:
+                        # Validate workflow status
+                        workflow_status = airflow_serverless.get_workflow_status(
+                            workflow_arn, region=AIRFLOW_SERVERLESS_REGION
+                        )
+                        if workflow_status.get("success"):
+                            status = workflow_status.get("status")
+                            typer.echo(f"   Status: {status}")
+                            if status == "FAILED":
                                 typer.echo(
-                                    f"⚠️  Could not verify workflow status: {workflow_status.get('error')}"
+                                    f"❌ Workflow {workflow_name} is in FAILED state"
                                 )
+                                return False
                         else:
                             typer.echo(
-                                f"❌ Failed to create workflow {workflow_name}: {result.get('error')}"
+                                f"⚠️  Could not verify workflow status: {workflow_status.get('error')}"
                             )
-                            return False
+                    else:
+                        typer.echo(
+                            f"❌ Failed to create workflow {workflow_name}: {result.get('error')}"
+                        )
+                        return False
 
                 if workflows_created:
                     typer.echo(
@@ -910,14 +1033,17 @@ def _get_airflow_serverless_execution_role(config: Dict[str, Any]) -> Optional[s
             sts = boto3.client("sts")
             identity = sts.get_caller_identity()
             account_id = identity["Account"]
-        except Exception:
+        except Exception as e:
+            typer.echo(f"⚠️ Failed to get account ID: {e}", err=True)
             return None
 
     # Use the role we created during testing
     return f"arn:aws:iam::{account_id}:role/OverdriveExecutionRole"
 
 
-def _find_dag_files(bundle_root: str, manifest: PipelineManifest, target_config) -> List[str]:
+def _find_dag_files(
+    bundle_root: str, manifest: PipelineManifest, target_config
+) -> List[str]:
     """
     Find DAG YAML files specified in the manifest workflows section.
     Searches all directories configured in bundle_target_configuration.
@@ -937,43 +1063,59 @@ def _find_dag_files(bundle_root: str, manifest: PipelineManifest, target_config)
 
     # Get directories to search from bundle_target_configuration
     search_dirs = []
-    if hasattr(target_config, 'bundle_target_configuration'):
+    if hasattr(target_config, "bundle_target_configuration"):
         btc = target_config.bundle_target_configuration
         # For serverless Airflow, search ALL configured directories
-        if hasattr(btc, 'workflows') and btc.workflows and hasattr(btc.workflows, 'directory'):
+        if (
+            hasattr(btc, "workflows")
+            and btc.workflows
+            and hasattr(btc.workflows, "directory")
+        ):
             search_dirs.append(btc.workflows.directory)
-        if hasattr(btc, 'storage') and btc.storage and hasattr(btc.storage, 'directory'):
+        if (
+            hasattr(btc, "storage")
+            and btc.storage
+            and hasattr(btc.storage, "directory")
+        ):
             search_dirs.append(btc.storage.directory)
-    
+
     # Fallback: search all directories in bundle root
     if not search_dirs:
-        search_dirs = [d for d in os.listdir(bundle_root) if os.path.isdir(os.path.join(bundle_root, d))]
+        search_dirs = [
+            d
+            for d in os.listdir(bundle_root)
+            if os.path.isdir(os.path.join(bundle_root, d))
+        ]
 
     # Search for each workflow specified in manifest
     for workflow in manifest.workflows:
         workflow_name = workflow.workflow_name
         found = False
-        
+
         # Search each configured directory
         for search_dir in search_dirs:
             dir_path = os.path.join(bundle_root, search_dir)
             if not os.path.exists(dir_path):
                 continue
-            
+
             # Search for YAML file with matching dag_id
             for root, _, files in os.walk(dir_path):
                 for file in files:
-                    if file.endswith(('.yaml', '.yml')):
+                    if file.endswith((".yaml", ".yml")):
                         file_path = os.path.join(root, file)
                         # Check if file contains matching dag_id
                         try:
                             import yaml
-                            with open(file_path, 'r') as f:
+
+                            with open(file_path, "r") as f:
                                 content = yaml.safe_load(f)
                                 if isinstance(content, dict):
                                     # Check if any top-level key has dag_id matching workflow_name
                                     for key, value in content.items():
-                                        if isinstance(value, dict) and value.get('dag_id') == workflow_name:
+                                        if (
+                                            isinstance(value, dict)
+                                            and value.get("dag_id") == workflow_name
+                                        ):
                                             dag_files.append(file_path)
                                             found = True
                                             break
@@ -985,7 +1127,7 @@ def _find_dag_files(bundle_root: str, manifest: PipelineManifest, target_config)
                     break
             if found:
                 break
-        
+
         if not found:
             typer.echo(f"⚠️ Workflow YAML not found for: {workflow_name}")
 
@@ -1040,7 +1182,7 @@ def _resolve_environment_variables(
 
 
 def _upload_dag_to_s3(
-    dag_file_path: str, workflow_name: str, config: Dict[str, Any], target_config=None
+    dag_file_path: str, workflow_name: str, config: Dict[str, Any], target_config=None, project_id=None, domain_id=None
 ) -> Optional[Dict[str, str]]:
     """
     Upload DAG file to S3 for Overdrive workflow creation.
@@ -1050,6 +1192,8 @@ def _upload_dag_to_s3(
         workflow_name: Name of the workflow
         config: Configuration dictionary
         target_config: Target configuration with environment variables
+        project_id: DataZone project ID
+        domain_id: DataZone domain ID
 
     Returns:
         S3 location dictionary or None if failed
@@ -1057,19 +1201,27 @@ def _upload_dag_to_s3(
     try:
         import boto3
 
-        # Use a default bucket pattern - in production this should be configurable
-        # Use Airflow Serverless region for S3 bucket (must match workflow region)
-        region = AIRFLOW_SERVERLESS_REGION
-        account_id = config.get("aws", {}).get("account_id")
-
-        if not account_id:
-            # Try to get account ID from STS
-            sts = boto3.client("sts")
-            identity = sts.get_caller_identity()
-            account_id = identity["Account"]
-
-        # Use a bucket pattern similar to our test setup
-        bucket_name = f"smus-airflow-serverless-{account_id}-{region}"
+        region = config.get("region", "us-east-1")
+        
+        # Get S3 bucket from project's default.s3_shared connection
+        bucket_name = None
+        if project_id and domain_id:
+            connections = datazone.get_project_connections(project_id, domain_id, region)
+            s3_shared_conn = connections.get("default.s3_shared", {})
+            s3_uri = s3_shared_conn.get("s3Uri", "")
+            if s3_uri:
+                # Extract bucket name from s3://bucket-name/path/
+                bucket_name = s3_uri.replace("s3://", "").split("/")[0]
+        
+        # Fallback to hardcoded pattern if connection not found
+        if not bucket_name:
+            account_id = config.get("aws", {}).get("account_id")
+            if not account_id:
+                sts = boto3.client("sts")
+                identity = sts.get_caller_identity()
+                account_id = identity["Account"]
+            bucket_name = f"smus-airflow-serverless-{account_id}-{AIRFLOW_SERVERLESS_REGION}"
+        
         object_key = f"workflows/{workflow_name}.yaml"
 
         # Create S3 client
@@ -1078,7 +1230,8 @@ def _upload_dag_to_s3(
         # Try to create bucket if it doesn't exist
         try:
             s3_client.head_bucket(Bucket=bucket_name)
-        except:
+        except Exception as e:
+            typer.echo(f"Bucket {bucket_name} doesn't exist, creating it: {e}")
             try:
                 if region == "us-east-1":
                     s3_client.create_bucket(Bucket=bucket_name)
@@ -1115,7 +1268,7 @@ def _upload_dag_to_s3(
             typer.echo(f"🔍 DEBUG: Resolved DAG content:\n{resolved_content}")
             dag_content = resolved_content
         else:
-            typer.echo(f"🔍 DEBUG: No environment variables to resolve")
+            typer.echo("🔍 DEBUG: No environment variables to resolve")
             typer.echo(f"🔍 DEBUG: target_config: {target_config}")
             if target_config:
                 typer.echo(

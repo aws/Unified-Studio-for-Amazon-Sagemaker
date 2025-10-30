@@ -1,0 +1,14 @@
+test_batch_transform:
+  dag_id: "test_batch_transform"
+  tasks:
+    batch_transform_test:
+      operator: "airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator"
+      retries: 0
+      input_config:
+        input_path: "test_batch_transform.ipynb"
+        input_params: {}
+      output_config:
+        output_formats: ['NOTEBOOK']
+      compute:
+        instance_type: "ml.c5.xlarge"
+      wait_for_completion: True

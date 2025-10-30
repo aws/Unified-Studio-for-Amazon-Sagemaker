@@ -10,7 +10,7 @@ if [ ! -f "$CONFIG_FILE" ]; then
 fi
 
 # Parse config
-ACCOUNT_ID=$(yq '.account_id' "$CONFIG_FILE")
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 REGION=$(yq '.regions.primary.name' "$CONFIG_FILE")
 DOMAIN_STACK_NAME=$(yq '.stacks.domain' "$CONFIG_FILE")
 BLUEPRINTS_STACK_NAME=$(yq '.stacks.blueprints_profiles' "$CONFIG_FILE")
@@ -19,8 +19,17 @@ DEV_PROJECT_NAME=$(yq '.projects.dev.name' "$CONFIG_FILE")
 DEV_PROJECT_DESC=$(yq '.projects.dev.description' "$CONFIG_FILE")
 ADMIN_USERNAME=$(yq '.users.admin_username' "$CONFIG_FILE")
 
-# Get owners array from config
+# Get owners and roles from config, construct full ARNs
 OWNERS_JSON=$(yq '.users.owners' "$CONFIG_FILE" -o json)
+OWNER_ROLES_JSON=$(yq '.users.owner_roles' "$CONFIG_FILE" -o json)
+
+# Combine owners (usernames) and role ARNs
+COMBINED_OWNERS=$(echo "$OWNERS_JSON" | jq -r '.[]')
+if [ "$OWNER_ROLES_JSON" != "null" ]; then
+    ROLE_ARNS=$(echo "$OWNER_ROLES_JSON" | jq -r '.[]' | sed "s|^|arn:aws:iam::${ACCOUNT_ID}:role/|")
+    COMBINED_OWNERS=$(echo -e "$COMBINED_OWNERS\n$ROLE_ARNS")
+fi
+OWNERS_JSON=$(echo "$COMBINED_OWNERS" | jq -R -s -c 'split("\n") | map(select(length > 0))')
 
 echo "Deploying DataZone Dev Project..."
 echo "Account ID: $ACCOUNT_ID"
@@ -184,8 +193,17 @@ REGION=$(yq '.regions.primary.name' "$CONFIG_FILE")
 DOMAIN_STACK_NAME=$(yq '.stacks.domain' "$CONFIG_FILE")
 ADMIN_USERNAME=$(yq '.users.admin_username' "$CONFIG_FILE")
 
-# Get owners array from config
+# Get owners and roles from config, construct full ARNs
 OWNERS_JSON=$(yq '.users.owners' "$CONFIG_FILE" -o json)
+OWNER_ROLES_JSON=$(yq '.users.owner_roles' "$CONFIG_FILE" -o json)
+
+# Combine owners (usernames) and role ARNs
+COMBINED_OWNERS=$(echo "$OWNERS_JSON" | jq -r '.[]')
+if [ "$OWNER_ROLES_JSON" != "null" ]; then
+    ROLE_ARNS=$(echo "$OWNER_ROLES_JSON" | jq -r '.[]' | sed "s|^|arn:aws:iam::${ACCOUNT_ID}:role/|")
+    COMBINED_OWNERS=$(echo -e "$COMBINED_OWNERS\n$ROLE_ARNS")
+fi
+OWNERS_JSON=$(echo "$COMBINED_OWNERS" | jq -R -s -c 'split("\n") | map(select(length > 0))')
 
 echo "Deploying DataZone Project Memberships..."
 echo "Account ID: $ACCOUNT_ID"

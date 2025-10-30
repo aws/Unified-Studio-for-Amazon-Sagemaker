@@ -76,17 +76,21 @@ class IntegrationTestBase:
 
         self.test_commands = []
         self.logger.info(f"=== Starting test: {method.__name__} ===")
+        
+        # Pre-register test result so pytest hooks can update it
+        self.test_result = {
+            "name": self.current_test_name,
+            "commands": 0,
+            "success": True,  # Will be updated by pytest hook if test fails
+            "duration": 0,
+        }
+        IntegrationTestBase._test_results.append(self.test_result)
 
     def teardown_method(self, method):
         """Teardown for each test method."""
-        # Record test result
-        test_result = {
-            "name": self.current_test_name,
-            "commands": len(self.test_commands),
-            "success": all(cmd.get("success", False) for cmd in self.test_commands),
-            "duration": sum(cmd.get("duration", 0) for cmd in self.test_commands),
-        }
-        IntegrationTestBase._test_results.append(test_result)
+        # Update test result with final command counts and duration
+        self.test_result["commands"] = len(self.test_commands)
+        self.test_result["duration"] = sum(cmd.get("duration", 0) for cmd in self.test_commands)
 
         if hasattr(self, "test_dir"):
             self.cleanup_test_directory()
@@ -99,7 +103,7 @@ class IntegrationTestBase:
 
         total_time = time.time() - cls._test_start_time if cls._test_start_time else 0
         total_tests = len(cls._test_results)
-        passed_tests = sum(1 for r in cls._test_results if r["success"])
+        passed_tests = sum(1 for r in cls._test_results if r.get("success") is True)
         total_commands = sum(r["commands"] for r in cls._test_results)
 
         print("\n" + "=" * 80)
@@ -115,19 +119,19 @@ class IntegrationTestBase:
         # Group by test class
         by_class = {}
         for result in cls._test_results:
-            class_name = result["name"].split("::")[0]
+            class_name = result["name"].split("::")[0] if "::" in result["name"] else result["name"].split("__")[0]
             if class_name not in by_class:
                 by_class[class_name] = []
             by_class[class_name].append(result)
 
         for class_name, tests in by_class.items():
-            class_passed = sum(1 for t in tests if t["success"])
+            class_passed = sum(1 for t in tests if t.get("success") is True)
             class_total = len(tests)
             status = "✅" if class_passed == class_total else "❌"
             print(f"{status} {class_name}: {class_passed}/{class_total}")
 
             for test in tests:
-                test_status = "✅" if test["success"] else "❌"
+                test_status = "✅" if test.get("success") is True else "❌"
                 # Handle both :: and __ separators
                 if "::" in test["name"]:
                     method_name = test["name"].split("::")[1]
@@ -326,8 +330,10 @@ class IntegrationTestBase:
             # Basic STS access is sufficient for most tests
             # DataZone access is optional and may not be available in all environments
             try:
+                endpoint_url = os.environ.get("AWS_ENDPOINT_URL_DATAZONE")
+                region = os.environ.get("DEV_DOMAIN_REGION", self.config["aws"]["region"])
                 datazone = boto3.client(
-                    "datazone", region_name=self.config["aws"]["region"]
+                    "datazone", region_name=region, endpoint_url=endpoint_url
                 )
                 domains = datazone.list_domains(maxResults=1)
                 self.logger.info("DataZone access verified")

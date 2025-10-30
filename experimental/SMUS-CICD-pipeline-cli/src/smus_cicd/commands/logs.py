@@ -1,7 +1,7 @@
 """Logs command implementation for workflow log monitoring."""
 
-import time
 import json
+import time
 from typing import Optional
 
 import typer
@@ -244,7 +244,7 @@ def _live_log_monitoring(
             if not active_runs:
                 if output.upper() != "JSON":
                     typer.echo(
-                        f"\n✅ No active workflow runs found. Monitoring complete."
+                        "\n✅ No active workflow runs found. Monitoring complete."
                     )
                 break
 

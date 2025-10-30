@@ -6,17 +6,9 @@ pipelineName: DemoMarketingPipeline
 # Bundle configuration (optional)
 bundle:
   bundlesDirectory: ./bundles
-  workflow:
-    - connectionName: default.s3_shared
-      include: 
-        - 'workflows'
-      exclude: 
-        - '.ipynb_checkpoints/'
-        - '__pycache__/'
-        - '*.pyc'
-        - '.libs.json'    
   storage:
-    - connectionName: default.s3_shared
+    - name: code
+      connectionName: default.s3_shared
       include: 
         - '*'
       exclude: 
@@ -24,6 +16,16 @@ bundle:
         - '__pycache__/'
         - '*.pyc'
         - '.libs.json'
+    - name: workflows
+      connectionName: default.s3_shared
+      append: true
+      include: 
+        - 'workflows'
+      exclude: 
+        - '.ipynb_checkpoints/'
+        - '__pycache__/'
+        - '*.pyc'
+        - '.libs.json'    
   catalog:
     assets:
     - selector:
@@ -52,9 +54,12 @@ targets:
     # Bundle target configuration
     bundle_target_configuration:
       storage:
-        connectionName: default.s3_shared
-        directory: 'src'        
-      workflows:
+        - name: code
+          connectionName: default.s3_shared
+          targetDirectory: 'src'
+        - name: workflows
+          connectionName: default.s3_shared
+          targetDirectory: 'workflows'
         connectionName: default.s3_shared
         directory: 'workflows'
     
@@ -82,9 +87,12 @@ targets:
     # Bundle target configuration
     bundle_target_configuration:
       storage:
-        connectionName: default.s3_shared
-        directory: 'src'        
-      workflows:
+        - name: code
+          connectionName: default.s3_shared
+          targetDirectory: 'src'
+        - name: workflows
+          connectionName: default.s3_shared
+          targetDirectory: 'workflows'
         connectionName: default.s3_shared
         directory: 'workflows'
     
@@ -112,9 +120,12 @@ targets:
     # Bundle target configuration
     bundle_target_configuration:
       storage:
-        connectionName: default.s3_shared
-        directory: 'src'        
-      workflows:
+        - name: code
+          connectionName: default.s3_shared
+          targetDirectory: 'src'
+        - name: workflows
+          connectionName: default.s3_shared
+          targetDirectory: 'workflows'
         connectionName: default.s3_shared
         directory: 'workflows'
       catalog:
