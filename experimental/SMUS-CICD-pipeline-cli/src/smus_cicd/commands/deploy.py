@@ -992,7 +992,7 @@ def _create_airflow_serverless_workflows(
                                 )
                                 return False
                         else:
-                            error_msg = workflow_status.get('error')
+                            error_msg = workflow_status.get("error")
                             typer.echo(
                                 f"❌ Could not verify workflow status: {error_msg}"
                             )

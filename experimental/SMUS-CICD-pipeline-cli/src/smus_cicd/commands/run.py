@@ -584,27 +584,39 @@ def _execute_airflow_serverless_workflows(
             if result.get("success"):
                 run_id = result.get("run_id")
                 initial_status = result.get("status")
-                
+
                 if output.upper() != "JSON":
                     typer.echo("✅ Workflow run started successfully")
                     typer.echo(f"📋 Run ID: {run_id}")
                     typer.echo(f"📊 Initial Status: {initial_status}")
-                
+
                 # Verify workflow transitioned from READY state
                 # Valid running states: STARTING, QUEUED, RUNNING
                 if initial_status not in ["STARTING", "QUEUED", "RUNNING"]:
                     # Wait a moment and check again
                     import time
+
                     time.sleep(10)
-                    status_check = airflow_serverless.get_workflow_status(workflow_arn, region=region)
-                    current_status = status_check.get("status") if status_check.get("success") else initial_status
-                    
+                    status_check = airflow_serverless.get_workflow_status(
+                        workflow_arn, region=region
+                    )
+                    current_status = (
+                        status_check.get("status")
+                        if status_check.get("success")
+                        else initial_status
+                    )
+
                     if current_status not in ["STARTING", "QUEUED", "RUNNING"]:
                         error_msg = f"Workflow run started but status is '{current_status}' (expected STARTING, QUEUED, or RUNNING). The workflow may not have actually started."
                         if output.upper() != "JSON":
                             typer.echo(f"❌ {error_msg}")
                         else:
-                            typer.echo(json.dumps({"error": error_msg, "status": current_status}, indent=2))
+                            typer.echo(
+                                json.dumps(
+                                    {"error": error_msg, "status": current_status},
+                                    indent=2,
+                                )
+                            )
                         raise typer.Exit(1)
                     else:
                         if output.upper() != "JSON":

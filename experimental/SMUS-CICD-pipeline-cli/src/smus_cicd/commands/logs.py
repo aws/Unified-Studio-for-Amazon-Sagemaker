@@ -104,19 +104,21 @@ def _monitor_airflow_serverless_logs(
         recent_runs = airflow_serverless.list_workflow_runs(
             workflow_arn, region=region, max_results=1
         )
-        
+
         if not recent_runs:
-            error_msg = "No workflow runs found. Start a workflow run before fetching logs."
+            error_msg = (
+                "No workflow runs found. Start a workflow run before fetching logs."
+            )
             if output.upper() == "JSON":
                 typer.echo(json.dumps({"error": error_msg}, indent=2))
             else:
                 typer.echo(f"❌ {error_msg}")
             raise typer.Exit(1)
-        
+
         # Check the most recent run status
         latest_run = recent_runs[0]
         run_status = latest_run.get("status")
-        
+
         # Valid active states for live monitoring
         if run_status in ["STARTING", "QUEUED", "RUNNING"]:
             active_run = True

@@ -313,9 +313,7 @@ def _monitor_airflow_serverless_workflows(
             typer.echo("\n   🚀 Serverless Airflow Workflows:")
 
         # List all serverless Airflow workflows
-        all_workflows = airflow_serverless.list_workflows(
-            region=config.get("region")
-        )
+        all_workflows = airflow_serverless.list_workflows(region=config.get("region"))
 
         # Filter workflows that belong to this pipeline/target using tags
         pipeline_name = manifest.pipeline_name
@@ -359,35 +357,56 @@ def _monitor_airflow_serverless_workflows(
                 run_status = "No runs"
                 start_time = "N/A"
                 duration = "N/A"
-                
+
                 if recent_runs:
                     latest_run = recent_runs[0]
                     run_id = latest_run.get("run_id", "N/A")
                     run_status = latest_run.get("status", "UNKNOWN")
-                    
+
                     # Calculate duration
                     started_at = latest_run.get("started_at")
                     ended_at = latest_run.get("ended_at")
-                    
+
                     if started_at:
                         from datetime import datetime
-                        start_time = started_at.strftime("%Y-%m-%d %H:%M:%S") if hasattr(started_at, 'strftime') else str(started_at)
-                        
+
+                        start_time = (
+                            started_at.strftime("%Y-%m-%d %H:%M:%S")
+                            if hasattr(started_at, "strftime")
+                            else str(started_at)
+                        )
+
                         if ended_at:
                             # Completed run - calculate from start to end
-                            if hasattr(started_at, 'timestamp') and hasattr(ended_at, 'timestamp'):
-                                duration_seconds = (ended_at - started_at).total_seconds()
+                            if hasattr(started_at, "timestamp") and hasattr(
+                                ended_at, "timestamp"
+                            ):
+                                duration_seconds = (
+                                    ended_at - started_at
+                                ).total_seconds()
                                 hours = int(duration_seconds // 3600)
                                 minutes = int((duration_seconds % 3600) // 60)
-                                duration = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+                                duration = (
+                                    f"{hours}h {minutes}m"
+                                    if hours > 0
+                                    else f"{minutes}m"
+                                )
                         else:
                             # Still running - calculate from start to now
-                            if hasattr(started_at, 'timestamp'):
-                                now = datetime.now(started_at.tzinfo) if started_at.tzinfo else datetime.utcnow()
+                            if hasattr(started_at, "timestamp"):
+                                now = (
+                                    datetime.now(started_at.tzinfo)
+                                    if started_at.tzinfo
+                                    else datetime.utcnow()
+                                )
                                 duration_seconds = (now - started_at).total_seconds()
                                 hours = int(duration_seconds // 3600)
                                 minutes = int((duration_seconds % 3600) // 60)
-                                duration = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+                                duration = (
+                                    f"{hours}h {minutes}m"
+                                    if hours > 0
+                                    else f"{minutes}m"
+                                )
                             else:
                                 duration = "Running..."
 
@@ -402,24 +421,32 @@ def _monitor_airflow_serverless_workflows(
                 }
 
                 serverlessairflow_data["workflows"][workflow_name] = workflow_data
-                table_rows.append([
-                    workflow_name,
-                    workflow_status.get("status", "UNKNOWN"),
-                    workflow_status.get("trigger_mode", "scheduled"),
-                    run_id,
-                    run_status,
-                    start_time,
-                    duration
-                ])
+                table_rows.append(
+                    [
+                        workflow_name,
+                        workflow_status.get("status", "UNKNOWN"),
+                        workflow_status.get("trigger_mode", "scheduled"),
+                        run_id,
+                        run_status,
+                        start_time,
+                        duration,
+                    ]
+                )
 
             if output.upper() != "JSON":
                 # Print table header
-                typer.echo(f"\n      {'Workflow':<40} {'Status':<10} {'Trigger':<12} {'Run ID':<20} {'Run Status':<12} {'Start Time':<20} {'Duration':<10}")
-                typer.echo(f"      {'-'*40} {'-'*10} {'-'*12} {'-'*20} {'-'*12} {'-'*20} {'-'*10}")
-                
+                typer.echo(
+                    f"\n      {'Workflow':<40} {'Status':<10} {'Trigger':<12} {'Run ID':<20} {'Run Status':<12} {'Start Time':<20} {'Duration':<10}"
+                )
+                typer.echo(
+                    f"      {'-'*40} {'-'*10} {'-'*12} {'-'*20} {'-'*12} {'-'*20} {'-'*10}"
+                )
+
                 # Print table rows
                 for row in table_rows:
-                    typer.echo(f"      {row[0]:<40} {row[1]:<10} {row[2]:<12} {row[3]:<20} {row[4]:<12} {row[5]:<20} {row[6]:<10}")
+                    typer.echo(
+                        f"      {row[0]:<40} {row[1]:<10} {row[2]:<12} {row[3]:<20} {row[4]:<12} {row[5]:<20} {row[6]:<10}"
+                    )
 
             workflows_data["overdrive"] = serverlessairflow_data
         else:

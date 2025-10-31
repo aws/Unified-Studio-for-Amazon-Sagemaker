@@ -10,9 +10,7 @@ from . import boto3_client
 from .logger import get_logger
 
 # Airflow Serverless (Overdrive) configuration - configurable via environment variables
-AIRFLOW_SERVERLESS_ENDPOINT = os.environ.get(
-    "AIRFLOW_SERVERLESS_ENDPOINT"
-)
+AIRFLOW_SERVERLESS_ENDPOINT = os.environ.get("AIRFLOW_SERVERLESS_ENDPOINT")
 AIRFLOW_SERVERLESS_SERVICE = "awsoverdriveservice"
 
 
@@ -33,20 +31,24 @@ def create_airflow_serverless_client(
                 client_region = "us-east-1"
         else:
             client_region = region
-        
-        print(f"🔍 DEBUG: Creating Airflow Serverless client with region={client_region}, endpoint={endpoint_url}")
+
+        print(
+            f"🔍 DEBUG: Creating Airflow Serverless client with region={client_region}, endpoint={endpoint_url}"
+        )
         session = boto3.Session()
         client = session.client(
-            AIRFLOW_SERVERLESS_SERVICE, region_name=client_region, endpoint_url=endpoint_url
+            AIRFLOW_SERVERLESS_SERVICE,
+            region_name=client_region,
+            endpoint_url=endpoint_url,
         )
     else:
         # Use domain region without custom endpoint
         client_region = region
-        print(f"🔍 DEBUG: Creating Airflow Serverless client with region={client_region}, endpoint=default")
-        session = boto3.Session()
-        client = session.client(
-            AIRFLOW_SERVERLESS_SERVICE, region_name=client_region
+        print(
+            f"🔍 DEBUG: Creating Airflow Serverless client with region={client_region}, endpoint=default"
         )
+        session = boto3.Session()
+        client = session.client(AIRFLOW_SERVERLESS_SERVICE, region_name=client_region)
 
     return client
 
@@ -135,7 +137,9 @@ def create_workflow(
         import typer
 
         typer.echo(f"🔍 DEBUG: Client region: {region}")
-        typer.echo(f"🔍 DEBUG: Client endpoint: {AIRFLOW_SERVERLESS_ENDPOINT or 'default'}")
+        typer.echo(
+            f"🔍 DEBUG: Client endpoint: {AIRFLOW_SERVERLESS_ENDPOINT or 'default'}"
+        )
         typer.echo(f"🔍 DEBUG: Create workflow request params: {params}")
 
         logger.info(f"Creating serverless Airflow workflow: {workflow_name}")
@@ -173,7 +177,7 @@ def create_workflow(
                 logger.info(f"🔍 DEBUG: Looking for workflow name: {workflow_name}")
                 for wf in workflows:
                     logger.info(f"🔍 DEBUG: Checking workflow: {wf.get('name')}")
-                
+
                 workflow_arn = None
                 for wf in workflows:
                     if wf["name"] == workflow_name:
@@ -187,7 +191,9 @@ def create_workflow(
                         }
 
                 if not workflow_arn:
-                    logger.error(f"Could not find existing workflow {workflow_name} in list")
+                    logger.error(
+                        f"Could not find existing workflow {workflow_name} in list"
+                    )
                     raise Exception(f"Could not find existing workflow {workflow_name}")
 
                 # Delete the existing workflow

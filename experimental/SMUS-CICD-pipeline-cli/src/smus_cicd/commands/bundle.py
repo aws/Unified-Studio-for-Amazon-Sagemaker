@@ -127,7 +127,9 @@ def bundle_command(
             if target_config.domain.tags:
                 config["domain"]["tags"] = target_config.domain.tags
 
-        region = config.get("domain", {}).get("region") or config.get("aws", {}).get("region")
+        region = config.get("domain", {}).get("region") or config.get("aws", {}).get(
+            "region"
+        )
         if not region:
             raise ValueError(
                 "Region must be specified in target domain configuration or AWS config"
@@ -141,7 +143,9 @@ def bundle_command(
         connections = project_info.get("connections", {})
 
         # Get bundles directory from manifest or use default
-        bundles_directory = manifest.bundle.bundles_directory if manifest.bundle else "./bundles"
+        bundles_directory = (
+            manifest.bundle.bundles_directory if manifest.bundle else "./bundles"
+        )
 
         # Import bundle storage helper
         from ..helpers.bundle_storage import (
@@ -174,13 +178,33 @@ def bundle_command(
             s3_client = boto3.client("s3", region_name=region)
 
             # Process storage bundles (unified - includes workflows)
-            storage_bundles = manifest.bundle.storage if manifest.bundle and manifest.bundle.storage else []
+            storage_bundles = (
+                manifest.bundle.storage
+                if manifest.bundle and manifest.bundle.storage
+                else []
+            )
 
             for bundle_def in storage_bundles:
-                name = bundle_def.get('name') if isinstance(bundle_def, dict) else bundle_def.name
-                connection_name = bundle_def.get('connectionName') if isinstance(bundle_def, dict) else bundle_def.connection_name
-                include_patterns = bundle_def.get('include', []) if isinstance(bundle_def, dict) else (bundle_def.include if bundle_def.include else [])
-                append_flag = bundle_def.get('append', False) if isinstance(bundle_def, dict) else (bundle_def.append if hasattr(bundle_def, 'append') else False)
+                name = (
+                    bundle_def.get("name")
+                    if isinstance(bundle_def, dict)
+                    else bundle_def.name
+                )
+                connection_name = (
+                    bundle_def.get("connectionName")
+                    if isinstance(bundle_def, dict)
+                    else bundle_def.connection_name
+                )
+                include_patterns = (
+                    bundle_def.get("include", [])
+                    if isinstance(bundle_def, dict)
+                    else (bundle_def.include if bundle_def.include else [])
+                )
+                append_flag = (
+                    bundle_def.get("append", False)
+                    if isinstance(bundle_def, dict)
+                    else (bundle_def.append if hasattr(bundle_def, "append") else False)
+                )
 
                 if not connection_name or connection_name not in connections:
                     continue
@@ -205,76 +229,84 @@ def bundle_command(
                 typer.echo(f"  Downloaded {files_added} files for '{name}'")
 
             # Process Git repositories (supports both dict and list formats)
-            git_repos = manifest.bundle.git if manifest.bundle and manifest.bundle.git else []
+            git_repos = (
+                manifest.bundle.git if manifest.bundle and manifest.bundle.git else []
+            )
 
             for repo_config in git_repos:
-                repository = repo_config.get('repository') if isinstance(repo_config, dict) else repo_config.repository
-                url = repo_config.get('url') if isinstance(repo_config, dict) else repo_config.url
+                repository = (
+                    repo_config.get("repository")
+                    if isinstance(repo_config, dict)
+                    else repo_config.repository
+                )
+                url = (
+                    repo_config.get("url")
+                    if isinstance(repo_config, dict)
+                    else repo_config.url
+                )
 
                 if url and repository:
-                        typer.echo(f"Cloning Git repository: {repository}")
+                    typer.echo(f"Cloning Git repository: {repository}")
 
-                        try:
-                            # Always clone to repositories/{repository-name}
-                            clone_path = os.path.join(
-                                temp_bundle_dir, "repositories", repository
-                            )
-                            os.makedirs(os.path.dirname(clone_path), exist_ok=True)
+                    try:
+                        # Always clone to repositories/{repository-name}
+                        clone_path = os.path.join(
+                            temp_bundle_dir, "repositories", repository
+                        )
+                        os.makedirs(os.path.dirname(clone_path), exist_ok=True)
 
-                            subprocess.run(
-                                ["git", "clone", "--depth", "1", url, clone_path],
-                                check=True,
-                                capture_output=True,
-                                text=True,
-                                timeout=60,
-                            )
+                        subprocess.run(
+                            ["git", "clone", "--depth", "1", url, clone_path],
+                            check=True,
+                            capture_output=True,
+                            text=True,
+                            timeout=60,
+                        )
 
-                            # Remove .git directory and Python cache files
-                            git_dir = os.path.join(clone_path, ".git")
-                            if os.path.exists(git_dir):
-                                shutil.rmtree(git_dir)
+                        # Remove .git directory and Python cache files
+                        git_dir = os.path.join(clone_path, ".git")
+                        if os.path.exists(git_dir):
+                            shutil.rmtree(git_dir)
 
-                            # Remove Python cache files and directories
-                            for root, dirs, files in os.walk(clone_path, topdown=False):
-                                # Remove __pycache__ and dot directories
-                                dirs_to_remove = [
-                                    d
-                                    for d in dirs
-                                    if d == "__pycache__"
-                                    or d == ".ipynb_checkpoints"
-                                    or d.startswith(".")
-                                ]
-                                for d in dirs_to_remove:
-                                    shutil.rmtree(os.path.join(root, d))
-                                    dirs.remove(d)
+                        # Remove Python cache files and directories
+                        for root, dirs, files in os.walk(clone_path, topdown=False):
+                            # Remove __pycache__ and dot directories
+                            dirs_to_remove = [
+                                d
+                                for d in dirs
+                                if d == "__pycache__"
+                                or d == ".ipynb_checkpoints"
+                                or d.startswith(".")
+                            ]
+                            for d in dirs_to_remove:
+                                shutil.rmtree(os.path.join(root, d))
+                                dirs.remove(d)
 
-                                # Remove .pyc and .DS_Store files
-                                files_to_remove = [
-                                    f
-                                    for f in files
-                                    if f.endswith(".pyc") or f == ".DS_Store"
-                                ]
-                                for f in files_to_remove:
-                                    os.remove(os.path.join(root, f))
+                            # Remove .pyc and .DS_Store files
+                            files_to_remove = [
+                                f
+                                for f in files
+                                if f.endswith(".pyc") or f == ".DS_Store"
+                            ]
+                            for f in files_to_remove:
+                                os.remove(os.path.join(root, f))
 
-                            # Count files (after cleanup)
-                            git_files_added = 0
-                            for root, dirs, files in os.walk(clone_path):
-                                git_files_added += len(files)
+                        # Count files (after cleanup)
+                        git_files_added = 0
+                        for root, dirs, files in os.walk(clone_path):
+                            git_files_added += len(files)
 
-                            total_files_added += git_files_added
-                            typer.echo(
-                                f"  Cloned {git_files_added} files from {repository}"
-                            )
+                        total_files_added += git_files_added
+                        typer.echo(
+                            f"  Cloned {git_files_added} files from {repository}"
+                        )
 
-                        except subprocess.TimeoutExpired:
-                            typer.echo(
-                                "Error: Git clone timed out after 60 seconds", err=True
-                            )
-                        except Exception as e:
-                            typer.echo(
-                                f"Error cloning Git repository: {str(e)}", err=True
-                            )
+                    except subprocess.TimeoutExpired:
+                        typer.echo(
+                            "Error: Git clone timed out after 60 seconds", err=True
+                        )
+                    except Exception as e:
+                        typer.echo(f"Error cloning Git repository: {str(e)}", err=True)
 
             # Create or update zip archive from temp directory
             if total_files_added > 0:
