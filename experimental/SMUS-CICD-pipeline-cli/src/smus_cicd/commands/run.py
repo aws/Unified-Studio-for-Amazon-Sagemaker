@@ -56,13 +56,6 @@ def run_command(
         # Check if any workflow uses serverless Airflow
         uses_airflow_serverless = False
 
-        # Check bundle workflow configurations
-        if manifest.bundle.workflow:
-            for workflow_config in manifest.bundle.workflow:
-                if workflow_config.get("airflow-serverless", False):
-                    uses_airflow_serverless = True
-                    break
-
         # Check workflows section for airflow-serverless engine
         if manifest.workflows:
             for wf in manifest.workflows:
@@ -563,8 +556,10 @@ def _execute_airflow_serverless_workflows(
             safe_dag = dag_name.replace("-", "_")
             expected_workflow_name = f"{safe_pipeline}_{target_name}_{safe_dag}"
 
+            # Use target's region instead of hardcoded region
+            region = target_config.domain.region
+
             # List existing workflows to find the actual ARN
-            region = AIRFLOW_SERVERLESS_REGION
             workflows = airflow_serverless.list_workflows(region=region)
 
             # Find the workflow that matches our expected name
@@ -588,10 +583,32 @@ def _execute_airflow_serverless_workflows(
 
             if result.get("success"):
                 run_id = result.get("run_id")
+                initial_status = result.get("status")
+                
                 if output.upper() != "JSON":
                     typer.echo("✅ Workflow run started successfully")
                     typer.echo(f"📋 Run ID: {run_id}")
-                    typer.echo(f"📊 Status: {result.get('status')}")
+                    typer.echo(f"📊 Initial Status: {initial_status}")
+                
+                # Verify workflow transitioned from READY state
+                # Valid running states: STARTING, QUEUED, RUNNING
+                if initial_status not in ["STARTING", "QUEUED", "RUNNING"]:
+                    # Wait a moment and check again
+                    import time
+                    time.sleep(10)
+                    status_check = airflow_serverless.get_workflow_status(workflow_arn, region=region)
+                    current_status = status_check.get("status") if status_check.get("success") else initial_status
+                    
+                    if current_status not in ["STARTING", "QUEUED", "RUNNING"]:
+                        error_msg = f"Workflow run started but status is '{current_status}' (expected STARTING, QUEUED, or RUNNING). The workflow may not have actually started."
+                        if output.upper() != "JSON":
+                            typer.echo(f"❌ {error_msg}")
+                        else:
+                            typer.echo(json.dumps({"error": error_msg, "status": current_status}, indent=2))
+                        raise typer.Exit(1)
+                    else:
+                        if output.upper() != "JSON":
+                            typer.echo(f"✓ Verified workflow status: {current_status}")
 
                 results.append(
                     {

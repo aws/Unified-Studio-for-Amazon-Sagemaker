@@ -6,13 +6,12 @@ from typing import Optional
 
 import typer
 
-from ..helpers.utils import build_domain_config, get_datazone_project_info, load_config
+from ..helpers.utils import (  # noqa: F401
+    build_domain_config,
+    get_datazone_project_info,
+    load_config,
+)
 from ..pipeline import PipelineManifest
-
-# TEMPORARY: Airflow Serverless (Overdrive) configuration
-# TODO: Remove these overrides once service is available in all regions
-AIRFLOW_SERVERLESS_REGION = "us-west-2"  # Force us-west-2 for Airflow Serverless
-AIRFLOW_SERVERLESS_ENDPOINT_URL = "https://overdrive-gamma.us-west-2.api.aws"
 
 
 def monitor_command(targets: Optional[str], manifest_file: str, output: str):
@@ -281,12 +280,6 @@ def _target_uses_airflow_serverless(manifest: PipelineManifest, target_config) -
     Returns:
         True if target uses serverless Airflow, False otherwise
     """
-    # Check bundle workflow configurations for airflow-serverless flag
-    if manifest.bundle.workflow:
-        for workflow_config in manifest.bundle.workflow:
-            if workflow_config.get("airflow-serverless", False):
-                return True
-
     # Check workflows section for airflow-serverless engine
     if manifest.workflows:
         for workflow in manifest.workflows:
@@ -317,11 +310,11 @@ def _monitor_airflow_serverless_workflows(
         from ..helpers import airflow_serverless
 
         if output.upper() != "JSON":
-            typer.echo("\n   🚀 Serverless Airflow Workflow Status:")
+            typer.echo("\n   🚀 Serverless Airflow Workflows:")
 
         # List all serverless Airflow workflows
         all_workflows = airflow_serverless.list_workflows(
-            region=AIRFLOW_SERVERLESS_REGION
+            region=config.get("region")
         )
 
         # Filter workflows that belong to this pipeline/target using tags
@@ -345,65 +338,94 @@ def _monitor_airflow_serverless_workflows(
                 "workflows": {},
             }
 
+            # Prepare table data
+            table_rows = []
             for workflow in relevant_workflows:
                 workflow_arn = workflow["workflow_arn"]
                 workflow_name = workflow["name"]
 
                 # Get workflow details
                 workflow_status = airflow_serverless.get_workflow_status(
-                    workflow_arn, region=AIRFLOW_SERVERLESS_REGION
+                    workflow_arn, region=config.get("region")
                 )
 
                 # Get recent workflow runs
                 recent_runs = airflow_serverless.list_workflow_runs(
-                    workflow_arn, region=AIRFLOW_SERVERLESS_REGION, max_results=5
+                    workflow_arn, region=config.get("region"), max_results=1
                 )
 
-                recent_status = "No runs"
+                # Extract run details
+                run_id = "N/A"
+                run_status = "No runs"
+                start_time = "N/A"
+                duration = "N/A"
+                
                 if recent_runs:
-                    recent_status = recent_runs[0]["status"]
+                    latest_run = recent_runs[0]
+                    run_id = latest_run.get("run_id", "N/A")
+                    run_status = latest_run.get("status", "UNKNOWN")
+                    
+                    # Calculate duration
+                    started_at = latest_run.get("started_at")
+                    ended_at = latest_run.get("ended_at")
+                    
+                    if started_at:
+                        from datetime import datetime
+                        start_time = started_at.strftime("%Y-%m-%d %H:%M:%S") if hasattr(started_at, 'strftime') else str(started_at)
+                        
+                        if ended_at:
+                            # Completed run - calculate from start to end
+                            if hasattr(started_at, 'timestamp') and hasattr(ended_at, 'timestamp'):
+                                duration_seconds = (ended_at - started_at).total_seconds()
+                                hours = int(duration_seconds // 3600)
+                                minutes = int((duration_seconds % 3600) // 60)
+                                duration = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+                        else:
+                            # Still running - calculate from start to now
+                            if hasattr(started_at, 'timestamp'):
+                                now = datetime.now(started_at.tzinfo) if started_at.tzinfo else datetime.utcnow()
+                                duration_seconds = (now - started_at).total_seconds()
+                                hours = int(duration_seconds // 3600)
+                                minutes = int((duration_seconds % 3600) // 60)
+                                duration = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+                            else:
+                                duration = "Running..."
 
                 workflow_data = {
                     "workflow_arn": workflow_arn,
                     "status": workflow_status.get("status", "UNKNOWN"),
-                    "trigger_mode": workflow_status.get("trigger_mode", "Unknown"),
-                    "recent_run_status": recent_status,
-                    "recent_runs": recent_runs[:3],
-                    "created_at": workflow_status.get("created_at"),
-                    "log_group": workflow_status.get("log_group"),
+                    "trigger_mode": workflow_status.get("trigger_mode", "scheduled"),
+                    "run_id": run_id,
+                    "run_status": run_status,
+                    "start_time": start_time,
+                    "duration": duration,
                 }
 
                 serverlessairflow_data["workflows"][workflow_name] = workflow_data
+                table_rows.append([
+                    workflow_name,
+                    workflow_status.get("status", "UNKNOWN"),
+                    workflow_status.get("trigger_mode", "scheduled"),
+                    run_id,
+                    run_status,
+                    start_time,
+                    duration
+                ])
 
-                if output.upper() != "JSON":
-                    status_icon = (
-                        "✅"
-                        if recent_status == "SUCCESS"
-                        else (
-                            "❌"
-                            if recent_status == "FAILED"
-                            else (
-                                "🔄"
-                                if recent_status in ["STARTING", "QUEUED", "RUNNING"]
-                                else "⏸️"
-                            )
-                        )
-                    )
-
-                    typer.echo(f"      🚀 {workflow_name}")
-                    typer.echo(
-                        f"         {status_icon} Status: {workflow_status.get('status')} | Recent: {recent_status}"
-                    )
-                    typer.echo(f"         ARN: {workflow_arn}")
-
-                    if workflow_status.get("log_group"):
-                        typer.echo(f"         📋 Logs: {workflow_status['log_group']}")
+            if output.upper() != "JSON":
+                # Print table header
+                typer.echo(f"\n      {'Workflow':<40} {'Status':<10} {'Trigger':<12} {'Run ID':<20} {'Run Status':<12} {'Start Time':<20} {'Duration':<10}")
+                typer.echo(f"      {'-'*40} {'-'*10} {'-'*12} {'-'*20} {'-'*12} {'-'*20} {'-'*10}")
+                
+                # Print table rows
+                for row in table_rows:
+                    typer.echo(f"      {row[0]:<40} {row[1]:<10} {row[2]:<12} {row[3]:<20} {row[4]:<12} {row[5]:<20} {row[6]:<10}")
 
             workflows_data["overdrive"] = serverlessairflow_data
         else:
             if output.upper() != "JSON":
                 typer.echo(
-                    "      ℹ️  No Overdrive workflows found for this pipeline/target"
+                    "      ℹ️  No Serverless Airflow workflows found for this pipeline/target"
                 )
 
             workflows_data["overdrive"] = {

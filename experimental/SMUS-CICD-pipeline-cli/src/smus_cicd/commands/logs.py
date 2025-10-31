@@ -97,6 +97,37 @@ def _monitor_airflow_serverless_logs(
             typer.echo(f"❌ {error_msg}")
         raise typer.Exit(1)
 
+    # For live monitoring, check if there's an active workflow run
+    active_run = False
+    if live:
+        # Get recent workflow runs to check if any are active
+        recent_runs = airflow_serverless.list_workflow_runs(
+            workflow_arn, region=region, max_results=1
+        )
+        
+        if not recent_runs:
+            error_msg = "No workflow runs found. Start a workflow run before fetching logs."
+            if output.upper() == "JSON":
+                typer.echo(json.dumps({"error": error_msg}, indent=2))
+            else:
+                typer.echo(f"❌ {error_msg}")
+            raise typer.Exit(1)
+        
+        # Check the most recent run status
+        latest_run = recent_runs[0]
+        run_status = latest_run.get("status")
+        
+        # Valid active states for live monitoring
+        if run_status in ["STARTING", "QUEUED", "RUNNING"]:
+            active_run = True
+        else:
+            # Run already ended - fetch static logs instead
+            if output.upper() != "JSON":
+                typer.echo(f"ℹ️  Workflow run already completed (status: {run_status})")
+                typer.echo(f"   Run ID: {latest_run.get('run_id')}")
+                typer.echo("   Fetching all logs...")
+            active_run = False
+
     # Construct log group name from workflow name
     # Log group format: /aws/airflow-serverless/<workflow-name>
     log_group = f"/aws/airflow-serverless/{workflow_name}"
@@ -108,7 +139,7 @@ def _monitor_airflow_serverless_logs(
 
     # Fetch logs
     try:
-        if live:
+        if live and active_run:
             _live_log_monitoring(workflow_arn, region, output, config)
         else:
             _fetch_static_logs(workflow_arn, region, output, lines, config)

@@ -23,11 +23,12 @@ class TestDeployCatalogNegativeScenarios:
 pipelineName: TestCatalogPipeline
 bundle:
   bundlesDirectory: /tmp/bundles
-  workflow:
-    - connectionName: default.s3_shared
-      include: ['workflows']
   storage:
-    - connectionName: default.s3_shared
+    - name: workflows
+      connectionName: default.s3_shared
+      include: ['workflows']
+    - name: code
+      connectionName: default.s3_shared
       include: ['src']
 {catalog_config}
 targets:
@@ -40,11 +41,9 @@ targets:
       name: test-project
     bundle_target_configuration:
       storage:
-        connectionName: default.s3_shared
-        directory: src
-      workflows:
-        connectionName: default.s3_shared
-        directory: workflows
+        - name: code
+          connectionName: default.s3_shared
+          targetDirectory: src
 """
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(manifest_content)

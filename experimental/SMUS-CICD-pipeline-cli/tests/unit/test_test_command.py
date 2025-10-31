@@ -16,7 +16,8 @@ class TestTestCommand:
 pipelineName: TestPipeline
 bundle:
   storage:
-    - connectionName: default.s3_shared
+    - name: code
+      connectionName: default.s3_shared
       include: ["src/"]
 targets:
   dev:
@@ -25,7 +26,7 @@ targets:
       region: us-east-1
     project:
       name: test-project-dev
-    stage: dev
+    stage: DEV
     tests:
       folder: tests/
 workflows:
@@ -44,7 +45,8 @@ workflows:
 pipelineName: TestPipeline
 bundle:
   storage:
-    - connectionName: default.s3_shared
+    - name: code
+      connectionName: default.s3_shared
       include: ["src/"]
 targets:
   dev:
@@ -53,7 +55,7 @@ targets:
       region: us-east-1
     project:
       name: test-project-dev
-    stage: dev
+    stage: DEV
 workflows:
   - workflowName: test_dag
     connectionName: project.workflow_mwaa

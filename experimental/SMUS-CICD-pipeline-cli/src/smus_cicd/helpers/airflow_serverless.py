@@ -2,7 +2,7 @@
 
 import os
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 import boto3
 
@@ -11,9 +11,8 @@ from .logger import get_logger
 
 # Airflow Serverless (Overdrive) configuration - configurable via environment variables
 AIRFLOW_SERVERLESS_ENDPOINT = os.environ.get(
-    "AIRFLOW_SERVERLESS_ENDPOINT", "https://overdrive-gamma.us-west-2.api.aws"
+    "AIRFLOW_SERVERLESS_ENDPOINT"
 )
-AIRFLOW_SERVERLESS_REGION = os.environ.get("AIRFLOW_SERVERLESS_REGION", "us-west-2")
 AIRFLOW_SERVERLESS_SERVICE = "awsoverdriveservice"
 
 
@@ -21,19 +20,33 @@ def create_airflow_serverless_client(
     connection_info: Dict[str, Any] = None, region: str = None
 ):
     """Create Airflow Serverless client with proper endpoint configuration."""
-    # Use the provided region (project region) instead of hardcoded region
-    client_region = region or AIRFLOW_SERVERLESS_REGION
-
-    # Build endpoint URL based on the actual region
-    endpoint_url = f"https://overdrive-gamma.{client_region}.api.aws"
-
-    print(f"🔍 DEBUG: Creating Airflow Serverless client with region={client_region}, endpoint={endpoint_url}")
-
-    # Create client with region-specific endpoint URL
-    session = boto3.Session()
-    client = session.client(
-        AIRFLOW_SERVERLESS_SERVICE, region_name=client_region, endpoint_url=endpoint_url
-    )
+    # Use AIRFLOW_SERVERLESS_ENDPOINT if set, otherwise use domain region without endpoint
+    if AIRFLOW_SERVERLESS_ENDPOINT:
+        endpoint_url = AIRFLOW_SERVERLESS_ENDPOINT
+        # Extract region from endpoint if not provided
+        if not region:
+            if "us-east-1" in endpoint_url:
+                client_region = "us-east-1"
+            elif "us-west-2" in endpoint_url:
+                client_region = "us-west-2"
+            else:
+                client_region = "us-east-1"
+        else:
+            client_region = region
+        
+        print(f"🔍 DEBUG: Creating Airflow Serverless client with region={client_region}, endpoint={endpoint_url}")
+        session = boto3.Session()
+        client = session.client(
+            AIRFLOW_SERVERLESS_SERVICE, region_name=client_region, endpoint_url=endpoint_url
+        )
+    else:
+        # Use domain region without custom endpoint
+        client_region = region
+        print(f"🔍 DEBUG: Creating Airflow Serverless client with region={client_region}, endpoint=default")
+        session = boto3.Session()
+        client = session.client(
+            AIRFLOW_SERVERLESS_SERVICE, region_name=client_region
+        )
 
     return client
 
@@ -120,13 +133,14 @@ def create_workflow(
             params["Tags"] = tags
 
         import typer
-        typer.echo(f"🔍 DEBUG: Client region: {region or AIRFLOW_SERVERLESS_REGION}")
-        typer.echo(f"🔍 DEBUG: Client endpoint: https://overdrive-gamma.{region or AIRFLOW_SERVERLESS_REGION}.api.aws")
+
+        typer.echo(f"🔍 DEBUG: Client region: {region}")
+        typer.echo(f"🔍 DEBUG: Client endpoint: {AIRFLOW_SERVERLESS_ENDPOINT or 'default'}")
         typer.echo(f"🔍 DEBUG: Create workflow request params: {params}")
-        
+
         logger.info(f"Creating serverless Airflow workflow: {workflow_name}")
         response = client.create_workflow(**params)
-        
+
         typer.echo(f"🔍 DEBUG: Create workflow response: {response}")
 
         workflow_arn = response["WorkflowArn"]
@@ -146,23 +160,34 @@ def create_workflow(
         # Handle ConflictException when workflow already exists (idempotent behavior)
         if "ConflictException" in str(e) and "already exists" in str(e):
             logger.info(
-                f"Workflow {workflow_name} already exists, deleting and recreating workflow"
+                f"Workflow {workflow_name} already exists, returning existing workflow info"
             )
 
-            # Delete and recreate the existing workflow instead of updating
+            # Get existing workflow info and return it
             try:
                 client = create_airflow_serverless_client(connection_info, region)
 
                 # Get existing workflow ARN first
                 workflows = list_workflows(connection_info, region)
+                logger.info(f"🔍 DEBUG: Found {len(workflows)} workflows in list")
+                logger.info(f"🔍 DEBUG: Looking for workflow name: {workflow_name}")
+                for wf in workflows:
+                    logger.info(f"🔍 DEBUG: Checking workflow: {wf.get('name')}")
+                
                 workflow_arn = None
                 for wf in workflows:
                     if wf["name"] == workflow_name:
                         workflow_arn = wf["workflow_arn"]
-                        break
+                        logger.info(f"Found existing workflow: {workflow_arn}")
+                        return {
+                            "workflow_arn": workflow_arn,
+                            "workflow_version": wf.get("workflow_version"),
+                            "success": True,
+                            "already_exists": True,
+                        }
 
                 if not workflow_arn:
-                    logger.error(f"Could not find existing workflow {workflow_name}")
+                    logger.error(f"Could not find existing workflow {workflow_name} in list")
                     raise Exception(f"Could not find existing workflow {workflow_name}")
 
                 # Delete the existing workflow
@@ -220,9 +245,9 @@ def get_workflow_status(
         return {
             "workflow_arn": response["WorkflowArn"],
             "name": response["Name"],
-            "status": response["Status"],
+            "status": response["WorkflowStatus"],
             "created_at": response["CreatedAt"],
-            "updated_at": response["UpdatedAt"],
+            "updated_at": response["ModifiedAt"],
             "success": True,
         }
 
@@ -248,6 +273,7 @@ def list_workflows(
         for workflow in response.get("Workflows", []):
             workflow_data = {
                 "workflow_arn": workflow["WorkflowArn"],
+                "workflow_version": workflow.get("WorkflowVersion"),
                 "name": workflow["Name"],
                 "status": workflow[
                     "WorkflowStatus"
@@ -414,31 +440,6 @@ def delete_workflow(
     except Exception as e:
         logger.error(f"Failed to delete workflow {workflow_arn}: {e}")
         raise Exception(f"Failed to delete workflow {workflow_arn}: {e}")
-
-
-def get_workflow_status(
-    workflow_arn: str, connection_info: Dict[str, Any] = None, region: str = None
-) -> Dict[str, Any]:
-    """Get the status of a serverless Airflow workflow."""
-    logger = get_logger("airflow_serverless")
-
-    try:
-        client = create_airflow_serverless_client(connection_info, region)
-        response = client.get_workflow(WorkflowArn=workflow_arn)
-
-        return {
-            "status": response[
-                "WorkflowStatus"
-            ],  # Use WorkflowStatus instead of Status
-            "name": response["Name"],
-            "created_at": response["CreatedAt"],
-            "updated_at": response["ModifiedAt"],  # Use ModifiedAt instead of UpdatedAt
-            "success": True,
-        }
-
-    except Exception as e:
-        logger.error(f"Failed to get workflow status for {workflow_arn}: {e}")
-        return {"success": False, "error": str(e)}
 
 
 def get_cloudwatch_logs(

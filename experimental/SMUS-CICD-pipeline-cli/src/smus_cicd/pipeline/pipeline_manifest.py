@@ -51,7 +51,9 @@ class BundleConfig:
     """Bundle configuration."""
 
     bundles_directory: str = "./bundles"
-    storage: List[Dict[str, Any]] = field(default_factory=list)  # Unified storage (includes workflows)
+    storage: List[Dict[str, Any]] = field(
+        default_factory=list
+    )  # Unified storage (includes workflows)
     git: List[Dict[str, Any]] = field(default_factory=list)  # Changed from dict to list
     catalog: Optional[CatalogConfig] = None
 
@@ -265,7 +267,7 @@ class PipelineManifest:
             domain = DomainConfig(
                 region=domain_data.get("region", ""),
                 name=domain_data.get("name"),
-                tags=domain_data.get("tags")
+                tags=domain_data.get("tags"),
             )
 
             if not domain.region.strip():

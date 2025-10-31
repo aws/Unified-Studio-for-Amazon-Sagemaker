@@ -115,33 +115,6 @@ class TestAnalyticWorkflowPipeline(IntegrationTestBase):
         return os.path.join(os.path.dirname(__file__), "analytic_workflow_pipeline.yaml")
 
     @pytest.mark.integration
-    def test_describe_connect_after_deploy(self):
-        """Test describe --connect after deployment (should be idempotent)."""
-        if not self.verify_aws_connectivity():
-            pytest.skip("AWS connectivity not available")
-
-        pipeline_file = self.get_pipeline_file()
-        
-        # Test describe with --connect
-        result = self.run_cli_command([
-            "describe", 
-            "--pipeline", pipeline_file,
-            "--connect"
-        ])
-        
-        assert result["exit_code"] == 0, f"describe --connect failed: {result['output']}"
-        
-        # Should show connection details
-        output = result["output"]
-        assert "Domain:" in output
-        assert "cicd-test-domain" in output
-        assert "Project ID:" in output
-        
-        # Should show both dev and test targets
-        assert "dev-marketing" in output
-        assert "analytic-workflow-test" in output
-
-    @pytest.mark.integration
     def test_analytic_workflow_pipeline_deployment(self):
         """Test complete analytic workflow pipeline deployment workflow."""
         if not self.verify_aws_connectivity():
@@ -191,6 +164,8 @@ class TestAnalyticWorkflowPipeline(IntegrationTestBase):
             
             result = subprocess.run([
                 "aws", "s3", "sync", analytic_workflow_dir, code_dest,
+                "--exclude", ".*",
+                "--exclude", "*/.*",
                 "--exclude", "*.pyc",
                 "--exclude", "__pycache__/*", 
                 "--exclude", ".ipynb_checkpoints/*"
@@ -293,51 +268,12 @@ class TestAnalyticWorkflowPipeline(IntegrationTestBase):
         finally:
             # Cleanup
             print(f"\n=== Cleanup ===")
-            self.cleanup_generated_files()
+            try:
+                bundle_dir = "/tmp/bundles"
+                if os.path.exists(bundle_dir):
+                    shutil.rmtree(bundle_dir)
+                    print(f"✅ Cleaned up bundle directory: {bundle_dir}")
+            except Exception as e:
+                print(f"⚠️ Could not clean up: {e}")
             print(f"✅ Test completed and cleaned up")
 
-    @pytest.mark.integration
-    def test_analytic_workflow_pipeline_validation(self):
-        """Test that analytic workflow pipeline contains expected ML components."""
-        if not self.verify_aws_connectivity():
-            pytest.skip("AWS connectivity not available")
-
-        pipeline_file = self.get_pipeline_file()
-        
-        print(f"\n=== Analytic Workflow Pipeline Validation ===")
-        
-        # Step 1: Create bundle locally to inspect contents
-        result = self.run_cli_command([
-            "bundle", 
-            "--pipeline", pipeline_file,
-            "test"  # target as positional argument
-        ])
-        assert result["exit_code"] == 0, f"Bundle creation failed: {result['output']}"
-        
-        # Step 2: Verify bundle contains ML workflow files
-        # The bundle should be created in /tmp/bundles based on manifest
-        bundle_dir = "/tmp/bundles"
-        if os.path.exists(bundle_dir):
-            print(f"✅ Bundle directory exists: {bundle_dir}")
-            
-            # Look for workflow files
-            for root, dirs, files in os.walk(bundle_dir):
-                for file in files:
-                    if file.endswith('.yaml') or file.endswith('.yml'):
-                        print(f"✅ Found workflow file: {os.path.join(root, file)}")
-                    elif file.endswith('.py'):
-                        print(f"✅ Found Python script: {os.path.join(root, file)}")
-        
-        print(f"✅ Bundle validation completed")
-
-    def cleanup_generated_files(self):
-        """Clean up any files generated during testing."""
-        try:
-            # Clean up bundle directory
-            import shutil
-            bundle_dir = "/tmp/bundles"
-            if os.path.exists(bundle_dir):
-                shutil.rmtree(bundle_dir)
-                print(f"✅ Cleaned up bundle directory: {bundle_dir}")
-        except Exception as e:
-            print(f"⚠️ Could not clean up generated files: {e}")

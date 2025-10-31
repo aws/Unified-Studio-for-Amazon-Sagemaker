@@ -89,8 +89,9 @@ targets:
       create: false
     bundle_target_configuration:
       storage:
-        connectionName: default.s3_shared
-        directory: 'src'
+        - name: code
+          connectionName: default.s3_shared
+          targetDirectory: 'src'
 """
             )
             manifest_file = f.name

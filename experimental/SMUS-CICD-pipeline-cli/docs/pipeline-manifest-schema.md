@@ -76,19 +76,19 @@ domain:
 ```yaml
 bundle:
   bundlesDirectory: ./bundles  # Optional: Bundle output directory (local or S3)
-  workflow:                    # Optional: Workflow bundle config
-    - connectionName: default.s3_shared
-      append: true              # Optional: Append vs replace
-      include: ['workflows/']   # Optional: Include patterns
-      exclude: ['*.pyc']        # Optional: Exclude patterns
-  storage:                     # Optional: Storage bundle config
-    - connectionName: default.s3_shared
-      append: false
-      include: ['src/']
+  storage:                     # Optional: Storage bundle config (unified - includes workflows)
+    - name: code               # Required: Unique name for this bundle item
+      connectionName: default.s3_shared
+      append: false            # Optional: Append vs replace
+      include: ['src/']        # Optional: Include patterns
+      exclude: ['*.pyc']       # Optional: Exclude patterns
+    - name: workflows          # Required: Unique name for workflows
+      connectionName: default.s3_shared
+      append: true
+      include: ['workflows/']
   git:                         # Optional: Git repository
     repository: my-repo
     url: https://github.com/user/repo.git
-    targetDir: ./src
   catalog:                     # Optional: Catalog asset access
     assets:                    # Required: List of assets
       - selector:              # Required: Asset selector
@@ -119,11 +119,12 @@ targets:
         - EnvironmentConfigurationName: 'OnDemand Workflows'
     bundle_target_configuration: # Optional: Target-specific bundle config
       storage:
-        connectionName: default.s3_shared
-        directory: 'src'
-      workflows:
-        connectionName: default.s3_shared
-        directory: 'workflows'
+        - name: code           # Required: Name matching bundle storage item
+          connectionName: default.s3_shared
+          targetDirectory: 'src'  # Required: Target directory on connection
+        - name: workflows
+          connectionName: default.s3_shared
+          targetDirectory: 'workflows'
     workflows:                 # Optional: Target-specific workflows
       - workflowName: prepareData
         parameters:

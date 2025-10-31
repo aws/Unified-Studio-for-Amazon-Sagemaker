@@ -1,23 +1,21 @@
-# Configuration file for DataZone CI/CD deployment - Dev Account
+# Configuration file for DataZone CI/CD deployment - Dev Account 198737698272
 # Stage: dev
 
-# Service Endpoints (optional - only for non-prod environments)
 # Multi-region configuration
 regions:
   primary:
     name: us-east-1
     enabled: true
+  # secondary:
+  #   name: us-west-2
+  #   enabled: false
+  # tertiary:
+  #   name: us-east-1
+  #   enabled: false
 
 # DataZone Domain Tags (for auto-discovery - all tags must match)
 domain_tags:
   purpose: smus-cicd-testing
-
-# # Stack Names
-# stacks:
-#   domain: cicd-test-domain-stack
-#   blueprints_profiles: sagemaker-blueprints-profiles-stack
-#   projects: sagemaker-projects-stack
-#   memberships: sagemaker-project-memberships-stack
 
 # Project Configuration
 projects:

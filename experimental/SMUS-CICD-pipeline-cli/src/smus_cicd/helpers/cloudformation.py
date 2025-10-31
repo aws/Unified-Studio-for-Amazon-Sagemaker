@@ -206,12 +206,7 @@ def create_project_via_cloudformation(
         if role_arn:
             template_dict["Resources"]["DataZoneProject"]["Properties"][
                 "CustomerProvidedRoleConfigs"
-            ] = [
-                {
-                    "RoleArn": role_arn,
-                    "RoleDesignation": "PROJECT_OWNER"
-                }
-            ]
+            ] = [{"RoleArn": role_arn, "RoleDesignation": "PROJECT_OWNER"}]
             typer.echo(f"✓ Using customer-provided role: {role_arn}")
 
         # Convert template to JSON
@@ -490,7 +485,9 @@ def update_project_stack_tags(stack_name, region, tags):
             cf_client.describe_stacks(StackName=stack_name)
         except cf_client.exceptions.ClientError as e:
             if "does not exist" in str(e):
-                typer.echo(f"⚠️  Stack {stack_name} not found - project was created outside CICD, skipping tag update")
+                typer.echo(
+                    f"⚠️  Stack {stack_name} not found - project was created outside CICD, skipping tag update"
+                )
                 return True
             raise
 

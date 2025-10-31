@@ -12,7 +12,8 @@ import boto3
 import typer
 
 from ..helpers import deployment
-from ..helpers.utils import get_datazone_project_info, load_config, load_yaml
+from ..helpers.utils import get_datazone_project_info, load_config
+from ..pipeline import PipelineManifest
 
 
 def display_bundle_tree(zip_path: str, output: str):
@@ -80,7 +81,7 @@ def bundle_command(
     """Create bundle zip files by downloading from S3 connection locations."""
     try:
         config = load_config()
-        manifest = load_yaml(manifest_file)
+        manifest = PipelineManifest.from_file(manifest_file)
 
         # Parse targets - handle single target or comma-separated list
         target_list = []
@@ -90,17 +91,17 @@ def bundle_command(
         # Use first target for now (bundle command typically works with single target)
         target_name = target_list[0] if target_list else None
 
-        # Get target configuration
-        targets_dict = manifest.get("targets", {})
-
         # If no target specified, default to target with STAGE=DEV
         if not target_name:
-            for name, config_data in targets_dict.items():
-                if config_data.get("stage", "").upper() == "DEV":
+            for name in manifest.targets.keys():
+                target_config = manifest.get_target(name)
+                if target_config.stage and target_config.stage.upper() == "DEV":
                     target_name = name
-                    typer.echo(f"No target specified, defaulting to DEV target: {target_name}")
+                    typer.echo(
+                        f"No target specified, defaulting to DEV target: {target_name}"
+                    )
                     break
-        
+
         # Require target to be specified or found
         if not target_name:
             typer.echo(
@@ -109,19 +110,24 @@ def bundle_command(
             )
             raise typer.Exit(1)
 
-        if target_name not in targets_dict:
+        if target_name not in manifest.targets:
             typer.echo(f"Error: Target '{target_name}' not found in manifest", err=True)
             raise typer.Exit(1)
 
-        target_config = targets_dict[target_name]
-        project_name = target_config.get("project", {}).get("name")
+        target_config = manifest.get_target(target_name)
+        project_name = target_config.project.name
 
-        # Get region from target's domain configuration
-        if "domain" in target_config:
-            config["domain"] = target_config["domain"]
-            config["region"] = target_config["domain"].get("region")
+        # Get region and domain name from target's domain configuration
+        if target_config.domain:
+            if "domain" not in config:
+                config["domain"] = {}
+            config["domain"]["region"] = target_config.domain.region
+            if target_config.domain.name:
+                config["domain"]["name"] = target_config.domain.name
+            if target_config.domain.tags:
+                config["domain"]["tags"] = target_config.domain.tags
 
-        region = config.get("region")
+        region = config.get("domain", {}).get("region") or config.get("aws", {}).get("region")
         if not region:
             raise ValueError(
                 "Region must be specified in target domain configuration or AWS config"
@@ -135,8 +141,7 @@ def bundle_command(
         connections = project_info.get("connections", {})
 
         # Get bundles directory from manifest or use default
-        bundle_config = manifest.get("bundle", {})
-        bundles_directory = bundle_config.get("bundlesDirectory", "./bundles")
+        bundles_directory = manifest.bundle.bundles_directory if manifest.bundle else "./bundles"
 
         # Import bundle storage helper
         from ..helpers.bundle_storage import (
@@ -149,7 +154,7 @@ def bundle_command(
         ensure_bundle_directory_exists(bundles_directory, region)
 
         # Create zip file path (always create locally first, then upload if S3)
-        pipeline_name = manifest.get("pipelineName", "pipeline")
+        pipeline_name = manifest.pipeline_name
         zip_filename = f"{pipeline_name}.zip"
 
         if is_s3_url(bundles_directory):
@@ -169,17 +174,13 @@ def bundle_command(
             s3_client = boto3.client("s3", region_name=region)
 
             # Process storage bundles (unified - includes workflows)
-            storage_config = bundle_config.get("storage", [])
-            if isinstance(storage_config, list):
-                storage_bundles = storage_config
-            else:
-                storage_bundles = [storage_config] if storage_config else []
+            storage_bundles = manifest.bundle.storage if manifest.bundle and manifest.bundle.storage else []
 
             for bundle_def in storage_bundles:
-                name = bundle_def.get("name", "unnamed")
-                connection_name = bundle_def.get("connectionName")
-                include_patterns = bundle_def.get("include", [])
-                append_flag = bundle_def.get("append", False)
+                name = bundle_def.get('name') if isinstance(bundle_def, dict) else bundle_def.name
+                connection_name = bundle_def.get('connectionName') if isinstance(bundle_def, dict) else bundle_def.connection_name
+                include_patterns = bundle_def.get('include', []) if isinstance(bundle_def, dict) else (bundle_def.include if bundle_def.include else [])
+                append_flag = bundle_def.get('append', False) if isinstance(bundle_def, dict) else (bundle_def.append if hasattr(bundle_def, 'append') else False)
 
                 if not connection_name or connection_name not in connections:
                     continue
@@ -204,16 +205,13 @@ def bundle_command(
                 typer.echo(f"  Downloaded {files_added} files for '{name}'")
 
             # Process Git repositories (supports both dict and list formats)
-            git_config = bundle_config.get("git")
-            if git_config:
-                # Convert single dict to list for uniform processing
-                git_repos = git_config if isinstance(git_config, list) else [git_config]
-                
-                for repo_config in git_repos:
-                    repository = repo_config.get("repository")
-                    url = repo_config.get("url")
+            git_repos = manifest.bundle.git if manifest.bundle and manifest.bundle.git else []
 
-                    if url and repository:
+            for repo_config in git_repos:
+                repository = repo_config.get('repository') if isinstance(repo_config, dict) else repo_config.repository
+                url = repo_config.get('url') if isinstance(repo_config, dict) else repo_config.url
+
+                if url and repository:
                         typer.echo(f"Cloning Git repository: {repository}")
 
                         try:
@@ -242,7 +240,9 @@ def bundle_command(
                                 dirs_to_remove = [
                                     d
                                     for d in dirs
-                                    if d == "__pycache__" or d == ".ipynb_checkpoints" or d.startswith(".")
+                                    if d == "__pycache__"
+                                    or d == ".ipynb_checkpoints"
+                                    or d.startswith(".")
                                 ]
                                 for d in dirs_to_remove:
                                     shutil.rmtree(os.path.join(root, d))
@@ -272,7 +272,9 @@ def bundle_command(
                                 "Error: Git clone timed out after 60 seconds", err=True
                             )
                         except Exception as e:
-                            typer.echo(f"Error cloning Git repository: {str(e)}", err=True)
+                            typer.echo(
+                                f"Error cloning Git repository: {str(e)}", err=True
+                            )
 
             # Create or update zip archive from temp directory
             if total_files_added > 0:
@@ -288,7 +290,9 @@ def bundle_command(
                         dirs[:] = [
                             d
                             for d in dirs
-                            if d != "__pycache__" and d != ".ipynb_checkpoints" and not d.startswith(".")
+                            if d != "__pycache__"
+                            and d != ".ipynb_checkpoints"
+                            and not d.startswith(".")
                         ]
 
                         for file in files:

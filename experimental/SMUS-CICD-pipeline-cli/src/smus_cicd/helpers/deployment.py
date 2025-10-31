@@ -30,13 +30,13 @@ def deploy_files(
     # Normalize target_directory: treat ".", "", or None as root
     if target_directory in (".", "", None):
         target_directory = ""
-    
+
     # Construct full S3 path
     if target_directory:
         full_s3_path = f"{s3_uri.rstrip('/')}/{target_directory}/"
     else:
         full_s3_path = s3_uri if s3_uri.endswith("/") else f"{s3_uri}/"
-    
+
     typer.echo(f"  S3 Location: {full_s3_path}")
 
     # Parse S3 URI for clearing if needed
@@ -281,16 +281,14 @@ def download_s3_files(
                 for pattern in include_patterns:
                     pattern_clean = pattern.rstrip("/")
                     source_s3_uri = f"s3://{bucket_name}/{s3_prefix}{pattern_clean}/"
-                    target_path = target_dir / pattern_clean
-                    target_path.mkdir(parents=True, exist_ok=True)
 
-                    # Use AWS CLI sync
+                    # Use AWS CLI sync - download directly to target_dir
                     cmd = [
                         "aws",
                         "s3",
                         "sync",
                         source_s3_uri,
-                        str(target_path),
+                        str(target_dir),
                         "--exclude",
                         "*.pyc",
                         "--exclude",
@@ -299,6 +297,7 @@ def download_s3_files(
                         ".ipynb_checkpoints/*",
                     ]
 
+                    typer.echo(f"  🔍 Running: {' '.join(cmd)}")
                     result = subprocess.run(cmd, capture_output=True, text=True)
 
                     if result.returncode == 0:

@@ -11,7 +11,7 @@ bundle:
     - name: code 
       connectionName: default.s3_shared  
       include: 
-        - 'src'
+        - 'code/src'
       exclude: 
         - '.ipynb_checkpoints/'
         - '__pycache__/'
@@ -19,8 +19,7 @@ bundle:
         - '.libs.json'  
     - name: workflows
       connectionName: default.s3_shared   
-      append: true
-      include: ['workflows']
+      include: ['workflows/']
       exclude: ['.ipynb_checkpoints/', '__pycache__/', '*.pyc']
   git:
     - repository: covid-19-dateset
@@ -39,6 +38,7 @@ targets:
     test:
        stage: TEST 
        domain:
+         name: BETA_10282025_Domain
          tags:
           purpose: smus-cicd-testing
          region: ${DEV_DOMAIN_REGION:us-east-1}

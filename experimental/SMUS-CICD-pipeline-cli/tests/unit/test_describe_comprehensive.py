@@ -4,6 +4,7 @@ import pytest
 import tempfile
 import os
 from typer.testing import CliRunner
+from unittest.mock import patch
 from smus_cicd.cli import app
 
 
@@ -23,7 +24,11 @@ class TestDescribeCommand:
         try:
             runner = CliRunner()
             cmd_args = ["describe", "--pipeline", manifest_file] + (args or [])
-            result = runner.invoke(app, cmd_args)
+            with patch("smus_cicd.commands.describe.get_datazone_project_info") as mock_project:
+                with patch("smus_cicd.commands.describe.load_config") as mock_config:
+                    mock_project.return_value = {"connections": {}, "status": "ACTIVE", "project_id": "test-id"}
+                    mock_config.return_value = {"region": "us-east-1"}
+                    result = runner.invoke(app, cmd_args)
             return result
         finally:
             os.unlink(manifest_file)
@@ -54,12 +59,13 @@ targets:
 pipelineName: ComplexPipeline
 bundle:
   bundlesDirectory: /tmp/bundles
-  workflow:
-    - connectionName: project.workflow_connection
+  storage:
+    - name: workflows
+      connectionName: project.workflow_connection
       append: true
       include: ['workflows/']
-  storage:
-    - connectionName: project.storage_connection
+    - name: notebooks
+      connectionName: project.storage_connection
       append: false
       include: ['notebooks/']
 targets:
@@ -67,30 +73,27 @@ targets:
     domain:
       name: complex-domain
       region: ${DEV_DOMAIN_REGION:us-east-1}
-    stage: DEVELOPMENT
+    stage: DEV
     project:
       name: dev-project
       create: false
-    default: true
   production:
     domain:
       name: complex-domain
       region: ${DEV_DOMAIN_REGION:us-east-1}
-    stage: PRODUCTION
+    stage: PROD
     project:
       name: prod-project
       create: false
 workflows:
   - workflowName: data_pipeline
     connectionName: project.mwaa_connection
-    logging: console
     engine: MWAA
     parameters:
       env: production
       timeout: 3600
   - workflowName: ml_training
     connectionName: project.spark_connection
-    logging: none
     engine: MWAA
 """
         result = self.run_describe(manifest, ["--connections"])
@@ -262,7 +265,7 @@ targets:
         assert "'domain' is a required property" in result.stderr
 
     def test_missing_domain_name(self):
-        """Test error when domain name is missing."""
+        """Test that domain name is optional (can use tags instead)."""
         manifest = """
 pipelineName: TestPipeline
 bundle:
@@ -276,9 +279,9 @@ targets:
       name: test-project
 """
         result = self.run_describe(manifest)
-        assert result.exit_code == 1
-        assert "Error describing manifest" in result.stderr
-        assert "'name' is a required property" in result.stderr
+        # Domain name is optional, so this should succeed
+        assert result.exit_code == 0
+        assert "Pipeline: TestPipeline" in result.stdout
 
     def test_missing_domain_region(self):
         """Test error when domain region is missing."""

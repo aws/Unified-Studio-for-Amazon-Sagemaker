@@ -2,10 +2,6 @@
 # Stage: dev
 
 # Service Endpoints (optional - only for non-prod environments)
-service_endpoints:
-  datazone: https://iceland-gamma.us-east-1.api.aws
-  airflow_serverless: https://overdrive-gamma.us-east-1.api.aws
-
 # Multi-region configuration
 regions:
   primary:

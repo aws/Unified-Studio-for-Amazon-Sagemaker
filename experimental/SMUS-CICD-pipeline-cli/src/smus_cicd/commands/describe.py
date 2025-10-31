@@ -5,7 +5,11 @@ import json
 import boto3
 import typer
 
-from ..helpers.utils import build_domain_config, get_datazone_project_info, load_config
+from ..helpers.utils import (  # noqa: F401
+    build_domain_config,
+    get_datazone_project_info,
+    load_config,
+)
 from ..pipeline import PipelineManifest
 
 
@@ -153,19 +157,28 @@ def describe_command(
                     if project_info.get("status") == "NOT_FOUND":
                         # Project doesn't exist - check if it will be created
                         should_create = False
-                        if target_config.initialization and target_config.initialization.project:
-                            should_create = getattr(target_config.initialization.project, "create", False)
-                        
+                        if (
+                            target_config.initialization
+                            and target_config.initialization.project
+                        ):
+                            should_create = getattr(
+                                target_config.initialization.project, "create", False
+                            )
+
                         if output.upper() != "JSON":
                             typer.echo(f"    ⚠️  Project does not exist yet")
                             if should_create:
-                                typer.echo("    ℹ️  Project will be created during deployment (create: true)")
+                                typer.echo(
+                                    "    ℹ️  Project will be created during deployment (create: true)"
+                                )
                             else:
-                                typer.echo("    ℹ️  Project must be created before deployment (create: false)")
-                        
+                                typer.echo(
+                                    "    ℹ️  Project must be created before deployment (create: false)"
+                                )
+
                         target_data["project"]["status"] = "NOT_FOUND"
                         target_data["project"]["will_create"] = should_create
-                    
+
                     elif project_info.get("project_id") and "error" not in project_info:
                         project_connections = project_info.get("connections", {})
 
@@ -182,7 +195,10 @@ def describe_command(
                         if connect and not project_connections:
                             has_errors = True
                             if output.upper() != "JSON":
-                                typer.echo(f"    ❌ Error: Project has no connections configured", err=True)
+                                typer.echo(
+                                    f"    ❌ Error: Project has no connections configured",
+                                    err=True,
+                                )
 
                         if output.upper() != "JSON":
                             typer.echo(f"    Project ID: {project_info['project_id']}")

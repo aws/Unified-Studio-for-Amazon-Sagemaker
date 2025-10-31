@@ -318,6 +318,63 @@ class IntegrationTestBase:
 
         return command_result
 
+    def run_cli_command_streaming(self, command: list) -> Dict[str, Any]:
+        """Run CLI command with live streaming output."""
+        import subprocess
+        import sys
+        
+        cmd_str = " ".join(command)
+        self.logger.info(f"EXECUTING CLI COMMAND (STREAMING): {cmd_str}")
+        
+        # Build full command
+        full_cmd = [sys.executable, "-m", "smus_cicd.cli"] + command
+        
+        start_time = time.time()
+        output_lines = []
+        
+        try:
+            process = subprocess.Popen(
+                full_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
+            )
+            
+            # Stream output line by line
+            for line in iter(process.stdout.readline, ''):
+                if line:
+                    line = line.rstrip()
+                    print(line, flush=True)  # Print to console immediately
+                    self.logger.info(f"  {line}")
+                    output_lines.append(line)
+            
+            process.wait()
+            exit_code = process.returncode
+            
+        except Exception as e:
+            self.logger.error(f"COMMAND FAILED: {e}")
+            exit_code = 1
+            output_lines.append(f"Error: {e}")
+        
+        end_time = time.time()
+        duration = end_time - start_time
+        
+        self.logger.info(f"COMMAND COMPLETED in {duration:.2f}s - Exit code: {exit_code}")
+        
+        output = "\n".join(output_lines)
+        command_result = {
+            "exit_code": exit_code,
+            "stdout": output,
+            "output": output,
+            "success": exit_code == 0,
+            "command": cmd_str,
+            "duration": duration,
+        }
+        
+        self.test_commands.append(command_result)
+        return command_result
+
     def verify_aws_connectivity(self) -> bool:
         """Verify AWS connectivity and permissions."""
         self.logger.info("CHECKING AWS connectivity...")

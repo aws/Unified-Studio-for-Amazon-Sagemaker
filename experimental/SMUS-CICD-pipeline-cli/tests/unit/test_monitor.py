@@ -17,20 +17,21 @@ targets:
     domain:
       name: test-domain
       region: ${DEV_DOMAIN_REGION:us-east-1}
+    stage: DEV
     project:
       name: dev-project
       create: false
-    workflows:
-      - workflowName: target_workflow
   test:
     domain:
       name: test-domain
       region: ${DEV_DOMAIN_REGION:us-east-1}
+    stage: TEST
     project:
       name: test-project
       create: false
 workflows:
   - workflowName: global_workflow
+    connectionName: project.workflow_mwaa
 """
 
 
@@ -86,11 +87,20 @@ def test_monitor_all_targets(
     mock_manifest = create_mock_manifest()
     mock_from_file.return_value = mock_manifest
 
-    mock_get_project_info.return_value = {"status": "ACTIVE", "connections": {}}
+    mock_get_project_info.return_value = {
+        "status": "ACTIVE",
+        "connections": {},
+        "project_id": "test-project-id"
+    }
     mock_mwaa_health.return_value = True  # Mock MWAA as healthy
 
     with patch("builtins.open", mock_open(read_data=sample_manifest)):
         result = runner.invoke(app, ["monitor", "--pipeline", "test.yaml"])
+        # Debug output
+        if result.exit_code != 0:
+            print(f"\nExit code: {result.exit_code}")
+            print(f"Stdout: {result.stdout}")
+            print(f"Stderr: {result.stderr}")
         # The command should succeed even if projects don't have project_id
         assert result.exit_code == 0
         assert "Pipeline: TestPipeline" in result.stdout

@@ -1,7 +1,7 @@
+import os
 import time
 from time import sleep
 from typing import Dict, List, Optional, Tuple
-import os
 
 """
 DataZone integration functions for SMUS CI/CD CLI.
@@ -13,25 +13,29 @@ import typer
 
 def _get_datazone_client(region: str):
     """Create DataZone client with optional custom endpoint from environment."""
-    endpoint_url = os.environ.get('DATAZONE_ENDPOINT_URL')
+    endpoint_url = os.environ.get("DATAZONE_ENDPOINT_URL")
     if endpoint_url:
         return boto3.client("datazone", region_name=region, endpoint_url=endpoint_url)
     return boto3.client("datazone", region_name=region)
 
 
-def resolve_domain_id(domain_name: Optional[str] = None, domain_tags: Optional[Dict[str, str]] = None, region: str = None) -> Tuple[Optional[str], Optional[str]]:
+def resolve_domain_id(
+    domain_name: Optional[str] = None,
+    domain_tags: Optional[Dict[str, str]] = None,
+    region: str = None,
+) -> Tuple[Optional[str], Optional[str]]:
     """
     Resolve domain ID by name, tags, or auto-detect if only one domain exists.
-    
+
     Args:
         domain_name: Optional domain name to search for
         domain_tags: Optional dict with tag key-value pairs (e.g., {"purpose": "smus-cicd-testing", "STAGE": "DEV"})
                      All tags must match for a domain to be selected
         region: AWS region
-    
+
     Returns:
         Tuple of (domain_id, domain_name) or (None, None) if not found
-        
+
     Raises:
         Exception: If multiple domains found without specific criteria
     """
@@ -39,48 +43,55 @@ def resolve_domain_id(domain_name: Optional[str] = None, domain_tags: Optional[D
         datazone_client = _get_datazone_client(region)
         response = datazone_client.list_domains()
         domains = response.get("items", [])
-        
+
         if not domains:
             return None, None
-        
+
         # Filter by name if provided
         if domain_name:
             for domain in domains:
                 if domain.get("name") == domain_name:
                     return domain.get("id"), domain.get("name")
             return None, None
-        
+
         # Filter by tags if provided - ALL tags must match
         if domain_tags:
             matching_domains = []
             for domain in domains:
                 domain_arn = domain.get("arn")
-                tags_response = datazone_client.list_tags_for_resource(resourceArn=domain_arn)
+                tags_response = datazone_client.list_tags_for_resource(
+                    resourceArn=domain_arn
+                )
                 tags = tags_response.get("tags", {})
-                
+
                 # Check if all provided tags match
                 if all(tags.get(k) == v for k, v in domain_tags.items()):
                     matching_domains.append(domain)
-            
+
             if len(matching_domains) == 0:
                 return None, None
             elif len(matching_domains) == 1:
                 return matching_domains[0].get("id"), matching_domains[0].get("name")
             else:
                 tag_str = ", ".join(f"{k}={v}" for k, v in domain_tags.items())
-                raise Exception(f"Multiple domains found with tags {tag_str}. Please specify domain name or add more specific tags.")
-        
+                raise Exception(
+                    f"Multiple domains found with tags {tag_str}. Please specify domain name or add more specific tags."
+                )
+
         # Auto-detect: only one domain exists
         if len(domains) == 1:
             return domains[0].get("id"), domains[0].get("name")
         else:
-            raise Exception(f"Multiple domains found in region {region}. Please specify domain name or tags.")
-            
+            raise Exception(
+                f"Multiple domains found in region {region}. Please specify domain name or tags."
+            )
+
     except Exception as e:
         if "Multiple domains" in str(e):
             raise
         # Log the actual error before re-raising
         from .logger import get_logger
+
         logger = get_logger("datazone")
         logger.error(f"Error resolving domain: {e}")
         raise
@@ -121,6 +132,7 @@ def get_project_user_role_arn(project_name: str, domain_name: str, region: str) 
 
     except Exception as e:
         from .logger import get_logger
+
         logger = get_logger("datazone")
         logger.error(f"Failed to get project user role ARN for {project_name}: {e}")
         return None

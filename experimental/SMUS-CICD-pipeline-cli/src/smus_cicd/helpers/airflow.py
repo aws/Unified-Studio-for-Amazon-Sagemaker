@@ -44,8 +44,11 @@ def capture_workflow_logs(mwaa_client, mwaa_env_name, dag_id, run_id, timeout=30
                 except Exception as parse_error:
                     # If JSON parsing fails, try direct text
                     from .logger import get_logger
+
                     logger = get_logger("airflow")
-                    logger.warning(f"Failed to parse JSON response for DAG {dag_id}, using raw text: {parse_error}")
+                    logger.warning(
+                        f"Failed to parse JSON response for DAG {dag_id}, using raw text: {parse_error}"
+                    )
                     return response.text
             return None
         except Exception as e:

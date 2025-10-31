@@ -419,4 +419,4 @@ class TestCreateCommand:
                 assert "dev:" in content
                 assert "test:" in content
                 assert "prod:" in content
-                assert "default: true  # Default target for operations" in content
+                assert "stage: DEV" in content  # DEV stage is the default target

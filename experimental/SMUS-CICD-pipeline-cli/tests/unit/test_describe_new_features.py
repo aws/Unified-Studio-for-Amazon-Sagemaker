@@ -4,6 +4,7 @@ import tempfile
 import json
 import pytest
 from typer.testing import CliRunner
+from unittest.mock import patch
 from smus_cicd.cli import app
 
 
@@ -223,9 +224,13 @@ workflows:
         manifest_file = self.create_test_manifest()
 
         try:
-            result = runner.invoke(
-                app, ["describe", "--pipeline", manifest_file, "--connections"]
-            )
+            with patch("smus_cicd.commands.describe.get_datazone_project_info") as mock_project:
+                with patch("smus_cicd.commands.describe.load_config") as mock_config:
+                    mock_project.return_value = {"connections": {}, "status": "ACTIVE", "project_id": "test-id"}
+                    mock_config.return_value = {"region": "us-east-1"}
+                    result = runner.invoke(
+                        app, ["describe", "--pipeline", manifest_file, "--connections"]
+                    )
 
             assert result.exit_code == 0
             assert "Pipeline: TestPipeline" in result.stdout
@@ -242,9 +247,13 @@ workflows:
         manifest_file = self.create_test_manifest()
 
         try:
-            result = runner.invoke(
-                app, ["describe", "--pipeline", manifest_file, "--connections"]
-            )
+            with patch("smus_cicd.commands.describe.get_datazone_project_info") as mock_project:
+                with patch("smus_cicd.commands.describe.load_config") as mock_config:
+                    mock_project.return_value = {"connections": {}, "status": "ACTIVE", "project_id": "test-id"}
+                    mock_config.return_value = {"region": "us-east-1"}
+                    result = runner.invoke(
+                        app, ["describe", "--pipeline", manifest_file, "--connections"]
+                    )
 
             assert result.exit_code == 0
             assert "Pipeline: TestPipeline" in result.stdout

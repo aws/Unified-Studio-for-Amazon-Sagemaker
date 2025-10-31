@@ -1,6 +1,5 @@
 """Deploy command implementation."""
 
-import json
 import os
 import tempfile
 import zipfile
@@ -13,7 +12,11 @@ import typer
 from ..helpers import datazone, deployment
 from ..helpers.error_handler import handle_error, handle_success
 from ..helpers.project_manager import ProjectManager
-from ..helpers.utils import build_domain_config, get_datazone_project_info, load_config
+from ..helpers.utils import (  # noqa: F401
+    build_domain_config,
+    get_datazone_project_info,
+    load_config,
+)
 from ..pipeline import PipelineManifest
 
 # TEMPORARY: Airflow Serverless (Overdrive) configuration
@@ -351,7 +354,7 @@ def _deploy_storage_item(
     """
     name = storage_config.get("name", "unnamed")
     target_dir = storage_config.get("targetDirectory", "")
-    
+
     typer.echo(f"Deploying storage item '{name}' to {target_dir}...")
 
     return _deploy_named_item_from_bundle(
@@ -379,7 +382,7 @@ def _deploy_git_item(
     """
     name = git_config.get("name", "git")
     target_dir = git_config.get("targetDirectory", "")
-    
+
     typer.echo(f"Deploying git repository to {target_dir}...")
 
     # Git items are in bundle under their targetDir structure
@@ -557,11 +560,11 @@ def _deploy_git_from_bundle(
             if not repositories_dir.exists():
                 typer.echo("⚠️  No repositories directory found in bundle")
                 return None, None
-            
+
             deployed_files = []
             connection = _get_project_connection(project_name, git_config, config)
             region = config.get("region", "us-east-1")
-            
+
             # Deploy all repositories
             for repo_dir in repositories_dir.iterdir():
                 if repo_dir.is_dir():
@@ -570,7 +573,7 @@ def _deploy_git_from_bundle(
                     )
                     if success:
                         deployed_files.extend(_get_files_list(str(repo_dir)))
-            
+
             s3_uri = connection.get("s3Uri", "")
             return deployed_files if deployed_files else None, s3_uri
     finally:
@@ -587,13 +590,13 @@ def _display_deployment_summary_new(
 ):
     """Display deployment summary for new structure."""
     typer.echo("\n📦 Deployment Summary:")
-    
+
     for i, (files, s3_uri) in enumerate(storage_results):
         if files is not None:
             typer.echo(f"  ✅ Storage item {i+1}: {len(files)} files → {s3_uri}")
         else:
             typer.echo(f"  ❌ Storage item {i+1}: Failed")
-    
+
     for i, (files, s3_uri) in enumerate(git_results):
         if files is not None:
             typer.echo(f"  ✅ Git item {i+1}: {len(files)} files → {s3_uri}")
@@ -756,26 +759,26 @@ def _process_catalog_assets(
 
     # Import datazone helper functions
     from ..helpers.datazone import (
-        get_domain_id_by_name,
         get_project_id_by_name,
         process_catalog_assets,
     )
 
     # Get domain and project IDs
     region = target_config.domain.region
-    
+
     # Resolve domain using name, tags, or auto-detect
     from ..helpers.datazone import resolve_domain_id
+
     domain_id, domain_name = resolve_domain_id(
         domain_name=target_config.domain.name,
         domain_tags=target_config.domain.tags,
-        region=region
+        region=region,
     )
-    
+
     if not domain_id:
         handle_error(f"Could not resolve domain in region {region}")
         return False
-    
+
     project_name = target_config.project.name
 
     project_id = get_project_id_by_name(project_name, domain_id, region)
@@ -869,12 +872,12 @@ def _create_airflow_serverless_workflows(
         # Get project user role ARN for serverless Airflow execution
         project_name = target_config.project.name
         region = config["region"]
-        
+
         # Resolve domain
         domain_id, domain_name = resolve_domain_id(
             domain_name=target_config.domain.name,
             domain_tags=target_config.domain.tags,
-            region=region
+            region=region,
         )
 
         role_arn = datazone.get_project_user_role_arn(project_name, domain_name, region)
@@ -913,7 +916,12 @@ def _create_airflow_serverless_workflows(
 
                     # Upload DAG file to S3 for serverless Airflow
                     s3_location = _upload_dag_to_s3(
-                        dag_file, workflow_name, config, target_config, project_id, domain_id
+                        dag_file,
+                        workflow_name,
+                        config,
+                        target_config,
+                        project_id,
+                        domain_id,
                     )
                     if not s3_location:
                         typer.echo(f"❌ Failed to upload DAG file: {dag_file}")
@@ -973,7 +981,7 @@ def _create_airflow_serverless_workflows(
 
                         # Validate workflow status
                         workflow_status = airflow_serverless.get_workflow_status(
-                            workflow_arn, region=AIRFLOW_SERVERLESS_REGION
+                            workflow_arn, region=config.get("region")
                         )
                         if workflow_status.get("success"):
                             status = workflow_status.get("status")
@@ -984,9 +992,11 @@ def _create_airflow_serverless_workflows(
                                 )
                                 return False
                         else:
+                            error_msg = workflow_status.get('error')
                             typer.echo(
-                                f"⚠️  Could not verify workflow status: {workflow_status.get('error')}"
+                                f"❌ Could not verify workflow status: {error_msg}"
                             )
+                            return False
                     else:
                         typer.echo(
                             f"❌ Failed to create workflow {workflow_name}: {result.get('error')}"
@@ -1182,7 +1192,12 @@ def _resolve_environment_variables(
 
 
 def _upload_dag_to_s3(
-    dag_file_path: str, workflow_name: str, config: Dict[str, Any], target_config=None, project_id=None, domain_id=None
+    dag_file_path: str,
+    workflow_name: str,
+    config: Dict[str, Any],
+    target_config=None,
+    project_id=None,
+    domain_id=None,
 ) -> Optional[Dict[str, str]]:
     """
     Upload DAG file to S3 for Overdrive workflow creation.
@@ -1202,17 +1217,19 @@ def _upload_dag_to_s3(
         import boto3
 
         region = config.get("region", "us-east-1")
-        
+
         # Get S3 bucket from project's default.s3_shared connection
         bucket_name = None
         if project_id and domain_id:
-            connections = datazone.get_project_connections(project_id, domain_id, region)
+            connections = datazone.get_project_connections(
+                project_id, domain_id, region
+            )
             s3_shared_conn = connections.get("default.s3_shared", {})
             s3_uri = s3_shared_conn.get("s3Uri", "")
             if s3_uri:
                 # Extract bucket name from s3://bucket-name/path/
                 bucket_name = s3_uri.replace("s3://", "").split("/")[0]
-        
+
         # Fallback to hardcoded pattern if connection not found
         if not bucket_name:
             account_id = config.get("aws", {}).get("account_id")
@@ -1220,8 +1237,10 @@ def _upload_dag_to_s3(
                 sts = boto3.client("sts")
                 identity = sts.get_caller_identity()
                 account_id = identity["Account"]
-            bucket_name = f"smus-airflow-serverless-{account_id}-{AIRFLOW_SERVERLESS_REGION}"
-        
+            bucket_name = (
+                f"smus-airflow-serverless-{account_id}-{AIRFLOW_SERVERLESS_REGION}"
+            )
+
         object_key = f"workflows/{workflow_name}.yaml"
 
         # Create S3 client

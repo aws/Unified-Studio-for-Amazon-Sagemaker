@@ -1,11 +1,11 @@
 ml_dev_workflow:
-  dag_id: "ml_dev_workflow"
+  dag_id: "ml_dev_workflow_v3"
   tasks:
     ml_orchestrator_notebook:
       operator: "airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator"
       retries: 0
       input_config:
-        input_path: "ml_orchestrator_notebook.ipynb"
+        input_path: "ml/workflows/ml_orchestrator_notebook.ipynb"
         input_params: {}
       output_config:
         output_formats: 

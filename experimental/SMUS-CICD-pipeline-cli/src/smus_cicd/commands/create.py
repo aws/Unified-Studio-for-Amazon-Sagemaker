@@ -226,8 +226,9 @@ pipelineName: {pipeline_name}
 # Bundle configuration (optional)
 bundle:
   bundlesDirectory: ./bundles
-  workflow:
-    - connectionName: default.s3_shared
+  storage:
+    - name: workflows
+      connectionName: default.s3_shared
       include:
         - 'workflows'
       exclude:
@@ -235,8 +236,8 @@ bundle:
         - '__pycache__/'
         - '*.pyc'
         - '.libs.json'
-  storage:
-    - connectionName: default.s3_shared
+    - name: code
+      connectionName: default.s3_shared
       include:
         - '*'
       exclude:
@@ -301,11 +302,9 @@ def _generate_targets_section(
     # Bundle target configuration
     bundle_target_configuration:
       storage:
-        connectionName: default.s3_shared
-        directory: 'src'
-      workflows:
-        connectionName: default.s3_shared
-        directory: 'workflows'
+        - name: code
+          connectionName: default.s3_shared
+          targetDirectory: 'src'
 
     # Test configuration (optional)
     tests:

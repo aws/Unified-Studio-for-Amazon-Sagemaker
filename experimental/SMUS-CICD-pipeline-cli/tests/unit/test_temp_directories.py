@@ -15,14 +15,14 @@ def sample_manifest():
 pipelineName: TestPipeline
 bundlesDirectory: /tmp/bundles
 bundle:
-  workflow:
-    - connectionName: default.s3_shared
+  storage:
+    - name: workflows
+      connectionName: default.s3_shared
       append: true
       include: ['workflows/']
 targets:
   dev:
     stage: DEV
-    default: true
     domain:
       name: test-domain
       region: us-east-1
@@ -39,9 +39,10 @@ def test_bundle_uses_temp_directory(sample_manifest):
 
     with patch("os.path.exists", return_value=True):
         with patch(
-            "smus_cicd.commands.bundle.load_yaml",
-            return_value=yaml.safe_load(sample_manifest),
-        ):
+            "smus_cicd.commands.bundle.PipelineManifest.from_file"
+        ) as mock_manifest:
+            from smus_cicd.pipeline import PipelineManifest
+            mock_manifest.return_value = PipelineManifest.from_dict(yaml.safe_load(sample_manifest))
             with patch(
                 "smus_cicd.helpers.utils.load_config",
                 return_value={"region": "us-east-1"},

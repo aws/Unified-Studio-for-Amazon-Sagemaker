@@ -54,12 +54,16 @@ def test_describe_basic(mock_load_config, mock_get_region, sample_manifest):
         assert "Domain: test-domain" in result.stdout
 
 
+@patch("smus_cicd.commands.describe.load_config")
+@patch("smus_cicd.commands.describe.get_datazone_project_info")
 @patch("smus_cicd.helpers.utils._get_region_from_config")
 @patch("smus_cicd.helpers.utils.load_config")
-def test_describe_with_connections(mock_load_config, mock_get_region, sample_manifest):
+def test_describe_with_connections(mock_load_config_utils, mock_get_region, mock_project_info, mock_load_config_describe, sample_manifest):
     """Test describe with connections flag."""
-    mock_load_config.return_value = {"region": "us-east-1"}
+    mock_load_config_utils.return_value = {"region": "us-east-1"}
+    mock_load_config_describe.return_value = {"region": "us-east-1"}
     mock_get_region.return_value = "us-east-1"
+    mock_project_info.return_value = {"connections": {}, "status": "ACTIVE", "project_id": "test-id"}
 
     runner = CliRunner()
     with tempfile.TemporaryDirectory() as temp_dir:

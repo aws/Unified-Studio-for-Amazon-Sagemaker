@@ -267,25 +267,25 @@ targets:
         """Test validation with missing required fields in bundle_target_configuration."""
         missing_fields = """
 pipelineName: TestPipeline
-domain:
-  name: test-domain
-  region: us-east-1
 targets:
   dev:
+    domain:
+      name: test-domain
+      region: us-east-1
     stage: DEV
     project:
       name: dev-project
     bundle_target_configuration:
-      workflows:
-        connectionName: default.s3_shared
-        # missing directory field
+      storage:
+        - connectionName: default.s3_shared
+          # missing name field
 """
         manifest_file = self.create_temp_manifest(missing_fields)
         try:
             is_valid, errors, data = validate_manifest_file(manifest_file)
             assert not is_valid
             assert any(
-                "'directory' is a required property" in error for error in errors
+                "'name' is a required property" in error for error in errors
             )
         finally:
             os.unlink(manifest_file)
