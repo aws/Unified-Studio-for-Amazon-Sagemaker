@@ -595,6 +595,14 @@ class ProjectManager:
             and hasattr(target_config.initialization, "environments")
         ):
             print(f"🔍 DEBUG: No environments specified for target: {target_name}")
+            # Still create connections even if no environments specified
+            if target_config.initialization:
+                project_id = project_info.get("project_id")
+                domain_id = datazone.get_domain_id_by_name(domain_name, region)
+                if project_id and domain_id:
+                    self._ensure_manifest_connections(
+                        target_config, domain_id, project_id, region
+                    )
             return True  # No environments to create is success
 
         project_id = project_info.get("project_id")
@@ -603,6 +611,15 @@ class ProjectManager:
         domain_id = datazone.get_domain_id_by_name(domain_name, region)
 
         print(f"🔍 DEBUG: Resolved project_id: {project_id}, domain_id: {domain_id}")
+
+        if not project_id or not domain_id:
+            print(
+                f"🔍 DEBUG: Missing project_id or domain_id: {project_id}, {domain_id}"
+            )
+            return False
+
+        # Ensure connections exist (idempotent)
+        self._ensure_manifest_connections(target_config, domain_id, project_id, region)
 
         if not project_id or not domain_id:
             print(
@@ -801,6 +818,65 @@ class ProjectManager:
 
         except Exception as e:
             print(f"🔍 DEBUG: Error validating MWAA: {e}")
+
+    def _ensure_manifest_connections(
+        self, target_config, domain_id: str, project_id: str, region: str
+    ) -> None:
+        """Ensure connections from manifest exist (idempotent)."""
+        if not (
+            target_config.initialization
+            and hasattr(target_config.initialization, "connections")
+            and target_config.initialization.connections
+        ):
+            return
+
+        import boto3
+        from .connection_creator import ConnectionCreator
+
+        # Get existing connections
+        datazone_client = boto3.client("datazone", region_name=region)
+        existing_conns = {}
+        try:
+            response = datazone_client.list_connections(
+                domainIdentifier=domain_id, projectIdentifier=project_id
+            )
+            for conn in response.get("items", []):
+                existing_conns[conn["name"]] = conn["connectionId"]
+        except Exception as e:
+            print(f"⚠️  Could not list existing connections: {e}")
+
+        # Get environment ID (use first available environment)
+        try:
+            envs_response = datazone_client.list_environments(
+                domainIdentifier=domain_id, projectIdentifier=project_id
+            )
+            environments = envs_response.get("items", [])
+            if not environments:
+                print("⚠️  No environments found - cannot create connections")
+                return
+            environment_id = environments[0]["id"]
+        except Exception as e:
+            print(f"⚠️  Could not get environment ID: {e}")
+            return
+
+        creator = ConnectionCreator(domain_id, region)
+
+        for conn_config in target_config.initialization.connections:
+            full_name = f"project.{conn_config.name}.{conn_config.type.lower()}"
+
+            if full_name in existing_conns:
+                print(f"✅ Connection already exists: {full_name}")
+                continue
+
+            try:
+                print(f"🔗 Creating connection: {full_name} ({conn_config.type})")
+                conn_id = creator.create_from_config(
+                    environment_id=environment_id,
+                    connection_config=conn_config,
+                )
+                print(f"✅ Connection created: {full_name} ({conn_id})")
+            except Exception as e:
+                print(f"⚠️  Failed to create connection {full_name}: {e}")
 
     def _extract_memberships(self, target_config) -> tuple[List[str], List[str]]:
         """Extract owners and contributors from target configuration."""

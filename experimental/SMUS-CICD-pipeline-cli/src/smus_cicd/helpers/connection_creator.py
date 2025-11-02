@@ -13,6 +13,96 @@ class ConnectionCreator:
         self.domain_id = domain_id
         self.region = region
         self.client = boto3.client("datazone", region_name=region)
+        self._account_id = None
+
+    def create_from_config(
+        self,
+        environment_id: str,
+        connection_config,
+        description: str = None,
+    ) -> str:
+        """
+        Create connection from manifest ConnectionConfig with wildcard replacement.
+
+        Args:
+            environment_id: DataZone environment ID
+            connection_config: ConnectionConfig object from manifest
+            description: Optional description
+
+        Returns:
+            Connection ID
+        """
+        # Get account ID for wildcard replacement
+        if not self._account_id:
+            sts = boto3.client("sts")
+            self._account_id = sts.get_caller_identity()["Account"]
+
+        # Replace wildcards in properties
+        properties = self._replace_wildcards(connection_config.properties)
+
+        # Create connection using existing method
+        return self.create_connection(
+            environment_id=environment_id,
+            name=connection_config.name,
+            connection_type=connection_config.type,
+            description=description,
+            **properties,
+        )
+
+    def _replace_wildcards(self, properties: dict) -> dict:
+        """Replace :*: wildcards with account ID in property values."""
+        result = {}
+        for key, value in properties.items():
+            if isinstance(value, str) and ":*:" in value:
+                result[key] = value.replace(":*:", f":{self._account_id}:")
+            else:
+                result[key] = value
+        return result
+        self._account_id = None
+
+    def create_from_config(
+        self,
+        environment_id: str,
+        connection_config,
+        description: str = None,
+    ) -> str:
+        """
+        Create connection from manifest ConnectionConfig with wildcard replacement.
+
+        Args:
+            environment_id: DataZone environment ID
+            connection_config: ConnectionConfig object from manifest
+            description: Optional description
+
+        Returns:
+            Connection ID
+        """
+        # Get account ID for wildcard replacement
+        if not self._account_id:
+            sts = boto3.client("sts")
+            self._account_id = sts.get_caller_identity()["Account"]
+
+        # Replace wildcards in properties
+        properties = self._replace_wildcards(connection_config.properties)
+
+        # Create connection using existing method
+        return self.create_connection(
+            environment_id=environment_id,
+            name=connection_config.name,
+            connection_type=connection_config.type,
+            description=description,
+            **properties,
+        )
+
+    def _replace_wildcards(self, properties: Dict[str, Any]) -> Dict[str, Any]:
+        """Replace :*: wildcards with account ID in property values."""
+        result = {}
+        for key, value in properties.items():
+            if isinstance(value, str) and ":*:" in value:
+                result[key] = value.replace(":*:", f":{self._account_id}:")
+            else:
+                result[key] = value
+        return result
 
     def create_connection(
         self,
@@ -86,14 +176,8 @@ class ConnectionCreator:
         elif connection_type == "SPARK_EMR":
             return {
                 "sparkEmrProperties": {
-                    "computeArn": kwargs.get(
-                        "compute_arn",
-                        "arn:aws:emr-serverless:us-east-1:123456789012:application/default",
-                    ),
-                    "runtimeRole": kwargs.get(
-                        "runtime_role",
-                        "arn:aws:iam::123456789012:role/EMRServerlessExecutionRole",
-                    ),
+                    "computeArn": kwargs.get("compute_arn"),
+                    "runtimeRole": kwargs.get("runtime_role"),
                 }
             }
         elif connection_type == "REDSHIFT":
@@ -117,15 +201,21 @@ class ConnectionCreator:
                 }
             }
         elif connection_type == "MLFLOW":
+            tracking_server_arn = kwargs.get("trackingServerArn") or kwargs.get(
+                "tracking_server_arn"
+            )
+            tracking_server_name = kwargs.get("trackingServerName") or kwargs.get(
+                "tracking_server_name"
+            )
+
+            # Extract server name from ARN if not provided
+            if not tracking_server_name and tracking_server_arn:
+                tracking_server_name = tracking_server_arn.split("/")[-1]
+
             return {
                 "mlflowProperties": {
-                    "trackingServerName": kwargs.get(
-                        "tracking_server_name", "default-tracking-server"
-                    ),
-                    "trackingServerArn": kwargs.get(
-                        "tracking_server_arn",
-                        "arn:aws:sagemaker:us-east-1:123456789012:mlflow-tracking-server/default",
-                    ),
+                    "trackingServerName": tracking_server_name,
+                    "trackingServerArn": tracking_server_arn,
                 }
             }
         elif connection_type == "WORKFLOWS_MWAA":

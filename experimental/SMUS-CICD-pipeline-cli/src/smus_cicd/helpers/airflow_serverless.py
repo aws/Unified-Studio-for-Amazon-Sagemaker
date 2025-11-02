@@ -73,9 +73,20 @@ def create_workflow(
     try:
         client = create_airflow_serverless_client(connection_info, region)
 
+        # Parse S3 location into bucket and key
+        s3_bucket = None
+        s3_key = None
+        if dag_s3_location.startswith("s3://"):
+            parts = dag_s3_location[5:].split("/", 1)
+            s3_bucket = parts[0]
+            s3_key = parts[1] if len(parts) > 1 else ""
+
         params = {
             "Name": workflow_name,
-            "DefinitionS3Location": dag_s3_location,
+            "DefinitionS3Location": {
+                "Bucket": s3_bucket,
+                "ObjectKey": s3_key,
+            },
             "RoleArn": role_arn,
             "OverdriveVersion": 1,
         }
@@ -112,11 +123,11 @@ def create_workflow(
                     f"Could not get DataZone environment ID from connections: {e}"
                 )
 
-            # Add DataZone stage and endpoint - COMMENTED OUT FOR TESTING
-            # env_vars["DataZoneStage"] = "prod"
-            # env_vars["DataZoneEndpoint"] = (
-            #     f"https://datazone.{datazone_domain_region or region}.amazonaws.com"
-            # )
+            # Add DataZone endpoint from environment variable if set
+            import os
+
+            if os.getenv("AWS_ENDPOINT_URL_DATAZONE"):
+                env_vars["DataZoneEndpoint"] = os.getenv("AWS_ENDPOINT_URL_DATAZONE")
 
             params["EnvironmentVariables"] = env_vars
             logger.info(f"🔍 DEBUG: DataZone environment variables: {env_vars}")
@@ -182,12 +193,34 @@ def create_workflow(
                 for wf in workflows:
                     if wf["name"] == workflow_name:
                         workflow_arn = wf["workflow_arn"]
-                        logger.info(f"Found existing workflow: {workflow_arn}")
+                        logger.info(
+                            f"Found existing workflow: {workflow_arn}, updating it"
+                        )
+
+                        # Update the existing workflow
+                        update_params = {
+                            "WorkflowArn": workflow_arn,
+                            "DefinitionS3Location": {
+                                "Bucket": s3_bucket,
+                                "ObjectKey": s3_key,
+                            },
+                            "RoleArn": role_arn,
+                        }
+                        if description:
+                            update_params["Description"] = description
+                        if tags:
+                            update_params["Tags"] = tags
+
+                        logger.info(f"Updating workflow with params: {update_params}")
+                        update_response = client.update_workflow(**update_params)
+                        logger.info(f"Successfully updated workflow: {workflow_arn}")
+
                         return {
                             "workflow_arn": workflow_arn,
-                            "workflow_version": wf.get("workflow_version"),
+                            "workflow_version": update_response.get("WorkflowVersion"),
                             "success": True,
                             "already_exists": True,
+                            "updated": True,
                         }
 
                 if not workflow_arn:
@@ -482,6 +515,10 @@ def get_cloudwatch_logs(
 
         return events
 
+    except logs_client.exceptions.ResourceNotFoundException:
+        logger = get_logger("airflow_serverless")
+        logger.error(f"Log group not found: {log_group_name}")
+        raise Exception(f"Log group not found: {log_group_name}")
     except Exception as e:
         logger = get_logger("airflow_serverless")
         logger.error(f"Failed to get CloudWatch logs for {log_group_name}: {e}")

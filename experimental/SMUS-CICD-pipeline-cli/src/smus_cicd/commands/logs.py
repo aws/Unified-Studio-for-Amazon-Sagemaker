@@ -131,8 +131,8 @@ def _monitor_airflow_serverless_logs(
             active_run = False
 
     # Construct log group name from workflow name
-    # Log group format: /aws/airflow-serverless/<workflow-name>
-    log_group = f"/aws/airflow-serverless/{workflow_name}"
+    # Log group format: /aws/mwaa-serverless/<workflow-name>/
+    log_group = f"/aws/mwaa-serverless/{workflow_name}/"
 
     if output.upper() != "JSON":
         typer.echo(f"📁 Log Group: {log_group}")
@@ -169,7 +169,7 @@ def _fetch_static_logs(
 
     # Extract workflow name and construct log group
     workflow_name = workflow_arn.split("/")[-1]
-    log_group = f"/aws/airflow-serverless/{workflow_name}"
+    log_group = f"/aws/mwaa-serverless/{workflow_name}/"
 
     log_events = airflow_serverless.get_cloudwatch_logs(
         log_group, region=region, limit=lines
@@ -220,7 +220,7 @@ def _live_log_monitoring(
 
     # Extract workflow name and construct log group
     workflow_name = workflow_arn.split("/")[-1]
-    log_group = f"/aws/airflow-serverless/{workflow_name}"
+    log_group = f"/aws/mwaa-serverless/{workflow_name}/"
 
     last_timestamp = None
     check_count = 0

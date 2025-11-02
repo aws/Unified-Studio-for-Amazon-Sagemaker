@@ -479,6 +479,10 @@ definitions:
       targetDirectory:
         type: string
         description: "Target directory on connection"
+      compression:
+        type: string
+        enum: ['gz', 'tar.gz']
+        description: "Optional compression format. If specified, files will be compressed into a tar.gz archive before upload"
     additionalProperties: false
   
   bundleTargetGitItem:

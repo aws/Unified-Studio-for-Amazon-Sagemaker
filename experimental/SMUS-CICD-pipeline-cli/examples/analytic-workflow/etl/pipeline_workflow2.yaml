@@ -1,0 +1,28 @@
+pipelineName: etl_workflow2_test
+
+bundle:
+  bundlesDirectory: /tmp/bundles
+  storage:
+    - name: etl
+      connectionName: default.s3_shared
+      include: ['etl']
+
+targets:
+  test: 
+    stage: TEST
+    domain:
+      name: BETA_10282025_Domain
+      region: us-east-1
+    project: 
+      name: test-marketing
+    bundle_target_configuration:
+      storage:
+        - name: etl
+          connectionName: default.s3_shared
+          targetDirectory: 'etl/bundle'
+    environment_variables:
+      AWS_REGION: us-east-1
+
+workflows:
+  - workflowName: workflow2_summary
+    engine: airflow-serverless

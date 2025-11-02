@@ -67,7 +67,16 @@ def deploy_files(
             typer.echo(f"    Warning: Could not clear directory: {str(e)}")
 
     # Upload files using AWS CLI sync
-    source_path = Path(temp_dir) / source_folder
+    source_path = (
+        Path(source_folder)
+        if os.path.isabs(source_folder)
+        else Path(temp_dir) / source_folder
+    )
+    typer.echo(f"  🔍 DEBUG: temp_dir={temp_dir}, source_folder={source_folder}")
+    typer.echo(
+        f"  🔍 DEBUG: source_path={source_path}, is_abs={os.path.isabs(source_folder)}"
+    )
+    typer.echo(f"  🔍 DEBUG: full_s3_path={full_s3_path}")
     files_synced = 0
 
     if source_path.exists():
@@ -231,6 +240,13 @@ def download_s3_files(
         target_dir = Path(temp_bundle_dir) / section_type
         target_dir.mkdir(parents=True, exist_ok=True)
 
+        typer.echo(
+            f"  🔍 DEBUG download_s3_files: section_type={section_type}, target_dir={target_dir}"
+        )
+        typer.echo(
+            f"  🔍 DEBUG download_s3_files: s3_uri={s3_uri}, patterns={include_patterns}"
+        )
+
         # Build AWS CLI sync command
         if include_patterns:
             # Check if we have a wildcard pattern
@@ -277,57 +293,89 @@ def download_s3_files(
                 else:
                     typer.echo(f"  Error syncing: {result.stderr}", err=True)
             else:
-                # Specific patterns - sync each directory
+                # Specific patterns - sync each directory or copy individual files
                 for pattern in include_patterns:
                     pattern_clean = pattern.rstrip("/")
-                    source_s3_uri = f"s3://{bucket_name}/{s3_prefix}{pattern_clean}/"
 
-                    # Use AWS CLI sync - download directly to target_dir
-                    cmd = [
-                        "aws",
-                        "s3",
-                        "sync",
-                        source_s3_uri,
-                        str(target_dir),
-                        "--exclude",
-                        "*.pyc",
-                        "--exclude",
-                        "__pycache__/*",
-                        "--exclude",
-                        ".ipynb_checkpoints/*",
-                    ]
+                    # Check if pattern looks like a file (has extension)
+                    is_file = "." in os.path.basename(pattern_clean)
 
-                    typer.echo(f"  🔍 Running: {' '.join(cmd)}")
-                    result = subprocess.run(cmd, capture_output=True, text=True)
+                    if is_file:
+                        # Individual file - use aws s3 cp
+                        source_s3_uri = f"s3://{bucket_name}/{s3_prefix}{pattern_clean}"
+                        target_file = target_dir / os.path.basename(pattern_clean)
 
-                    if result.returncode == 0:
-                        # Count downloaded files from output
-                        lines = (
-                            result.stdout.strip().split("\n")
-                            if result.stdout.strip()
-                            else []
-                        )
-                        pattern_files = len(
-                            [line for line in lines if "download:" in line]
-                        )
-                        downloaded_files += pattern_files
+                        cmd = [
+                            "aws",
+                            "s3",
+                            "cp",
+                            source_s3_uri,
+                            str(target_file),
+                        ]
 
-                        # Show downloaded files
-                        for line in lines:
-                            if "download:" in line:
-                                # Extract relative path from AWS CLI output
-                                parts = line.split(" to ")
-                                if len(parts) > 1:
-                                    local_path = parts[1]
-                                    relative_path = os.path.relpath(
-                                        local_path, str(target_dir)
-                                    )
-                                    typer.echo(f"  Downloaded: {relative_path}")
+                        typer.echo(f"  🔍 Running: {' '.join(cmd)}")
+                        result = subprocess.run(cmd, capture_output=True, text=True)
+
+                        if result.returncode == 0:
+                            downloaded_files += 1
+                            typer.echo(
+                                f"  Downloaded: {os.path.basename(pattern_clean)}"
+                            )
+                        else:
+                            typer.echo(
+                                f"  Error copying file: {result.stderr}", err=True
+                            )
                     else:
-                        typer.echo(
-                            f"  Error syncing {pattern_clean}: {result.stderr}",
-                            err=True,
+                        # Directory - use aws s3 sync
+                        source_s3_uri = (
+                            f"s3://{bucket_name}/{s3_prefix}{pattern_clean}/"
                         )
+
+                        cmd = [
+                            "aws",
+                            "s3",
+                            "sync",
+                            source_s3_uri,
+                            str(target_dir),
+                            "--exclude",
+                            "*.pyc",
+                            "--exclude",
+                            "__pycache__/*",
+                            "--exclude",
+                            ".ipynb_checkpoints/*",
+                        ]
+
+                        typer.echo(f"  🔍 Running: {' '.join(cmd)}")
+                        result = subprocess.run(cmd, capture_output=True, text=True)
+
+                        if result.returncode == 0:
+                            # Count downloaded files from output
+                            lines = (
+                                result.stdout.strip().split("\n")
+                                if result.stdout.strip()
+                                else []
+                            )
+                            pattern_files = len(
+                                [line for line in lines if "download:" in line]
+                            )
+                            downloaded_files += pattern_files
+
+                            # Show downloaded files
+                            for line in lines:
+                                if "download:" in line:
+                                    # Extract relative path from AWS CLI output
+                                    parts = line.split(" to ")
+                                    if len(parts) > 1:
+                                        local_path = parts[1]
+                                        relative_path = os.path.relpath(
+                                            local_path, str(target_dir)
+                                        )
+                                        typer.echo(f"  Downloaded: {relative_path}")
+                        else:
+                            typer.echo(
+                                f"  Error syncing {pattern_clean}: {result.stderr}",
+                                err=True,
+                            )
         else:
             # No include patterns - sync everything
             source_s3_uri = f"s3://{bucket_name}/{s3_prefix}"

@@ -1,0 +1,259 @@
+"""Integration test for ETL workflow deployment."""
+
+import pytest
+import os
+import subprocess
+import re
+import boto3
+from tests.integration.base import IntegrationTestBase
+
+
+class TestETLWorkflow(IntegrationTestBase):
+    """Test ETL workflow deployment."""
+
+    def setup_method(self, method):
+        """Set up test environment."""
+        super().setup_method(method)
+        self.setup_test_directory()
+        self.cleanup_workflows()
+        self.cleanup_glue_databases()
+
+    def cleanup_workflows(self):
+        """Delete existing workflows from previous runs."""
+        try:
+            client = boto3.client(
+                'awsoverdriveservice',
+                region_name='us-east-1',
+                endpoint_url='https://overdrive-gamma.us-east-1.api.aws'
+            )
+            response = client.list_workflows()
+            workflows = response.get('Workflows', [])
+            expected_name = 'IntegrationTestETLWorkflow_test_marketing_workflow_combined'
+            
+            for wf in workflows:
+                if wf.get('Name') == expected_name:
+                    workflow_arn = wf.get('WorkflowArn')
+                    print(f"🗑️  Deleting existing workflow: {expected_name}")
+                    client.delete_workflow(WorkflowArn=workflow_arn)
+                    print("✅ Workflow deleted")
+                    break
+        except Exception as e:
+            print(f"⚠️  Could not delete workflow: {e}")
+
+    def cleanup_glue_databases(self):
+        """Delete test Glue databases and S3 data."""
+        glue_client = boto3.client('glue', region_name='us-east-1')
+        s3_client = boto3.client('s3', region_name='us-east-1')
+        
+        databases_to_delete = ['analytic_workflow_test_db', 'covid19_summary_db']
+        
+        for db_name in databases_to_delete:
+            try:
+                # Get database location before deleting
+                try:
+                    db_info = glue_client.get_database(Name=db_name)
+                    location_uri = db_info.get('Database', {}).get('LocationUri', '')
+                    
+                    # Delete S3 data if location exists
+                    if location_uri.startswith('s3://'):
+                        bucket_and_key = location_uri[5:].split('/', 1)
+                        bucket = bucket_and_key[0]
+                        prefix = bucket_and_key[1] if len(bucket_and_key) > 1 else ''
+                        
+                        # Delete all objects in the location
+                        paginator = s3_client.get_paginator('list_objects_v2')
+                        for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+                            objects = page.get('Contents', [])
+                            if objects:
+                                delete_keys = [{'Key': obj['Key']} for obj in objects]
+                                s3_client.delete_objects(Bucket=bucket, Delete={'Objects': delete_keys})
+                                print(f"✅ Deleted S3 data: s3://{bucket}/{prefix}")
+                except glue_client.exceptions.EntityNotFoundException:
+                    pass
+                
+                # Delete the database
+                glue_client.delete_database(Name=db_name)
+                print(f"✅ Deleted Glue database: {db_name}")
+            except glue_client.exceptions.EntityNotFoundException:
+                pass
+            except Exception as e:
+                print(f"⚠️ Could not delete database {db_name}: {e}")
+
+    def get_pipeline_file(self):
+        return os.path.join(
+            os.path.dirname(__file__),
+            "../../../../examples/analytic-workflow/etl/etl_pipeline.yaml"
+        )
+
+    @pytest.mark.integration
+    def test_etl_workflow_deployment(self):
+        """Test ETL workflow deployment following basic_pipeline pattern."""
+        if not self.verify_aws_connectivity():
+            pytest.skip("AWS connectivity not available")
+
+        pipeline_file = self.get_pipeline_file()
+        workflow_name = "workflow_combined"
+        
+        # Cleanup: Remove etl directory from test project S3
+        print("\n=== Cleanup: Remove test project S3 etl directory ===")
+        try:
+            subprocess.run(
+                ["aws", "s3", "rm", "s3://amazon-sagemaker-198737698272-us-east-1-4pg255jku47vdz/shared/etl/", "--recursive"],
+                capture_output=True,
+                text=True
+            )
+            print("✅ Cleaned test project S3 etl directory")
+        except Exception as e:
+            print(f"⚠️ Could not clean S3: {e}")
+
+        # Step 1: Describe --connect
+        print("\n=== Step 1: Describe with Connections ===")
+        result = self.run_cli_command(["describe", "--pipeline", pipeline_file, "--connect"])
+        assert result["success"], f"Describe --connect failed: {result['output']}"
+        print("✅ Describe --connect successful")
+
+        # Step 2: Upload ETL code to S3 (dev project)
+        print("\n=== Step 2: Upload ETL Code to S3 (dev project) ===")
+        s3_uri_match = re.search(
+            r"dev: dev-marketing.*?default\.s3_shared:.*?s3Uri: (s3://[^\s]+)",
+            result["output"],
+            re.DOTALL
+        )
+        
+        if s3_uri_match:
+            s3_uri = s3_uri_match.group(1)
+            etl_dir = os.path.join(
+                os.path.dirname(__file__),
+                "../../../../examples/analytic-workflow/etl"
+            )
+            
+            if os.path.exists(etl_dir):
+                upload_result = subprocess.run(
+                    [
+                        "aws", "s3", "sync",
+                        etl_dir, s3_uri + "etl/",
+                        "--delete",
+                        "--exclude", "*.pyc",
+                        "--exclude", "__pycache__/*",
+                        "--exclude", "test_*.sh",
+                    ],
+                    capture_output=True,
+                    text=True
+                )
+                
+                if upload_result.returncode == 0:
+                    print(f"✅ ETL code uploaded to S3: {s3_uri}etl/")
+                else:
+                    print(f"⚠️ Upload failed: {upload_result.stderr}")
+        else:
+            print("⚠️ Could not extract S3 URI from describe output")
+
+        # Step 3: Bundle from dev
+        print("\n=== Step 3: Bundle from dev ===")
+        result = self.run_cli_command(["bundle", "--pipeline", pipeline_file, "--targets", "dev"])
+        assert result["success"], f"Bundle failed: {result['output']}"
+        print("✅ Bundle successful")
+
+        # Step 4: Deploy
+        print("\n=== Step 4: Deploy ===")
+        result = self.run_cli_command(["deploy", "test", "--pipeline", pipeline_file])
+        assert result["success"], f"Deploy failed: {result['output']}"
+        print("✅ Deploy successful")
+
+        # Step 5: Monitor
+        print("\n=== Step 5: Monitor ===")
+        result = self.run_cli_command(["monitor", "--targets", "test", "--pipeline", pipeline_file])
+        assert result["success"], f"Monitor failed: {result['output']}"
+        print("✅ Monitor successful")
+
+        # Step 6: Run workflow
+        print("\n=== Step 6: Run Workflow ===")
+        result = self.run_cli_command(
+            ["run", "--workflow", workflow_name, "--targets", "test", "--pipeline", pipeline_file]
+        )
+        assert result["success"], f"Run workflow failed: {result['output']}"
+        print("✅ Workflow started")
+
+        # Step 7: Wait for workflow completion
+        print("\n=== Step 7: Wait for Workflow Completion ===")
+        import time
+        client = boto3.client(
+            'awsoverdriveservice',
+            region_name='us-east-1',
+            endpoint_url='https://overdrive-gamma.us-east-1.api.aws'
+        )
+        
+        # Get workflow ARN
+        response = client.list_workflows()
+        workflows = response.get('Workflows', [])
+        expected_name = f'IntegrationTestETLWorkflow_test_marketing_{workflow_name}'
+        workflow_arn = None
+        for wf in workflows:
+            if wf.get('Name') == expected_name:
+                workflow_arn = wf.get('WorkflowArn')
+                break
+        
+        if workflow_arn:
+            # Get latest run
+            runs_response = client.list_workflow_runs(WorkflowArn=workflow_arn, MaxResults=1)
+            runs = runs_response.get('WorkflowRuns', [])
+            if runs:
+                run_id = runs[0].get('RunId')
+                print(f"Waiting for workflow run {run_id} to complete...")
+                
+                max_wait = 600  # 10 minutes
+                start_time = time.time()
+                while time.time() - start_time < max_wait:
+                    run_detail = client.get_workflow_run(WorkflowArn=workflow_arn, RunId=run_id)
+                    status = run_detail.get('RunDetail', {}).get('RunState', 'UNKNOWN')
+                    print(f"  Status: {status}")
+                    
+                    if status in ['SUCCEEDED', 'FAILED', 'CANCELLED', 'STOPPED', 'TIMEOUT']:
+                        print(f"✅ Workflow completed with status: {status}")
+                        break
+                    
+                    time.sleep(30)
+                else:
+                    print("⚠️  Workflow did not complete within 10 minutes")
+        
+        # Step 8: Monitor workflow status
+        print("\n=== Step 8: Monitor Workflow Status ===")
+        result = self.run_cli_command(["monitor", "--targets", "test", "--pipeline", pipeline_file])
+        assert result["success"], f"Monitor after run failed: {result['output']}"
+        print("✅ Monitor after run successful")
+
+        # Step 9: Fetch workflow logs
+        print("\n=== Step 9: Fetch Workflow Logs ===")
+        try:
+            client = boto3.client(
+                'awsoverdriveservice',
+                region_name='us-east-1',
+                endpoint_url='https://overdrive-gamma.us-east-1.api.aws'
+            )
+            response = client.list_workflows()
+            workflows = response.get('Workflows', [])
+            expected_name = f'IntegrationTestETLWorkflow_test_marketing_{workflow_name}'
+            
+            workflow_arn = None
+            for wf in workflows:
+                if wf.get('Name') == expected_name:
+                    workflow_arn = wf.get('WorkflowArn')
+                    break
+            
+            if workflow_arn:
+                print(f"📋 Workflow ARN: {workflow_arn}")
+                result = self.run_cli_command(["logs", "--workflow", workflow_arn])
+                if result["success"]:
+                    print("✅ Logs retrieved successfully")
+                else:
+                    print("⚠️ Logs command failed")
+            else:
+                print("⚠️ Workflow not found")
+        except Exception as e:
+            print(f"⚠️ Could not fetch logs: {e}")
+        
+        # Step 10: Run pipeline tests
+        print("\n=== Step 10: Run Pipeline Tests ===")
+        result = self.run_cli_command(["test", "--targets", "test", "--test-output", "console", "--pipeline", pipeline_file])
+        assert result["success"], f"Pipeline tests failed: {result['output']}"
+        print("✅ Pipeline tests passed")

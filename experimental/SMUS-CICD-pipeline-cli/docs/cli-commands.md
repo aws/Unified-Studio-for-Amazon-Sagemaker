@@ -207,8 +207,11 @@ smus-cli monitor --targets test --output JSON
 # Run tests for all targets
 smus-cli test --pipeline pipeline.yaml
 
-# Run tests for specific targets
+# Run tests for specific targets with verbose output
 smus-cli test --targets test --verbose
+
+# Stream test output directly to console
+smus-cli test --targets test --test-output console
 ```
 
 ### 8. Delete Resources

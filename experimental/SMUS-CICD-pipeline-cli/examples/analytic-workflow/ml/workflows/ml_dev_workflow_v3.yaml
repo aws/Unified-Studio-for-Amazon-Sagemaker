@@ -5,7 +5,7 @@ ml_dev_workflow:
       operator: "airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator"
       retries: 0
       input_config:
-        input_path: "ml/workflows/ml_orchestrator_notebook.ipynb"
+        input_path: "ml/bundle/workflows/ml_orchestrator_notebook.ipynb"
         input_params: {}
       output_config:
         output_formats: 

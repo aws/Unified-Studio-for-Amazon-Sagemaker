@@ -7,6 +7,7 @@ The pipeline manifest is a YAML file that defines your CI/CD pipeline configurat
 ## Quick Links
 
 - **[Pipeline Manifest Schema Documentation](pipeline-manifest-schema.md)** - Complete schema reference with validation rules
+- **[Substitutions and Variables](substitutions-and-variables.md)** - Dynamic variable resolution in workflows
 - **[CLI Commands Reference](cli-commands.md)** - Detailed command documentation
 
 ## Minimal Example

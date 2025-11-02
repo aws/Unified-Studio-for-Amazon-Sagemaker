@@ -48,6 +48,10 @@ nosetests.xml
 coverage.xml
 *.cover
 *.py,cover
+
+# SMUS test auto-generated files
+**/pipeline_tests/.smus_test_config.json
+**/pipeline_tests/conftest.py
 .hypothesis/
 .pytest_cache/
 tests/test-outputs/
@@ -154,3 +158,10 @@ cleanup.py
 
 # Overdrive test folder (private testing)
 tests/airless-test/
+tmp/
+
+# Backup files
+*.bak*
+
+# Files marked for deletion
+to-delete/

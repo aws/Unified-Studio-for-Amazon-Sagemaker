@@ -29,8 +29,14 @@ def extract_connection_properties(connection_detail: Dict[str, Any]) -> Dict[str
     # Extract type-specific properties
     if connection_type == "S3":
         s3_props = props.get("s3Properties", {})
-        conn_info["s3Uri"] = s3_props.get("s3Uri", "")
+        s3_uri = s3_props.get("s3Uri", "")
+        conn_info["s3Uri"] = s3_uri
         conn_info["status"] = s3_props.get("status")
+        # Extract bucket name from S3 URI
+        if s3_uri:
+            conn_info["bucket_name"] = (
+                s3_uri.replace("s3://", "").rstrip("/").split("/")[0]
+            )
 
     elif connection_type == "ATHENA":
         athena_props = props.get("athenaProperties", {})

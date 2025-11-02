@@ -298,12 +298,17 @@ def test(
     verbose: bool = typer.Option(
         False, "--verbose", "-v", help="Show detailed test output"
     ),
+    test_output: str = typer.Option(
+        None,
+        "--test-output",
+        help="Test output mode: console (stream test output directly)",
+    ),
     file_path: str = typer.Option(
         "pipeline.yaml", "--pipeline", "-p", help="Path to pipeline manifest file"
     ),
 ):
     """Run tests for pipeline targets."""
-    test_command(targets, output, verbose, file_path)
+    test_command(targets, output, verbose, test_output, file_path)
 
 
 @app.command(

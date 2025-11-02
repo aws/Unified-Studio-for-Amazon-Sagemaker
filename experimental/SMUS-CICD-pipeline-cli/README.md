@@ -8,6 +8,8 @@ A CLI tool for managing CI/CD pipelines in SageMaker Unified Studio (SMUS), enab
 
 See **[Pipeline Manifest Reference](docs/pipeline-manifest.md)** for complete guide to pipeline configuration.
 
+See **[Substitutions and Variables](docs/substitutions-and-variables.md)** for dynamic variable resolution in workflows.
+
 See **[CLI Commands Reference](docs/cli-commands.md)** for detailed command documentation and examples.
 
 See **[Development Guide](docs/development.md)** for development workflows, testing, and contribution guidelines.

@@ -1,0 +1,24 @@
+s3_analytics_workflow_3:
+  dag_id: 'covid_analytics_workflow'
+  tasks:
+    covid_data_summary:
+      operator: airflow.providers.amazon.aws.operators.glue.GlueJobOperator
+      retries: 0
+      job_name: covid-summary-job
+      script_location: '{proj.connection.default.s3_shared.s3Uri}etl/bundle/glue_covid_summary_job.py'
+      s3_bucket: '{proj.connection.default.s3_shared.bucket_name}'
+      iam_role_name: '{proj.iam_role_name}'
+      region_name: '{env.AWS_REGION}'
+      script_args:
+        '--DATABASE_NAME': 'covid19_db'
+        '--TABLE_NAME': 'worldwide_aggregate'
+        '--SUMMARY_DATABASE_NAME': 'covid19_summary_db'
+        '--S3_DATABASE_PATH': '{proj.connection.default.s3_shared.s3Uri}etl/output/databases/covid19_summary_db/'
+      create_job_kwargs:
+        GlueVersion: '4.0'
+        MaxRetries: 0
+        Timeout: 300
+        Command:
+          Name: 'glueetl'
+          PythonVersion: '3'
+
