@@ -660,20 +660,93 @@ smus-cli monitor [OPTIONS]
 #### Options
 - **`-p, --pipeline`**: Path to pipeline manifest file (default: `pipeline.yaml`)
 - **`-t, --targets`**: Target name(s) - single target or comma-separated list (shows all targets if not specified)
+- **`-l, --live`**: Keep monitoring until all workflows complete
 - **`-o, --output`**: Output format: TEXT (default) or JSON
 - **`--help`**: Show command help
 
 #### Examples
 
 ```bash
-# Monitor all targets
+# Monitor all targets (one-time snapshot)
 smus-cli monitor
 
 # Monitor specific targets
 smus-cli monitor -t dev,test
 
+# Live monitoring - continuously poll until workflows complete
+smus-cli monitor --live
+
 # Monitor with JSON output
 smus-cli monitor -o JSON
+```
+
+#### Live Monitoring
+
+When using `--live`, the monitor command:
+1. Displays initial table with all workflow statuses
+2. Polls every 10 seconds for status changes
+3. Reports status changes as new lines: `[HH:MM:SS] workflow_name (run id): OLD_STATUS → NEW_STATUS`
+4. Exits automatically when no workflows are RUNNING or QUEUED
+5. Can be stopped manually with Ctrl+C
+
+**Example Live Output:**
+```
+🔄 Starting live monitoring... (Press Ctrl+C to stop)
+
+Pipeline: IntegrationTestMLWorkflow
+
+      Workflow                                 Status     Trigger      Run ID       Run Status   Start Time           Duration  
+      ---------------------------------------- ---------- ------------ ------------ ------------ -------------------- ----------
+      IntegrationTestMLWorkflow_test_market... READY      scheduled    ZG9hFOTB...  RUNNING      2025-11-02 22:23:24  2m        
+
+[22:25:34] IntegrationTestMLWorkflow_test_marketing_ml_dev_workflow_v3 (run ZG9hFOTB...): RUNNING → SUCCEEDED
+
+✅ All workflows completed
+```
+
+### 6. logs - Fetch Workflow Logs
+
+Fetches and displays workflow logs from CloudWatch (supports serverless Airflow workflows).
+
+```bash
+smus-cli logs [OPTIONS]
+```
+
+#### Options
+- **`-w, --workflow`**: Workflow ARN to fetch logs for (required)
+- **`-l, --live`**: Keep fetching logs until workflow terminates
+- **`-o, --output`**: Output format: TEXT (default) or JSON
+- **`-n, --lines`**: Number of log lines to fetch (default: 100)
+- **`--help`**: Show command help
+
+#### Examples
+
+```bash
+# Fetch logs for serverless Airflow workflow
+smus-cli logs --workflow arn:aws:airflow-serverless:us-east-2:123456789012:workflow/MyWorkflow
+
+# Live log monitoring (streams logs in real-time)
+smus-cli logs --workflow arn:aws:airflow-serverless:us-east-2:123456789012:workflow/MyWorkflow --live
+
+# Fetch specific number of lines
+smus-cli logs --workflow arn:aws:airflow-serverless:us-east-2:123456789012:workflow/MyWorkflow --lines 50
+
+# Fetch logs with JSON output
+smus-cli logs --workflow arn:aws:airflow-serverless:us-east-2:123456789012:workflow/MyWorkflow --output JSON
+```
+
+**Example Output:**
+```
+📋 Fetching logs for workflow: IntegrationTestMLWorkflow_test_marketing_ml_dev_workflow_v3
+🔗 ARN: arn:aws:airflow-serverless:us-east-1:198737698272:workflow/IntegrationTestMLWorkflow_test_marketing_ml_dev_workflow_v3-A3zE3YBMKo
+================================================================================
+📁 Log Group: /aws/mwaa-serverless/IntegrationTestMLWorkflow_test_marketing_ml_dev_workflow_v3-A3zE3YBMKo/
+📊 Workflow Status: READY
+--------------------------------------------------------------------------------
+📄 Showing 100 log events:
+
+[2025-11-02 15:52:34] [workflow_id=IntegrationTestMLWorkflow.../task_id=ml_orchestrator_notebook/attempt=1.log] {"timestamp":"2025-11-02T20:52:34.124324Z","level":"info","event":"Executing workload"...}
+[2025-11-02 15:52:35] [workflow_id=IntegrationTestMLWorkflow.../task_id=ml_orchestrator_notebook/attempt=1.log] {"timestamp":"2025-11-02T20:52:35.035022","level":"info","event":"DAG bundles loaded: dags-folder"...}
 ```
 
 ### 5. run - Run Workflow Commands

@@ -230,9 +230,17 @@ def _live_log_monitoring(
 
         try:
             # Get current workflow runs to check if any are active
+            if output.upper() != "JSON":
+                typer.echo(f"🔍 DEBUG: Fetching workflow runs (check {check_count})...")
+            
             runs = airflow_serverless.list_workflow_runs(
                 workflow_arn, region=region, max_results=5
             )
+
+            if output.upper() != "JSON":
+                typer.echo(f"🔍 DEBUG: Got {len(runs)} runs from list_workflow_runs")
+                for run in runs:
+                    typer.echo(f"🔍 DEBUG: Run {run.get('run_id')}: status={run.get('status')}")
 
             active_runs = [
                 run
@@ -240,10 +248,19 @@ def _live_log_monitoring(
                 if run["status"] in ["STARTING", "QUEUED", "RUNNING"]
             ]
 
+            if output.upper() != "JSON":
+                typer.echo(f"🔍 DEBUG: {len(active_runs)} active runs found")
+
             # Fetch new logs
+            if output.upper() != "JSON":
+                typer.echo(f"🔍 DEBUG: Fetching logs from {log_group}...")
+            
             log_events = airflow_serverless.get_cloudwatch_logs(
                 log_group, start_time=last_timestamp, region=region, limit=50
             )
+
+            if output.upper() != "JSON":
+                typer.echo(f"🔍 DEBUG: Got {len(log_events)} log events")
 
             # Display new log events
             if log_events:

@@ -179,9 +179,15 @@ def monitor(
         "-t",
         help="Target name(s) - single target or comma-separated list (shows all targets if not specified)",
     ),
+    live: bool = typer.Option(
+        False,
+        "--live",
+        "-l",
+        help="Keep monitoring until all workflows complete",
+    ),
 ):
     """Monitor workflow status across target environments."""
-    monitor_command(targets, manifest_file, output)
+    monitor_command(targets, manifest_file, output, live)
 
 
 @app.command(

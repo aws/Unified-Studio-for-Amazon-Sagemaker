@@ -2,6 +2,7 @@
 
 import datetime
 import json
+import time
 from typing import Optional
 
 import typer
@@ -14,8 +15,132 @@ from ..helpers.utils import (  # noqa: F401
 from ..pipeline import PipelineManifest
 
 
-def monitor_command(targets: Optional[str], manifest_file: str, output: str):
+def monitor_command(
+    targets: Optional[str], manifest_file: str, output: str, live: bool = False
+):
     """Monitor workflow status across target environments."""
+    if live:
+        _monitor_live(targets, manifest_file, output)
+    else:
+        _monitor_once(targets, manifest_file, output)
+
+
+def _monitor_live(targets: Optional[str], manifest_file: str, output: str):
+    """Monitor workflows continuously until all runs complete."""
+    # Track previous run states
+    previous_states = {}
+
+    # Initial full display
+    typer.echo("🔄 Starting live monitoring... (Press Ctrl+C to stop)\n")
+    _monitor_once(targets, manifest_file, output, previous_states=previous_states)
+
+    try:
+        while True:
+            time.sleep(10)  # Poll every 10 seconds
+
+            # Check for status changes
+            has_running = _check_status_changes(
+                targets, manifest_file, output, previous_states
+            )
+
+            # If no workflows are running, exit
+            if not has_running:
+                typer.echo("\n✅ All workflows completed")
+                break
+
+    except KeyboardInterrupt:
+        typer.echo("\n\n⏹️  Monitoring stopped by user")
+        raise typer.Exit(0)
+
+
+def _check_status_changes(
+    targets: Optional[str], manifest_file: str, output: str, previous_states: dict
+) -> bool:
+    """Check for workflow status changes and report them. Returns True if any workflows are running."""
+    manifest = PipelineManifest.from_file(manifest_file)
+
+    # Parse targets
+    target_list = []
+    if targets:
+        target_list = [t.strip() for t in targets.split(",")]
+
+    targets_to_monitor = {}
+    if target_list:
+        for target_name in target_list:
+            if target_name in manifest.targets:
+                targets_to_monitor[target_name] = manifest.targets[target_name]
+    else:
+        targets_to_monitor = manifest.targets
+
+    has_running = False
+
+    for target_name, target_config in targets_to_monitor.items():
+        config = build_domain_config(target_config)
+
+        # Check if this target uses serverless Airflow
+        uses_airflow_serverless = _target_uses_airflow_serverless(
+            manifest, target_config
+        )
+
+        if uses_airflow_serverless:
+            from ..helpers import airflow_serverless
+
+            # List workflows
+            all_workflows = airflow_serverless.list_workflows(
+                region=config.get("region")
+            )
+            pipeline_name = manifest.pipeline_name
+            target_project = target_config.project.name
+
+            relevant_workflows = [
+                w
+                for w in all_workflows
+                if w.get("tags", {}).get("Pipeline") == pipeline_name
+                and w.get("tags", {}).get("Target") == target_project
+            ]
+
+            for workflow in relevant_workflows:
+                workflow_arn = workflow["workflow_arn"]
+                workflow_name = workflow["name"]
+
+                # Get recent runs
+                recent_runs = airflow_serverless.list_workflow_runs(
+                    workflow_arn, region=config.get("region"), max_results=1
+                )
+
+                if recent_runs:
+                    latest_run = recent_runs[0]
+                    run_id = latest_run.get("run_id", "N/A")
+                    run_status = latest_run.get("status", "UNKNOWN")
+
+                    # Track if running
+                    if run_status in ["RUNNING", "QUEUED"]:
+                        has_running = True
+
+                    # Check for status change
+                    key = f"{target_name}:{workflow_name}:{run_id}"
+                    prev_status = previous_states.get(key)
+
+                    if prev_status and prev_status != run_status:
+                        # Status changed - report it
+                        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+                        typer.echo(
+                            f"[{timestamp}] {workflow_name} (run {run_id[:8]}...): {prev_status} → {run_status}"
+                        )
+
+                    # Update state
+                    previous_states[key] = run_status
+
+    return has_running
+
+
+def _monitor_once(
+    targets: Optional[str],
+    manifest_file: str,
+    output: str,
+    previous_states: dict = None,
+):
+    """Monitor workflow status across target environments once."""
     try:
         # Load pipeline manifest using centralized parser
         manifest = PipelineManifest.from_file(manifest_file)
@@ -182,7 +307,7 @@ def monitor_command(targets: Optional[str], manifest_file: str, output: str):
                     if uses_airflow_serverless:
                         # Monitor serverless Airflow workflows
                         airflow_serverless_data = _monitor_airflow_serverless_workflows(
-                            manifest, target_config, config, output
+                            manifest, target_config, config, output, previous_states
                         )
                         target_data["workflows"].update(airflow_serverless_data)
                     else:
@@ -290,7 +415,11 @@ def _target_uses_airflow_serverless(manifest: PipelineManifest, target_config) -
 
 
 def _monitor_airflow_serverless_workflows(
-    manifest: PipelineManifest, target_config, config: dict, output: str
+    manifest: PipelineManifest,
+    target_config,
+    config: dict,
+    output: str,
+    previous_states: dict = None,
 ) -> dict:
     """
     Monitor serverless Airflow workflows for a target.
@@ -363,6 +492,11 @@ def _monitor_airflow_serverless_workflows(
                     run_id = latest_run.get("run_id", "N/A")
                     run_status = latest_run.get("status", "UNKNOWN")
 
+                    # Track state for live monitoring
+                    if previous_states is not None:
+                        key = f"{target_config.project.name}:{workflow_name}:{run_id}"
+                        previous_states[key] = run_status
+
                     # Calculate duration
                     started_at = latest_run.get("started_at")
                     ended_at = latest_run.get("ended_at")
@@ -421,12 +555,20 @@ def _monitor_airflow_serverless_workflows(
                 }
 
                 serverlessairflow_data["workflows"][workflow_name] = workflow_data
+
+                # Truncate workflow name for display
+                display_name = (
+                    workflow_name
+                    if len(workflow_name) <= 40
+                    else workflow_name[:37] + "..."
+                )
+
                 table_rows.append(
                     [
-                        workflow_name,
+                        display_name,
                         workflow_status.get("status", "UNKNOWN"),
                         workflow_status.get("trigger_mode", "scheduled"),
-                        run_id,
+                        run_id[:8] + "..." if len(run_id) > 8 else run_id,
                         run_status,
                         start_time,
                         duration,
@@ -436,16 +578,16 @@ def _monitor_airflow_serverless_workflows(
             if output.upper() != "JSON":
                 # Print table header
                 typer.echo(
-                    f"\n      {'Workflow':<40} {'Status':<10} {'Trigger':<12} {'Run ID':<20} {'Run Status':<12} {'Start Time':<20} {'Duration':<10}"
+                    f"\n      {'Workflow':<40} {'Status':<10} {'Trigger':<12} {'Run ID':<12} {'Run Status':<12} {'Start Time':<20} {'Duration':<10}"
                 )
                 typer.echo(
-                    f"      {'-'*40} {'-'*10} {'-'*12} {'-'*20} {'-'*12} {'-'*20} {'-'*10}"
+                    f"      {'-'*40} {'-'*10} {'-'*12} {'-'*12} {'-'*12} {'-'*20} {'-'*10}"
                 )
 
                 # Print table rows
                 for row in table_rows:
                     typer.echo(
-                        f"      {row[0]:<40} {row[1]:<10} {row[2]:<12} {row[3]:<20} {row[4]:<12} {row[5]:<20} {row[6]:<10}"
+                        f"      {row[0]:<40} {row[1]:<10} {row[2]:<12} {row[3]:<12} {row[4]:<12} {row[5]:<20} {row[6]:<10}"
                     )
 
             workflows_data["overdrive"] = serverlessairflow_data

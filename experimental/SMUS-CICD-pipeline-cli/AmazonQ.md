@@ -294,3 +294,35 @@ gh run download <RUN-ID>
 ```
 
 Note: Replace `<PR-NUMBER>` with the actual PR number and `<RUN-ID>` with the actual run ID from the GitHub Actions workflow.
+
+## Airflow Serverless (Overdrive) Environment Configuration
+
+When working with airflow-serverless workflows, always determine the current environment configuration dynamically:
+
+### Environment Variables Check
+```bash
+# Check current airflow-serverless endpoint
+echo $AIRFLOW_SERVERLESS_ENDPOINT
+
+# Check current AWS region
+echo $AWS_DEFAULT_REGION
+
+# Check current AWS account
+aws sts get-caller-identity --query Account --output text
+
+# Get all relevant environment variables
+env | grep -E "(AWS_REGION|AWS_DEFAULT_REGION|AWS_ACCOUNT|AIRFLOW_SERVERLESS|OVERDRIVE)" | sort
+```
+
+### Dynamic Configuration Pattern
+When updating documentation or code, use this approach to get current values:
+- **Endpoint**: Read from `$AIRFLOW_SERVERLESS_ENDPOINT` environment variable
+- **Region**: Read from `$AWS_DEFAULT_REGION` or `$AWS_REGION` environment variable  
+- **Account**: Get from `aws sts get-caller-identity --query Account --output text`
+- **IAM Role Pattern**: `arn:aws:iam::{account}:role/datazone_usr_role_{project_id}_{environment_id}`
+
+### Important Notes
+- Never hardcode account IDs, regions, or endpoints in permanent documentation
+- Always reference environment variables or provide commands to determine current values
+- The airflow-serverless service may use different endpoints/regions across environments
+- Use `aws sts get-caller-identity` to verify you're working with the correct AWS account

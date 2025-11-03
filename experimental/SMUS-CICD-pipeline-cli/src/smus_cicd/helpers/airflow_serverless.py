@@ -208,8 +208,7 @@ def create_workflow(
                         }
                         if description:
                             update_params["Description"] = description
-                        if tags:
-                            update_params["Tags"] = tags
+                        # Note: Tags not supported in update_workflow API
 
                         logger.info(f"Updating workflow with params: {update_params}")
                         update_response = client.update_workflow(**update_params)

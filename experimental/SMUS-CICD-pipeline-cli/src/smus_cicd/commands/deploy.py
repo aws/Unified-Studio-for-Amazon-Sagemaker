@@ -996,20 +996,38 @@ def _create_airflow_serverless_workflows(
             )
             try:
                 # Download original
+                typer.echo(f"🔍 DEBUG: Downloading {s3_key} from S3")
                 s3_client.download_file(s3_bucket, s3_key, temp_yaml.name)
 
                 # Read and resolve
                 with open(temp_yaml.name, "r") as f:
                     original_content = f.read()
 
+                typer.echo(
+                    f"🔍 DEBUG: Original content length: {len(original_content)}"
+                )
                 resolved_content = resolver.resolve(original_content)
+                typer.echo(
+                    f"🔍 DEBUG: Resolved content length: {len(resolved_content)}"
+                )
+
+                if original_content != resolved_content:
+                    typer.echo(f"🔍 DEBUG: Content changed, uploading resolved version")
+                else:
+                    typer.echo(f"🔍 DEBUG: No variables found to resolve")
 
                 # Upload resolved version
                 with open(temp_yaml.name, "w") as f:
                     f.write(resolved_content)
 
+                typer.echo(
+                    f"🔍 DEBUG: Uploading resolved content to s3://{s3_bucket}/{s3_key}"
+                )
                 s3_client.upload_file(temp_yaml.name, s3_bucket, s3_key)
                 typer.echo(f"✅ Resolved variables in {s3_key}")
+            except Exception as e:
+                typer.echo(f"❌ Error resolving variables in {s3_key}: {e}", err=True)
+                raise
             finally:
                 os.unlink(temp_yaml.name)
 

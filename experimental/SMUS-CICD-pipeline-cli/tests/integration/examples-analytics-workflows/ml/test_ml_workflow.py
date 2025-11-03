@@ -148,7 +148,7 @@ class TestMLWorkflow(IntegrationTestBase):
             
             if workflow_arn:
                 print(f"📋 Workflow ARN: {workflow_arn}")
-                result = self.run_cli_command(["logs", "--workflow", workflow_arn])
+                result = self.run_cli_command(["logs", "--workflow", workflow_arn, "--live"])
                 if result["success"]:
                     print("✅ Logs retrieved successfully")
                 else:

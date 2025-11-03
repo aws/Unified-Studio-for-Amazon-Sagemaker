@@ -4,5 +4,6 @@
     ],
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,
-    "python.testing.cwd": "experimental/SMUS-CICD-pipeline-cli"
+    "python.testing.cwd": "experimental/SMUS-CICD-pipeline-cli",
+    "kiroAgent.configureMCP": "Disabled"
 }
