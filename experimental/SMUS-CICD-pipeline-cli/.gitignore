@@ -52,6 +52,7 @@ coverage.xml
 # SMUS test auto-generated files
 **/pipeline_tests/.smus_test_config.json
 **/pipeline_tests/conftest.py
+**/tests/reports/
 .hypothesis/
 .pytest_cache/
 tests/test-outputs/

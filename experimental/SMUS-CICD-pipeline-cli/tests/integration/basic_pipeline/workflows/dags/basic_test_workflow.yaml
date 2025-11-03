@@ -5,3 +5,16 @@ basic_test_workflow:
   tasks:
     start_task:
       operator: "airflow.operators.empty.EmptyOperator"
+    
+    param_test_notebook:
+      operator: "airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator"
+      retries: 0
+      input_config:
+        input_path: "param_test_notebook.ipynb"
+        input_params:
+          mlflow_arn: "{proj.connection.mlflow-server.trackingServerArn}"
+      output_config:
+        output_formats: ['NOTEBOOK']
+      wait_for_completion: True
+      dependencies:
+        - start_task
