@@ -150,29 +150,154 @@ pytest tests/unit/                          # Unit tests
 pytest tests/integration/ -m "not slow"     # Integration tests (skip slow)
 ```
 
-## Direct Test Execution (without run_tests.py)
+## Integration Test Execution Guide (GenAI Reference)
 
-### Running Tests Directly
-For running tests directly without using the run_tests.py script:
+### Test Structure Overview
+Integration tests validate end-to-end CICD workflows in real AWS environments. Each test follows a standard pattern:
+1. Cleanup existing resources
+2. Describe pipeline configuration
+3. Upload code to S3
+4. Bundle deployment artifacts
+5. Deploy to target environment
+6. Run workflow
+7. Monitor execution
+8. Validate results
 
-#### Unit Tests
+### Running Specific Integration Tests
+
+#### ML Training Workflow Test
+**Purpose**: Tests ML training orchestrator with SageMaker and MLflow integration
+**Location**: `tests/integration/examples-analytics-workflows/ml/test_ml_workflow.py`
+**Duration**: ~11 minutes
+**Environment**: Account 198737698272, us-east-1, test-marketing project
+
+```bash
+cd experimental/SMUS-CICD-pipeline-cli
+pytest tests/integration/examples-analytics-workflows/ml/test_ml_workflow.py::TestMLWorkflow::test_ml_workflow_deployment -v -s
+```
+
+**What it validates**:
+- MLflow ARN parameter injection via Papermill
+- Dynamic connection fetching (S3, IAM, MLflow)
+- SageMaker training job execution
+- Model logging to MLflow tracking server
+- Workflow completes with exit_code=0
+
+**Key files**:
+- Notebook: `examples/analytic-workflow/ml/workflows/ml_orchestrator_notebook.ipynb`
+- Workflow: `examples/analytic-workflow/ml/workflows/ml_dev_workflow_v3.yaml`
+- Pipeline: `examples/analytic-workflow/ml/ml_pipeline.yaml`
+
+**Download executed notebook**:
+```bash
+# Find latest output
+aws s3 ls s3://amazon-sagemaker-198737698272-us-east-1-4pg255jku47vdz/shared/workflows/output/ml/bundle/workflows/ --recursive | grep output.tar.gz | sort | tail -1
+
+# Download and extract
+aws s3 cp s3://amazon-sagemaker-198737698272-us-east-1-4pg255jku47vdz/PATH /tmp/ml_output.tar.gz
+cd /tmp && tar -xzf ml_output.tar.gz
+# View: /tmp/_ml_orchestrator_notebook.ipynb
+```
+
+#### ETL Workflow Test
+**Purpose**: Tests Glue ETL jobs with parameter passing and database creation
+**Location**: `tests/integration/examples-analytics-workflows/etl/test_etl_workflow.py`
+**Duration**: ~10 minutes
+**Environment**: Account 198737698272, us-east-1, test-marketing project
+
+```bash
+cd experimental/SMUS-CICD-pipeline-cli
+pytest tests/integration/examples-analytics-workflows/etl/test_etl_workflow.py -v -s
+```
+
+**What it validates**:
+- Glue job parameter passing via `run_job_kwargs.Arguments`
+- S3 data cleanup before execution
+- Database creation in Glue catalog
+- Workflow completion polling (30s intervals, 10min timeout)
+- All 4 parameters received by Glue job
+
+**Key fix**: Use `run_job_kwargs.Arguments` instead of `script_args` in workflow YAML
+
+**Key files**:
+- Workflow: `examples/analytic-workflow/etl/s3_analytics_workflow.yaml`
+- Glue scripts: `examples/analytic-workflow/etl/*.py`
+- Pipeline: `examples/analytic-workflow/etl/etl_pipeline.yaml`
+
+#### Basic Pipeline Test
+**Purpose**: Tests parameter passing from workflow to notebook via Papermill
+**Location**: `tests/integration/basic_pipeline/test_basic_pipeline.py`
+**Duration**: ~15 minutes
+
+```bash
+cd experimental/SMUS-CICD-pipeline-cli
+pytest tests/integration/basic_pipeline/test_basic_pipeline.py -v -s
+```
+
+**What it validates**:
+- Variable substitution: `{proj.connection.mlflow-server.trackingServerArn}`
+- Papermill parameter injection to notebooks
+- Parameters cell tagging and injection
+- Workflow execution and completion
+
+### Unit Tests
 ```bash
 cd experimental/SMUS-CICD-pipeline-cli
 python -m pytest tests/unit -v
 ```
 
-#### Integration Tests
+### All Integration Tests
 ```bash
 cd experimental/SMUS-CICD-pipeline-cli
 python -m pytest tests/integration -v
 ```
 
-Integration tests are located in `tests/integration/` and include:
-- Basic pipeline tests
-- Multi-target pipeline tests
-- Bundle deploy pipeline tests
-- Test pipeline creation/deletion
-- End-to-end pipeline tests
+### Test Output Locations
+- **Logs**: `tests/test-outputs/{TestClass}__{test_method}.log`
+- **Reports**: `tests/reports/test-results.html`
+- **Coverage**: `tests/reports/coverage/`
+
+### Common Test Patterns
+
+**Parameter Injection Pattern** (ML/Basic tests):
+1. Workflow YAML defines `input_params` with variable substitution
+2. Papermill injects parameters into tagged cell
+3. Notebook receives parameters as variables
+4. Verify in executed notebook's "injected-parameters" cell
+
+**Workflow Monitoring Pattern** (All tests):
+1. Start workflow with `run` command
+2. Poll status with `monitor` command
+3. Fetch logs with `logs --live` command
+4. Wait for "Task finished" with exit_code=0
+
+**S3 Artifact Pattern** (ML/ETL tests):
+1. Bundle creates compressed archives
+2. Deploy uploads to `s3://{bucket}/shared/{path}/`
+3. Workflow references S3 paths
+4. Download outputs from `s3://{bucket}/shared/workflows/output/`
+
+### Debugging Failed Tests
+
+**Check workflow status**:
+```bash
+# List workflows
+aws awsoverdriveservice list-workflows --region us-east-1 --endpoint-url https://overdrive-gamma.us-east-1.api.aws
+
+# Check runs
+aws awsoverdriveservice list-workflow-runs --workflow-arn ARN --region us-east-1 --endpoint-url https://overdrive-gamma.us-east-1.api.aws
+```
+
+**Check notebook execution**:
+```bash
+# Search for errors in executed notebook
+cat /tmp/_notebook.ipynb | jq -r '.cells[] | select(.outputs != null) | select(.outputs[] | .output_type == "error") | "Cell \(.execution_count): \(.outputs[].ename)"'
+```
+
+**Check Glue job parameters**:
+```bash
+aws glue get-job-run --job-name JOB_NAME --run-id RUN_ID --query 'JobRun.Arguments'
+```
 
 Important Note: These are pytest-based integration tests, NOT Hydra tests. Do not attempt to run them using the Hydra test platform.
 
