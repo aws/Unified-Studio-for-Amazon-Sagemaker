@@ -230,17 +230,9 @@ def _live_log_monitoring(
 
         try:
             # Get current workflow runs to check if any are active
-            if output.upper() != "JSON":
-                typer.echo(f"🔍 DEBUG: Fetching workflow runs (check {check_count})...")
-            
             runs = airflow_serverless.list_workflow_runs(
                 workflow_arn, region=region, max_results=5
             )
-
-            if output.upper() != "JSON":
-                typer.echo(f"🔍 DEBUG: Got {len(runs)} runs from list_workflow_runs")
-                for run in runs:
-                    typer.echo(f"🔍 DEBUG: Run {run.get('run_id')}: status={run.get('status')}")
 
             active_runs = [
                 run
@@ -248,19 +240,10 @@ def _live_log_monitoring(
                 if run["status"] in ["STARTING", "QUEUED", "RUNNING"]
             ]
 
-            if output.upper() != "JSON":
-                typer.echo(f"🔍 DEBUG: {len(active_runs)} active runs found")
-
             # Fetch new logs
-            if output.upper() != "JSON":
-                typer.echo(f"🔍 DEBUG: Fetching logs from {log_group}...")
-            
             log_events = airflow_serverless.get_cloudwatch_logs(
                 log_group, start_time=last_timestamp, region=region, limit=50
             )
-
-            if output.upper() != "JSON":
-                typer.echo(f"🔍 DEBUG: Got {len(log_events)} log events")
 
             # Display new log events
             if log_events:
@@ -298,11 +281,13 @@ def _live_log_monitoring(
                     )
                 break
 
-            # Show status update every 10 checks
-            if check_count % 10 == 0 and output.upper() != "JSON":
-                active_statuses = [run["status"] for run in active_runs]
+            # Show status update if no new logs but workflow still running
+            if not log_events and active_runs and output.upper() != "JSON":
+                run_info = active_runs[0]
+                run_id = run_info.get("run_id", "unknown")
+                status = run_info.get("status", "unknown")
                 typer.echo(
-                    f"🔄 Check {check_count}: {len(active_runs)} active runs ({', '.join(set(active_statuses))})"
+                    f"🔄 [{time.strftime('%H:%M:%S')}] Workflow still {status} (Run: {run_id}, ARN: {workflow_arn}) - waiting for logs..."
                 )
 
             time.sleep(10)  # Check every 10 seconds
