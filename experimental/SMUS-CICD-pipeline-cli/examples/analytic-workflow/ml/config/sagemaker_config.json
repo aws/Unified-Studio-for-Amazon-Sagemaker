@@ -1,7 +1,0 @@
-{
-  "tracking_server_url": "https://t-nvyn0qux6ier.us-east-1.experiments.sagemaker.aws",
-  "bucket_name": "sagemaker-ml-workflow-058264284947-us-east-1",
-  "data_uri": "s3://sagemaker-ml-workflow-058264284947-us-east-1/data/wine_dataset.csv",
-  "model_output_path": "s3://sagemaker-ml-workflow-058264284947-us-east-1/models/",
-  "region": "us-east-1"
-}

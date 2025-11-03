@@ -5,7 +5,7 @@ bundle:
   storage:
     - name: training-code
       connectionName: default.s3_shared
-      include: ['ml/training-workflow']
+      include: ['ml/job-code']
     - name: ml-workflows
       connectionName: default.s3_shared
       include: ['ml/workflows']
