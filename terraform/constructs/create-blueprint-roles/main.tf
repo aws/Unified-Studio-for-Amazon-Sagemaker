@@ -10,7 +10,7 @@ data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
 
 resource "aws_iam_role" "sagemaker_manage_access" {
-  name = "AmazonSageMakerManageAccess-${data.aws_region.current.name}-${var.domain_id}"
+  name = "AmazonSageMakerManageAccess-${data.aws_region.current.region}-${var.domain_id}"
   path = "/service-role/"
 
   assume_role_policy = jsonencode({
