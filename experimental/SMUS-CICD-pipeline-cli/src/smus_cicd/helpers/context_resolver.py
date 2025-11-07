@@ -38,7 +38,7 @@ class ContextResolver:
         if self._context:
             return self._context
 
-        from . import datazone, connections
+        from . import connections, datazone
 
         # Get project ID
         project_id = datazone.get_project_id_by_name(

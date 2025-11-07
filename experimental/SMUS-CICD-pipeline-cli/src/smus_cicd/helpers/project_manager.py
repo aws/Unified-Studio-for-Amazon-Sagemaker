@@ -831,6 +831,7 @@ class ProjectManager:
             return
 
         import boto3
+
         from .connection_creator import ConnectionCreator
 
         # Get existing connections

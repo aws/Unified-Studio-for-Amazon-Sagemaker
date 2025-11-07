@@ -142,4 +142,4 @@ targets:
             ):
                 result = runner.invoke(app, ["bundle"])
                 assert result.exit_code == 1
-                assert "No target specified and no DEV stage target found" in result.output
+                assert "Target 'dev' not found in manifest" in result.output

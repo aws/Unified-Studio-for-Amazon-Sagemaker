@@ -716,7 +716,9 @@ def get_project_details(project_name, region, domain_name):
 
 def get_project_connections(project_id, domain_id, region):
     """Get project connections from DataZone."""
-    typer.echo(f"🔍 DEBUG: get_project_connections called for project {project_id}", err=True)
+    typer.echo(
+        f"🔍 DEBUG: get_project_connections called for project {project_id}", err=True
+    )
     try:
         datazone_client = _get_datazone_client(region)
 
@@ -733,18 +735,18 @@ def get_project_connections(project_id, domain_id, region):
         # List connections for the project with pagination
         connections = {}
         next_token = None
-        
+
         while True:
             list_params = {
-                'domainIdentifier': domain_id,
-                'projectIdentifier': project_id,
-                'maxResults': 50
+                "domainIdentifier": domain_id,
+                "projectIdentifier": project_id,
+                "maxResults": 50,
             }
             if next_token:
-                list_params['nextToken'] = next_token
-                
+                list_params["nextToken"] = next_token
+
             response = datazone_client.list_connections(**list_params)
-            
+
             if not is_json_output:
                 print(
                     f"🔍 DEBUG: Page returned {len(response.get('items', []))} connections",
@@ -754,7 +756,7 @@ def get_project_connections(project_id, domain_id, region):
             for connection in response.get("items", []):
                 connection_name = connection.get("name", "unknown")
                 connection_id = connection.get("connectionId", "")
-                
+
                 typer.echo(f"🔍 DEBUG: Processing {connection_name}", err=True)
 
                 # Get detailed connection information
@@ -795,12 +797,12 @@ def get_project_connections(project_id, domain_id, region):
                         "type": "UNKNOWN",
                         "error": str(e),
                     }
-            
+
             # Check if there are more pages
-            next_token = response.get('nextToken')
+            next_token = response.get("nextToken")
             if not next_token:
                 break
-        
+
         if not is_json_output:
             print(
                 f"🔍 DEBUG: Retrieved {len(connections)} total connections",

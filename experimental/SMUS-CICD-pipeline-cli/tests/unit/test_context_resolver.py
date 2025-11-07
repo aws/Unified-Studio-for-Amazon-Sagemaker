@@ -131,9 +131,10 @@ def test_resolve_missing_variable(mock_get_project_id, mock_get_role, mock_get_c
     )
     
     content = "Missing: {env.DOES_NOT_EXIST}"
-    result = resolver.resolve(content)
     
-    assert result == "Missing: {env.DOES_NOT_EXIST}"
+    # Should raise ValueError for missing environment variable
+    with pytest.raises(ValueError, match="Failed to resolve variables"):
+        resolver.resolve(content)
 
 
 @patch('smus_cicd.helpers.connections.get_project_connections')

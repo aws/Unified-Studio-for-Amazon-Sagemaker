@@ -32,7 +32,7 @@ class ConnectionCreator:
             Connection ID
         """
         # Create connection directly from config properties
-        # Environment variable substitution (${STS_REGION}, ${STS_ACCOUNT_ID}) 
+        # Environment variable substitution (${STS_REGION}, ${STS_ACCOUNT_ID})
         # happens during manifest loading in utils.substitute_env_vars()
         return self.create_connection(
             environment_id=environment_id,
@@ -149,7 +149,9 @@ class ConnectionCreator:
             # Extract server name from ARN if not provided
             if not tracking_server_name and tracking_server_arn:
                 tracking_server_name = tracking_server_arn.split("/")[-1]
-                print(f"🔍 DEBUG: Extracted trackingServerName from ARN: {tracking_server_name}")
+                print(
+                    f"🔍 DEBUG: Extracted trackingServerName from ARN: {tracking_server_name}"
+                )
 
             props = {
                 "mlflowProperties": {
@@ -158,7 +160,7 @@ class ConnectionCreator:
                 }
             }
             print(f"🔍 DEBUG: MLflow props being returned: {props}")
-            
+
             return props
         elif connection_type == "WORKFLOWS_MWAA":
             return {

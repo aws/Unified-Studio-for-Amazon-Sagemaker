@@ -34,6 +34,11 @@ git status
 ### 2. Make Code Changes
 - Implement the requested feature/fix
 - Update relevant docstrings and comments
+- **Follow PEP 8 style guide**: https://peps.python.org/pep-0008/
+  - Imports should be at the top of the file (after docstrings, before code)
+  - Use proper whitespace around operators
+  - Avoid unused imports and variables
+  - Use regular strings instead of f-strings when no placeholders are needed
 - **For DataZone catalog asset features**: Ensure proper exception handling - DataZone helper functions should raise exceptions instead of returning None/False to ensure proper CLI exit codes
 - **Always run linting checks after code changes:**
   ```bash

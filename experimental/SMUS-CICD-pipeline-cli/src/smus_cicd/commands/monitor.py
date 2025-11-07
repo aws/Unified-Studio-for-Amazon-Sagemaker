@@ -589,7 +589,7 @@ def _monitor_airflow_serverless_workflows(
                     f"\n      {'Workflow':<40} {'Status':<10} {'Trigger':<12} {'Run ID':<12} {'Run Status':<12} {'Start Time':<20} {'Duration':<10}"
                 )
                 typer.echo(
-                    f"      {'-'*40} {'-'*10} {'-'*12} {'-'*12} {'-'*12} {'-'*20} {'-'*10}"
+                    f"      {'-' * 40} {'-' * 10} {'-' * 12} {'-' * 12} {'-' * 12} {'-' * 20} {'-' * 10}"
                 )
 
                 # Print table rows

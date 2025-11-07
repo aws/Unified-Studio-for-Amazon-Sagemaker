@@ -166,7 +166,7 @@ def describe_command(
                             )
 
                         if output.upper() != "JSON":
-                            typer.echo(f"    ⚠️  Project does not exist yet")
+                            typer.echo("    ⚠️  Project does not exist yet")
                             if should_create:
                                 typer.echo(
                                     "    ℹ️  Project will be created during deployment (create: true)"
@@ -196,7 +196,7 @@ def describe_command(
                             has_errors = True
                             if output.upper() != "JSON":
                                 typer.echo(
-                                    f"    ❌ Error: Project has no connections configured",
+                                    "    ❌ Error: Project has no connections configured",
                                     err=True,
                                 )
 
@@ -210,7 +210,9 @@ def describe_command(
                                 typer.echo(f"    Owners: {owners_str}")
 
                             if connections or connect:
-                                typer.echo(f"    Connections: ({len(project_connections)} total)")
+                                typer.echo(
+                                    f"    Connections: ({len(project_connections)} total)"
+                                )
                                 for conn_name, conn_info in project_connections.items():
                                     typer.echo(f"      {conn_name}:")
                                     # Handle error case where conn_info might be a string

@@ -1,7 +1,8 @@
 """Helper to generate test configuration from project context."""
 
+from typing import Any, Dict
+
 import boto3
-from typing import Dict, Any
 
 
 def generate_test_config(

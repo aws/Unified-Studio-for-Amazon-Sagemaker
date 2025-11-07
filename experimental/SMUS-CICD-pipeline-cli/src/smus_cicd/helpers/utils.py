@@ -38,7 +38,7 @@ def substitute_env_vars(data: Union[Dict, List, str]) -> Union[Dict, List, str]:
     Recursively substitute environment variables in YAML data.
 
     Supports ${VAR_NAME} syntax for environment variable substitution.
-    
+
     Pseudo environment variables (auto-resolved from AWS credentials):
     - STS_ACCOUNT_ID: Current AWS account ID from STS
     - STS_REGION: Current AWS region from boto3 session
@@ -60,15 +60,17 @@ def substitute_env_vars(data: Union[Dict, List, str]) -> Union[Dict, List, str]:
         def replace_var(match):
             var_name = match.group(1)
             default_value = match.group(2) if match.group(2) is not None else ""
-            
+
             # Handle pseudo environment variables
             if var_name == "STS_ACCOUNT_ID":
                 import boto3
+
                 return boto3.client("sts").get_caller_identity()["Account"]
             elif var_name == "STS_REGION":
                 import boto3
+
                 return boto3.Session().region_name or default_value
-            
+
             # Regular environment variable lookup
             return os.getenv(var_name, default_value)
 
@@ -376,17 +378,17 @@ def _get_project_connections(
 
         connections_dict = {}
         next_token = None
-        
+
         # Paginate through all connections
         while True:
             list_params = {
-                'domainIdentifier': domain_id,
-                'projectIdentifier': project_id,
-                'maxResults': 50
+                "domainIdentifier": domain_id,
+                "projectIdentifier": project_id,
+                "maxResults": 50,
             }
             if next_token:
-                list_params['nextToken'] = next_token
-                
+                list_params["nextToken"] = next_token
+
             response = datazone_client.list_connections(**list_params)
 
             for conn in response.get("items", []):
@@ -435,12 +437,14 @@ def _get_project_connections(
 
                         configurations = detail_response.get("configurations", [])
                         if configurations:
-                            connections_dict[conn_name]["configurations"] = configurations
+                            connections_dict[conn_name][
+                                "configurations"
+                            ] = configurations
                     except Exception as e:
                         logger.warning(f"Failed to get SPARK connection details: {e}")
-            
+
             # Check for next page
-            next_token = response.get('nextToken')
+            next_token = response.get("nextToken")
             if not next_token:
                 break
 

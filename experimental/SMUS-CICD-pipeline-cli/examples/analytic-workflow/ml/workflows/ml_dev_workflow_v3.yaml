@@ -12,3 +12,17 @@ ml_dev_workflow:
         output_formats: 
           ['NOTEBOOK']
       wait_for_completion: True
+    
+    ml_deployment_notebook:
+      operator: "airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator"
+      retries: 0
+      input_config:
+        input_path: "ml/bundle/workflows/ml_deployment_notebook.ipynb"
+        input_params:
+          mlflow_tracking_server_arn: "{proj.connection.mlflow-server.trackingServerArn}"
+      output_config:
+        output_formats: 
+          ['NOTEBOOK']
+      wait_for_completion: True
+      dependencies:
+        - ml_orchestrator_notebook

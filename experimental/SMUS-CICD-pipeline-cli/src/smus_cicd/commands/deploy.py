@@ -558,7 +558,6 @@ def _deploy_git_item(
     Returns:
         Tuple of (deployed_files_list, s3_uri) or (None, None) if failed
     """
-    name = git_config.get("name", "git")
     target_dir = git_config.get("targetDirectory", "")
 
     typer.echo(f"Deploying git repository to {target_dir}...")
@@ -683,8 +682,9 @@ def _deploy_named_item_from_bundle(
     target_dir: str,
 ) -> Tuple[Optional[List[str]], Optional[str]]:
     """Deploy a named item from bundle to target directory."""
-    from ..helpers.bundle_storage import download_bundle, is_s3_url
     import tarfile
+
+    from ..helpers.bundle_storage import download_bundle, is_s3_url
 
     local_bundle_path = download_bundle(bundle_file, config["region"])
 
@@ -809,15 +809,15 @@ def _display_deployment_summary_new(
 
     for i, (files, s3_uri) in enumerate(storage_results):
         if files is not None:
-            typer.echo(f"  ✅ Storage item {i+1}: {len(files)} files → {s3_uri}")
+            typer.echo(f"  ✅ Storage item {i + 1}: {len(files)} files → {s3_uri}")
         else:
-            typer.echo(f"  ❌ Storage item {i+1}: Failed")
+            typer.echo(f"  ❌ Storage item {i + 1}: Failed")
 
     for i, (files, s3_uri) in enumerate(git_results):
         if files is not None:
-            typer.echo(f"  ✅ Git item {i+1}: {len(files)} files → {s3_uri}")
+            typer.echo(f"  ✅ Git item {i + 1}: {len(files)} files → {s3_uri}")
         else:
-            typer.echo(f"  ❌ Git item {i+1}: Failed")
+            typer.echo(f"  ❌ Git item {i + 1}: Failed")
 
 
 def _get_project_connection(
@@ -1183,11 +1183,11 @@ def _create_airflow_serverless_workflows(
 
     try:
         from ..helpers import airflow_serverless
-        from ..helpers.bundle_storage import download_bundle, is_s3_url
+        from ..helpers.bundle_storage import download_bundle
         from ..helpers.datazone import resolve_domain_id
 
         # Download bundle to local temp file if it's on S3
-        local_bundle_path = download_bundle(bundle_path, config["region"])
+        download_bundle(bundle_path, config["region"])
 
         # Get project user role ARN for serverless Airflow execution
         project_name = target_config.project.name
@@ -1316,9 +1316,9 @@ def _create_airflow_serverless_workflows(
                 )
 
                 if original_content != resolved_content:
-                    typer.echo(f"🔍 DEBUG: Content changed, uploading resolved version")
+                    typer.echo("🔍 DEBUG: Content changed, uploading resolved version")
                 else:
-                    typer.echo(f"🔍 DEBUG: No variables found to resolve")
+                    typer.echo("🔍 DEBUG: No variables found to resolve")
 
                 # Upload resolved version
                 with open(temp_yaml.name, "w") as f:
