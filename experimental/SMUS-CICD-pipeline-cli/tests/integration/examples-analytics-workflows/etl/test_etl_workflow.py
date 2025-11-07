@@ -150,7 +150,7 @@ class TestETLWorkflow(IntegrationTestBase):
 
         # Step 3: Bundle from dev
         print("\n=== Step 3: Bundle from dev ===")
-        result = self.run_cli_command(["bundle", "--pipeline", pipeline_file, "--targets", "dev"])
+        result = self.run_cli_command(["bundle", "--pipeline", pipeline_file, "--target", "dev"])
         assert result["success"], f"Bundle failed: {result['output']}"
         print("✅ Bundle successful")
 
@@ -166,94 +166,44 @@ class TestETLWorkflow(IntegrationTestBase):
         assert result["success"], f"Monitor failed: {result['output']}"
         print("✅ Monitor successful")
 
-        # Step 6: Run workflow
+        # Step 6: Run workflow and extract ARN
         print("\n=== Step 6: Run Workflow ===")
         result = self.run_cli_command(
             ["run", "--workflow", workflow_name, "--targets", "test", "--pipeline", pipeline_file]
         )
         assert result["success"], f"Run workflow failed: {result['output']}"
-        print("✅ Workflow started")
-
-        # Step 7: Wait for workflow completion
-        print("\n=== Step 7: Wait for Workflow Completion ===")
-        import time
-        client = boto3.client(
-            'awsoverdriveservice',
-            region_name='us-east-1',
-            endpoint_url='https://overdrive-gamma.us-east-1.api.aws'
-        )
         
-        # Get workflow ARN
-        response = client.list_workflows()
-        workflows = response.get('Workflows', [])
-        expected_name = f'IntegrationTestETLWorkflow_test_marketing_{workflow_name}'
-        workflow_arn = None
-        for wf in workflows:
-            if wf.get('Name') == expected_name:
-                workflow_arn = wf.get('WorkflowArn')
-                break
+        # Extract workflow ARN from run output
+        workflow_arn_match = re.search(r'🔗 ARN: (arn:aws:airflow-serverless:[^\s]+)', result["output"])
+        workflow_arn = workflow_arn_match.group(1) if workflow_arn_match else None
         
         if workflow_arn:
-            # Get latest run
-            runs_response = client.list_workflow_runs(WorkflowArn=workflow_arn, MaxResults=1)
-            runs = runs_response.get('WorkflowRuns', [])
-            if runs:
-                run_id = runs[0].get('RunId')
-                print(f"Waiting for workflow run {run_id} to complete...")
-                
-                max_wait = 600  # 10 minutes
-                start_time = time.time()
-                while time.time() - start_time < max_wait:
-                    run_detail = client.get_workflow_run(WorkflowArn=workflow_arn, RunId=run_id)
-                    status = run_detail.get('RunDetail', {}).get('RunState', 'UNKNOWN')
-                    print(f"  Status: {status}")
-                    
-                    if status in ['SUCCEEDED', 'FAILED', 'CANCELLED', 'STOPPED', 'TIMEOUT']:
-                        print(f"✅ Workflow completed with status: {status}")
-                        break
-                    
-                    time.sleep(30)
-                else:
-                    print("⚠️  Workflow did not complete within 10 minutes")
-        
-        # Step 8: Monitor workflow status
-        print("\n=== Step 8: Monitor Workflow Status ===")
+            print(f"✅ Workflow started: {workflow_arn}")
+        else:
+            print("✅ Workflow started (ARN not found)")
+
+        # Step 7: Monitor workflow status
+        print("\n=== Step 7: Monitor Workflow Status ===")
         result = self.run_cli_command(["monitor", "--targets", "test", "--pipeline", pipeline_file])
         assert result["success"], f"Monitor after run failed: {result['output']}"
         print("✅ Monitor after run successful")
 
-        # Step 9: Fetch workflow logs
-        print("\n=== Step 9: Fetch Workflow Logs ===")
-        try:
-            client = boto3.client(
-                'awsoverdriveservice',
-                region_name='us-east-1',
-                endpoint_url='https://overdrive-gamma.us-east-1.api.aws'
-            )
-            response = client.list_workflows()
-            workflows = response.get('Workflows', [])
-            expected_name = f'IntegrationTestETLWorkflow_test_marketing_{workflow_name}'
-            
-            workflow_arn = None
-            for wf in workflows:
-                if wf.get('Name') == expected_name:
-                    workflow_arn = wf.get('WorkflowArn')
-                    break
-            
-            if workflow_arn:
-                print(f"📋 Workflow ARN: {workflow_arn}")
-                result = self.run_cli_command(["logs", "--workflow", workflow_arn])
-                if result["success"]:
-                    print("✅ Logs retrieved successfully")
-                else:
-                    print("⚠️ Logs command failed")
+        # Step 8: Wait for workflow completion using logs
+        print("\n=== Step 8: Wait for Workflow Completion ===")
+        if workflow_arn:
+            print(f"📋 Monitoring workflow: {workflow_arn}")
+            result = self.run_cli_command(["logs", "--live", "--workflow", workflow_arn])
+            # logs --live waits for completion and returns success/failure
+            if result["success"]:
+                print("✅ Workflow completed successfully")
             else:
-                print("⚠️ Workflow not found")
-        except Exception as e:
-            print(f"⚠️ Could not fetch logs: {e}")
+                print(f"⚠️ Workflow failed or timed out: {result['output']}")
+                # Don't fail the test yet - let pipeline tests determine success
+        else:
+            print("⚠️ Could not extract workflow ARN, skipping log wait")
         
-        # Step 10: Run pipeline tests
-        print("\n=== Step 10: Run Pipeline Tests ===")
+        # Step 9: Run pipeline tests
+        print("\n=== Step 9: Run Pipeline Tests ===")
         result = self.run_cli_command(["test", "--targets", "test", "--test-output", "console", "--pipeline", pipeline_file])
         assert result["success"], f"Pipeline tests failed: {result['output']}"
         print("✅ Pipeline tests passed")

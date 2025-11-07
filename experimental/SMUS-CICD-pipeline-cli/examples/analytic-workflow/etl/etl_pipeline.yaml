@@ -7,6 +7,9 @@ bundle:
       connectionName: default.s3_shared
       include: ['etl']
       exclude: ['.ipynb_checkpoints/', '__pycache__/', '*.pyc', 'test_*.sh']
+  git:
+    - repository: covid-19-dataset
+      url: https://github.com/datasets/covid-19.git
 
 targets:
   dev: 
@@ -23,7 +26,6 @@ targets:
   test: 
     stage: TEST
     domain:
-      name: BETA_10282025_Domain
       tags:
         purpose: smus-cicd-testing
       region: ${DEV_DOMAIN_REGION:us-east-1}
@@ -43,10 +45,14 @@ targets:
         - name: etl
           connectionName: default.s3_shared
           targetDirectory: 'etl/bundle'
+      git:
+        - name: covid-19-dataset
+          connectionName: default.s3_shared
+          targetDirectory: 'repos'
     environment_variables:
       S3_PREFIX: test
-      AWS_REGION: us-east-1
+      AWS_REGION: ${DEV_DOMAIN_REGION:us-east-1}
 
 workflows:
-  - workflowName: workflow_combined
+  - workflowName: covid_etl_pipeline
     engine: airflow-serverless

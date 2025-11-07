@@ -5,10 +5,11 @@ from awsglue.utils import getResolvedOptions
 from pyspark.context import SparkContext
 from awsglue.context import GlueContext
 from awsglue.job import Job
-from pyspark.sql.functions import sum as spark_sum, count, avg
+from pyspark.sql.functions import sum as spark_sum, count, avg, col
+from pyspark.sql.types import LongType
 
 # Initialize GlueContext and SparkSession
-args = getResolvedOptions(sys.argv, ['JOB_NAME'])
+args = getResolvedOptions(sys.argv, ['JOB_NAME', 'S3_DATABASE_PATH', 'BUCKET_NAME'])
 sc = SparkContext()
 glueContext = GlueContext(sc)
 spark = glueContext.spark_session
@@ -27,35 +28,41 @@ try:
 except glue_client.exceptions.AlreadyExistsException:
     print(f"- Database {summary_db} already exists")
 
-# Read data from the us_simplified table
-print("Reading data from us_simplified table...")
-datasource = glueContext.create_dynamic_frame.from_catalog(
-    database="covid19_db",
-    table_name="us_simplified"
-)
+# Read CSV directly using Spark to avoid SerDe issues
+bucket = args['BUCKET_NAME']
+csv_path = f"s3://{bucket}/shared/repos/data/time-series-19-covid-combined.csv"
+print(f"Reading CSV directly from: {csv_path}")
 
-df = datasource.toDF()
-print(f"Read {df.count()} records from us_simplified table")
+df = spark.read.format("csv") \
+    .option("header", "true") \
+    .option("inferSchema", "true") \
+    .load(csv_path)
 
-# Cast string columns to numeric types
-from pyspark.sql.functions import col
-df = df.withColumn("confirmed", col("confirmed").cast("bigint")) \
-       .withColumn("deaths", col("deaths").cast("bigint"))
+# Rename columns to simpler names
+df = df.withColumnRenamed("Country/Region", "country") \
+       .withColumnRenamed("Province/State", "province") \
+       .withColumnRenamed("Date", "date") \
+       .withColumnRenamed("Confirmed", "confirmed") \
+       .withColumnRenamed("Recovered", "recovered") \
+       .withColumnRenamed("Deaths", "deaths")
 
-# Create summary by state
-print("Creating summary by state...")
-summary_df = df.groupBy("state").agg(
+print(f"Read {df.count()} records from CSV")
+
+# Cast numeric columns to ensure they're the right type
+# Create summary by country
+print("Creating summary by country...")
+summary_df = df.groupBy("country").agg(
     spark_sum("confirmed").alias("total_confirmed"),
     spark_sum("deaths").alias("total_deaths"),
     avg("confirmed").alias("avg_daily_confirmed"),
     count("*").alias("days_reported")
 ).orderBy("total_confirmed", ascending=False)
 
-print("Top 10 states by total cases:")
+print("Top 10 countries by total cases:")
 summary_df.show(10)
 
-# Define S3 output path
-s3_output_path = "s3://amazon-sagemaker-198737698272-us-east-1-4pg255jku47vdz/covid19-data/us_state_summary/"
+# Define S3 output path from parameters
+s3_output_path = args['S3_DATABASE_PATH']
 
 # Write the DataFrame to S3 in Parquet format
 print(f"Writing summary data to: {s3_output_path}")
@@ -75,7 +82,7 @@ try:
             'Name': 'us_state_summary',
             'StorageDescriptor': {
                 'Columns': [
-                    {'Name': 'state', 'Type': 'string'},
+                    {'Name': 'country', 'Type': 'string'},
                     {'Name': 'total_confirmed', 'Type': 'bigint'},
                     {'Name': 'total_deaths', 'Type': 'bigint'},
                     {'Name': 'avg_daily_confirmed', 'Type': 'double'},
