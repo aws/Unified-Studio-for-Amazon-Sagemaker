@@ -123,6 +123,31 @@ properties:
               - number
               - boolean
       additionalProperties: false
+  monitoring:
+    type: object
+    description: "Monitoring and alerts configuration"
+    properties:
+      eventbridge:
+        type: object
+        description: "EventBridge event emission configuration"
+        properties:
+          enabled:
+            type: boolean
+            description: "Enable or disable EventBridge event emission"
+            default: true
+          eventBusName:
+            type: string
+            description: "EventBridge event bus name or ARN"
+            default: "default"
+            examples:
+              - "default"
+              - "arn:aws:events:us-east-1:123456789012:event-bus/custom-bus"
+          includeMetadata:
+            type: boolean
+            description: "Include git, CI/CD, and user metadata in events"
+            default: true
+        additionalProperties: false
+    additionalProperties: false
   targets:
     type: object
     description: "Target environments for deployment"

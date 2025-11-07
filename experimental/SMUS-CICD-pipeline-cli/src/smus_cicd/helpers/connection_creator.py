@@ -13,7 +13,6 @@ class ConnectionCreator:
         self.domain_id = domain_id
         self.region = region
         self.client = boto3.client("datazone", region_name=region)
-        self._account_id = None
 
     def create_from_config(
         self,
@@ -22,7 +21,7 @@ class ConnectionCreator:
         description: str = None,
     ) -> str:
         """
-        Create connection from manifest ConnectionConfig with wildcard replacement.
+        Create connection from manifest ConnectionConfig.
 
         Args:
             environment_id: DataZone environment ID
@@ -32,77 +31,16 @@ class ConnectionCreator:
         Returns:
             Connection ID
         """
-        # Get account ID for wildcard replacement
-        if not self._account_id:
-            sts = boto3.client("sts")
-            self._account_id = sts.get_caller_identity()["Account"]
-
-        # Replace wildcards in properties
-        properties = self._replace_wildcards(connection_config.properties)
-
-        # Create connection using existing method
+        # Create connection directly from config properties
+        # Environment variable substitution (${STS_REGION}, ${STS_ACCOUNT_ID}) 
+        # happens during manifest loading in utils.substitute_env_vars()
         return self.create_connection(
             environment_id=environment_id,
             name=connection_config.name,
             connection_type=connection_config.type,
             description=description,
-            **properties,
+            **connection_config.properties,
         )
-
-    def _replace_wildcards(self, properties: dict) -> dict:
-        """Replace :*: wildcards with account ID in property values."""
-        result = {}
-        for key, value in properties.items():
-            if isinstance(value, str) and ":*:" in value:
-                result[key] = value.replace(":*:", f":{self._account_id}:")
-            else:
-                result[key] = value
-        return result
-        self._account_id = None
-
-    def create_from_config(
-        self,
-        environment_id: str,
-        connection_config,
-        description: str = None,
-    ) -> str:
-        """
-        Create connection from manifest ConnectionConfig with wildcard replacement.
-
-        Args:
-            environment_id: DataZone environment ID
-            connection_config: ConnectionConfig object from manifest
-            description: Optional description
-
-        Returns:
-            Connection ID
-        """
-        # Get account ID for wildcard replacement
-        if not self._account_id:
-            sts = boto3.client("sts")
-            self._account_id = sts.get_caller_identity()["Account"]
-
-        # Replace wildcards in properties
-        properties = self._replace_wildcards(connection_config.properties)
-
-        # Create connection using existing method
-        return self.create_connection(
-            environment_id=environment_id,
-            name=connection_config.name,
-            connection_type=connection_config.type,
-            description=description,
-            **properties,
-        )
-
-    def _replace_wildcards(self, properties: Dict[str, Any]) -> Dict[str, Any]:
-        """Replace :*: wildcards with account ID in property values."""
-        result = {}
-        for key, value in properties.items():
-            if isinstance(value, str) and ":*:" in value:
-                result[key] = value.replace(":*:", f":{self._account_id}:")
-            else:
-                result[key] = value
-        return result
 
     def create_connection(
         self,
@@ -211,13 +149,17 @@ class ConnectionCreator:
             # Extract server name from ARN if not provided
             if not tracking_server_name and tracking_server_arn:
                 tracking_server_name = tracking_server_arn.split("/")[-1]
+                print(f"🔍 DEBUG: Extracted trackingServerName from ARN: {tracking_server_name}")
 
-            return {
+            props = {
                 "mlflowProperties": {
-                    "trackingServerName": tracking_server_name,
                     "trackingServerArn": tracking_server_arn,
+                    "trackingServerName": tracking_server_name,
                 }
             }
+            print(f"🔍 DEBUG: MLflow props being returned: {props}")
+            
+            return props
         elif connection_type == "WORKFLOWS_MWAA":
             return {
                 "workflowsMwaaProperties": {

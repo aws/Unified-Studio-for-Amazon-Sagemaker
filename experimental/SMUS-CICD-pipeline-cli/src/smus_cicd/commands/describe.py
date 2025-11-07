@@ -210,7 +210,7 @@ def describe_command(
                                 typer.echo(f"    Owners: {owners_str}")
 
                             if connections or connect:
-                                typer.echo("    Connections:")
+                                typer.echo(f"    Connections: ({len(project_connections)} total)")
                                 for conn_name, conn_info in project_connections.items():
                                     typer.echo(f"      {conn_name}:")
                                     # Handle error case where conn_info might be a string

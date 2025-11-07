@@ -103,7 +103,11 @@ def _fix_airflow_role_cloudwatch_policy(role_arn: str, region: str) -> bool:
 
 
 def deploy_command(
-    targets: Optional[str], manifest_file: str, bundle: Optional[str] = None
+    targets: Optional[str],
+    manifest_file: str,
+    bundle: Optional[str] = None,
+    emit_events: Optional[bool] = None,
+    event_bus_name: Optional[str] = None,
 ) -> None:
     """
     Deploy bundle files to target's bundle_target_configuration.
@@ -115,6 +119,8 @@ def deploy_command(
         targets: Comma-separated list of target names (optional)
         manifest_file: Path to the pipeline manifest file
         bundle: Optional path to pre-created bundle file
+        emit_events: Optional override for event emission
+        event_bus_name: Optional override for event bus name
     """
     try:
         manifest = PipelineManifest.from_file(manifest_file)
@@ -127,21 +133,123 @@ def deploy_command(
         # Build config with domain info
         config = build_domain_config(target_config)
 
+        # Initialize event emitter
+        from ..helpers.monitoring import (
+            build_bundle_info,
+            build_target_info,
+            collect_metadata,
+            create_event_emitter,
+        )
+
+        emitter = create_event_emitter(
+            manifest, config["region"], emit_events, event_bus_name
+        )
+        typer.echo(
+            f"🔍 EventEmitter initialized: enabled={emitter.enabled}, bus={emitter.event_bus_name}, region={emitter.region}"
+        )
+
+        target_info = build_target_info(target_name, target_config)
+        metadata = collect_metadata(manifest)
+        typer.echo(f"🔍 Metadata collected: {bool(metadata)}")
+
+        # Emit deploy started event
+        bundle_path = bundle or _find_bundle_file(manifest, config)
+        if bundle_path:
+            bundle_info = build_bundle_info(bundle_path)
+            result = emitter.deploy_started(
+                manifest.pipeline_name, target_info, bundle_info, metadata
+            )
+            typer.echo(f"🔍 Deploy started event emitted: {result}")
+
         # Initialize project if needed
         project_manager = ProjectManager(manifest, config)
-        project_manager.ensure_project_exists(target_name, target_config)
+
+        # Emit project init started
+        project_config = {
+            "name": target_config.project.name,
+            "create": target_config.project.create,
+        }
+        emitter.project_init_started(
+            manifest.pipeline_name, target_info, project_config, metadata
+        )
+
+        try:
+            project_manager.ensure_project_exists(target_name, target_config)
+
+            # Emit project init completed
+            project_info = {
+                "name": target_config.project.name,
+                "status": "ACTIVE",
+            }
+            emitter.project_init_completed(
+                manifest.pipeline_name, target_info, project_info, metadata
+            )
+
+        except Exception as e:
+            # Emit project init failed
+            error = {
+                "stage": "project-init",
+                "code": "PROJECT_INIT_FAILED",
+                "message": str(e),
+            }
+            emitter.project_init_failed(
+                manifest.pipeline_name, target_info, error, metadata
+            )
+            raise
 
         # Deploy bundle and track errors
         deployment_success = _deploy_bundle_to_target(
-            target_config, manifest, config, bundle, target_name
+            target_config, manifest, config, bundle, target_name, emitter, metadata
         )
 
         if deployment_success:
+            # Emit deploy completed
+            emitter.deploy_completed(
+                manifest.pipeline_name,
+                target_info,
+                {"status": "success"},
+                metadata,
+            )
             handle_success("Deployment completed successfully!")
         else:
+            # Emit deploy failed
+            error = {
+                "stage": "deploy",
+                "code": "DEPLOYMENT_FAILED",
+                "message": "Deployment failed due to errors during bundle deployment",
+            }
+            emitter.deploy_failed(manifest.pipeline_name, target_info, error, metadata)
             handle_error("Deployment failed due to errors during bundle deployment")
 
     except Exception as e:
+        # Emit deploy failed for unexpected errors
+        try:
+            from ..helpers.monitoring import (
+                build_target_info,
+                collect_metadata,
+                create_event_emitter,
+            )
+
+            manifest = PipelineManifest.from_file(manifest_file)
+            target_name = _get_target_name(targets, manifest)
+            target_config = _get_target_config(target_name, manifest)
+            config = build_domain_config(target_config)
+
+            emitter = create_event_emitter(
+                manifest, config["region"], emit_events, event_bus_name
+            )
+            target_info = build_target_info(target_name, target_config)
+            metadata = collect_metadata(manifest)
+
+            error = {
+                "stage": "deploy",
+                "code": "DEPLOYMENT_ERROR",
+                "message": str(e),
+            }
+            emitter.deploy_failed(manifest.pipeline_name, target_info, error, metadata)
+        except Exception:
+            pass  # Don't fail on event emission errors
+
         handle_error(f"Deployment failed: {e}")
 
 
@@ -215,6 +323,8 @@ def _deploy_bundle_to_target(
     config: Dict[str, Any],
     bundle_file: Optional[str] = None,
     target_name: Optional[str] = None,
+    emitter=None,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """
     Deploy bundle files to the target environment.
@@ -225,10 +335,14 @@ def _deploy_bundle_to_target(
         config: Configuration dictionary
         bundle_file: Optional path to pre-created bundle file
         target_name: Optional target name for workflow tagging
+        emitter: Optional EventEmitter for monitoring
+        metadata: Optional metadata for events
 
     Returns:
         True if deployment succeeded, False otherwise
     """
+    from ..helpers.monitoring import build_target_info
+
     bundle_target_config = target_config.bundle_target_configuration
     storage_configs = bundle_target_config.storage or []
     git_configs = bundle_target_config.git or []
@@ -253,24 +367,67 @@ def _deploy_bundle_to_target(
 
     typer.echo(f"Bundle file: {bundle_path}")
 
+    # Emit bundle upload started
+    if emitter:
+        from ..helpers.monitoring import build_bundle_info
+
+        target_info = build_target_info(target_name, target_config)
+        bundle_info = build_bundle_info(bundle_path)
+        emitter.bundle_upload_started(
+            manifest.pipeline_name, target_info, bundle_info, metadata
+        )
+
     # Deploy storage items (includes workflows)
     storage_results = []
-    for storage_config in storage_configs:
-        result = _deploy_storage_item(
-            bundle_path, storage_config, target_config.project.name, config
-        )
-        storage_results.append(result)
+    try:
+        for storage_config in storage_configs:
+            result = _deploy_storage_item(
+                bundle_path, storage_config, target_config.project.name, config
+            )
+            storage_results.append(result)
 
-    # Deploy git items
-    git_results = []
-    for git_config in git_configs:
-        result = _deploy_git_item(
-            bundle_path, git_config, target_config.project.name, config
-        )
-        git_results.append(result)
+        # Deploy git items
+        git_results = []
+        for git_config in git_configs:
+            result = _deploy_git_item(
+                bundle_path, git_config, target_config.project.name, config
+            )
+            git_results.append(result)
 
-    # Display deployment summary
-    _display_deployment_summary_new(bundle_path, storage_results, git_results)
+        # Display deployment summary
+        _display_deployment_summary_new(bundle_path, storage_results, git_results)
+
+        # Emit bundle upload completed
+        if emitter:
+            deployment_results = {
+                "storageDeployments": [
+                    {
+                        "s3Location": s3_uri,
+                        "filesCount": len(files_list) if files_list else 0,
+                    }
+                    for files_list, s3_uri in storage_results
+                ],
+                "gitDeployments": [
+                    {"filesCount": len(files_list) if files_list else 0}
+                    for files_list, _ in git_results
+                ],
+            }
+            emitter.bundle_upload_completed(
+                manifest.pipeline_name, target_info, deployment_results, metadata
+            )
+
+    except Exception as e:
+        # Emit bundle upload failed
+        if emitter:
+            error = {
+                "stage": "bundle-upload",
+                "code": "BUNDLE_UPLOAD_FAILED",
+                "message": str(e),
+            }
+            emitter.bundle_upload_failed(
+                manifest.pipeline_name, target_info, error, metadata
+            )
+        raise
 
     # Create serverless Airflow workflows if configured
     effective_target_name = target_name or target_config.name
@@ -293,10 +450,14 @@ def _deploy_bundle_to_target(
         effective_target_name,
         s3_bucket,
         s3_prefix,
+        emitter,
+        metadata,
     )
 
     # Process catalog assets if configured
-    asset_success = _process_catalog_assets(target_config, manifest, config)
+    asset_success = _process_catalog_assets(
+        target_config, manifest, config, emitter, metadata
+    )
 
     # Return overall success
     all_success = all(r[0] is not None for r in storage_results + git_results)
@@ -784,6 +945,8 @@ def _process_catalog_assets(
     target_config,
     manifest: PipelineManifest,
     config: Dict[str, Any],
+    emitter=None,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """
     Process catalog assets for DataZone access.
@@ -792,10 +955,14 @@ def _process_catalog_assets(
         target_config: Target configuration object
         manifest: Pipeline manifest object
         config: Configuration dictionary
+        emitter: Optional EventEmitter for monitoring
+        metadata: Optional metadata for events
 
     Returns:
         True if all assets processed successfully, False otherwise
     """
+    from ..helpers.monitoring import build_target_info
+
     # Check if catalog processing is disabled in bundle target configuration
     if (
         target_config.bundle_target_configuration
@@ -811,6 +978,20 @@ def _process_catalog_assets(
         return True
 
     typer.echo("🔍 Processing catalog assets...")
+
+    # Emit catalog assets started
+    if emitter:
+        target_info = build_target_info(target_config.name, target_config)
+        asset_configs = [
+            {
+                "assetId": asset.selector.assetId,
+                "permission": asset.permission,
+            }
+            for asset in manifest.bundle.catalog.assets
+        ]
+        emitter.catalog_assets_started(
+            manifest.pipeline_name, target_info, asset_configs, metadata
+        )
 
     # Import datazone helper functions
     from ..helpers.datazone import (
@@ -831,14 +1012,36 @@ def _process_catalog_assets(
     )
 
     if not domain_id:
-        handle_error(f"Could not resolve domain in region {region}")
+        error_msg = f"Could not resolve domain in region {region}"
+        if emitter:
+            target_info = build_target_info(target_config.name, target_config)
+            error = {
+                "stage": "catalog-assets",
+                "code": "DOMAIN_NOT_FOUND",
+                "message": error_msg,
+            }
+            emitter.catalog_assets_failed(
+                manifest.pipeline_name, target_info, error, metadata
+            )
+        handle_error(error_msg)
         return False
 
     project_name = target_config.project.name
 
     project_id = get_project_id_by_name(project_name, domain_id, region)
     if not project_id:
-        handle_error(f"Could not find project ID for project: {project_name}")
+        error_msg = f"Could not find project ID for project: {project_name}"
+        if emitter:
+            target_info = build_target_info(target_config.name, target_config)
+            error = {
+                "stage": "catalog-assets",
+                "code": "PROJECT_NOT_FOUND",
+                "message": error_msg,
+            }
+            emitter.catalog_assets_failed(
+                manifest.pipeline_name, target_info, error, metadata
+            )
+        handle_error(error_msg)
         return False
 
     # Convert assets to dictionary format for processing
@@ -866,11 +1069,47 @@ def _process_catalog_assets(
         success = process_catalog_assets(domain_id, project_id, assets_data, region)
         if success:
             typer.echo("✅ All catalog assets processed successfully")
+
+            # Emit catalog assets completed
+            if emitter:
+                target_info = build_target_info(target_config.name, target_config)
+                asset_results = [
+                    {
+                        "assetId": asset.selector.assetId,
+                        "status": "processed",
+                    }
+                    for asset in manifest.bundle.catalog.assets
+                ]
+                emitter.catalog_assets_completed(
+                    manifest.pipeline_name, target_info, asset_results, metadata
+                )
         else:
-            handle_error("Failed to process catalog assets")
+            error_msg = "Failed to process catalog assets"
+            if emitter:
+                target_info = build_target_info(target_config.name, target_config)
+                error = {
+                    "stage": "catalog-assets",
+                    "code": "PROCESSING_FAILED",
+                    "message": error_msg,
+                }
+                emitter.catalog_assets_failed(
+                    manifest.pipeline_name, target_info, error, metadata
+                )
+            handle_error(error_msg)
         return success
     except Exception as e:
-        handle_error(f"Error processing catalog assets: {e}")
+        error_msg = f"Error processing catalog assets: {e}"
+        if emitter:
+            target_info = build_target_info(target_config.name, target_config)
+            error = {
+                "stage": "catalog-assets",
+                "code": "PROCESSING_ERROR",
+                "message": str(e),
+            }
+            emitter.catalog_assets_failed(
+                manifest.pipeline_name, target_info, error, metadata
+            )
+        handle_error(error_msg)
         return False
 
 
@@ -882,6 +1121,8 @@ def _create_airflow_serverless_workflows(
     target_name: str,
     s3_bucket: Optional[str],
     s3_prefix: Optional[str],
+    emitter=None,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> bool:
     """
     Create serverless Airflow workflows if airflow-serverless flag is enabled.
@@ -894,10 +1135,14 @@ def _create_airflow_serverless_workflows(
         target_name: Name of the target
         s3_bucket: S3 bucket where files were deployed
         s3_prefix: S3 prefix where files were deployed
+        emitter: Optional EventEmitter for monitoring
+        metadata: Optional metadata for events
 
     Returns:
         True if all workflows created successfully, False otherwise
     """
+    from ..helpers.monitoring import build_target_info
+
     # Check if any workflow configuration has airflow-serverless enabled
     airflow_serverless_enabled = False
 
@@ -921,6 +1166,21 @@ def _create_airflow_serverless_workflows(
 
     typer.echo("🚀 Creating serverless Airflow workflows...")
 
+    # Emit workflow creation started
+    if emitter:
+        target_info = build_target_info(target_name, target_config)
+        workflows_info = [
+            {
+                "workflowName": wf.workflow_name,
+                "engine": wf.engine,
+            }
+            for wf in manifest.workflows
+            if wf.engine == "airflow-serverless"
+        ]
+        emitter.workflow_creation_started(
+            manifest.pipeline_name, target_info, workflows_info, metadata
+        )
+
     try:
         from ..helpers import airflow_serverless
         from ..helpers.bundle_storage import download_bundle, is_s3_url
@@ -942,24 +1202,68 @@ def _create_airflow_serverless_workflows(
 
         role_arn = datazone.get_project_user_role_arn(project_name, domain_name, region)
         if not role_arn:
-            typer.echo("❌ No project user role found")
+            error_msg = "No project user role found"
+            typer.echo(f"❌ {error_msg}")
+            if emitter:
+                target_info = build_target_info(target_name, target_config)
+                error = {
+                    "stage": "workflow-creation",
+                    "code": "ROLE_NOT_FOUND",
+                    "message": error_msg,
+                }
+                emitter.workflow_creation_failed(
+                    manifest.pipeline_name, target_info, error, metadata
+                )
             return False
 
         # Get domain and project IDs for workflow creation
         domain_id = datazone.get_domain_id_by_name(domain_name, region)
         if not domain_id:
-            typer.echo(f"❌ Could not find domain ID for domain: {domain_name}")
+            error_msg = f"Could not find domain ID for domain: {domain_name}"
+            typer.echo(f"❌ {error_msg}")
+            if emitter:
+                target_info = build_target_info(target_name, target_config)
+                error = {
+                    "stage": "workflow-creation",
+                    "code": "DOMAIN_NOT_FOUND",
+                    "message": error_msg,
+                }
+                emitter.workflow_creation_failed(
+                    manifest.pipeline_name, target_info, error, metadata
+                )
             return False
 
         project_id = datazone.get_project_id_by_name(project_name, domain_id, region)
         if not project_id:
-            typer.echo(f"❌ Could not find project ID for project: {project_name}")
+            error_msg = f"Could not find project ID for project: {project_name}"
+            typer.echo(f"❌ {error_msg}")
+            if emitter:
+                target_info = build_target_info(target_name, target_config)
+                error = {
+                    "stage": "workflow-creation",
+                    "code": "PROJECT_NOT_FOUND",
+                    "message": error_msg,
+                }
+                emitter.workflow_creation_failed(
+                    manifest.pipeline_name, target_info, error, metadata
+                )
             return False
 
         workflows_created = []
 
         if not s3_bucket or s3_prefix is None:
-            typer.echo("❌ Could not determine S3 location from storage deployment")
+            error_msg = "Could not determine S3 location from storage deployment"
+            typer.echo(f"❌ {error_msg}")
+            if emitter:
+                target_info = build_target_info(target_name, target_config)
+                error = {
+                    "stage": "workflow-creation",
+                    "code": "S3_LOCATION_NOT_FOUND",
+                    "message": error_msg,
+                }
+                emitter.workflow_creation_failed(
+                    manifest.pipeline_name, target_info, error, metadata
+                )
             return False
 
         # Search for DAG files in S3
@@ -1090,29 +1394,90 @@ def _create_airflow_serverless_workflows(
                     status = workflow_status.get("status")
                     typer.echo(f"   Status: {status}")
                     if status == "FAILED":
-                        typer.echo(f"❌ Workflow {workflow_name} is in FAILED state")
+                        error_msg = f"Workflow {workflow_name} is in FAILED state"
+                        typer.echo(f"❌ {error_msg}")
+                        if emitter:
+                            target_info = build_target_info(target_name, target_config)
+                            error = {
+                                "stage": "workflow-creation",
+                                "code": "WORKFLOW_FAILED",
+                                "message": error_msg,
+                                "details": {"workflowName": workflow_name},
+                            }
+                            emitter.workflow_creation_failed(
+                                manifest.pipeline_name, target_info, error, metadata
+                            )
                         return False
                 else:
                     error_msg = workflow_status.get("error")
                     typer.echo(f"❌ Could not verify workflow status: {error_msg}")
+                    if emitter:
+                        target_info = build_target_info(target_name, target_config)
+                        error = {
+                            "stage": "workflow-creation",
+                            "code": "WORKFLOW_STATUS_CHECK_FAILED",
+                            "message": error_msg,
+                            "details": {"workflowName": workflow_name},
+                        }
+                        emitter.workflow_creation_failed(
+                            manifest.pipeline_name, target_info, error, metadata
+                        )
                     return False
             else:
-                typer.echo(
-                    f"❌ Failed to create workflow {workflow_name}: {result.get('error')}"
-                )
+                error_msg = result.get("error")
+                typer.echo(f"❌ Failed to create workflow {workflow_name}: {error_msg}")
+                if emitter:
+                    target_info = build_target_info(target_name, target_config)
+                    error = {
+                        "stage": "workflow-creation",
+                        "code": "WORKFLOW_CREATION_FAILED",
+                        "message": error_msg,
+                        "details": {"workflowName": workflow_name},
+                    }
+                    emitter.workflow_creation_failed(
+                        manifest.pipeline_name, target_info, error, metadata
+                    )
                 return False
 
         if workflows_created:
             typer.echo(
                 f"\n🎉 Successfully created {len(workflows_created)} Overdrive workflows"
             )
+
+            # Emit workflow creation completed
+            if emitter:
+                target_info = build_target_info(target_name, target_config)
+                workflow_results = [
+                    {
+                        "workflowName": wf["name"],
+                        "engine": "airflow-serverless",
+                        "status": "created",
+                        "workflowArn": wf["arn"],
+                    }
+                    for wf in workflows_created
+                ]
+                emitter.workflow_creation_completed(
+                    manifest.pipeline_name, target_info, workflow_results, metadata
+                )
+
             return True
         else:
             typer.echo("⚠️ No workflows were created")
             return True
 
     except Exception as e:
-        typer.echo(f"❌ Error creating Overdrive workflows: {e}")
+        error_msg = f"Error creating Overdrive workflows: {e}"
+        typer.echo(f"❌ {error_msg}")
+        if emitter:
+            target_info = build_target_info(target_name, target_config)
+            error = {
+                "stage": "workflow-creation",
+                "code": "WORKFLOW_CREATION_ERROR",
+                "message": str(e),
+            }
+            emitter.workflow_creation_failed(
+                manifest.pipeline_name, target_info, error, metadata
+            )
         return False
 
 

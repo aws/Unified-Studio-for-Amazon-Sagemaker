@@ -55,9 +55,17 @@ if __name__ == '__main__':
     # MLflow setup if available
     if mlflow_available:
         mlflow_tracking_uri = os.environ.get('MLFLOW_TRACKING_SERVER_ARN')
-        if mlflow_tracking_uri:
-            mlflow.set_tracking_uri(mlflow_tracking_uri)
-            print(f"MLflow tracking URI set to: {mlflow_tracking_uri}")
+        if not mlflow_tracking_uri:
+            raise ValueError("MLFLOW_TRACKING_SERVER_ARN environment variable is required but not set")
+        
+        # Import sagemaker_mlflow to enable ARN resolution
+        try:
+            import sagemaker_mlflow
+        except ImportError:
+            print("Warning: sagemaker_mlflow not available, ARN resolution may fail")
+        
+        mlflow.set_tracking_uri(mlflow_tracking_uri)
+        print(f"MLflow tracking URI set to: {mlflow_tracking_uri}")
         
         # Start MLflow run
         with mlflow.start_run():

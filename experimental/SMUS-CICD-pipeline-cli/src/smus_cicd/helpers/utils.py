@@ -38,6 +38,10 @@ def substitute_env_vars(data: Union[Dict, List, str]) -> Union[Dict, List, str]:
     Recursively substitute environment variables in YAML data.
 
     Supports ${VAR_NAME} syntax for environment variable substitution.
+    
+    Pseudo environment variables (auto-resolved from AWS credentials):
+    - STS_ACCOUNT_ID: Current AWS account ID from STS
+    - STS_REGION: Current AWS region from boto3 session
 
     Args:
         data: YAML data (dict, list, or string)
@@ -56,6 +60,16 @@ def substitute_env_vars(data: Union[Dict, List, str]) -> Union[Dict, List, str]:
         def replace_var(match):
             var_name = match.group(1)
             default_value = match.group(2) if match.group(2) is not None else ""
+            
+            # Handle pseudo environment variables
+            if var_name == "STS_ACCOUNT_ID":
+                import boto3
+                return boto3.client("sts").get_caller_identity()["Account"]
+            elif var_name == "STS_REGION":
+                import boto3
+                return boto3.Session().region_name or default_value
+            
+            # Regular environment variable lookup
             return os.getenv(var_name, default_value)
 
         return re.sub(pattern, replace_var, data)
@@ -360,60 +374,75 @@ def _get_project_connections(
     try:
         datazone_client = datazone._get_datazone_client(region)
 
-        response = datazone_client.list_connections(
-            domainIdentifier=domain_id, projectIdentifier=project_id
-        )
-
         connections_dict = {}
-        for conn in response.get("items", []):
-            conn_name = conn.get("name", "unknown")
-            conn_type = conn.get("type", "")
-
-            # Check if WORKFLOWS_MWAA is actually serverless
-            if conn_type == "WORKFLOWS_MWAA":
-                props = conn.get("props", {})
-                if "workflowsServerlessProperties" in props:
-                    conn_type = "WORKFLOWS_SERVERLESS"
-
-            connections_dict[conn_name] = {
-                "connectionId": conn.get("connectionId", ""),
-                "type": conn_type,
-                "region": region,
+        next_token = None
+        
+        # Paginate through all connections
+        while True:
+            list_params = {
+                'domainIdentifier': domain_id,
+                'projectIdentifier': project_id,
+                'maxResults': 50
             }
+            if next_token:
+                list_params['nextToken'] = next_token
+                
+            response = datazone_client.list_connections(**list_params)
 
-            # Add S3 URI if it's an S3 connection
-            if conn_type == "S3":
-                props = conn.get("props", {}).get("s3Properties", {})
-                if props.get("s3Uri"):
-                    connections_dict[conn_name]["s3Uri"] = props["s3Uri"]
+            for conn in response.get("items", []):
+                conn_name = conn.get("name", "unknown")
+                conn_type = conn.get("type", "")
 
-            # Add workgroup info for ATHENA connections
-            elif conn_type == "ATHENA":
-                props = conn.get("props", {}).get("athenaProperties", {})
-                if props.get("workgroupName"):
-                    connections_dict[conn_name]["workgroupName"] = props[
-                        "workgroupName"
-                    ]
+                # Check if WORKFLOWS_MWAA is actually serverless
+                if conn_type == "WORKFLOWS_MWAA":
+                    props = conn.get("props", {})
+                    if "workflowsServerlessProperties" in props:
+                        conn_type = "WORKFLOWS_SERVERLESS"
 
-            # Add SPARK connection properties
-            elif conn_type == "SPARK":
-                # Need to get full connection details for sparkGlueProperties and configurations
-                try:
-                    detail_response = datazone_client.get_connection(
-                        domainIdentifier=domain_id,
-                        identifier=conn.get("connectionId", ""),
-                    )
-                    props = detail_response.get("props", {}).get(
-                        "sparkGlueProperties", {}
-                    )
-                    if props:
-                        connections_dict[conn_name]["sparkGlueProperties"] = props
+                connections_dict[conn_name] = {
+                    "connectionId": conn.get("connectionId", ""),
+                    "type": conn_type,
+                    "region": region,
+                }
 
-                    configurations = detail_response.get("configurations", [])
-                    if configurations:
-                        connections_dict[conn_name]["configurations"] = configurations
-                except Exception as e:
-                    logger.warning(f"Failed to get SPARK connection details: {e}")
+                # Add S3 URI if it's an S3 connection
+                if conn_type == "S3":
+                    props = conn.get("props", {}).get("s3Properties", {})
+                    if props.get("s3Uri"):
+                        connections_dict[conn_name]["s3Uri"] = props["s3Uri"]
+
+                # Add workgroup info for ATHENA connections
+                elif conn_type == "ATHENA":
+                    props = conn.get("props", {}).get("athenaProperties", {})
+                    if props.get("workgroupName"):
+                        connections_dict[conn_name]["workgroupName"] = props[
+                            "workgroupName"
+                        ]
+
+                # Add SPARK connection properties
+                elif conn_type == "SPARK":
+                    # Need to get full connection details for sparkGlueProperties and configurations
+                    try:
+                        detail_response = datazone_client.get_connection(
+                            domainIdentifier=domain_id,
+                            identifier=conn.get("connectionId", ""),
+                        )
+                        props = detail_response.get("props", {}).get(
+                            "sparkGlueProperties", {}
+                        )
+                        if props:
+                            connections_dict[conn_name]["sparkGlueProperties"] = props
+
+                        configurations = detail_response.get("configurations", [])
+                        if configurations:
+                            connections_dict[conn_name]["configurations"] = configurations
+                    except Exception as e:
+                        logger.warning(f"Failed to get SPARK connection details: {e}")
+            
+            # Check for next page
+            next_token = response.get('nextToken')
+            if not next_token:
+                break
 
         return connections_dict
 

@@ -77,6 +77,11 @@ class ContextResolver:
                 "kms_key_arn": kms_key_arn or "",
                 "connection": {},
             },
+            "domain": {
+                "id": self.domain_id,
+                "name": self.domain_name,
+                "region": self.region,
+            },
             "env": self.env_vars,
         }
 
@@ -136,11 +141,15 @@ class ContextResolver:
 
         Returns:
             Content with variables replaced
+
+        Raises:
+            ValueError: If any variable cannot be resolved
         """
         context = self._build_context()
 
-        # Pattern matches {env.VAR} or {proj.property.nested}
-        pattern = r"\{(env|proj)\.([^}]+)\}"
+        # Pattern matches {env.VAR}, {proj.property.nested}, or {domain.property}
+        pattern = r"\{(env|proj|domain)\.([^}]+)\}"
+        unresolved = []
 
         def replacer(match):
             namespace = match.group(1)
@@ -151,36 +160,50 @@ class ContextResolver:
 
                 # Special handling for proj.connection.* paths
                 if namespace == "proj" and path.startswith("connection."):
-                    # Split into: connection, conn_name, property
-                    parts = path.split(".", 2)
-                    if len(parts) >= 3:
-                        # parts[0] = "connection"
-                        # parts[1] = first part of connection name
-                        # parts[2] = rest (could be more connection name + property)
+                    conn_dict = value["connection"]
+                    remaining = path[11:]  # Remove "connection."
 
-                        # Find the connection name by checking what exists in context
-                        conn_dict = value["connection"]
-                        remaining = path[11:]  # Remove "connection."
-
-                        # Try to match connection names (they can have dots)
-                        for conn_name in conn_dict.keys():
-                            if remaining.startswith(conn_name + "."):
-                                # Found the connection
-                                property_name = remaining[len(conn_name) + 1 :]
+                    # Try to match connection names (they can have dots)
+                    for conn_name in conn_dict.keys():
+                        if remaining.startswith(conn_name + "."):
+                            # Found the connection
+                            property_name = remaining[len(conn_name) + 1 :]
+                            if property_name in conn_dict[conn_name]:
                                 return str(conn_dict[conn_name][property_name])
-                            elif remaining == conn_name:
-                                # Requesting the whole connection object
-                                return str(conn_dict[conn_name])
+                            # Special case: extract bucket from s3Uri for S3 connections
+                            elif (
+                                property_name == "bucket"
+                                and "s3Uri" in conn_dict[conn_name]
+                            ):
+                                s3_uri = conn_dict[conn_name]["s3Uri"]
+                                # Extract bucket from s3://bucket-name/path/
+                                bucket = s3_uri.replace("s3://", "").split("/")[0]
+                                return bucket
+                            else:
+                                unresolved.append(f"{{{namespace}.{path}}}")
+                                return match.group(0)
+                        elif remaining == conn_name:
+                            # Requesting the whole connection object
+                            return str(conn_dict[conn_name])
 
-                        # Connection not found
-                        return match.group(0)
+                    # Connection not found
+                    unresolved.append(f"{{{namespace}.{path}}}")
+                    return match.group(0)
                 else:
                     # Normal path traversal
                     for key in path.split("."):
                         value = value[key]
                     return str(value)
             except (KeyError, TypeError):
-                # Keep original if not found
+                unresolved.append(f"{{{namespace}.{path}}}")
                 return match.group(0)
 
-        return re.sub(pattern, replacer, content)
+        resolved = re.sub(pattern, replacer, content)
+
+        if unresolved:
+            raise ValueError(
+                f"Failed to resolve variables: {', '.join(unresolved)}\n"
+                f"Available connections: {', '.join(context['proj']['connection'].keys())}"
+            )
+
+        return resolved

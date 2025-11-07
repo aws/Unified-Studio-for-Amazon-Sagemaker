@@ -164,6 +164,22 @@ class WorkflowConfig:
 
 
 @dataclass
+class EventBridgeConfig:
+    """EventBridge monitoring configuration."""
+
+    enabled: bool = True
+    eventBusName: str = "default"
+    includeMetadata: bool = True
+
+
+@dataclass
+class MonitoringConfig:
+    """Monitoring configuration."""
+
+    eventbridge: Optional[EventBridgeConfig] = None
+
+
+@dataclass
 class PipelineManifest:
     """Complete pipeline manifest data model."""
 
@@ -171,6 +187,7 @@ class PipelineManifest:
     bundle: BundleConfig
     targets: Dict[str, TargetConfig]
     workflows: List[WorkflowConfig] = field(default_factory=list)
+    monitoring: Optional[MonitoringConfig] = None
     _file_path: Optional[str] = field(default=None, init=False)
 
     @classmethod
@@ -407,11 +424,26 @@ class PipelineManifest:
             )
             workflows.append(workflow)
 
+        # Parse monitoring configuration
+        monitoring = None
+        monitoring_data = data.get("monitoring")
+        if monitoring_data:
+            eventbridge = None
+            eventbridge_data = monitoring_data.get("eventbridge")
+            if eventbridge_data is not None:
+                eventbridge = EventBridgeConfig(
+                    enabled=eventbridge_data.get("enabled", True),
+                    eventBusName=eventbridge_data.get("eventBusName", "default"),
+                    includeMetadata=eventbridge_data.get("includeMetadata", True),
+                )
+            monitoring = MonitoringConfig(eventbridge=eventbridge)
+
         return cls(
             pipeline_name=data.get("pipelineName", ""),
             bundle=bundle,
             targets=targets,
             workflows=workflows,
+            monitoring=monitoring,
         )
 
     def get_target(self, target_name: str) -> Optional[TargetConfig]:

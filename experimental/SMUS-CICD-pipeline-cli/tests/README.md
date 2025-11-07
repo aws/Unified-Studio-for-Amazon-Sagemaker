@@ -6,25 +6,53 @@ This directory contains unit tests and integration tests for the SMUS CI/CD CLI.
 
 Before running integration tests, you must deploy the required AWS infrastructure:
 
-### 1. Deploy SageMaker Domain
+### 1. Deploy MLflow Tracking Server
+
+The basic_pipeline test requires an MLflow tracking server in us-east-2:
+
+```bash
+cd tests/scripts/setup/5-testing-infrastructure
+
+# Get account ID
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+REGION="us-east-2"
+
+# Deploy MLflow stack
+aws cloudformation deploy \
+  --template-file shared-resources-template.yaml \
+  --stack-name "smus-shared-resources-use2" \
+  --parameter-overrides \
+    S3BucketName="smus-mlflow-artifacts-${ACCOUNT_ID}-${REGION}" \
+    TrackingServerName="smus-integration-mlflow-use2" \
+    TrackingServerSize="Small" \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --region "$REGION"
+```
+
+### 2. Create dev-marketing Project Manually
+
+The basic_pipeline test bundles from the dev-marketing project, which must exist before running tests:
+
+1. Navigate to SageMaker Unified Studio console in us-east-2
+2. Create a project named `dev-marketing` in your domain
+3. Wait for project environment deployment to complete
+4. Verify the project has default connections (s3_shared, iam, etc.)
+
+**Note:** The test target `test-marketing` will be auto-created during test execution, but `dev-marketing` must exist beforehand for bundling to work.
+
+### 3. Deploy SageMaker Domain (if not exists)
 ```bash
 cd tests/scripts
 ./deploy-domain.sh
 ```
 
-### 2. Deploy Environment Blueprints and Profiles
+### 4. Deploy Environment Blueprints and Profiles
 ```bash
 cd tests/scripts
 ./deploy-blueprints-profiles.sh
 ```
 
-### 3. Deploy Dev Project
-```bash
-cd tests/scripts
-./deploy-projects.sh
-```
-
-**Important:** These scripts must be run in order as they have dependencies on each other. The integration tests require these AWS resources to be deployed and available.
+**Important:** These resources must be created before running integration tests. The tests require these AWS resources to be deployed and available.
 
 ## Test Structure
 

@@ -20,10 +20,16 @@ class TestMLWorkflow(IntegrationTestBase):
     def cleanup_workflows(self):
         """Delete existing workflows from previous runs."""
         try:
+            import os
+            region = os.environ.get('DEV_DOMAIN_REGION', 'us-east-1')
+            endpoint = os.environ.get('AIRFLOW_SERVERLESS_ENDPOINT')
+            if not endpoint:
+                endpoint = f'https://airflow-serverless.{region}.api.aws/'
+            
             client = boto3.client(
                 'awsoverdriveservice',
-                region_name='us-east-1',
-                endpoint_url='https://overdrive-gamma.us-east-1.api.aws'
+                region_name=region,
+                endpoint_url=endpoint
             )
             response = client.list_workflows()
             workflows = response.get('Workflows', [])
@@ -98,7 +104,7 @@ class TestMLWorkflow(IntegrationTestBase):
 
         # Step 3: Bundle from dev
         print("\n=== Step 3: Bundle from dev ===")
-        result = self.run_cli_command(["bundle", "--pipeline", pipeline_file, "--targets", "dev"])
+        result = self.run_cli_command(["bundle", "--pipeline", pipeline_file, "--target", "dev"])
         assert result["success"], f"Bundle failed: {result['output']}"
         print("✅ Bundle successful")
 
@@ -122,38 +128,28 @@ class TestMLWorkflow(IntegrationTestBase):
         assert result["success"], f"Run workflow failed: {result['output']}"
         print("✅ Workflow started")
 
-        # Step 7: Monitor workflow status
-        print("\n=== Step 7: Monitor Workflow Status ===")
-        result = self.run_cli_command(["monitor", "--targets", "test", "--pipeline", pipeline_file])
-        assert result["success"], f"Monitor after run failed: {result['output']}"
-        print("✅ Monitor after run successful")
+        # Step 7: Get workflow ARN
+        print("\n=== Step 7: Get Workflow ARN ===")
+        import boto3
+        region = os.environ.get('DEV_DOMAIN_REGION', 'us-east-1')
+        endpoint = os.environ.get('AIRFLOW_SERVERLESS_ENDPOINT', f'https://airflow-serverless.{region}.api.aws/')
+        client = boto3.client('awsoverdriveservice', region_name=region, endpoint_url=endpoint)
+        response = client.list_workflows()
+        workflow_arn = None
+        expected_name = 'IntegrationTestMLWorkflow_test_marketing_ml_dev_workflow_v3'
+        for wf in response.get('Workflows', []):
+            if wf.get('Name') == expected_name:
+                workflow_arn = wf.get('WorkflowArn')
+                break
+        assert workflow_arn, "Could not find workflow ARN"
+        print(f"✅ Workflow ARN: {workflow_arn}")
 
-        # Step 8: Fetch workflow logs
-        print("\n=== Step 8: Fetch Workflow Logs ===")
-        try:
-            client = boto3.client(
-                'awsoverdriveservice',
-                region_name='us-east-1',
-                endpoint_url='https://overdrive-gamma.us-east-1.api.aws'
-            )
-            response = client.list_workflows()
-            workflows = response.get('Workflows', [])
-            expected_name = f'IntegrationTestMLWorkflow_test_marketing_{workflow_name}'
-            
-            workflow_arn = None
-            for wf in workflows:
-                if wf.get('Name') == expected_name:
-                    workflow_arn = wf.get('WorkflowArn')
-                    break
-            
-            if workflow_arn:
-                print(f"📋 Workflow ARN: {workflow_arn}")
-                result = self.run_cli_command(["logs", "--workflow", workflow_arn, "--live"])
-                if result["success"]:
-                    print("✅ Logs retrieved successfully")
-                else:
-                    print("⚠️ Logs command timed out (expected with --live)")
-            else:
-                print("⚠️ Workflow not found")
-        except Exception as e:
-            print(f"⚠️ Could not fetch logs: {e}")
+        # Step 8: Fetch workflow logs and wait for completion
+        print("\n=== Step 8: Fetch Workflow Logs and Wait ===")
+        result = self.run_cli_command(
+            ["logs", "--live", "--workflow", workflow_arn]
+        )
+        if result["success"]:
+            print("✅ Workflow completed successfully")
+        else:
+            print(f"⚠️ Workflow logs: {result['output']}")

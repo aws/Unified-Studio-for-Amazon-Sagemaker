@@ -121,12 +121,14 @@ def test_command(
 
             # Load AWS config
             config = load_config()
-            config["domain"] = {
-                "name": target_config.domain.name,
-                "region": target_config.domain.region,
-            }
+            # Build domain config with name and tags for proper resolution
+            domain_dict = {"region": target_config.domain.region}
+            if target_config.domain.name:
+                domain_dict["name"] = target_config.domain.name
+            if target_config.domain.tags:
+                domain_dict["tags"] = target_config.domain.tags
+            config["domain"] = domain_dict
             config["region"] = target_config.domain.region
-            config["domain_name"] = target_config.domain.name
 
             # Get project info for context
             project_info = get_datazone_project_info(target_config.project.name, config)
@@ -144,6 +146,22 @@ def test_command(
                 _display_target_summary(target_name, test_results, output)
                 continue
 
+            # Get domain name from domain_id if not provided
+            domain_name = target_config.domain.name
+            if not domain_name and project_info.get("domainId"):
+                import boto3
+
+                try:
+                    datazone_client = boto3.client(
+                        "datazone", region_name=target_config.domain.region
+                    )
+                    domain_response = datazone_client.get_domain(
+                        identifier=project_info["domainId"]
+                    )
+                    domain_name = domain_response.get("name", "")
+                except Exception:
+                    domain_name = ""
+
             # Generate test configuration
             from ..helpers.test_config import generate_test_config
 
@@ -153,7 +171,7 @@ def test_command(
                     "project_id", project_info.get("projectId", "")
                 ),
                 domain_id=project_info.get("domainId", ""),
-                domain_name=target_config.domain.name,
+                domain_name=domain_name,
                 region=target_config.domain.region,
                 target_name=target_name,
                 env_vars=target_config.environment_variables or {},
@@ -196,7 +214,7 @@ def smus_config():
                     "SMUS_PROJECT_NAME": target_config.project.name,
                     "SMUS_TARGET_NAME": target_name,
                     "SMUS_REGION": target_config.domain.region,
-                    "SMUS_DOMAIN_NAME": target_config.domain.name,
+                    "SMUS_DOMAIN_NAME": domain_name or "",
                     "SMUS_TEST_CONFIG": config_file,
                 }
             )

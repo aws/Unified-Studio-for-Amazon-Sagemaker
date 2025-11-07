@@ -1,7 +1,7 @@
 pipelineName: DemoMarketingPipeline
 domain:
   name: your-domain-name
-  region: us-east-1
+  region: ${DEV_DOMAIN_REGION:us-east-1}
 bundle:
   bundlesDirectory: ./bundles
 targets:

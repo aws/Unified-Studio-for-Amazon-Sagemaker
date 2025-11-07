@@ -1,343 +1,396 @@
-# SMUS CI/CD CLI
+# SMUS CI/CD Pipeline CLI
 
-A CLI tool for managing CI/CD pipelines in SageMaker Unified Studio (SMUS), enabling automated deployment of data science workflows and assets across multiple environments.
+**Automate deployment of data science workflows across SageMaker Unified Studio environments**
 
-<!-- Trigger integration tests -->
+Deploy Airflow DAGs, Jupyter notebooks, and ML pipelines from development to production with confidence. Built for data engineers, ML engineers, and platform teams managing multi-environment data science workflows.
 
-## Quick Reference
+---
 
-See **[Pipeline Manifest Reference](docs/pipeline-manifest.md)** for complete guide to pipeline configuration.
+## Why SMUS CI/CD CLI?
 
-See **[Substitutions and Variables](docs/substitutions-and-variables.md)** for dynamic variable resolution in workflows.
+✅ **Deploy with Confidence** - Automated testing and validation before production  
+✅ **Multi-Environment Management** - Dev → Test → Prod with environment-specific configuration  
+✅ **DataZone Integration** - Automatic catalog asset subscription and approval workflows  
+✅ **Infrastructure as Code** - Version-controlled pipeline definitions and reproducible deployments  
+✅ **GitHub Actions Ready** - Native CI/CD integration for automated deployments  
 
-See **[CLI Commands Reference](docs/cli-commands.md)** for detailed command documentation and examples.
+---
 
-See **[Development Guide](docs/development.md)** for development workflows, testing, and contribution guidelines.
+## Quick Start
 
-See **[GitHub Actions Integration](docs/github-actions-integration.md)** for automated testing and deployment workflows.
-
-## What is a CI/CD Pipeline?
-
-**Continuous Integration/Continuous Deployment (CI/CD)** is a software development practice that automates the process of integrating code changes, testing them, and deploying them to different environments. A CI/CD pipeline consists of:
-
-- **Source Control**: Code and configuration stored in version control
-- **Build/Package**: Creating deployable artifacts from source code
-- **Test Environments**: Staging areas for validation and testing
-- **Production Deployment**: Automated deployment to live environments
-- **Monitoring**: Tracking deployment success and application health
-
-In the context of **SageMaker Unified Studio**, a CI/CD pipeline manages:
-- **Data Science Workflows**: Airflow DAGs, Jupyter notebooks, and ML pipelines
-- **Data Assets**: Datasets, models, and analytical outputs
-- **Environment Configuration**: Project settings, user permissions, and resource allocation
-- **Cross-Environment Promotion**: Moving validated work from dev → test → production
-
-## SMUS Pipeline Architecture
-
-The SMUS CI/CD system consists of CLI operations that manage target environments. Each target represents a complete deployment environment with its own resources.
-
-### Typical CICD Pipeline and CLI Operations Flow
-
-```mermaid
-graph LR
-    subgraph "Pipeline Manifest"
-        PM[Pipeline YAML]
-    end
-    
-    subgraph "DEV STAGE"
-        C1[describe]
-        C2[bundle]
-        C1 --> C2
-    end
-    
-    subgraph "TEST STAGE"
-        C3[deploy]
-        C4[run]
-        C5[test]
-        C3 --> C4 --> C5
-    end
-    
-    subgraph "PROD STAGE"
-        C6[deploy]
-        C7[monitor]
-        C6 --> C7
-    end
-    
-    PM --> C1
-    C2 --> C3
-    C5 --> C6
+**Install from source:**
+```bash
+git clone https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker.git
+cd Unified-Studio-for-Amazon-Sagemaker/experimental/SMUS-CICD-pipeline-cli
+pip install -e .
 ```
 
-## Key Concepts
+**Deploy your first pipeline:**
+```bash
+# Validate configuration
+smus-cli describe --pipeline pipeline.yaml --connect
 
-### Core Components
+# Create deployment bundle
+smus-cli bundle --pipeline pipeline.yaml --targets dev
 
-The SMUS CI/CD system is built around three fundamental concepts:
+# Deploy to test environment
+smus-cli deploy --targets test --pipeline pipeline.yaml
 
-#### Pipeline
-A **pipeline** represents your complete CI/CD workflow configuration, defined in a YAML manifest file. It specifies:
-- Pipeline name and metadata
+# Run validation tests
+smus-cli test --pipeline pipeline.yaml --targets test
+```
+
+**See it in action:** [Live GitHub Actions Example](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/actions/runs/17631303500)
+
+---
+
+## Who Is This For?
+
+### 👨‍💻 DevOps Teams
+Build and deploy CI/CD pipelines for data engineering, ML, and GenAI workflows.  
+→ **[Quick Start Guide](docs/getting-started/quickstart.md)** - Deploy your first pipeline in 10 minutes  
+
+**Includes examples for:**
+- Data Engineering (Glue, Notebooks, Athena)
+- ML Workflows (SageMaker, Notebooks)
+- GenAI Applications (Bedrock, Notebooks)
+
+### 🔧 Platform Administrators
+Set up and manage multi-environment infrastructure for DevOps teams.  
+→ **[Admin Guide](docs/getting-started/admin-quickstart.md)** - Configure infrastructure in 15 minutes
+
+---
+
+## Key Features
+
+### 🚀 Automated Deployment
+- **Bundle Creation** - Package workflows, notebooks, and data assets into deployable artifacts
+- **Multi-Target Deployment** - Deploy to dev, test, and prod with a single command
+- **Environment Variables** - Dynamic configuration using `${VAR}` substitution
+- **Rollback Support** - Revert to previous versions when needed
+
+### 🔍 Testing & Validation
+- **Automated Tests** - Run validation tests before promoting to production
+- **Quality Gates** - Block deployments if tests fail
+- **Workflow Monitoring** - Track execution status and logs
+- **Health Checks** - Verify deployment correctness
+
+### 📊 DataZone Catalog Integration
+- **Asset Discovery** - Automatically find required catalog assets
+- **Subscription Management** - Request access to tables and datasets
+- **Approval Workflows** - Handle cross-project data access
+- **Asset Tracking** - Monitor catalog dependencies
+
+### 🔄 CI/CD Integration
+- **GitHub Actions** - Pre-built workflows for automated deployment
+- **GitLab CI** - Native support for GitLab pipelines
+- **Environment Variables** - Flexible configuration for any CI/CD platform
+- **Webhook Support** - Trigger deployments from external events
+
+### 🏗️ Infrastructure Management
+- **Project Creation** - Automatically provision SageMaker Unified Studio projects
+- **Connection Setup** - Configure S3, Airflow, Athena, and Lakehouse connections
+- **Resource Mapping** - Link AWS resources to project connections
+- **Permission Management** - Control access and collaboration
+
+---
+
+## Supported AWS Services
+
+Deploy workflows using these AWS services through Airflow YAML syntax:
+
+### 🎯 Analytics & Data
+**Amazon Athena** • **AWS Glue** • **Amazon EMR** • **Amazon Redshift** • **Lake Formation**
+
+### 🤖 Machine Learning  
+**SageMaker Training** • **SageMaker Pipelines** • **Feature Store** • **Model Registry** • **Batch Transform**
+
+### 🧠 Generative AI
+**Amazon Bedrock** • **Bedrock Agents** • **Bedrock Knowledge Bases** • **Guardrails**
+
+### 📊 Additional Services
+S3 • Lambda • Step Functions • DynamoDB • RDS • SNS/SQS • Batch
+
+**See complete list:** [Airflow AWS Operators Reference](docs/airflow-aws-operators.md)
+
+---
+
+## Core Concepts
+
+### Pipeline
+A YAML manifest defining your complete CI/CD workflow:
 - Target environments (dev, test, prod)
 - Bundle configuration (what to deploy)
 - Workflow definitions and parameters
 - Environment-specific settings
 
-#### Bundle
-A **bundle** is a deployable package containing all artifacts needed for a specific deployment:
-- **Workflow files**: Airflow DAGs, Python scripts, configuration files
-- **Storage assets**: Jupyter notebooks, data files, ML models
-- **Git repositories**: External code dependencies
-- **Metadata**: Deployment instructions and environment mappings
+### Bundle
+A deployable package containing:
+- Airflow DAGs and Python scripts
+- Jupyter notebooks and data files
+- ML models and configuration
+- Git repository dependencies
 
-Bundles are created from source environments (typically dev) and deployed to target environments (test, prod).
+### Target
+A deployment environment mapping to a SageMaker Unified Studio project:
+- Environment configuration (domain, region, project)
+- Resource definitions (S3, Airflow, Athena, Glue)
+- Deployment settings and parameters
+- Access control and permissions
 
-#### Target
-A **target** represents a deployment environment, mapping to a SageMaker Unified Studio project:
-- **Environment configuration**: Domain, region, project settings
-- **Resource definitions**: S3 connections, workflow engines, compute environments
-- **Deployment settings**: Bundle destinations, initialization parameters
-- **Access control**: Project owners, contributors, permissions
+**How it works:** Bundles code → Deploys to projects → Runs workflows → Monitors execution
 
-### CLI Capabilities
+---
 
-The SMUS CI/CD CLI provides comprehensive pipeline management capabilities:
+## Documentation
 
-- **Infrastructure Deployment**: Automatically deploy and configure SageMaker Unified Studio projects, connections, and AWS resources for test and production stages
-- **Artifact Bundling**: Package code, workflows, notebooks, data assets, and configuration files into deployable bundles
-- **Multi-Target Deployment**: Push bundled artifacts to multiple environments (dev, test, prod) with environment-specific configuration
-- **DataZone Catalog Integration**: Automatically request and manage access to catalog assets (tables, datasets) required by your pipelines with subscription management and approval workflows
-- **Workflow Orchestration**: Trigger, run, and monitor Airflow DAGs and ML pipelines across different stages
-- **Automated Testing**: Execute validation tests to verify deployment correctness and pipeline functionality
-- **Quality Gates**: Stop pipeline progression if tests fail, ensuring only validated changes reach production
-- **CI/CD Integration**: Native support for GitHub Actions, GitLab CI, and other CI/CD providers through environment variables and CLI automation
-- **Environment Management**: Handle environment-specific configuration through variable substitution and target-based deployment
-- **Parameter Substitution**: Support for `${VAR_NAME}` and `$VAR_NAME` syntax in workflow files for flexible multi-environment deployments
+### Getting Started
+- **[Quick Start Guide](docs/getting-started/quickstart.md)** - Deploy your first pipeline (10 min)
+- **[Admin Guide](docs/getting-started/admin-quickstart.md)** - Set up infrastructure (15 min)
 
-### Pipeline Stages → SMUS Projects
+### Guides
+- **[Pipeline Manifest Reference](docs/pipeline-manifest.md)** - Complete YAML configuration guide
+- **[CLI Commands](docs/cli-commands.md)** - Detailed command documentation
+- **[Substitutions & Variables](docs/substitutions-and-variables.md)** - Dynamic configuration
+- **[GitHub Actions Integration](docs/github-actions-integration.md)** - Automated CI/CD workflows
 
-Each **pipeline target** (dev, test, prod) maps to a **SageMaker Unified Studio Project**:
+### Reference
+- **[Pipeline Manifest Schema](docs/pipeline-manifest-schema.md)** - YAML schema reference
+- **[Airflow AWS Operators](docs/airflow-aws-operators.md)** - Custom operators
 
-- **Dev Target** → **Dev Project** (`dev-marketing`)
-  - Development and experimentation
-  - Rapid iteration and testing
-  - Individual developer workspaces
+### Examples
+- **[ETL Pipeline](examples/analytic-workflow/etl/)** - Glue jobs with Airflow orchestration
+- **[ML Pipeline](examples/analytic-workflow/ml/)** - SageMaker training with MLflow tracking
+- **[Serverless Example](examples/serverless-example/)** - Airflow Serverless workflows
+- **[MWAA Example](examples/mwaa-example/)** - Managed Airflow workflows
 
-- **Test Target** → **Test Project** (`test-marketing`)
-  - Integration testing and validation
-  - Staging environment for QA
-  - Pre-production verification
+### Development
+- **[Development Guide](docs/development.md)** - Contributing and testing
 
-- **Prod Target** → **Prod Project** (`prod-marketing`)
-  - Production deployment
-  - Live data processing
-  - Business-critical workflows
+---
 
-### Resource Mapping
+## Example Pipeline Flow
 
-Each project contains:
-- **S3 Storage Connections** - For data assets and notebooks
-- **Workflow Connections** - For Airflow DAGs and ML pipelines
-- **Environment Configurations** - Compute and runtime settings
-- **User Permissions** - Access control and collaboration
-
-## Installation
-
-### ⚠️ Security Notice
-**DO NOT** install `smus-cicd-cli` from PyPI as it may contain malicious code.
-Always install from the official AWS repository source code.
-
-### From Source (Recommended)
-```bash
-# Clone the official AWS repository
-git clone https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker.git
-cd Unified-Studio-for-Amazon-Sagemaker/experimental/SMUS-CICD-pipeline-cli
-pip install -e .
-```
-cd smus-cicd-pipeline-cli
-
-# Install in development mode
-pip install -e ".[dev]"
-
-# Or install normally
-pip install .
+```mermaid
+graph LR
+    subgraph "Development"
+        A[Write Code] --> B[Test Locally]
+    end
+    
+    subgraph "CI/CD Pipeline"
+        B --> C[Bundle]
+        C --> D[Deploy to Test]
+        D --> E[Run Tests]
+        E --> F{Tests Pass?}
+        F -->|Yes| G[Deploy to Prod]
+        F -->|No| H[Block Deployment]
+    end
+    
+    subgraph "Production"
+        G --> I[Monitor]
+    end
 ```
 
-### Installation from Source
-```bash
-# Clone the official AWS repository
-git clone https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker.git
-cd Unified-Studio-for-Amazon-Sagemaker/experimental/SMUS-CICD-pipeline-cli
-pip install -e .
+---
+
+## Example Pipelines
+
+### ETL Pipeline (`examples/analytic-workflow/etl/`)
+
+**What it deploys:**
+- **2 AWS Glue jobs** running on Glue 4.0
+  - `data_discovery_task` - Lists and discovers S3 data files
+  - `data_summary_task` - Processes COVID-19 data from Athena tables
+- **Airflow Serverless workflow** orchestrating job dependencies
+- **Python scripts** bundled and uploaded to S3 shared storage
+
+**Pipeline manifest (`etl_pipeline.yaml`):**
+- Bundles `etl/` directory to S3 connection `default.s3_shared`
+- Deploys to `dev` (DEV stage) and `test` (TEST stage with auto-created project)
+- Injects environment variables (`S3_PREFIX`, `AWS_REGION`)
+- Runs integration tests from `pipeline_tests/` folder
+
+**Workflow (`workflow_combined.yaml`):**
+```yaml
+workflow_combined:
+  dag_id: 'covid_etl_workflow'
+  tasks:
+    data_discovery_task:
+      operator: airflow.providers.amazon.aws.operators.glue.GlueJobOperator
+      script_location: 's3://.../etl/bundle/glue_s3_list_job.py'
+      script_args:
+        '--BUCKET_NAME': 'amazon-sagemaker-...'
+    
+    data_summary_task:
+      operator: airflow.providers.amazon.aws.operators.glue.GlueJobOperator
+      script_location: 's3://.../etl/bundle/glue_covid_summary_job.py'
+      script_args:
+        '--DATABASE_NAME': 'covid19_db'
+        '--TABLE_NAME': 'us_simplified'
 ```
 
-## Quick Start
-
-For detailed command examples and outputs, see **[CLI Commands Reference](docs/cli-commands.md)**.
-
-### Basic Workflow
+**Deploy:**
 ```bash
-# 1. Validate pipeline configuration
-smus-cli describe --pipeline pipeline.yaml --connect
-
-# 2. Create deployment bundle from dev environment
-smus-cli bundle --pipeline pipeline.yaml --targets dev
-
-# 3. Deploy to marketing test stage
-smus-cli deploy --targets marketing-test-stage --pipeline pipeline.yaml
-
-# 4. Monitor workflow status
-smus-cli monitor --pipeline pipeline.yaml
-
-# 5. Trigger workflow execution
-smus-cli run --pipeline pipeline.yaml --targets marketing-test-stage --workflow test_dag --command trigger
-
-# 6. Run tests to validate deployment
-smus-cli test --pipeline pipeline.yaml --targets marketing-test-stage
-
-# 7. Clean up resources (when needed)
-smus-cli delete --targets marketing-test-stage --pipeline pipeline.yaml --force
+cd examples/analytic-workflow/etl
+smus-cli bundle --pipeline etl_pipeline.yaml --targets dev
+smus-cli deploy --targets test --pipeline etl_pipeline.yaml
 ```
 
-## Common Workflows
+### ML Training Pipeline (`examples/analytic-workflow/ml/`)
 
-### Example CI/CD Workflow in Action
+**What it deploys:**
+- **SageMaker Notebook Operator** executing ML orchestration notebook
+- **Training code** bundled with compression to S3 (`job-code/` directory)
+- **Workflow definition** with MLflow connection injection
+- **MLflow tracking server** connection for experiment tracking
 
-See a **live example** of the SMUS CI/CD pipeline in action: [GitHub Actions Workflow Run](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/actions/runs/17631303500)
+**Pipeline manifest (`ml_pipeline.yaml`):**
+- Bundles 2 storage locations:
+  - `training-code` → compressed tarball with training script + inference code
+  - `ml-workflows` → notebook and workflow definitions
+- Auto-creates test project with MLflow connection
+- Injects MLflow tracking server ARN via connection parameter substitution
 
-This example demonstrates:
-- **Automated Testing**: Unit tests, integration tests, and code quality checks
-- **Multi-Stage Deployment**: Deploy to dev → test → prod environments
-- **Pipeline Validation**: Verify pipeline configuration and connectivity
-- **Bundle Creation**: Package workflows and data assets for deployment
-- **Environment Management**: Use environment variables for flexible configuration
-- **Quality Gates**: Stop deployment if any stage fails validation
+**Workflow (`ml_dev_workflow_v3.yaml`):**
+```yaml
+ml_dev_workflow:
+  dag_id: "ml_dev_workflow_v3"
+  tasks:
+    ml_orchestrator_notebook:
+      operator: airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator
+      input_config:
+        input_path: "ml/bundle/workflows/ml_orchestrator_notebook.ipynb"
+        input_params:
+          mlflow_tracking_server_arn: "{proj.connection.mlflow-server.trackingServerArn}"
+```
 
-### Complete CI/CD Flow
+**ML Orchestrator Notebook does:**
+1. Generates synthetic training data (1000 samples, 20 features, 3 classes)
+2. Uploads training/inference data to S3
+3. Launches SageMaker training job with SKLearn estimator
+4. Logs metrics and model to MLflow tracking server
+5. Runs batch transform inference on test data
+6. Outputs predictions to S3
+
+**Training script (`sagemaker_training_script.py`):**
+- Trains RandomForest classifier on synthetic data
+- Logs hyperparameters and metrics to MLflow
+- Saves model artifacts (model.joblib, scaler.joblib)
+- **Copies inference.py to model tarball** for batch transform
+
+**Deploy:**
 ```bash
-# 1. Analyze pipeline configuration
-smus-cli describe --pipeline pipeline.yaml --workflows --targets --connect
+cd examples/analytic-workflow/ml
+smus-cli bundle --pipeline ml_pipeline.yaml --targets dev
+smus-cli deploy --targets test --pipeline ml_pipeline.yaml
+```
 
-# 2. Create deployment bundle from current dev state
-smus-cli bundle dev
+**Key features:**
+- ✅ Dynamic parameter injection from project connections
+- ✅ MLflow experiment tracking and model registry integration
+- ✅ SageMaker training with custom dependencies (requirements.txt)
+- ✅ Batch transform inference with custom inference handler
+- ✅ Compressed bundle storage for efficient deployment
 
-# 3. Deploy to staging (auto-initializes if needed)
-smus-cli deploy --targets staging
+---
 
-# 4. After validation, deploy to production (auto-initializes if needed)
+## Common Use Cases
+
+### Deploy Airflow DAGs
+```bash
+# Bundle and deploy workflows (YAML syntax) to test environment
+smus-cli bundle --targets dev
+smus-cli deploy --targets test
+smus-cli run --targets test --workflow my_dag
+```
+
+### Promote to Production
+```bash
+# Run tests in staging
+smus-cli test --targets test
+
+# Deploy to production if tests pass
 smus-cli deploy --targets prod
 ```
 
-For detailed development workflows, testing procedures, and contribution guidelines, see the **[Development Guide](docs/development.md)**.
-
-## Target Environment Composition
-
-### Development Environment
-```mermaid
-graph TB
-    subgraph "Dev Target Environment"
-        T1[Target: dev]
-        
-        subgraph "SageMaker Unified Studio"
-            P1[SageMaker Unified Studio Project<br/>dev-marketing]
-        end
-        
-        subgraph "Connections"
-            SC1[Storage Connection<br/>default.s3_shared]
-            WC1[Workflow Connection<br/>project.workflow_mwaa]
-            AC1[Analytics Connection<br/>project.athena]
-            LC1[Lakehouse Connection<br/>project.default_lakehouse]
-        end
-        
-        subgraph "AWS Resources"
-            S31[S3 Bucket<br/>sagemaker-unified-studio-...-shared/]
-            MWAA1[MWAA Environment<br/>SageMaker Unified StudioMWAAEnv-...-dev]
-            ATHENA1[Athena Workgroup<br/>workgroup-...-dev]
-            GLUE1[Glue Database<br/>sagemaker_unified_studio_..._dev]
-        end
-    end
-    
-    T1 --> P1
-    P1 --> SC1
-    P1 --> WC1
-    P1 --> AC1
-    P1 --> LC1
-    
-    SC1 --> S31
-    WC1 --> MWAA1
-    AC1 --> ATHENA1
-    LC1 --> GLUE1
+### Manage Catalog Assets
+```bash
+# Request access to catalog tables
+smus-cli deploy --targets test  # Automatically requests subscriptions
+smus-cli monitor --targets test  # Track approval status
 ```
 
-### Test Environment
-```mermaid
-graph TB
-    subgraph "Test Target Environment"
-        T2[Target: test]
-        
-        subgraph "SageMaker Unified Studio"
-            P2[SageMaker Unified Studio Project<br/>test-marketing]
-        end
-        
-        subgraph "Connections"
-            SC2[Storage Connection<br/>default.s3_shared]
-            WC2[Workflow Connection<br/>project.workflow_mwaa]
-            AC2[Analytics Connection<br/>project.athena]
-            LC2[Lakehouse Connection<br/>project.default_lakehouse]
-        end
-        
-        subgraph "AWS Resources"
-            S32[S3 Bucket<br/>sagemaker-unified-studio-...-shared/]
-            MWAA2[MWAA Environment<br/>SageMaker Unified StudioMWAAEnv-...-test]
-            ATHENA2[Athena Workgroup<br/>workgroup-...-test]
-            GLUE2[Glue Database<br/>sagemaker_unified_studio_..._test]
-        end
-    end
-    
-    T2 --> P2
-    P2 --> SC2
-    P2 --> WC2
-    P2 --> AC2
-    P2 --> LC2
-    
-    SC2 --> S32
-    WC2 --> MWAA2
-    AC2 --> ATHENA2
-    LC2 --> GLUE2
+### CI/CD Automation
+```yaml
+# .github/workflows/deploy.yml
+- name: Deploy to Test
+  run: smus-cli deploy --targets test --pipeline pipeline.yaml
+  
+- name: Run Tests
+  run: smus-cli test --targets test --pipeline pipeline.yaml
+  
+- name: Deploy to Prod
+  if: success()
+  run: smus-cli deploy --targets prod --pipeline pipeline.yaml
 ```
 
-### Production Environment
-```mermaid
-graph TB
-    subgraph "Prod Target Environment"
-        T3[Target: prod]
-        
-        subgraph "SageMaker Unified Studio"
-            P3[SageMaker Unified Studio Project<br/>prod-marketing]
-        end
-        
-        subgraph "Connections"
-            SC3[Storage Connection<br/>default.s3_shared]
-            WC3[Workflow Connection<br/>project.workflow_mwaa]
-            AC3[Analytics Connection<br/>project.athena]
-            LC3[Lakehouse Connection<br/>project.default_lakehouse]
-        end
-        
-        subgraph "AWS Resources"
-            S33[S3 Bucket<br/>sagemaker-unified-studio-...-shared/]
-            MWAA3[MWAA Environment<br/>SageMaker Unified StudioMWAAEnv-...-prod]
-            ATHENA3[Athena Workgroup<br/>workgroup-...-prod]
-            GLUE3[Glue Database<br/>sagemaker_unified_studio_..._prod]
-        end
-    end
-    
-    T3 --> P3
-    P3 --> SC3
-    P3 --> WC3
-    P3 --> AC3
-    P3 --> LC3
-    
-    SC3 --> S33
-    WC3 --> MWAA3
-    AC3 --> ATHENA3
-    LC3 --> GLUE3
+---
+
+## Security Notice
+
+⚠️ **DO NOT** install from PyPI - always install from official AWS source code.
+
+```bash
+# ✅ Correct - Install from official AWS repository
+git clone https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker.git
+cd Unified-Studio-for-Amazon-Sagemaker/experimental/SMUS-CICD-pipeline-cli
+pip install -e .
+
+# ❌ Wrong - Do not use PyPI
+pip install smus-cicd-cli  # May contain malicious code
 ```
+
+---
+
+## Support & Community
+
+- **Documentation**: [docs/](docs/)
+- **Examples**: [examples/](examples/)
+- **Issues**: [GitHub Issues](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/issues)
+- **Contributing**: [Development Guide](docs/development.md)
+
+---
+
+## Quick Navigation - All READMEs
+
+### 📚 Documentation
+- **[Getting Started Hub](docs/getting-started/README.md)** - Role-based navigation for DevOps teams and admins
+- **[Quick Start Guide](docs/getting-started/quickstart.md)** - Deploy your first pipeline in 10 minutes
+- **[Admin Quick Start](docs/getting-started/admin-quickstart.md)** - Infrastructure setup in 15 minutes
+
+### 📖 Reference Guides
+- **[Pipeline Manifest](docs/pipeline-manifest.md)** - Complete YAML configuration reference
+- **[CLI Commands](docs/cli-commands.md)** - All available commands and options
+- **[Substitutions & Variables](docs/substitutions-and-variables.md)** - Dynamic configuration guide
+- **[GitHub Actions Integration](docs/github-actions-integration.md)** - CI/CD automation setup
+- **[Airflow AWS Operators](docs/airflow-aws-operators.md)** - Custom operator reference
+- **[Pipeline Manifest Schema](docs/pipeline-manifest-schema.md)** - YAML schema validation
+
+### 💡 Examples
+- **[Examples Overview](examples/README.md)** - All available examples and usage
+- **[ETL Pipeline](examples/analytic-workflow/etl/)** - Glue jobs with Airflow orchestration
+- **[ML Pipeline](examples/analytic-workflow/ml/README.md)** - SageMaker training with MLflow tracking
+- **[ML Training Code](examples/analytic-workflow/ml/job-code/README.md)** - Training script details
+- **[Serverless Example](examples/serverless-example/README.md)** - Airflow Serverless workflows
+- **[MWAA Example](examples/mwaa-example/README.md)** - Managed Airflow workflows
+
+### 🧪 Testing & Development
+- **[Tests Overview](tests/README.md)** - Testing infrastructure and guidelines
+- **[Test Scripts](tests/scripts/README.md)** - Helper scripts for testing
+- **[Development Guide](docs/development.md)** - Contributing and local development
+
+---
+
+## License
+
+This project is licensed under the MIT-0 License. See [LICENSE](../../LICENSE) for details.

@@ -117,18 +117,26 @@ def _monitor_airflow_serverless_logs(
 
         # Check the most recent run status
         latest_run = recent_runs[0]
-        run_status = latest_run.get("status")
+        run_detail = latest_run.get("RunDetailSummary")
 
-        # Valid active states for live monitoring
-        if run_status in ["STARTING", "QUEUED", "RUNNING"]:
+        # If RunDetailSummary doesn't exist, run is still queued
+        if run_detail is None:
+            run_status = "QUEUED"
             active_run = True
         else:
-            # Run already ended - fetch static logs instead
-            if output.upper() != "JSON":
-                typer.echo(f"ℹ️  Workflow run already completed (status: {run_status})")
-                typer.echo(f"   Run ID: {latest_run.get('run_id')}")
-                typer.echo("   Fetching all logs...")
-            active_run = False
+            run_status = run_detail.get("Status")
+            # Valid active states for live monitoring
+            if run_status in ["STARTING", "QUEUED", "RUNNING"]:
+                active_run = True
+            else:
+                # Run already ended - fetch static logs instead
+                if output.upper() != "JSON":
+                    typer.echo(
+                        f"ℹ️  Workflow run already completed (status: {run_status})"
+                    )
+                    typer.echo(f"   Run ID: {latest_run.get('run_id')}")
+                    typer.echo("   Fetching all logs...")
+                active_run = False
 
     # Construct log group name from workflow name
     # Log group format: /aws/mwaa-serverless/<workflow-name>/
@@ -234,15 +242,39 @@ def _live_log_monitoring(
                 workflow_arn, region=region, max_results=5
             )
 
-            active_runs = [
-                run
-                for run in runs
-                if run["status"] in ["STARTING", "QUEUED", "RUNNING"]
-            ]
+            # Check completion status via ended_at field or terminal status
+            active_runs = []
+            completed_runs = []
+            terminal_statuses = {"SUCCESS", "FAILED", "STOPPED", "COMPLETED"}
+
+            for run in runs:
+                ended_at = run.get("ended_at")
+                status = run.get("status")
+
+                if output.upper() != "JSON":
+                    typer.echo(
+                        f"🔍 DEBUG: Run {run.get('run_id')}: ended_at={ended_at}, status={status}"
+                    )
+
+                # Run is complete if it has ended_at OR has terminal status
+                if ended_at or status in terminal_statuses:
+                    run["final_status"] = status or "COMPLETED"
+                    completed_runs.append(run)
+                else:
+                    active_runs.append(run)
+                    run["final_status"] = None
+
+            if output.upper() != "JSON":
+                typer.echo(
+                    f"🔍 DEBUG: Active runs: {len(active_runs)}, Completed runs: {len(completed_runs)}"
+                )
 
             # Fetch new logs
             log_events = airflow_serverless.get_cloudwatch_logs(
-                log_group, start_time=last_timestamp, region=region, limit=50
+                log_group,
+                start_time=last_timestamp + 1 if last_timestamp else None,
+                region=region,
+                limit=50,
             )
 
             # Display new log events
@@ -267,6 +299,12 @@ def _live_log_monitoring(
 
                         typer.echo(f"[{timestamp}] [{stream}] {message}")
 
+                        # Debug: Highlight task completion events
+                        if "Task finished" in message or "final_state" in message:
+                            typer.echo(
+                                f"🔍 DEBUG: Task completion detected in log at {timestamp}"
+                            )
+
                 # Update last timestamp
                 if log_events:
                     last_timestamp = int(
@@ -276,9 +314,24 @@ def _live_log_monitoring(
             # Check if we should continue monitoring
             if not active_runs:
                 if output.upper() != "JSON":
-                    typer.echo(
-                        "\n✅ No active workflow runs found. Monitoring complete."
-                    )
+                    # Report final status of completed runs
+                    if completed_runs:
+                        for run in completed_runs:
+                            run_id = run.get("run_id", "unknown")
+                            status = run.get("final_status")
+                            if status == "SUCCESS":
+                                typer.echo(
+                                    f"\n✅ Workflow run {run_id} completed successfully"
+                                )
+                            elif status == "FAILED":
+                                typer.echo(f"\n❌ Workflow run {run_id} failed")
+                            elif status == "STOPPED":
+                                typer.echo(f"\n⚠️  Workflow run {run_id} stopped")
+                            else:
+                                typer.echo(
+                                    f"\n✅ Workflow run {run_id} completed with status: {status}"
+                                )
+                    typer.echo("\n✅ Logs streaming complete.")
                 break
 
             # Show status update if no new logs but workflow still running

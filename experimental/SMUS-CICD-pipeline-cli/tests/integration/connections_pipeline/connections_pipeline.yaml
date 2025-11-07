@@ -88,8 +88,7 @@ targets:
             - name: mlflow-experiments
               type: MLFLOW
               properties:
-                trackingServerName: "wine-classification-mlflow-v2"
-                trackingServerArn: "arn:aws:sagemaker:us-east-1:058264284947:mlflow-tracking-server/wine-classification-mlflow-v2"
+                trackingServerArn: "arn:aws:sagemaker:*:*:mlflow-tracking-server/smus-integration-mlflow-use2"
             
             - name: mwaa-workflows
               type: WORKFLOWS_MWAA

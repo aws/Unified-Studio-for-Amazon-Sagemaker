@@ -111,10 +111,14 @@ def _check_status_changes(
                 if recent_runs:
                     latest_run = recent_runs[0]
                     run_id = latest_run.get("run_id", "N/A")
-                    run_status = latest_run.get("status", "UNKNOWN")
+                    ended_at = latest_run.get("ended_at")
+                    status = latest_run.get("status")
 
-                    # Track if running
-                    if run_status in ["RUNNING", "QUEUED"]:
+                    # Check if run has ended
+                    if ended_at:
+                        run_status = status or "COMPLETED"
+                    else:
+                        run_status = "RUNNING"
                         has_running = True
 
                     # Check for status change
@@ -490,7 +494,11 @@ def _monitor_airflow_serverless_workflows(
                 if recent_runs:
                     latest_run = recent_runs[0]
                     run_id = latest_run.get("run_id", "N/A")
-                    run_status = latest_run.get("status", "UNKNOWN")
+                    run_status = latest_run.get("RunDetailSummary", {}).get("Status")
+
+                    # None status means initializing, treat as valid
+                    if run_status is None:
+                        run_status = "INITIALIZING"
 
                     # Track state for live monitoring
                     if previous_states is not None:

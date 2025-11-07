@@ -18,39 +18,27 @@ def create_airflow_serverless_client(
     connection_info: Dict[str, Any] = None, region: str = None
 ):
     """Create Airflow Serverless client with proper endpoint configuration."""
-    # Use AIRFLOW_SERVERLESS_ENDPOINT if set, otherwise use domain region without endpoint
+    session = boto3.Session()
+
+    # Determine region
+    if not region:
+        region = session.region_name or "us-east-1"
+
+    # Use AIRFLOW_SERVERLESS_ENDPOINT if set, otherwise use public endpoint
     if AIRFLOW_SERVERLESS_ENDPOINT:
         endpoint_url = AIRFLOW_SERVERLESS_ENDPOINT
-        # Extract region from endpoint if not provided
-        if not region:
-            if "us-east-1" in endpoint_url:
-                client_region = "us-east-1"
-            elif "us-west-2" in endpoint_url:
-                client_region = "us-west-2"
-            else:
-                client_region = "us-east-1"
-        else:
-            client_region = region
-
-        print(
-            f"🔍 DEBUG: Creating Airflow Serverless client with region={client_region}, endpoint={endpoint_url}"
-        )
-        session = boto3.Session()
-        client = session.client(
-            AIRFLOW_SERVERLESS_SERVICE,
-            region_name=client_region,
-            endpoint_url=endpoint_url,
-        )
     else:
-        # Use domain region without custom endpoint
-        client_region = region
-        print(
-            f"🔍 DEBUG: Creating Airflow Serverless client with region={client_region}, endpoint=default"
-        )
-        session = boto3.Session()
-        client = session.client(AIRFLOW_SERVERLESS_SERVICE, region_name=client_region)
+        endpoint_url = f"https://airflow-serverless.{region}.api.aws/"
 
-    return client
+    print(
+        f"🔍 DEBUG: Creating Airflow Serverless client with region={region}, endpoint={endpoint_url}"
+    )
+
+    return session.client(
+        AIRFLOW_SERVERLESS_SERVICE,
+        region_name=region,
+        endpoint_url=endpoint_url,
+    )
 
 
 def create_workflow(
@@ -174,53 +162,19 @@ def create_workflow(
         logger.error(f"🔍 DEBUG: Full exception details: {str(e)}")
         # Handle ConflictException when workflow already exists (idempotent behavior)
         if "ConflictException" in str(e) and "already exists" in str(e):
-            logger.info(
-                f"Workflow {workflow_name} already exists, returning existing workflow info"
-            )
+            logger.info(f"Workflow {workflow_name} already exists, updating it")
 
-            # Get existing workflow info and return it
+            # Get existing workflow info and update it
             try:
                 client = create_airflow_serverless_client(connection_info, region)
 
-                # Get existing workflow ARN first
+                # Get existing workflow ARN
                 workflows = list_workflows(connection_info, region)
-                logger.info(f"🔍 DEBUG: Found {len(workflows)} workflows in list")
-                logger.info(f"🔍 DEBUG: Looking for workflow name: {workflow_name}")
-                for wf in workflows:
-                    logger.info(f"🔍 DEBUG: Checking workflow: {wf.get('name')}")
-
                 workflow_arn = None
                 for wf in workflows:
                     if wf["name"] == workflow_name:
                         workflow_arn = wf["workflow_arn"]
-                        logger.info(
-                            f"Found existing workflow: {workflow_arn}, updating it"
-                        )
-
-                        # Update the existing workflow
-                        update_params = {
-                            "WorkflowArn": workflow_arn,
-                            "DefinitionS3Location": {
-                                "Bucket": s3_bucket,
-                                "ObjectKey": s3_key,
-                            },
-                            "RoleArn": role_arn,
-                        }
-                        if description:
-                            update_params["Description"] = description
-                        # Note: Tags not supported in update_workflow API
-
-                        logger.info(f"Updating workflow with params: {update_params}")
-                        update_response = client.update_workflow(**update_params)
-                        logger.info(f"Successfully updated workflow: {workflow_arn}")
-
-                        return {
-                            "workflow_arn": workflow_arn,
-                            "workflow_version": update_response.get("WorkflowVersion"),
-                            "success": True,
-                            "already_exists": True,
-                            "updated": True,
-                        }
+                        break
 
                 if not workflow_arn:
                     logger.error(
@@ -228,44 +182,76 @@ def create_workflow(
                     )
                     raise Exception(f"Could not find existing workflow {workflow_name}")
 
-                # Delete the existing workflow
-                logger.info(f"Deleting existing workflow: {workflow_name}")
-                delete_params = {"WorkflowArn": workflow_arn}
-                logger.info(
-                    f"🔍 DEBUG: Delete workflow request params: {delete_params}"
-                )
-                client.delete_workflow(**delete_params)
-                logger.info(f"Successfully deleted workflow: {workflow_arn}")
+                logger.info(f"Found existing workflow: {workflow_arn}, updating it")
 
-                # Wait a moment for the deletion to propagate
-                import time
+                # Update the existing workflow
+                update_params = {
+                    "WorkflowArn": workflow_arn,
+                    "DefinitionS3Location": {
+                        "Bucket": s3_bucket,
+                        "ObjectKey": s3_key,
+                    },
+                    "RoleArn": role_arn,
+                }
 
-                logger.info("Waiting for workflow deletion to propagate...")
-                time.sleep(5)
+                # Add DataZone environment variables if provided
+                if datazone_domain_id and datazone_project_id:
+                    from . import datazone
 
-                # Recreate the workflow with original parameters
-                logger.info(f"Recreating serverless Airflow workflow: {workflow_name}")
-                logger.info(f"🔍 DEBUG: Recreate workflow request params: {params}")
-                response = client.create_workflow(**params)
-                logger.info(f"🔍 DEBUG: Recreate workflow response: {response}")
+                    env_vars = {}
+                    env_vars["DataZoneDomainRegion"] = datazone_domain_region or region
+                    env_vars["DataZoneDomainId"] = datazone_domain_id
+                    env_vars["DataZoneProjectId"] = datazone_project_id
 
-                workflow_arn = response["WorkflowArn"]
-                logger.info(f"Successfully recreated workflow: {workflow_arn}")
+                    # Get environment_id from IAM connection
+                    try:
+                        project_connections = datazone.get_project_connections(
+                            project_id=datazone_project_id,
+                            domain_id=datazone_domain_id,
+                            region=datazone_domain_region or region,
+                        )
+
+                        for conn_name, conn_info in project_connections.items():
+                            if conn_info.get("type") == "IAM":
+                                env_id = conn_info.get("environmentId")
+                                if env_id:
+                                    env_vars["DataZoneEnvironmentId"] = env_id
+                                    break
+                    except Exception as e:
+                        logger.warning(
+                            f"Could not get DataZone environment ID from connections: {e}"
+                        )
+
+                    import os
+
+                    if os.getenv("AWS_ENDPOINT_URL_DATAZONE"):
+                        env_vars["DataZoneEndpoint"] = os.getenv(
+                            "AWS_ENDPOINT_URL_DATAZONE"
+                        )
+
+                    update_params["EnvironmentVariables"] = env_vars
+
+                if description:
+                    update_params["Description"] = description
+
+                logger.info(f"Updating workflow with params: {update_params}")
+                update_response = client.update_workflow(**update_params)
+                logger.info(f"Successfully updated workflow: {workflow_arn}")
 
                 return {
                     "workflow_arn": workflow_arn,
-                    "workflow_version": response["WorkflowVersion"],
-                    "created_at": response["CreatedAt"],
-                    "revision_id": response["RevisionId"],
+                    "workflow_version": update_response.get("WorkflowVersion"),
                     "success": True,
+                    "already_exists": True,
+                    "updated": True,
                 }
 
-            except Exception as delete_recreate_error:
+            except Exception as update_error:
                 logger.error(
-                    f"Failed to delete and recreate workflow {workflow_name}: {delete_recreate_error}"
+                    f"Failed to update workflow {workflow_name}: {update_error}"
                 )
                 raise Exception(
-                    f"Failed to delete and recreate workflow {workflow_name}: {delete_recreate_error}"
+                    f"Failed to update workflow {workflow_name}: {update_error}"
                 )
 
         logger.error(f"Failed to create workflow {workflow_name}: {e}")
@@ -458,6 +444,49 @@ def list_workflow_runs(
     except Exception as e:
         logger.error(f"Failed to list workflow runs for {workflow_arn}: {e}")
         return []
+
+
+def is_workflow_run_complete(
+    run_id: str,
+    workflow_arn: str = None,
+    connection_info: Dict[str, Any] = None,
+    region: str = None,
+) -> tuple[bool, str]:
+    """Check if workflow run is complete by examining task statuses.
+
+    Returns:
+        tuple: (is_complete, final_status) where final_status is SUCCESS, FAILED, or STOPPED
+    """
+    logger = get_logger("airflow_serverless")
+
+    try:
+        client = create_airflow_serverless_client(connection_info, region)
+        response = client.list_task_instances(RunId=run_id)
+
+        tasks = response.get("TaskInstances", [])
+        if not tasks:
+            return False, None
+
+        terminal_states = {"COMPLETED", "FAILED", "STOPPED", "SKIPPED"}
+        task_statuses = [task.get("Status") for task in tasks]
+
+        # Check if all tasks are in terminal state
+        all_complete = all(status in terminal_states for status in task_statuses)
+
+        if all_complete:
+            # Determine final status: FAILED if any failed, SUCCESS otherwise
+            if any(status == "FAILED" for status in task_statuses):
+                return True, "FAILED"
+            elif any(status == "STOPPED" for status in task_statuses):
+                return True, "STOPPED"
+            else:
+                return True, "SUCCESS"
+
+        return False, None
+
+    except Exception as e:
+        logger.error(f"Error checking task status for {run_id}: {e}")
+        return False, None
 
 
 def delete_workflow(

@@ -101,7 +101,7 @@ def describe(
 
 @app.command(
     "bundle",
-    help="2. Create bundle zip files by downloading from S3. Example: smus-cli bundle -p pipeline.yaml -t dev",
+    help="2. Create bundle zip files. Bundles from dev target by default. Example: smus-cli bundle --target test",
     rich_help_panel="Pipeline Commands",
 )
 def bundle(
@@ -114,20 +114,35 @@ def bundle(
     output: str = typer.Option(
         "TEXT", "--output", "-o", help="Output format: TEXT (default) or JSON"
     ),
-    targets: str = typer.Option(
+    target: str = typer.Option(
         None,
-        "--targets",
+        "--target",
         "-t",
-        help="Target name(s) - single target or comma-separated list (required)",
+        help="Target name to bundle for (bundles FROM dev by default)",
+    ),
+    local: bool = typer.Option(
+        False,
+        "--local",
+        help="Bundle from local filesystem instead of dev target",
     ),
     target_positional: str = typer.Argument(
         None, help="Target name (positional argument for backward compatibility)"
     ),
 ):
-    """Create bundle zip files by downloading from S3 connection locations."""
-    # Use positional argument if provided, otherwise use --targets flag
-    final_targets = target_positional if target_positional else targets
-    bundle_command(final_targets, manifest_file, output_dir, output)
+    """Create bundle zip files. By default bundles FROM dev target for deployment to specified target."""
+    # Use positional argument if provided, otherwise use --target flag
+    final_target = target_positional if target_positional else target
+
+    # Determine bundle source
+    if local:
+        bundle_source = final_target or "default"
+        console.print(f"📦 Bundling from local filesystem for target: {bundle_source}")
+    else:
+        bundle_source = "dev"
+        console.print(f"🔍 Bundle source: dev target")
+        console.print(f"📦 Bundle destination: {final_target or 'default'}")
+
+    bundle_command(bundle_source, manifest_file, output_dir, output)
 
 
 @app.command(
@@ -151,6 +166,16 @@ def deploy(
         "-b",
         help="Path to pre-created bundle file",
     ),
+    emit_events: bool = typer.Option(
+        None,
+        "--emit-events/--no-events",
+        help="Enable/disable EventBridge event emission (overrides manifest config)",
+    ),
+    event_bus_name: str = typer.Option(
+        None,
+        "--event-bus-name",
+        help="EventBridge event bus name or ARN (overrides manifest config)",
+    ),
     target_positional: str = typer.Argument(
         None, help="Target name (positional argument for backward compatibility)"
     ),
@@ -158,7 +183,7 @@ def deploy(
     """Deploy bundle files to target's bundle_target_configuration (auto-initializes infrastructure if needed)."""
     # Use positional argument if provided, otherwise use --targets flag
     final_targets = target_positional if target_positional else targets
-    deploy_command(final_targets, manifest_file, bundle)
+    deploy_command(final_targets, manifest_file, bundle, emit_events, event_bus_name)
 
 
 @app.command(
