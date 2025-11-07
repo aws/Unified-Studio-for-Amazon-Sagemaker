@@ -15,6 +15,9 @@ Parameters:
   ProjectProfileId:
     Description: Project Profile id for which we need to create project
     Type: String
+  ModelGovernanceProjectProfileId:
+    Description: Project Profile id needed for the Model Governance Project creation. Can be found in the output of "create_project_profiles" stack. 
+    Type: String
   Name:
     Description: Name of the project
     Type: String
@@ -36,6 +39,13 @@ Resources:
       DomainIdentifier: !Ref DomainId
       Name: !Ref Name
       ProjectProfileId: !Ref ProjectProfileId
+  ProjectModelGovernance:
+    Type: AWS::DataZone::Project
+    Properties:
+      Description: "Govern generative AI models powered by Amazon Bedrock"
+      DomainIdentifier: !Ref DomainId
+      Name: "GenerativeAIModelGovernanceProject"
+      ProjectProfileId: !Ref ModelGovernanceProjectProfileId
 ```
 
 ### Project Memberships
@@ -73,6 +83,9 @@ Parameters:
     Type: String
   ProjectProfileId:
     Description: Project Profile Id for which we need to create Project
+    Type: String
+  ModelGovernanceProjectProfileId:
+    Description: Project Profile id needed for the Model Governance Project creation. Can be found in the output of "create_project_profiles" stack. 
     Type: String
   Name:
     Description: Name of the project
