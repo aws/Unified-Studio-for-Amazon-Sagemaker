@@ -465,8 +465,21 @@ Resources:
           AwsRegion:
             RegionName: !Ref Region
 
+#Internal Project profile for Amazon Bedrock Governance
+  ModelGovernanceProjectProfile:
+    Type: AWS::DataZone::ProjectProfile
+    Properties:
+      Name: 'Generative AI model governance'
+      Description: 'Govern generative AI models powered by Amazon Bedrock'
+      Status: 'ENABLED'
+      DomainIdentifier: !Ref DomainId
+      DomainUnitIdentifier: !Ref DomainUnitId
+
 Outputs:
   SQLAnalyticsProfileId:
     Value: !GetAtt SQLAnalytics.Id
   AllCapabilitiesProjectProfileId:
     Value: !GetAtt AllCapabilitiesProjectProfile.Id
+  ModelGovernanceProjectProfileId:
+    Description: Model Governance Project Profile ID
+    Value: !GetAtt ModelGovernanceProjectProfile.Id
