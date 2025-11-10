@@ -1,7 +1,8 @@
 import os
 import joblib
 import pandas as pd
-from io import StringIO
+import numpy as np
+from io import StringIO, BytesIO
 
 def model_fn(model_dir):
     """Load model and scaler"""
@@ -22,6 +23,8 @@ def input_fn(request_body, content_type='text/csv'):
             df = pd.read_csv(StringIO(request_body), header=0)
             df.columns = range(len(df.columns))
             return df
+    elif content_type == 'application/x-npy':
+        return np.load(BytesIO(request_body), allow_pickle=True)
     raise ValueError(f"Unsupported content type: {content_type}")
 
 def predict_fn(input_data, model_dict):
@@ -35,4 +38,8 @@ def output_fn(prediction, accept='text/csv'):
     """Format output"""
     if accept == 'text/csv':
         return '\n'.join(str(p) for p in prediction)
+    elif accept == 'application/x-npy':
+        buffer = BytesIO()
+        np.save(buffer, prediction)
+        return buffer.getvalue()
     raise ValueError(f"Unsupported accept type: {accept}")

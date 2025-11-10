@@ -1,0 +1,36 @@
+# SMUS CLI Agent Configuration
+# This file is auto-created in ~/.smus-cli/config.yaml on first run
+
+interactive:
+  # Default Bedrock model for agent (using cross-region inference profile)
+  default_model: us.anthropic.claude-3-5-haiku-20241022-v1:0
+  
+  # AWS region for Bedrock
+  region: us-east-1
+  
+  # Model parameters
+  max_tokens: 4096
+  temperature: 0.7
+
+bedrock:
+  # Knowledge Base ID (auto-created on first run)
+  knowledge_base_id: null
+  
+  # Data Source ID (auto-created on first run)
+  data_source_id: null
+  
+  # Public KB URI (read-only)
+  public_kb_uri: s3://smus-cli-public-kb/
+  
+  # Last sync timestamp
+  last_sync: null
+
+agent:
+  # Conversation logs directory
+  conversation_logs: ~/.smus-cli/agent-logs/
+  
+  # Enable feedback collection
+  feedback_enabled: true
+  
+  # Auto-sync KB weekly
+  auto_sync_enabled: false

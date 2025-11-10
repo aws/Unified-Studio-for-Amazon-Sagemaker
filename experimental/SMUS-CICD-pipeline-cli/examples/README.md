@@ -142,9 +142,37 @@ Tests machine learning pipeline with SageMaker training and MLflow tracking.
 
 ---
 
+#### 6. **Notebooks Workflow** (`tests/integration/examples-analytics-workflows/notebooks/`)
+Tests parallel execution of multiple example notebooks.
+
+**What it tests:**
+- Parallel notebook execution (9 notebooks simultaneously)
+- SageMakerNotebookOperator functionality
+- Notebook bundle deployment
+- Validation that all notebooks complete successfully
+
+**Pipeline components:**
+- `notebooks_pipeline.yaml` - Pipeline manifest
+- `parallel_notebooks_workflow.yaml` - Airflow DAG with 9 parallel tasks
+- `notebooks/` - 9 example notebooks (Pandas, Spark, DuckDB, MLflow, etc.)
+- `pipeline_tests/test_notebooks_execution.py` - Success validation
+
+**Notebooks included:**
+1. Basic Python with Pandas
+2. GDC Read/Write with Athena
+3. Customer Churn Analysis (Spark)
+4. Purchase Analytics (DuckDB)
+5. GenAI ETL (Pandas)
+6. City Temperature ETL (Spark)
+7. Time Series Forecasting (Chronos)
+8. Movie Sales (DynamoDB)
+9. Classification (MLflow)
+
+---
+
 ### Connection Tests
 
-#### 6. **DataZone Connections** (`tests/integration/connections_pipeline/`)
+#### 7. **DataZone Connections** (`tests/integration/connections_pipeline/`)
 Tests DataZone connection creation and management.
 
 **What it tests:**
@@ -157,11 +185,11 @@ Tests DataZone connection creation and management.
 
 ### Specialized Tests
 
-#### 7. **Create/Delete Pipeline** 
+#### 8. **Create/Delete Pipeline** 
 - `tests/integration/create_test_pipeline/` - Pipeline creation
 - `tests/integration/delete_test_pipeline/` - Pipeline cleanup
 
-#### 8. **Multi-Target Airless** (`tests/integration/multi_target_pipeline_airless/`)
+#### 9. **Multi-Target Airless** (`tests/integration/multi_target_pipeline_airless/`)
 Tests deployment without Airflow Serverless (notebooks only).
 
 ---

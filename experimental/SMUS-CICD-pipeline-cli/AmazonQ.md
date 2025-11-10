@@ -293,6 +293,21 @@ aws awsoverdriveservice list-workflows --region us-east-1 --endpoint-url https:/
 aws awsoverdriveservice list-workflow-runs --workflow-arn ARN --region us-east-1 --endpoint-url https://overdrive-gamma.us-east-1.api.aws
 ```
 
+**Download workflow outputs** (notebooks, artifacts):
+```bash
+# Use the automated download script
+python tests/scripts/download_workflow_outputs.py --workflow-arn <WORKFLOW_ARN>
+
+# This script:
+# - Finds the latest workflow run automatically
+# - Downloads all notebook outputs to /tmp/workflow_outputs/
+# - Extracts tar.gz files automatically
+# - Shows underscore-prefixed notebooks (true outputs with execution results)
+# - Provides paths to all downloaded files
+
+# Example output location: /tmp/workflow_outputs/_notebook_name.ipynb
+```
+
 **Check notebook execution**:
 ```bash
 # Search for errors in executed notebook

@@ -369,6 +369,36 @@ def delete(
     delete_command(pipeline, targets, force, async_mode, output)
 
 
+@app.command(
+    "chat",
+    help="8. Start interactive AI chat agent. Example: smus-cli chat",
+    rich_help_panel="Pipeline Commands",
+)
+def chat(
+    model: str = typer.Option(
+        None,
+        "--model",
+        help="Bedrock model ID (default from config)",
+    ),
+    kb_id: str = typer.Option(
+        None,
+        "--kb-id",
+        help="Knowledge Base ID (default from config)",
+    ),
+):
+    """
+    Start interactive chat with SMUS CLI AI agent.
+    
+    The agent can:
+    - Answer questions about SMUS CLI
+    - Help build new pipelines
+    - Troubleshoot issues
+    - Provide examples and guidance
+    """
+    from .agent.chat_agent import start_chat
+    start_chat(model_id=model, kb_id=kb_id)
+
+
 @app.callback()
 def main():
     """

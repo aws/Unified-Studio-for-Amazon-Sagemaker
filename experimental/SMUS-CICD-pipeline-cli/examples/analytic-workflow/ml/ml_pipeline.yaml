@@ -5,10 +5,16 @@ bundle:
   storage:
     - name: training-code
       connectionName: default.s3_shared
-      include: ['ml/job-code']
-    - name: ml-workflows
+      include: ['ml/training/code']
+    - name: training-workflows
       connectionName: default.s3_shared
-      include: ['ml/workflows']
+      include: ['ml/training/workflows']
+    - name: deployment-code
+      connectionName: default.s3_shared
+      include: ['ml/deployment/code']
+    - name: deployment-workflows
+      connectionName: default.s3_shared
+      include: ['ml/deployment/workflows']
 
 targets:
   dev: 
@@ -31,7 +37,7 @@ targets:
     project: 
       name: test-marketing
     tests:
-      folder: examples/analytic-workflow/ml/pipeline_tests/
+      folder: examples/analytic-workflow/ml/training/pipeline_tests/
     initialization:
       project: 
         create: true
@@ -56,12 +62,20 @@ targets:
           connectionName: default.s3_shared
           targetDirectory: 'ml/bundle/training-code'
           compression: 'gz'
-        - name: ml-workflows
+        - name: training-workflows
           connectionName: default.s3_shared
-          targetDirectory: 'ml/bundle/workflows'
+          targetDirectory: 'ml/bundle/training-workflows'
+        - name: deployment-code
+          connectionName: default.s3_shared
+          targetDirectory: 'ml/bundle/deployment-code'
+        - name: deployment-workflows
+          connectionName: default.s3_shared
+          targetDirectory: 'ml/bundle/deployment-workflows'
     environment_variables:
       S3_PREFIX: test
 
 workflows:
-  - workflowName: ml_dev_workflow_v3
+  - workflowName: ml_training_workflow
+    engine: airflow-serverless
+  - workflowName: ml_deployment_workflow
     engine: airflow-serverless

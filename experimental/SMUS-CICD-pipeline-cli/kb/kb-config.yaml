@@ -1,0 +1,47 @@
+# SMUS CLI Knowledge Base Configuration
+# Defines what content to include in the Knowledge Base (no file duplication)
+
+sources:
+  # Documentation from docs/ directory
+  - path: ../docs/
+    type: documentation
+    include:
+      - "*.md"
+    exclude:
+      - "development.md"  # Internal dev docs only
+  
+  # Examples from examples/ directory
+  - path: ../examples/
+    type: examples
+    include:
+      - "**/*.yaml"
+      - "**/*.py"
+      - "**/*.ipynb"
+    exclude:
+      - "**/test_*.py"
+      - "**/__pycache__/"
+      - "**/.ipynb_checkpoints/"
+  
+  # KB-specific templates
+  - path: ./templates/
+    type: templates
+    include:
+      - "*.j2"
+
+# S3 configuration for KB storage
+s3:
+  bucket: smus-cli-knowledge-base-${AWS_ACCOUNT_ID}
+  region: us-east-1
+  prefix: latest/
+
+# Bedrock Knowledge Base configuration
+# These IDs will be set after initial KB creation
+bedrock:
+  knowledge_base_id: null  # Set after running setup-kb.sh
+  data_source_id: null     # Set after running setup-kb.sh
+  embedding_model: amazon.titan-embed-text-v1
+
+metadata:
+  version: "1.0"
+  description: "SMUS CLI Knowledge Base for AI Agent"
+  last_updated: null
