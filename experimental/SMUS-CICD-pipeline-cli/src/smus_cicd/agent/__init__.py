@@ -2,4 +2,4 @@
 
 from .chat_agent import SMUSChatAgent
 
-__all__ = ['SMUSChatAgent']
+__all__ = ["SMUSChatAgent"]

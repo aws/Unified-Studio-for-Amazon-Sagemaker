@@ -388,7 +388,7 @@ def chat(
 ):
     """
     Start interactive chat with SMUS CLI AI agent.
-    
+
     The agent can:
     - Answer questions about SMUS CLI
     - Help build new pipelines
@@ -396,6 +396,7 @@ def chat(
     - Provide examples and guidance
     """
     from .agent.chat_agent import start_chat
+
     start_chat(model_id=model, kb_id=kb_id)
 
 
