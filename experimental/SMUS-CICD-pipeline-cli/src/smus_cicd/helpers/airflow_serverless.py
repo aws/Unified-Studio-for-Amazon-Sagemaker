@@ -11,7 +11,7 @@ from .logger import get_logger
 
 # Airflow Serverless (Overdrive) configuration - configurable via environment variables
 AIRFLOW_SERVERLESS_ENDPOINT = os.environ.get("AIRFLOW_SERVERLESS_ENDPOINT")
-AIRFLOW_SERVERLESS_SERVICE = "mwaaserverless"
+AIRFLOW_SERVERLESS_SERVICE = "mwaaserverless-internal"
 
 
 def create_airflow_serverless_client(
@@ -90,6 +90,47 @@ def create_workflow(
             params["Description"] = description
         if tags:
             params["Tags"] = tags
+        
+        # Add DataZone environment variables if provided
+        if datazone_domain_id and datazone_project_id:
+            from . import datazone
+
+            env_vars = {}
+            env_vars["DataZoneDomainRegion"] = datazone_domain_region or region
+            env_vars["DataZoneDomainId"] = datazone_domain_id
+            env_vars["DataZoneProjectId"] = datazone_project_id
+
+            # Get environment_id from IAM connection
+            try:
+                project_connections = datazone.get_project_connections(
+                    project_id=datazone_project_id,
+                    domain_id=datazone_domain_id,
+                    region=datazone_domain_region or region,
+                )
+
+                # Find IAM connection and extract environment_id
+                for conn_name, conn_info in project_connections.items():
+                    if conn_info.get("type") == "IAM":
+                        env_id = conn_info.get("environmentId")
+                        if env_id:
+                            env_vars["DataZoneEnvironmentId"] = env_id
+                            logger.info(
+                                f"Found DataZone environment ID from IAM connection: {env_id}"
+                            )
+                            break
+            except Exception as e:
+                logger.warning(
+                    f"Could not get DataZone environment ID from connections: {e}"
+                )
+
+            # Add DataZone endpoint from environment variable if set
+            import os
+
+            if os.getenv("AWS_ENDPOINT_URL_DATAZONE"):
+                env_vars["DataZoneEndpoint"] = os.getenv("AWS_ENDPOINT_URL_DATAZONE")
+
+            params["EnvironmentVariables"] = env_vars
+            logger.info(f"🔍 DEBUG: DataZone environment variables: {env_vars}")
 
         import typer
 
@@ -119,9 +160,49 @@ def create_workflow(
         logger.error(f"🔍 DEBUG: Exception in create_workflow: {type(e).__name__}: {e}")
         logger.error(f"🔍 DEBUG: Full exception details: {str(e)}")
         # Handle ConflictException when workflow already exists (idempotent behavior)
-        if "ConflictException" in str(e) and "already exists" in str(e):
-            logger.info(f"Workflow {workflow_name} already exists, updating it")
+        if "ConflictException" in str(e):
+            logger.info(f"Workflow {workflow_name} already exists")
 
+            # If EnvironmentVariables are needed, delete and recreate (update doesn't support them)
+            if datazone_domain_id or datazone_project_id:
+                logger.info(f"EnvironmentVariables needed - deleting and recreating workflow {workflow_name}")
+                
+                try:
+                    client = create_airflow_serverless_client(connection_info, region)
+                    
+                    # Get existing workflow ARN
+                    workflows = list_workflows(connection_info, region)
+                    workflow_arn = None
+                    for wf in workflows:
+                        if wf["name"] == workflow_name:
+                            workflow_arn = wf["workflow_arn"]
+                            break
+                    
+                    if workflow_arn:
+                        logger.info(f"Deleting existing workflow: {workflow_arn}")
+                        client.delete_workflow(WorkflowArn=workflow_arn)
+                        logger.info(f"Deleted workflow, recreating with EnvironmentVariables")
+                        
+                        # Retry creation
+                        response = client.create_workflow(**params)
+                        workflow_arn = response["WorkflowArn"]
+                        logger.info(f"Successfully recreated workflow: {workflow_arn}")
+                        
+                        return {
+                            "workflow_arn": workflow_arn,
+                            "workflow_version": response["WorkflowVersion"],
+                            "created_at": response["CreatedAt"],
+                            "revision_id": response["RevisionId"],
+                            "success": True,
+                            "recreated": True,
+                        }
+                except Exception as delete_error:
+                    logger.error(f"Failed to delete/recreate workflow: {delete_error}")
+                    raise
+            
+            # No EnvironmentVariables needed, just update
+            logger.info(f"Updating existing workflow {workflow_name}")
+            
             # Get existing workflow info and update it
             try:
                 client = create_airflow_serverless_client(connection_info, region)
