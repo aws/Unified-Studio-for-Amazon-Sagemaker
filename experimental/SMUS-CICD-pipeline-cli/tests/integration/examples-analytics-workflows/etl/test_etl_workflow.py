@@ -22,13 +22,13 @@ class TestETLWorkflow(IntegrationTestBase):
         """Delete existing workflows from previous runs."""
         try:
             client = boto3.client(
-                'awsoverdriveservice',
-                region_name='us-east-1',
-                endpoint_url='https://overdrive-gamma.us-east-1.api.aws'
+                'mwaaserverless',
+                region_name='us-east-2',
+                endpoint_url='https://airflow-serverless.us-east-2.api.aws/'
             )
             response = client.list_workflows()
             workflows = response.get('Workflows', [])
-            expected_name = 'IntegrationTestETLWorkflow_test_marketing_workflow_combined'
+            expected_name = 'IntegrationTestETLWorkflow_test_marketing_covid_etl_pipeline'
             
             for wf in workflows:
                 if wf.get('Name') == expected_name:
@@ -92,7 +92,7 @@ class TestETLWorkflow(IntegrationTestBase):
             pytest.skip("AWS connectivity not available")
 
         pipeline_file = self.get_pipeline_file()
-        workflow_name = "workflow_combined"
+        workflow_name = "covid_etl_pipeline"
         
         # Cleanup: Remove etl directory from test project S3
         print("\n=== Cleanup: Remove test project S3 etl directory ===")

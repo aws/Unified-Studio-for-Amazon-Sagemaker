@@ -79,5 +79,6 @@ targets:
               connectionName: default.s3_shared
               targetDirectory: '.'   
           git:
-            - connectionName: default.s3_shared
+            - name: covid-19-dateset
+              connectionName: default.s3_shared
               targetDirectory: 'repos'                          

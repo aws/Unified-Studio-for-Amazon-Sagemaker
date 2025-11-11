@@ -11,7 +11,7 @@ from .logger import get_logger
 
 # Airflow Serverless (Overdrive) configuration - configurable via environment variables
 AIRFLOW_SERVERLESS_ENDPOINT = os.environ.get("AIRFLOW_SERVERLESS_ENDPOINT")
-AIRFLOW_SERVERLESS_SERVICE = "awsoverdriveservice"
+AIRFLOW_SERVERLESS_SERVICE = "mwaaserverless"
 
 
 def create_airflow_serverless_client(
@@ -76,49 +76,7 @@ def create_workflow(
                 "ObjectKey": s3_key,
             },
             "RoleArn": role_arn,
-            "OverdriveVersion": 1,
         }
-
-        # Add DataZone environment variables if provided
-        if datazone_domain_id and datazone_project_id:
-            from . import datazone
-
-            env_vars = {}
-            env_vars["DataZoneDomainRegion"] = datazone_domain_region or region
-            env_vars["DataZoneDomainId"] = datazone_domain_id
-            env_vars["DataZoneProjectId"] = datazone_project_id
-
-            # Get environment_id from IAM connection
-            try:
-                project_connections = datazone.get_project_connections(
-                    project_id=datazone_project_id,
-                    domain_id=datazone_domain_id,
-                    region=datazone_domain_region or region,
-                )
-
-                # Find IAM connection and extract environment_id
-                for conn_name, conn_info in project_connections.items():
-                    if conn_info.get("type") == "IAM":
-                        env_id = conn_info.get("environmentId")
-                        if env_id:
-                            env_vars["DataZoneEnvironmentId"] = env_id
-                            logger.info(
-                                f"Found DataZone environment ID from IAM connection: {env_id}"
-                            )
-                            break
-            except Exception as e:
-                logger.warning(
-                    f"Could not get DataZone environment ID from connections: {e}"
-                )
-
-            # Add DataZone endpoint from environment variable if set
-            import os
-
-            if os.getenv("AWS_ENDPOINT_URL_DATAZONE"):
-                env_vars["DataZoneEndpoint"] = os.getenv("AWS_ENDPOINT_URL_DATAZONE")
-
-            params["EnvironmentVariables"] = env_vars
-            logger.info(f"🔍 DEBUG: DataZone environment variables: {env_vars}")
 
         # Network configuration - commented out for now
         # if security_group_ids and subnet_ids:
@@ -193,43 +151,6 @@ def create_workflow(
                     },
                     "RoleArn": role_arn,
                 }
-
-                # Add DataZone environment variables if provided
-                if datazone_domain_id and datazone_project_id:
-                    from . import datazone
-
-                    env_vars = {}
-                    env_vars["DataZoneDomainRegion"] = datazone_domain_region or region
-                    env_vars["DataZoneDomainId"] = datazone_domain_id
-                    env_vars["DataZoneProjectId"] = datazone_project_id
-
-                    # Get environment_id from IAM connection
-                    try:
-                        project_connections = datazone.get_project_connections(
-                            project_id=datazone_project_id,
-                            domain_id=datazone_domain_id,
-                            region=datazone_domain_region or region,
-                        )
-
-                        for conn_name, conn_info in project_connections.items():
-                            if conn_info.get("type") == "IAM":
-                                env_id = conn_info.get("environmentId")
-                                if env_id:
-                                    env_vars["DataZoneEnvironmentId"] = env_id
-                                    break
-                    except Exception as e:
-                        logger.warning(
-                            f"Could not get DataZone environment ID from connections: {e}"
-                        )
-
-                    import os
-
-                    if os.getenv("AWS_ENDPOINT_URL_DATAZONE"):
-                        env_vars["DataZoneEndpoint"] = os.getenv(
-                            "AWS_ENDPOINT_URL_DATAZONE"
-                        )
-
-                    update_params["EnvironmentVariables"] = env_vars
 
                 if description:
                     update_params["Description"] = description

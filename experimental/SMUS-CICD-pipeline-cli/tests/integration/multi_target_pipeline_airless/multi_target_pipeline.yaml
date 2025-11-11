@@ -19,7 +19,7 @@ bundle:
     - .ipynb_checkpoints/
     - __pycache__/
     - '*.pyc'
-    airflow-serverless: true
+    name: workflows
     name: workflows
 targets:
   dev:

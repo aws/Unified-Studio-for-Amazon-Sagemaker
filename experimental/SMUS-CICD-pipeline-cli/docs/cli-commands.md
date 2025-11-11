@@ -16,6 +16,7 @@ The SMUS CLI provides eight main commands for managing CI/CD pipelines in SageMa
 | `logs` | Fetch workflow logs from CloudWatch | `smus-cli logs --workflow arn:aws:airflow-serverless:region:account:workflow/name` |
 | `monitor` | Monitor workflow status | `smus-cli monitor --pipeline pipeline.yaml` |
 | `test` | Run tests for pipeline targets | `smus-cli test --targets marketing-test-stage` |
+| `integrate` | Integrate with external tools (Q CLI) | `smus-cli integrate qcli` |
 | `delete` | Remove target environments | `smus-cli delete --targets marketing-test-stage --force` |
 
 ## Detailed Command Examples
@@ -214,7 +215,43 @@ smus-cli test --targets test --verbose
 smus-cli test --targets test --test-output console
 ```
 
-### 8. Delete Resources
+### 8. Integrate with External Tools
+```bash
+# Setup Q CLI integration (MCP server)
+smus-cli integrate qcli
+
+# Check integration status
+smus-cli integrate qcli --status
+
+# Uninstall integration
+smus-cli integrate qcli --uninstall
+```
+
+**What it does:**
+- Registers SMUS CLI as an MCP (Model Context Protocol) server with Amazon Q CLI
+- Enables Q CLI to access SMUS pipeline examples, documentation, and validation
+- Provides natural language interface to SMUS CLI capabilities
+
+**Available MCP Tools:**
+- `get_pipeline_example` - Generate pipeline manifests from templates
+- `query_smus_kb` - Search SMUS documentation and examples
+- `validate_pipeline` - Validate pipeline.yaml against schema
+
+**Example Q CLI Usage:**
+```bash
+# After integration, use Q CLI to interact with SMUS
+q chat
+
+You: Show me a notebooks pipeline example
+Q: [Returns complete notebooks_pipeline.yaml with explanations]
+
+You: Validate my pipeline.yaml
+Q: [Validates and reports any schema errors]
+```
+
+**Logs:** `/tmp/smus_mcp_server.log`
+
+### 9. Delete Resources
 ```bash
 # Delete with confirmation
 smus-cli delete --targets test

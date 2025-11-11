@@ -287,10 +287,10 @@ python -m pytest tests/integration -v
 **Check workflow status**:
 ```bash
 # List workflows
-aws awsoverdriveservice list-workflows --region us-east-1 --endpoint-url https://overdrive-gamma.us-east-1.api.aws
+aws mwaaserverless list-workflows --region us-east-2 --endpoint-url https://airflow-serverless.us-east-2.api.aws/
 
 # Check runs
-aws awsoverdriveservice list-workflow-runs --workflow-arn ARN --region us-east-1 --endpoint-url https://overdrive-gamma.us-east-1.api.aws
+aws mwaaserverless list-workflow-runs --workflow-arn ARN --region us-east-2 --endpoint-url https://airflow-serverless.us-east-2.api.aws/
 ```
 
 **Download workflow outputs** (notebooks, artifacts):

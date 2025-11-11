@@ -26,7 +26,7 @@ class TestMLTrainingWorkflow(IntegrationTestBase):
                 endpoint = f'https://airflow-serverless.{region}.api.aws/'
             
             client = boto3.client(
-                'awsoverdriveservice',
+                'mwaaserverless',
                 region_name=region,
                 endpoint_url=endpoint
             )
@@ -121,9 +121,9 @@ class TestMLTrainingWorkflow(IntegrationTestBase):
 
         # Step 6: Get workflow ARN
         print("\n=== Step 6: Get Workflow ARN ===")
-        region = os.environ.get('DEV_DOMAIN_REGION', 'us-east-1')
+        region = os.environ.get('DEV_DOMAIN_REGION', 'us-east-2')
         endpoint = os.environ.get('AIRFLOW_SERVERLESS_ENDPOINT', f'https://airflow-serverless.{region}.api.aws/')
-        client = boto3.client('awsoverdriveservice', region_name=region, endpoint_url=endpoint)
+        client = boto3.client('mwaaserverless', region_name=region, endpoint_url=endpoint)
         response = client.list_workflows()
         workflow_arn = None
         expected_name = 'IntegrationTestMLWorkflow_test_marketing_ml_training_workflow'

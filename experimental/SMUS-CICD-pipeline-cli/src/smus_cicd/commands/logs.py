@@ -325,6 +325,8 @@ def _live_log_monitoring(
                                 )
                             elif status == "FAILED":
                                 typer.echo(f"\n❌ Workflow run {run_id} failed")
+                                typer.echo("\n✅ Logs streaming complete.")
+                                raise typer.Exit(1)
                             elif status == "STOPPED":
                                 typer.echo(f"\n⚠️  Workflow run {run_id} stopped")
                             else:
@@ -345,6 +347,8 @@ def _live_log_monitoring(
 
             time.sleep(10)  # Check every 10 seconds
 
+        except typer.Exit:
+            raise
         except Exception as e:
             if output.upper() == "JSON":
                 error_data = {

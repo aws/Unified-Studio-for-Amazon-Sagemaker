@@ -234,7 +234,7 @@ class TestBasicPipeline(IntegrationTestBase):
             endpoint = f'https://airflow-serverless.{region}.api.aws/'
         
         try:
-            client = boto3.client('awsoverdriveservice', region_name=region, endpoint_url=endpoint)
+            client = boto3.client('mwaaserverless', region_name=region, endpoint_url=endpoint)
             response = client.list_workflows()
             workflows = response.get('Workflows', [])
             expected_failure_name = f'BasicTestPipeline_test_marketing_{failure_workflow_name}'

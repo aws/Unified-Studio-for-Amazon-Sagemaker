@@ -3,6 +3,8 @@
 SMUS CI/CD CLI - Command Line Interface for SageMaker Unified Studio CI/CD Pipeline Management
 """
 
+import sys
+
 import typer
 from rich.console import Console
 
@@ -11,6 +13,7 @@ from .commands.bundle import bundle_command
 from .commands.create import create_command_with_output
 from .commands.delete import delete_command
 from .commands.deploy import deploy_command
+from .commands.integrate import integrate_qcli
 
 # Import command functions
 from .commands.describe import describe_command
@@ -367,6 +370,35 @@ def delete(
 ):
     """Delete projects and environments that were deployed during initialize."""
     delete_command(pipeline, targets, force, async_mode, output)
+
+
+@app.command(
+    "integrate",
+    help="Integrate SMUS CLI with other tools (Q CLI). Example: smus-cli integrate qcli",
+    rich_help_panel="Pipeline Commands",
+)
+def integrate(
+    tool: str = typer.Argument(..., help="Tool to integrate with (qcli)"),
+    status: bool = typer.Option(False, "--status", help="Show integration status"),
+    uninstall: bool = typer.Option(False, "--uninstall", help="Uninstall integration"),
+):
+    """
+    Integrate SMUS CLI with external tools.
+
+    Currently supports:
+    - qcli: Amazon Q CLI integration via MCP (Model Context Protocol)
+
+    Examples:
+      smus-cli integrate qcli              # Setup Q CLI integration
+      smus-cli integrate qcli --status     # Check integration status
+      smus-cli integrate qcli --uninstall  # Remove integration
+    """
+    if tool.lower() == "qcli":
+        sys.exit(integrate_qcli(status=status, uninstall=uninstall))
+    else:
+        typer.echo(f"❌ Unknown tool: {tool}")
+        typer.echo("Available: qcli")
+        raise typer.Exit(1)
 
 
 @app.command(

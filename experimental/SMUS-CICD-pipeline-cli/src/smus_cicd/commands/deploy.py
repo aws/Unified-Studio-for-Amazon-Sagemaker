@@ -22,7 +22,7 @@ from ..pipeline import PipelineManifest
 # TEMPORARY: Airflow Serverless (Overdrive) configuration
 # TODO: Remove these overrides once service is available in all regions
 AIRFLOW_SERVERLESS_REGION = "us-west-2"  # Force us-west-2 for Airflow Serverless
-AIRFLOW_SERVERLESS_ENDPOINT_URL = "https://overdrive-gamma.us-west-2.api.aws"
+AIRFLOW_SERVERLESS_ENDPOINT_URL = "https://airflow-serverless.us-west-2.api.aws/"
 
 
 def _fix_airflow_role_cloudwatch_policy(role_arn: str, region: str) -> bool:

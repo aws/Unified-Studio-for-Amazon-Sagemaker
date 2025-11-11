@@ -26,7 +26,7 @@ class TestGenAIWorkflow(IntegrationTestBase):
                 endpoint = f'https://airflow-serverless.{region}.api.aws/'
             
             client = boto3.client(
-                'awsoverdriveservice',
+                'mwaaserverless',
                 region_name=region,
                 endpoint_url=endpoint
             )
@@ -129,9 +129,9 @@ class TestGenAIWorkflow(IntegrationTestBase):
 
         # Step 7: Get workflow ARN
         print("\n=== Step 7: Get Workflow ARN ===")
-        region = os.environ.get('DEV_DOMAIN_REGION', 'us-east-1')
+        region = os.environ.get('DEV_DOMAIN_REGION', 'us-east-2')
         endpoint = os.environ.get('AIRFLOW_SERVERLESS_ENDPOINT', f'https://airflow-serverless.{region}.api.aws/')
-        client = boto3.client('awsoverdriveservice', region_name=region, endpoint_url=endpoint)
+        client = boto3.client('mwaaserverless', region_name=region, endpoint_url=endpoint)
         response = client.list_workflows()
         workflow_arn = None
         expected_name = 'IntegrationTestGenAIWorkflow_test_marketing_genai_dev_workflow'
@@ -147,7 +147,5 @@ class TestGenAIWorkflow(IntegrationTestBase):
         result = self.run_cli_command(
             ["logs", "--live", "--workflow", workflow_arn]
         )
-        if result["success"]:
-            print("✅ Workflow completed successfully")
-        else:
-            print(f"⚠️ Workflow logs: {result['output']}")
+        assert result["success"], f"Workflow execution failed: {result['output']}"
+        print("✅ Workflow completed successfully")

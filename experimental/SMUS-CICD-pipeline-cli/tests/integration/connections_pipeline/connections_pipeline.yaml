@@ -11,7 +11,8 @@ workflows:
 bundle:
   bundlesDirectory: /tmp/bundles
   workflow:
-    - connectionName: default.s3_shared
+    - name: workflows
+      connectionName: default.s3_shared
       include: 
         - 'workflows'
       exclude: 
@@ -20,7 +21,8 @@ bundle:
         - '*.pyc'
         - '.libs.json'    
   storage:
-    - connectionName: default.s3_shared
+    - name: src
+      connectionName: default.s3_shared
       include: 
         - 'src'
       exclude: 

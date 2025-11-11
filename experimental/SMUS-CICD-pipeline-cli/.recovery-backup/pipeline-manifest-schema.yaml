@@ -37,22 +37,24 @@ properties:
         items:
           $ref: "#/definitions/bundleConnection"
       git:
-        type: array
-        description: "Git repositories to clone into bundle"
-        items:
-          type: object
-          required: 
-            - repository
-            - url
-          properties:
-            repository:
-              type: string
-              description: "Repository name"
-            url:
-              type: string
-              format: uri
-              description: "Git repository URL"
-          additionalProperties: false
+        type: object
+        description: "Git repository to include in bundle"
+        required: 
+          - repository
+          - url
+          - targetDir
+        properties:
+          repository:
+            type: string
+            description: "Repository name"
+          url:
+            type: string
+            format: uri
+            description: "Git repository URL"
+          targetDir:
+            type: string
+            description: "Target directory for git content"
+        additionalProperties: false
       catalog:
         type: object
         description: "Catalog assets configuration for DataZone access"
@@ -115,13 +117,14 @@ properties:
       type: object
       required: 
         - workflowName
+        - connectionName
       properties:
         workflowName:
           type: string
           description: "Name of the workflow to trigger"
         connectionName:
           type: string
-          description: "Optional connection to use for workflow execution (MWAA only)"
+          description: "Connection to use for workflow execution"
           examples: 
             - "project.workflow_mwaa"
         engine:
@@ -148,28 +151,6 @@ properties:
             - "none"
           default: "console"
       additionalProperties: false
-  monitoring:
-    type: object
-    description: "Monitoring configuration for pipeline events"
-    properties:
-      eventbridge:
-        type: object
-        description: "EventBridge monitoring configuration"
-        properties:
-          enabled:
-            type: boolean
-            description: "Enable EventBridge monitoring"
-            default: false
-          eventBusName:
-            type: string
-            description: "EventBridge event bus name"
-            default: "default"
-          includeMetadata:
-            type: boolean
-            description: "Include metadata in events"
-            default: true
-        additionalProperties: false
-    additionalProperties: false
   targets:
     type: object
     description: "Target environments for deployment"
@@ -185,15 +166,7 @@ definitions:
     type: object
     required: 
       - connectionName
-      - name
     properties:
-      name:
-        type: string
-        description: "Name identifier for this bundle (used as subdirectory in bundle)"
-        examples:
-          - "etl"
-          - "workflows"
-          - "notebooks"
       connectionName:
         type: string
         description: "DataZone connection name"
@@ -428,11 +401,7 @@ definitions:
                   type: object
                   required:
                     - connectionName
-                    - name
                   properties:
-                    name:
-                      type: string
-                      description: "Name identifier for this storage bundle"
                     connectionName:
                       type: string
                       description: "DataZone connection name"
@@ -459,25 +428,19 @@ definitions:
                 description: "Target directory"
             additionalProperties: false
           git:
-            type: array
-            description: "Git deployment configuration for this target"
-            items:
-              type: object
-              required: 
-                - name
-                - connectionName
-                - targetDirectory
-              properties:
-                name:
-                  type: string
-                  description: "Git repository name"
-                connectionName:
-                  type: string
-                  description: "DataZone connection name"
-                targetDirectory:
-                  type: string
-                  description: "Target directory"
-              additionalProperties: false
+            type: object
+            description: "Git configuration for this target"
+            required: 
+              - connectionName
+              - directory
+            properties:
+              connectionName:
+                type: string
+                description: "DataZone connection name"
+              directory:
+                type: string
+                description: "Target directory"
+            additionalProperties: false
           catalog:
             type: object
             description: "Catalog configuration for this target"

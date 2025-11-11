@@ -1,7 +1,4 @@
 pipelineName: TestPipeline
-domain:
-  name: cicd-test-domain
-  region: ${DEV_DOMAIN_REGION:us-east-1}
 bundle:
   bundlesDirectory: ./bundles
   storage:
@@ -27,6 +24,10 @@ bundle:
 targets:
   dev:
     stage: DEV
+    domain:
+      tags:
+        purpose: smus-cicd-testing
+      region: ${DEV_DOMAIN_REGION:us-east-1}
     project:
       name: dev-marketing
       create: false
@@ -40,6 +41,10 @@ targets:
         targetDirectory: workflows
   test:
     stage: TEST
+    domain:
+      tags:
+        purpose: smus-cicd-testing
+      region: ${DEV_DOMAIN_REGION:us-east-1}
     project:
       name: dev-marketing-test
       create: true
@@ -60,6 +65,10 @@ targets:
         targetDirectory: workflows
   prod:
     stage: PROD
+    domain:
+      tags:
+        purpose: smus-cicd-testing
+      region: ${DEV_DOMAIN_REGION:us-east-1}
     project:
       name: dev-marketing-prod
       create: true

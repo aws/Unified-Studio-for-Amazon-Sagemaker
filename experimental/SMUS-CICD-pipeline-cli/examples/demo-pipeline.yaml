@@ -1,17 +1,18 @@
 pipelineName: DemoMarketingPipeline
-domain:
-  name: your-domain-name
-  region: ${DEV_DOMAIN_REGION:us-east-1}
 bundle:
   bundlesDirectory: ./bundles
 targets:
   dev:
     stage: DEV
+    domain:
+      region: ${DEV_DOMAIN_REGION:us-east-1}
     project:
       name: dev-project-name
       create: false
   test:
     stage: TEST
+    domain:
+      region: ${DEV_DOMAIN_REGION:us-east-1}
     project:
       name: test-project-name
       create: false
@@ -24,6 +25,8 @@ targets:
         contributors: []
   prod:
     stage: PROD
+    domain:
+      region: ${DEV_DOMAIN_REGION:us-east-1}
     project:
       name: prod-project-name
       create: false
