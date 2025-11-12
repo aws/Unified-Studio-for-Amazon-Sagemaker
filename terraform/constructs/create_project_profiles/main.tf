@@ -1,14 +1,13 @@
 /*
  * Create Project profile for SMUS Domain
- * WARNING: This module is currently non-functional due to an open issue 
- */
+ */ 
 
 resource "awscc_datazone_project_profile" "sql_analytics" {
   name = "SQL analytics"
   description = "Analyze your data in SageMaker Lakehouse using SQL"
-  domain_identifier = var.domain_unit_id
+  domain_identifier = var.domain_id
   status = "ENABLED"
-  /*
+  
   environment_configurations = [
     {
       name = "Tooling"
@@ -189,15 +188,14 @@ resource "awscc_datazone_project_profile" "sql_analytics" {
       }
     }
   ]
-  */
 }
 
 resource "awscc_datazone_project_profile" "all_capabilities_project_profile" {
   name = "All capabilities"
   description = "Analyze data and build machine learning and generative AI models and applications powered by Amazon Bedrock, Amazon EMR, AWS Glue, Amazon Athena, Amazon SageMaker AI and Amazon SageMaker Lakehouse"
   status = "ENABLED"
-  domain_identifier = var.domain_unit_id
-  /*
+  domain_identifier = var.domain_id
+  
   environment_configurations = [
     {
       name = "Tooling"
@@ -635,5 +633,5 @@ resource "awscc_datazone_project_profile" "all_capabilities_project_profile" {
       }
     }
   ]
-  */
+  
 }
