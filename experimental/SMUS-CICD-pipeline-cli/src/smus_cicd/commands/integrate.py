@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 
-def integrate_qcli(status=False, uninstall=False):
+def integrate_qcli(status=False, uninstall=False, configure=None):
     """Integrate SMUS CLI with Amazon Q CLI."""
 
     if status:
@@ -14,10 +14,10 @@ def integrate_qcli(status=False, uninstall=False):
     if uninstall:
         return uninstall_integration()
 
-    return setup_integration()
+    return setup_integration(configure)
 
 
-def setup_integration():
+def setup_integration(configure=None):
     """Setup Q CLI integration."""
     print("🔧 Setting up Q CLI integration...\n")
 
@@ -33,7 +33,7 @@ def setup_integration():
 
     # 2. Find SMUS CLI path
     smus_path = Path(__file__).parent.parent.parent.parent
-    wrapper_script = smus_path / "run_mcp_server.sh"
+    wrapper_script = smus_path / "tests" / "scripts" / "run_mcp_server.sh"
 
     if not wrapper_script.exists():
         print(f"❌ MCP server wrapper not found: {wrapper_script}")
@@ -41,13 +41,26 @@ def setup_integration():
 
     print(f"✅ SMUS CLI found: {smus_path}")
 
-    # 3. Register MCP server
+    # 3. Validate custom config if provided
+    if configure:
+        config_path = Path(configure)
+        if not config_path.exists():
+            print(f"❌ Configuration file not found: {configure}")
+            return 1
+        print(f"✅ Using custom config: {configure}")
+        # Store config path for wrapper script
+        config_env = f"SMUS_MCP_CONFIG={config_path.absolute()}"
+    else:
+        config_env = ""
+        print("✅ Using default config: mcp-config.yaml")
+
+    # 4. Register MCP server
     print("\n📝 Registering MCP server...")
-    result = subprocess.run(
-        ["q", "mcp", "add", "--name", "smus-cli", "--command", str(wrapper_script)],
-        capture_output=True,
-        text=True,
-    )
+    cmd = ["q", "mcp", "add", "--name", "smus-cli", "--command", str(wrapper_script)]
+    if config_env:
+        cmd.extend(["--env", config_env])
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
 
     if result.returncode != 0:
         if "already exists" in result.stderr.lower():
@@ -59,7 +72,7 @@ def setup_integration():
     else:
         print("✅ MCP server registered")
 
-    # 4. Verify
+    # 5. Verify
     print("\n🔍 Verifying registration...")
     result = subprocess.run(["q", "mcp", "list"], capture_output=True, text=True)
 
@@ -70,7 +83,7 @@ def setup_integration():
         print("⚠️  Registration succeeded but server not visible")
         return 1
 
-    # 5. Show usage
+    # 6. Show usage
     print("\n" + "=" * 60)
     print("🎉 Q CLI integration complete!")
     print("=" * 60)
@@ -82,6 +95,11 @@ def setup_integration():
     print("  • get_pipeline_example - Generate pipeline manifests")
     print("  • query_smus_kb - Search SMUS documentation")
     print("  • validate_pipeline - Validate pipeline.yaml")
+    print("\nKnowledge Base:")
+    if configure:
+        print(f"  Custom: {configure}")
+    else:
+        print("  Default: mcp-config.yaml")
     print("\nLogs:")
     print("  /tmp/smus_mcp_server.log")
     print("\nDocs:")

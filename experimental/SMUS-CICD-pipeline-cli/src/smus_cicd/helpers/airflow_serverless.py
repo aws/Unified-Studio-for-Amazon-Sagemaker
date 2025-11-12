@@ -90,7 +90,7 @@ def create_workflow(
             params["Description"] = description
         if tags:
             params["Tags"] = tags
-        
+
         # Add DataZone environment variables if provided
         if datazone_domain_id and datazone_project_id:
             from . import datazone
@@ -165,11 +165,13 @@ def create_workflow(
 
             # If EnvironmentVariables are needed, delete and recreate (update doesn't support them)
             if datazone_domain_id or datazone_project_id:
-                logger.info(f"EnvironmentVariables needed - deleting and recreating workflow {workflow_name}")
-                
+                logger.info(
+                    f"EnvironmentVariables needed - deleting and recreating workflow {workflow_name}"
+                )
+
                 try:
                     client = create_airflow_serverless_client(connection_info, region)
-                    
+
                     # Get existing workflow ARN
                     workflows = list_workflows(connection_info, region)
                     workflow_arn = None
@@ -177,17 +179,19 @@ def create_workflow(
                         if wf["name"] == workflow_name:
                             workflow_arn = wf["workflow_arn"]
                             break
-                    
+
                     if workflow_arn:
                         logger.info(f"Deleting existing workflow: {workflow_arn}")
                         client.delete_workflow(WorkflowArn=workflow_arn)
-                        logger.info(f"Deleted workflow, recreating with EnvironmentVariables")
-                        
+                        logger.info(
+                            f"Deleted workflow, recreating with EnvironmentVariables"
+                        )
+
                         # Retry creation
                         response = client.create_workflow(**params)
                         workflow_arn = response["WorkflowArn"]
                         logger.info(f"Successfully recreated workflow: {workflow_arn}")
-                        
+
                         return {
                             "workflow_arn": workflow_arn,
                             "workflow_version": response["WorkflowVersion"],
@@ -199,10 +203,10 @@ def create_workflow(
                 except Exception as delete_error:
                     logger.error(f"Failed to delete/recreate workflow: {delete_error}")
                     raise
-            
+
             # No EnvironmentVariables needed, just update
             logger.info(f"Updating existing workflow {workflow_name}")
-            
+
             # Get existing workflow info and update it
             try:
                 client = create_airflow_serverless_client(connection_info, region)

@@ -381,6 +381,9 @@ def integrate(
     tool: str = typer.Argument(..., help="Tool to integrate with (qcli)"),
     status: bool = typer.Option(False, "--status", help="Show integration status"),
     uninstall: bool = typer.Option(False, "--uninstall", help="Uninstall integration"),
+    configure: str = typer.Option(
+        None, "--configure", help="Path to custom MCP configuration file"
+    ),
 ):
     """
     Integrate SMUS CLI with external tools.
@@ -389,12 +392,15 @@ def integrate(
     - qcli: Amazon Q CLI integration via MCP (Model Context Protocol)
 
     Examples:
-      smus-cli integrate qcli              # Setup Q CLI integration
-      smus-cli integrate qcli --status     # Check integration status
-      smus-cli integrate qcli --uninstall  # Remove integration
+      smus-cli integrate qcli                           # Setup with default config
+      smus-cli integrate qcli --configure custom.yaml   # Setup with custom config
+      smus-cli integrate qcli --status                  # Check integration status
+      smus-cli integrate qcli --uninstall               # Remove integration
     """
     if tool.lower() == "qcli":
-        sys.exit(integrate_qcli(status=status, uninstall=uninstall))
+        sys.exit(
+            integrate_qcli(status=status, uninstall=uninstall, configure=configure)
+        )
     else:
         typer.echo(f"❌ Unknown tool: {tool}")
         typer.echo("Available: qcli")

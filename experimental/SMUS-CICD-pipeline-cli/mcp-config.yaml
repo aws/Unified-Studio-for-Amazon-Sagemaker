@@ -1,0 +1,38 @@
+# MCP Server Knowledge Base Configuration
+# This file defines what documents and templates are loaded into the MCP server
+
+docs:
+  # Documentation files to include in knowledge base
+  - path: README.md
+    description: Main project documentation
+  - path: docs/
+    description: All documentation files
+    recursive: true
+    include: ['*.md', '*.pdf']
+
+templates:
+  # CICD Pipeline templates
+  cicd_pipelines:
+    - path: examples/
+      description: Pipeline manifest examples
+      include: ['*pipeline*.yaml']
+    - path: tests/fixtures/
+      description: Test pipeline fixtures
+      include: ['*pipeline*.yaml']
+  
+  # GitHub Workflow templates
+  github_workflows:
+    - path: .github/workflows/
+      description: GitHub Actions workflows
+      include: ['*.yml', '*.yaml']
+  
+  # Airflow workflow templates
+  airflow_workflows:
+    - path: examples/mwaa-example/workflows/dags/
+      description: Airflow DAG examples
+      include: ['*.py']
+      exclude: ['__pycache__/', '*.pyc']
+    - path: examples/serverless-example/workflows/
+      description: Airflow serverless workflow examples
+      include: ['*.py']
+      exclude: ['__pycache__/', '*.pyc']

@@ -1,92 +1,111 @@
 parallel_notebooks_workflow:
-  dag_id: 'parallel_notebooks_execution'
+  dag_id: parallel_notebooks_execution
   tasks:
     notebook_00_pandas:
-      operator: "airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator"
+      operator: airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator
       retries: 0
       input_config:
-        input_path: "notebooks/bundle/notebooks/00_basic_python_pandas.ipynb"
+        input_path: notebooks/bundle/notebooks/00_basic_python_pandas.ipynb
         input_params: {}
       output_config:
-        output_formats: ['NOTEBOOK']
-      wait_for_completion: True
-    
+        output_formats:
+        - NOTEBOOK
+      compute:
+        instance_type: ml.c5.xlarge
+      wait_for_completion: true
     notebook_04_athena:
-      operator: "airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator"
+      operator: airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator
       retries: 0
       input_config:
-        input_path: "notebooks/bundle/notebooks/04_gdc_athena.ipynb"
+        input_path: notebooks/bundle/notebooks/04_gdc_athena.ipynb
         input_params: {}
       output_config:
-        output_formats: ['NOTEBOOK']
-      wait_for_completion: True
-    
+        output_formats:
+        - NOTEBOOK
+      compute:
+        instance_type: ml.c5.xlarge
+      wait_for_completion: true
     notebook_05_spark:
-      operator: "airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator"
+      operator: airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator
       retries: 0
       input_config:
-        input_path: "notebooks/bundle/notebooks/05_customer_churn_spark.ipynb"
+        input_path: notebooks/bundle/notebooks/05_customer_churn_spark.ipynb
         input_params: {}
       output_config:
-        output_formats: ['NOTEBOOK']
-      wait_for_completion: True
-    
+        output_formats:
+        - NOTEBOOK
+      compute:
+        instance_type: ml.c5.xlarge
+      wait_for_completion: true
     notebook_06_duckdb:
-      operator: "airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator"
+      operator: airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator
       retries: 0
       input_config:
-        input_path: "notebooks/bundle/notebooks/06_purchase_analytics_duckdb.ipynb"
+        input_path: notebooks/bundle/notebooks/06_purchase_analytics_duckdb.ipynb
         input_params: {}
       output_config:
-        output_formats: ['NOTEBOOK']
-      wait_for_completion: True
-    
+        output_formats:
+        - NOTEBOOK
+      compute:
+        instance_type: ml.c5.xlarge
+      wait_for_completion: true
     notebook_08_genai:
-      operator: "airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator"
+      operator: airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator
       retries: 0
       input_config:
-        input_path: "notebooks/bundle/notebooks/08_genai_etl_pandas.ipynb"
+        input_path: notebooks/bundle/notebooks/08_genai_etl_pandas.ipynb
         input_params: {}
       output_config:
-        output_formats: ['NOTEBOOK']
-      wait_for_completion: True
-    
+        output_formats:
+        - NOTEBOOK
+      compute:
+        instance_type: ml.c5.xlarge
+      wait_for_completion: true
     notebook_09_temperature:
-      operator: "airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator"
+      operator: airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator
       retries: 0
       input_config:
-        input_path: "notebooks/bundle/notebooks/09_city_temperature_spark.ipynb"
+        input_path: notebooks/bundle/notebooks/09_city_temperature_spark.ipynb
         input_params: {}
       output_config:
-        output_formats: ['NOTEBOOK']
-      wait_for_completion: True
-    
+        output_formats:
+        - NOTEBOOK
+      compute:
+        instance_type: ml.c5.xlarge
+      wait_for_completion: true
     notebook_10_chronos:
-      operator: "airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator"
+      operator: airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator
       retries: 0
       input_config:
-        input_path: "notebooks/bundle/notebooks/10_time_series_chronos.ipynb"
+        input_path: notebooks/bundle/notebooks/10_time_series_chronos.ipynb
         input_params: {}
       output_config:
-        output_formats: ['NOTEBOOK']
-      wait_for_completion: True
-    
+        output_formats:
+        - NOTEBOOK
+      compute:
+        instance_type: ml.c5.xlarge
+      wait_for_completion: true
     notebook_11_dynamodb:
-      operator: "airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator"
+      operator: airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator
       retries: 0
       input_config:
-        input_path: "notebooks/bundle/notebooks/11_movie_sales_dynamodb.ipynb"
+        input_path: notebooks/bundle/notebooks/11_movie_sales_dynamodb.ipynb
         input_params: {}
       output_config:
-        output_formats: ['NOTEBOOK']
-      wait_for_completion: True
-    
+        output_formats:
+        - NOTEBOOK
+      compute:
+        instance_type: ml.c5.xlarge
+      wait_for_completion: true
     notebook_12_mlflow:
-      operator: "airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator"
+      operator: airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator
       retries: 0
       input_config:
-        input_path: "notebooks/bundle/notebooks/12_classification_mlflow.ipynb"
+        input_path: notebooks/bundle/notebooks/12_classification_mlflow.ipynb
         input_params: {}
       output_config:
-        output_formats: ['NOTEBOOK']
-      wait_for_completion: True
+        output_formats:
+        - NOTEBOOK
+      compute:
+        instance_type: ml.c5.xlarge
+      wait_for_completion: true

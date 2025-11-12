@@ -15,30 +15,7 @@ class TestETLWorkflow(IntegrationTestBase):
         """Set up test environment."""
         super().setup_method(method)
         self.setup_test_directory()
-        self.cleanup_workflows()
         self.cleanup_glue_databases()
-
-    def cleanup_workflows(self):
-        """Delete existing workflows from previous runs."""
-        try:
-            client = boto3.client(
-                'mwaaserverless',
-                region_name='us-east-2',
-                endpoint_url='https://airflow-serverless.us-east-2.api.aws/'
-            )
-            response = client.list_workflows()
-            workflows = response.get('Workflows', [])
-            expected_name = 'IntegrationTestETLWorkflow_test_marketing_covid_etl_pipeline'
-            
-            for wf in workflows:
-                if wf.get('Name') == expected_name:
-                    workflow_arn = wf.get('WorkflowArn')
-                    print(f"🗑️  Deleting existing workflow: {expected_name}")
-                    client.delete_workflow(WorkflowArn=workflow_arn)
-                    print("✅ Workflow deleted")
-                    break
-        except Exception as e:
-            print(f"⚠️  Could not delete workflow: {e}")
 
     def cleanup_glue_databases(self):
         """Delete test Glue databases and S3 data."""

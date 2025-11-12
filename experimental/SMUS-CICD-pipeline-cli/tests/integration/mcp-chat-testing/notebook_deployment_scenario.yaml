@@ -1,0 +1,57 @@
+scenario: notebook_deployment_pipeline
+description: User creates pipeline for deploying Jupyter notebooks
+
+turns:
+  # Turn 1: User asks about notebook deployment
+  - type: user_input
+    message: "I need to deploy Jupyter notebooks to dev and prod environments"
+
+  # Turn 2: Q searches for notebook deployment info
+  - type: tool_call
+    tool: query_smus_kb
+    arguments:
+      query: "notebook deployment"
+      max_results: 3
+    save_as: notebook_search
+
+  # Turn 3: Q generates notebook pipeline example
+  - type: tool_call
+    tool: get_pipeline_example
+    arguments:
+      use_case: "notebooks"
+    save_as: notebook_pipeline
+
+  # Turn 4: Verify pipeline has notebook-specific config
+  - type: assertion
+    check: contains
+    target: notebook_pipeline
+    value: "notebooks"
+
+  # Turn 5: Verify multiple targets (dev/prod)
+  - type: assertion
+    check: regex
+    target: notebook_pipeline
+    value: "(dev|test|prod)"
+
+  # Turn 6: User asks about storage configuration
+  - type: user_input
+    message: "How do I configure S3 storage for the notebooks?"
+
+  # Turn 7: Q searches for storage configuration
+  - type: tool_call
+    tool: query_smus_kb
+    arguments:
+      query: "s3 storage bundle"
+      max_results: 3
+    save_as: storage_info
+
+  # Turn 8: Verify storage info found
+  - type: assertion
+    check: contains
+    target: storage_info
+    value: "storage"
+
+expected_outcome:
+  pipeline_created: true
+  storage_configured: true
+  multi_environment: true

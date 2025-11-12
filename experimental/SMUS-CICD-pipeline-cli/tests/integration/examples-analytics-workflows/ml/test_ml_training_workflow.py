@@ -15,34 +15,6 @@ class TestMLTrainingWorkflow(IntegrationTestBase):
         """Set up test environment."""
         super().setup_method(method)
         self.setup_test_directory()
-        self.cleanup_workflows()
-
-    def cleanup_workflows(self):
-        """Delete existing workflows from previous runs."""
-        try:
-            region = os.environ.get('DEV_DOMAIN_REGION', 'us-east-1')
-            endpoint = os.environ.get('AIRFLOW_SERVERLESS_ENDPOINT')
-            if not endpoint:
-                endpoint = f'https://airflow-serverless.{region}.api.aws/'
-            
-            client = boto3.client(
-                'mwaaserverless',
-                region_name=region,
-                endpoint_url=endpoint
-            )
-            response = client.list_workflows()
-            workflows = response.get('Workflows', [])
-            expected_name = 'IntegrationTestMLWorkflow_test_marketing_ml_training_workflow'
-            
-            for wf in workflows:
-                if wf.get('Name') == expected_name:
-                    workflow_arn = wf.get('WorkflowArn')
-                    print(f"🗑️  Deleting existing workflow: {expected_name}")
-                    client.delete_workflow(WorkflowArn=workflow_arn)
-                    print("✅ Workflow deleted")
-                    break
-        except Exception as e:
-            print(f"⚠️  Could not delete workflow: {e}")
 
     def get_pipeline_file(self):
         return os.path.join(
