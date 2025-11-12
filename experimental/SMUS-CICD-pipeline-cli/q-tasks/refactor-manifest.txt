@@ -1,0 +1,77 @@
+# Refactor Manifest Task - Terminology Change
+
+## Objective
+Clarify terminology to distinguish between:
+- **Bundle**: The manifest definition (what gets deployed - workflows, code, dependencies)
+- **GitHub Workflows**: The CICD pipeline automation (how deployment happens)
+- **CICD Pipeline**: Refers specifically to GitHub workflows, not our manifest
+
+## Current Problem
+The term "pipeline" is overloaded:
+- Our manifest is called "pipeline manifest" but it's really a "bundle definition"
+- GitHub workflows are the actual CICD pipeline
+- This creates confusion about what owns what
+
+## Terminology Changes Required
+
+### Core Concept
+- OLD: "pipeline manifest" → NEW: "bundle manifest" or just "bundle"
+- OLD: "CICD pipeline" (referring to our tool) → NEW: "GitHub workflows" (be specific)
+- KEEP: "CICD pipeline" only when referring to GitHub Actions workflows
+
+### Files to Change
+
+#### 1. Documentation Files
+- `docs/pipeline-manifest.md` → rename to `docs/bundle-manifest.md`
+- `docs/pipeline-manifest-schema.md` → rename to `docs/bundle-manifest-schema.md`
+- `docs/cli-commands.md` - update all references
+- `README.md` - update terminology
+- All example README files
+
+#### 2. Schema Files
+- `src/smus_cicd/pipeline/pipeline-manifest-schema.yaml` → `bundle-manifest-schema.yaml`
+- Update schema title and descriptions
+
+#### 3. Python Code
+- `src/smus_cicd/pipeline/pipeline_manifest.py` → rename to `bundle_manifest.py`
+- Update class names: `PipelineManifest` → `BundleManifest`
+- Update all docstrings and comments
+- CLI help text in `src/smus_cicd/cli.py`
+- Update all imports across codebase
+
+#### 4. Example Files
+- All `*pipeline.yaml` files → rename to `*bundle.yaml`
+- Update content references within files
+
+#### 5. Test Files
+- Update test file names and test data
+- Update assertions and error messages
+- Update all test fixtures
+
+#### 6. CLI Arguments
+- `--pipeline` flag → `--bundle` flag (NO backward compatibility)
+- Default filename: `pipeline.yaml` → `bundle.yaml`
+
+### Search Patterns to Find
+1. "pipeline manifest" → "bundle manifest" or "bundle"
+2. "pipeline.yaml" → "bundle.yaml"
+3. "PipelineManifest" → "BundleManifest"
+4. "--pipeline" flag → "--bundle" flag
+5. Comments/docstrings mentioning "pipeline" in bundle context
+6. Import statements with pipeline_manifest
+7. Variable names containing "pipeline" in bundle context
+
+### Breaking Changes
+- NO backward compatibility support
+- All code must be updated in one change
+- All examples must be updated
+- All tests must be updated
+- All documentation must be updated
+- Users must update their manifests from `pipeline.yaml` to `bundle.yaml`
+
+## Implementation Notes
+- This is a breaking change requiring full migration
+- Focus on clarity: bundle = what, GitHub workflows = how
+- CICD teams own GitHub workflows
+- Data/science teams own bundle definitions
+- All references must be updated atomically
