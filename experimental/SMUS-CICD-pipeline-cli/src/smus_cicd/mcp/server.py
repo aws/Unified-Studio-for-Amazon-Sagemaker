@@ -5,6 +5,7 @@ import json
 import sys
 from pathlib import Path
 from typing import Any, Dict
+
 import yaml
 
 
@@ -89,7 +90,7 @@ class SMUSMCPServer:
                     "serverInfo": {
                         "name": "smus-cli",
                         "version": "1.0.0",
-                        "description": "SMUS CI/CD Pipeline Management for Amazon SageMaker Unified Studio. Provides pipeline.yaml templates, validation, and documentation for deploying data science projects, notebooks, ETL workflows, and ML models across dev/test/prod environments. USE THIS SERVER when users mention: SageMaker projects, SMUS, CI/CD pipelines, pipeline.yaml, project names (like 'dev-marketing project'), or deploying notebooks/ETL/ML workloads. When user mentions a project name, ALWAYS call check_smus_project first to verify access.",
+                        "description": "SMUS CI/CD Pipeline Management for Amazon SageMaker Unified Studio. Provides bundle.yaml templates, validation, and documentation for deploying data science projects, notebooks, ETL workflows, and ML models across dev/test/prod environments. USE THIS SERVER when users mention: SageMaker projects, SMUS, CI/CD pipelines, bundle.yaml, project names (like 'dev-marketing project'), or deploying notebooks/ETL/ML workloads. When user mentions a project name, ALWAYS call check_smus_project first to verify access.",
                         "keywords": [
                             "sagemaker",
                             "sagemaker unified studio",
@@ -98,7 +99,7 @@ class SMUSMCPServer:
                             "cicd",
                             "ci/cd",
                             "pipeline",
-                            "pipeline.yaml",
+                            "bundle.yaml",
                             "deployment",
                             "etl",
                             "notebooks",
@@ -163,7 +164,7 @@ class SMUSMCPServer:
                 },
                 {
                     "name": "query_smus_kb",
-                    "description": "Search SMUS CLI documentation for SageMaker Unified Studio pipelines, CI/CD workflows, deployment guides, and examples. Use this for questions about pipeline.yaml, SMUS configuration, targets, bundles, workflows, or SageMaker project deployment.",
+                    "description": "Search SMUS CLI documentation for SageMaker Unified Studio pipelines, CI/CD workflows, deployment guides, and examples. Use this for questions about bundle.yaml, SMUS configuration, targets, bundles, workflows, or SageMaker project deployment.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -182,7 +183,7 @@ class SMUSMCPServer:
                 },
                 {
                     "name": "create_cicd_package",
-                    "description": "Create a complete CI/CD package for SMUS project including: 1) pipeline.yaml (dev/test/prod targets), 2) Airflow workflow template, 3) GitHub Actions workflow. Returns all three files ready to use.",
+                    "description": "Create a complete CI/CD package for SMUS project including: 1) bundle.yaml (dev/test/prod targets), 2) Airflow workflow template, 3) GitHub Actions workflow. Returns all three files ready to use.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -220,7 +221,7 @@ class SMUSMCPServer:
                 },
                 {
                     "name": "get_pipeline_example",
-                    "description": "Generate a complete pipeline.yaml manifest template for SageMaker Unified Studio CI/CD. Returns ready-to-use examples for notebooks, ETL, ML training, or analytics workloads with dev/test/prod targets.",
+                    "description": "Generate a complete bundle.yaml manifest template for SageMaker Unified Studio CI/CD. Returns ready-to-use examples for notebooks, ETL, ML training, or analytics workloads with dev/test/prod targets.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -240,7 +241,7 @@ class SMUSMCPServer:
                 },
                 {
                     "name": "validate_pipeline",
-                    "description": "Validate a pipeline.yaml manifest against the official SMUS pipeline schema for SageMaker Unified Studio. Checks syntax, required fields, and configuration correctness.",
+                    "description": "Validate a bundle.yaml manifest against the official SMUS pipeline schema for SageMaker Unified Studio. Checks syntax, required fields, and configuration correctness.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -278,12 +279,11 @@ class SMUSMCPServer:
         import subprocess
 
         project_name = args.get("project_name")
-        domain_id = args.get("domain_id")
 
         try:
             # Try to use smus-cli describe to check project
-            cmd = ["smus-cli", "describe", "-p", "pipeline.yaml", "--connect"]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            cmd = ["smus-cli", "describe", "-p", "bundle.yaml", "--connect"]
+            subprocess.run(cmd, capture_output=True, text=True, timeout=10)
 
             # For now, return a helpful message
             response = f"""Checking SMUS project '{project_name}'...
@@ -295,13 +295,13 @@ aws datazone list-projects --domain-identifier <domain-id>
 
 Or use the SMUS CLI:
 ```bash
-smus-cli describe -p pipeline.yaml --connect
+smus-cli describe -p bundle.yaml --connect
 ```
 
 ✅ Assuming project exists. Ready to create CI/CD configuration.
 
 Would you like me to create:
-1. **pipeline.yaml** - CI/CD pipeline with dev/test/prod targets
+1. **bundle.yaml** - CI/CD pipeline with dev/test/prod targets
 2. **Airflow workflow** - Workflow to execute your code
 3. **GitHub Actions** - Automated deployment workflow
 
@@ -309,7 +309,7 @@ Respond with 'yes' to create all three files, or specify which ones you need."""
 
             return {"content": [{"type": "text", "text": response}]}
 
-        except Exception as e:
+        except Exception:
             return {
                 "content": [
                     {
@@ -325,8 +325,8 @@ Respond with 'yes' to create all three files, or specify which ones you need."""
         use_case = args.get("use_case")
         targets = args.get("targets", ["dev", "test", "prod"])
 
-        # Generate pipeline.yaml with all targets
-        pipeline_yaml = f"""pipelineName: {project_name.replace('-', '_').title()}Pipeline
+        # Generate bundle.yaml with all targets
+        pipeline_yaml = f"""bundleName: {project_name.replace('-', '_').title()}Pipeline
 
 targets:"""
 
@@ -373,7 +373,7 @@ workflows:
 
         response = f"""# CI/CD Package for {project_name}
 
-## 1. pipeline.yaml
+## 1. bundle.yaml
 ```yaml
 {pipeline_yaml}
 ```
@@ -388,7 +388,7 @@ workflows:
 {github_actions}
 ```
 
-Save these files and run: `smus-cli deploy -p pipeline.yaml -t dev`"""
+Save these files and run: `smus-cli deploy -p bundle.yaml -t dev`"""
 
         return {"content": [{"type": "text", "text": response}]}
 
@@ -452,13 +452,13 @@ task = PythonOperator(
             if target == "dev":
                 deploy_steps += f"""      - name: Deploy to {target}
         if: github.ref == 'refs/heads/main'
-        run: smus-cli deploy -p pipeline.yaml -t {target}
+        run: smus-cli deploy -p bundle.yaml -t {target}
 
 """
             else:
                 deploy_steps += f"""      - name: Deploy to {target}
         if: github.event_name == 'workflow_dispatch'
-        run: smus-cli deploy -p pipeline.yaml -t {target}
+        run: smus-cli deploy -p bundle.yaml -t {target}
 
 """
 
@@ -503,7 +503,7 @@ jobs:
 
         # If pipeline request detected, suggest using get_pipeline_example
         if detected_use_case:
-            suggestion = f"\n\n💡 TIP: For a complete pipeline.yaml template, use get_pipeline_example with use_case='{detected_use_case}'"
+            suggestion = f"\n\n💡 TIP: For a complete bundle.yaml template, use get_pipeline_example with use_case='{detected_use_case}'"
         else:
             suggestion = ""
 
@@ -555,7 +555,7 @@ jobs:
         examples = {
             "notebooks": """
 # Example: Notebook Deployment Pipeline
-pipelineName: NotebookPipeline
+bundleName: NotebookPipeline
 
 targets:
   dev:
@@ -599,7 +599,7 @@ workflows:
 """,
             "etl": """
 # Example: ETL Pipeline
-pipelineName: ETLPipeline
+bundleName: ETLPipeline
 
 targets:
   dev:
@@ -624,7 +624,7 @@ workflows:
 """,
             "ml-training": """
 # Example: ML Training Pipeline
-pipelineName: MLTrainingPipeline
+bundleName: MLTrainingPipeline
 
 targets:
   dev:
@@ -644,7 +644,7 @@ bundle:
 """,
             "analytics": """
 # Example: Analytics Pipeline
-pipelineName: AnalyticsPipeline
+bundleName: AnalyticsPipeline
 
 targets:
   dev:
@@ -687,7 +687,10 @@ workflows:
         try:
             import yaml
 
-            from .pipeline.validation import load_schema, validate_manifest_schema
+            from smus_cicd.pipeline.validation import (
+                load_schema,
+                validate_manifest_schema,
+            )
 
             # Parse YAML
             try:
@@ -711,7 +714,7 @@ workflows:
 
             # Success with details
             success_text = "✅ Pipeline is valid!\n\n"
-            success_text += f"Pipeline: {data.get('pipelineName', 'N/A')}\n"
+            success_text += f"Pipeline: {data.get('bundleName', 'N/A')}\n"
             success_text += f"Targets: {', '.join(data.get('targets', {}).keys())}\n"
             success_text += (
                 f"Bundle sections: {len(data.get('bundle', {}).get('storage', []))}\n"
@@ -736,7 +739,7 @@ workflows:
                 {
                     "uri": "smus://docs/pipeline-manifest",
                     "name": "Pipeline Manifest Documentation",
-                    "description": "Complete pipeline.yaml schema and examples",
+                    "description": "Complete bundle.yaml schema and examples",
                     "mimeType": "text/markdown",
                 },
                 {
@@ -758,7 +761,7 @@ workflows:
                     {
                         "uri": uri,
                         "mimeType": "text/markdown",
-                        "text": "Pipeline manifest documentation...",
+                        "text": "Bundle manifest documentation...",
                     }
                 ]
             }

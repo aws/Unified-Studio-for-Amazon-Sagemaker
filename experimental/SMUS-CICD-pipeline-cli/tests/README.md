@@ -67,11 +67,11 @@ tests/
 │   ├── config.local.yaml # Local configuration (create from config.yaml)
 │   ├── base.py           # Base class for integration tests
 │   ├── basic_pipeline/   # Basic pipeline test suite
-│   │   ├── basic_pipeline.yaml        # Basic pipeline configuration
+│   │   ├── basic_pipeline.yaml        # Basic bundle configuration
 │   │   ├── test_basic_pipeline.py     # Basic pipeline tests
 │   │   └── README.md                  # Test documentation
 │   └── multi_target_pipeline/         # Multi-target pipeline test suite
-│       ├── multi_target_pipeline.yaml # Multi-target pipeline configuration
+│       ├── multi_target_pipeline.yaml # Multi-target bundle configuration
 │       ├── test_multi_target_pipeline.py # Multi-target tests
 │       └── README.md                  # Test documentation
 └── requirements.txt      # Test dependencies
@@ -199,7 +199,7 @@ pytest tests/ -m "not slow" -v             # All tests excluding slow ones
 
 ### Test Scenarios
 
-Each integration test uses its own pipeline configuration:
+Each integration test uses its own bundle configuration:
 
 - **`basic_pipeline.yaml`** - Single target pipeline
 - **`multi_target_pipeline.yaml`** - Multiple targets (dev, test, prod)
@@ -216,7 +216,7 @@ Each integration test uses its own pipeline configuration:
 Each integration test follows this pattern:
 
 1. **Setup** - Configure AWS credentials and test environment
-2. **Describe** - Validate pipeline configuration
+2. **Describe** - Validate bundle configuration
 3. **Bundle** - Create deployment packages (may fail if resources don't exist)
 4. **Monitor** - Check pipeline status
 5. **Cleanup** - Remove temporary resources

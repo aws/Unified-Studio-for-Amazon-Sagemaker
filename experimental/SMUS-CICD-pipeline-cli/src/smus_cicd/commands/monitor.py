@@ -12,7 +12,7 @@ from ..helpers.utils import (  # noqa: F401
     get_datazone_project_info,
     load_config,
 )
-from ..pipeline import PipelineManifest
+from ..pipeline import BundleManifest
 
 
 def monitor_command(
@@ -57,7 +57,7 @@ def _check_status_changes(
     targets: Optional[str], manifest_file: str, output: str, previous_states: dict
 ) -> bool:
     """Check for workflow status changes and report them. Returns True if any workflows are running."""
-    manifest = PipelineManifest.from_file(manifest_file)
+    manifest = BundleManifest.from_file(manifest_file)
 
     # Parse targets
     target_list = []
@@ -89,13 +89,13 @@ def _check_status_changes(
             all_workflows = airflow_serverless.list_workflows(
                 region=config.get("region")
             )
-            pipeline_name = manifest.pipeline_name
+            bundle_name = manifest.bundle_name
             target_project = target_config.project.name
 
             relevant_workflows = [
                 w
                 for w in all_workflows
-                if w.get("tags", {}).get("Pipeline") == pipeline_name
+                if w.get("tags", {}).get("Pipeline") == bundle_name
                 and w.get("tags", {}).get("Target") == target_project
             ]
 
@@ -147,7 +147,7 @@ def _monitor_once(
     """Monitor workflow status across target environments once."""
     try:
         # Load pipeline manifest using centralized parser
-        manifest = PipelineManifest.from_file(manifest_file)
+        manifest = BundleManifest.from_file(manifest_file)
 
         # Parse targets - handle single target or comma-separated list
         target_list = []
@@ -156,7 +156,7 @@ def _monitor_once(
 
         # Prepare output data structure for JSON format
         output_data = {
-            "pipeline": manifest.pipeline_name,
+            "bundle": manifest.bundle_name,
             "targets": {},
             "monitoring_timestamp": None,
         }
@@ -187,7 +187,7 @@ def _monitor_once(
 
         # TEXT output header
         if output.upper() != "JSON":
-            typer.echo(f"Pipeline: {manifest.pipeline_name}")
+            typer.echo(f"Pipeline: {manifest.bundle_name}")
 
         # Validate MWAA/Overdrive health for targets before monitoring
         healthy_targets = []
@@ -398,7 +398,7 @@ def _monitor_once(
         raise typer.Exit(1)
 
 
-def _target_uses_airflow_serverless(manifest: PipelineManifest, target_config) -> bool:
+def _target_uses_airflow_serverless(manifest: BundleManifest, target_config) -> bool:
     """
     Check if a target uses serverless Airflow workflows.
 
@@ -419,7 +419,7 @@ def _target_uses_airflow_serverless(manifest: PipelineManifest, target_config) -
 
 
 def _monitor_airflow_serverless_workflows(
-    manifest: PipelineManifest,
+    manifest: BundleManifest,
     target_config,
     config: dict,
     output: str,
@@ -449,7 +449,7 @@ def _monitor_airflow_serverless_workflows(
         all_workflows = airflow_serverless.list_workflows(region=config.get("region"))
 
         # Filter workflows that belong to this pipeline/target using tags
-        pipeline_name = manifest.pipeline_name
+        bundle_name = manifest.bundle_name
         target_name = target_config.project.name
 
         relevant_workflows = []
@@ -457,7 +457,7 @@ def _monitor_airflow_serverless_workflows(
             workflow_tags = workflow.get("tags", {})
             # Check if workflow tags match our pipeline and target
             if (
-                workflow_tags.get("Pipeline") == pipeline_name
+                workflow_tags.get("Pipeline") == bundle_name
                 and workflow_tags.get("Target") == target_name
             ):
                 relevant_workflows.append(workflow)
@@ -626,7 +626,7 @@ def _monitor_airflow_serverless_workflows(
 
 
 def _monitor_mwaa_workflows(
-    manifest: PipelineManifest, target_config, project_connections: dict, output: str
+    manifest: BundleManifest, target_config, project_connections: dict, output: str
 ) -> dict:
     """
     Monitor MWAA workflows for a target.

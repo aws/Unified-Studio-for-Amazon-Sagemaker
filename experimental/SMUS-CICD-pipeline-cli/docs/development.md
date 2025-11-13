@@ -60,7 +60,7 @@ The repository includes automated workflows for development:
 
 ### Environment Variable Configuration
 
-The CLI supports environment variable parameterization in pipeline manifests for flexible multi-environment development:
+The CLI supports environment variable parameterization in bundle manifests for flexible multi-environment development:
 
 **Local Development**:
 ```bash
@@ -81,7 +81,7 @@ export AWS_ROLE_ARN_DEV=arn:aws:iam::ACCOUNT:role/GitHubActionsRole-SMUS-CLI-Tes
 ```
 
 **Integration Test Manifests**:
-All integration test pipeline manifests use environment variables:
+All integration test bundle manifests use environment variables:
 ```yaml
 domain:
   name: cicd-test-domain
@@ -210,7 +210,7 @@ smus_cicd/
 
 ### Key Components
 - **CLI Commands**: Create, describe, bundle, deploy, test, monitor, run, delete
-- **Pipeline Manifest**: YAML configuration for multi-environment deployments
+- **Bundle Manifest**: YAML configuration for multi-environment deployments
 - **AWS Integrations**: DataZone, MWAA, S3, CloudFormation
 - **Bundle Management**: S3-based artifact storage and deployment
 

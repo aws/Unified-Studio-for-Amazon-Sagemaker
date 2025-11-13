@@ -16,7 +16,7 @@ class TestTestCommandExitCodes:
         self.runner = CliRunner()
 
     @pytest.mark.xfail(reason="Expected failure: no tests configured")
-    @patch("smus_cicd.commands.test.PipelineManifest.from_file")
+    @patch("smus_cicd.commands.test.BundleManifest.from_file")
     def test_no_tests_configured_returns_exit_code_1(self, mock_manifest):
         """Test that test command returns exit code 1 when no tests are configured."""
         # Mock manifest with target that has no tests
@@ -33,7 +33,7 @@ class TestTestCommandExitCodes:
 
         # Run test command
         result = self.runner.invoke(
-            app, ["test", "--pipeline", "test.yaml", "--targets", "test"]
+            app, ["test", "--bundle", "test.yaml", "--targets", "test"]
         )
 
         # Verify exit code 1
@@ -42,7 +42,7 @@ class TestTestCommandExitCodes:
         assert "Failed (no tests configured)" in result.stdout
 
     @pytest.mark.xfail(reason="Expected failure: missing test folder")
-    @patch("smus_cicd.commands.test.PipelineManifest.from_file")
+    @patch("smus_cicd.commands.test.BundleManifest.from_file")
     def test_missing_test_folder_returns_exit_code_1(self, mock_manifest):
         """Test that test command returns exit code 1 when test folder is missing."""
         # Mock manifest with target that has tests but folder doesn't exist
@@ -63,7 +63,7 @@ class TestTestCommandExitCodes:
 
         # Run test command
         result = self.runner.invoke(
-            app, ["test", "--pipeline", "test.yaml", "--targets", "test"]
+            app, ["test", "--bundle", "test.yaml", "--targets", "test"]
         )
 
         # Verify exit code 1

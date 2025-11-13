@@ -14,7 +14,7 @@ class TestDescribeNewFeatures:
     def create_test_manifest(self):
         """Create a test manifest file."""
         manifest_content = """
-pipelineName: TestPipeline
+bundleName: TestPipeline
 targets:
   dev:
     domain:
@@ -56,17 +56,17 @@ workflows:
 
         try:
             result = runner.invoke(
-                app, ["describe", "--pipeline", manifest_file, "--output", "JSON"]
+                app, ["describe", "--bundle", manifest_file, "--output", "JSON"]
             )
 
             assert result.exit_code == 0
 
             # Should be valid JSON
             output_data = json.loads(result.stdout)
-            assert "pipeline" in output_data
+            assert "bundle" in output_data
             assert "domain" in output_data
             assert "targets" in output_data
-            assert output_data["pipeline"] == "TestPipeline"
+            assert output_data["bundle"] == "TestPipeline"
             assert output_data["domain"]["name"] == "test-domain"
             assert output_data["domain"]["region"] == "us-east-1"
             assert "dev" in output_data["targets"]
@@ -84,7 +84,7 @@ workflows:
 
         try:
             result = runner.invoke(
-                app, ["describe", "--pipeline", manifest_file, "--output", "TEXT"]
+                app, ["describe", "--bundle", manifest_file, "--output", "TEXT"]
             )
 
             assert result.exit_code == 0
@@ -106,7 +106,7 @@ workflows:
 
         try:
             result = runner.invoke(
-                app, ["describe", "--pipeline", manifest_file, "--targets", "dev"]
+                app, ["describe", "--bundle", manifest_file, "--targets", "dev"]
             )
 
             assert result.exit_code == 0
@@ -130,7 +130,7 @@ workflows:
                 app,
                 [
                     "describe",
-                    "--pipeline",
+                    "--bundle",
                     manifest_file,
                     "--targets",
                     "dev",
@@ -159,7 +159,7 @@ workflows:
 
         try:
             result = runner.invoke(
-                app, ["describe", "--pipeline", manifest_file, "--targets", "invalid"]
+                app, ["describe", "--bundle", manifest_file, "--targets", "invalid"]
             )
 
             assert result.exit_code == 1
@@ -187,7 +187,7 @@ workflows:
                 app,
                 [
                     "describe",
-                    "--pipeline",
+                    "--bundle",
                     manifest_file,
                     "--targets",
                     "invalid",
@@ -229,7 +229,7 @@ workflows:
                     mock_project.return_value = {"connections": {}, "status": "ACTIVE", "project_id": "test-id"}
                     mock_config.return_value = {"region": "us-east-1"}
                     result = runner.invoke(
-                        app, ["describe", "--pipeline", manifest_file, "--connections"]
+                        app, ["describe", "--bundle", manifest_file, "--connections"]
                     )
 
             assert result.exit_code == 0
@@ -252,7 +252,7 @@ workflows:
                     mock_project.return_value = {"connections": {}, "status": "ACTIVE", "project_id": "test-id"}
                     mock_config.return_value = {"region": "us-east-1"}
                     result = runner.invoke(
-                        app, ["describe", "--pipeline", manifest_file, "--connections"]
+                        app, ["describe", "--bundle", manifest_file, "--connections"]
                     )
 
             assert result.exit_code == 0
@@ -274,7 +274,7 @@ workflows:
                 app,
                 [
                     "describe",
-                    "--pipeline",
+                    "--bundle",
                     manifest_file,
                     "--targets",
                     "dev",
@@ -291,7 +291,7 @@ workflows:
 
             # If successful, check for expected structure
             if result.exit_code == 0:
-                assert "pipeline" in output_data
+                assert "bundle" in output_data
                 assert "targets" in output_data
                 assert "dev" in output_data["targets"]
             else:

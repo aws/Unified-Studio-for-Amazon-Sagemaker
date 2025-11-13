@@ -9,7 +9,7 @@ from botocore.exceptions import ClientError
 
 
 def create_command(
-    pipeline_name: str,
+    bundle_name: str,
     domain_id: Optional[str] = None,
     dev_project_id: Optional[str] = None,
     stages: List[str] = None,
@@ -19,7 +19,7 @@ def create_command(
     Create a new pipeline manifest with all required fields and commented optional fields.
 
     Args:
-        pipeline_name: Name of the pipeline (required)
+        bundle_name: Name of the bundle (required)
         domain_id: SageMaker Unified Studio domain ID (optional)
         dev_project_id: Development project ID to base other targets on (optional)
         stages: List of stages to create targets for (defaults to ["dev", "test", "prod"])
@@ -33,18 +33,18 @@ def create_command(
     )
 
     manifest_content = _generate_manifest_content(
-        pipeline_name, domain_name, dev_project_name, stages, region
+        bundle_name, domain_name, dev_project_name, stages, region
     )
 
-    output_path = _write_manifest_file(pipeline_name, manifest_content)
+    output_path = _write_manifest_file(bundle_name, manifest_content)
 
     _display_creation_summary(
-        pipeline_name, domain_name, output_path, stages, domain_id, dev_project_id
+        bundle_name, domain_name, output_path, stages, domain_id, dev_project_id
     )
 
 
 def create_command_with_output(
-    pipeline_name: str,
+    bundle_name: str,
     output_file: str,
     domain_id: Optional[str] = None,
     dev_project_id: Optional[str] = None,
@@ -55,7 +55,7 @@ def create_command_with_output(
     Create a new pipeline manifest with all required fields and commented optional fields.
 
     Args:
-        pipeline_name: Name of the pipeline (required)
+        bundle_name: Name of the bundle (required)
         output_file: Output file path for the manifest
         domain_id: SageMaker Unified Studio domain ID (optional)
         dev_project_id: Development project ID to base other targets on (optional)
@@ -70,13 +70,13 @@ def create_command_with_output(
     )
 
     manifest_content = _generate_manifest_content(
-        pipeline_name, domain_name, dev_project_name, stages, region
+        bundle_name, domain_name, dev_project_name, stages, region
     )
 
     output_path = _write_manifest_file_to_path(output_file, manifest_content)
 
     _display_creation_summary(
-        pipeline_name, domain_name, output_path, stages, domain_id, dev_project_id
+        bundle_name, domain_name, output_path, stages, domain_id, dev_project_id
     )
 
 
@@ -195,7 +195,7 @@ def _handle_general_error(
 
 
 def _generate_manifest_content(
-    pipeline_name: str,
+    bundle_name: str,
     domain_name: str,
     dev_project_name: str,
     stages: List[str],
@@ -205,7 +205,7 @@ def _generate_manifest_content(
     Generate the complete manifest file content.
 
     Args:
-        pipeline_name: Name of the pipeline
+        bundle_name: Name of the bundle
         domain_name: Domain name or placeholder
         dev_project_name: Dev project name or placeholder
         stages: List of stages to create
@@ -221,7 +221,7 @@ def _generate_manifest_content(
     return f"""# SMUS CI/CD Pipeline Manifest
 # Generated template with required fields and optional field examples
 
-pipelineName: {pipeline_name}
+bundleName: {bundle_name}
 
 # Bundle configuration (optional)
 bundle:
@@ -350,12 +350,12 @@ def _get_default_comment(index: int) -> str:
     return ""
 
 
-def _write_manifest_file(pipeline_name: str, content: str) -> Path:
+def _write_manifest_file(bundle_name: str, content: str) -> Path:
     """
     Write manifest content to file.
 
     Args:
-        pipeline_name: Name of the pipeline (used for filename)
+        bundle_name: Name of the bundle (used for filename)
         content: Manifest content to write
 
     Returns:
@@ -365,7 +365,7 @@ def _write_manifest_file(pipeline_name: str, content: str) -> Path:
         typer.Exit: If file creation fails
     """
     try:
-        output_file = f"{pipeline_name}.yaml"
+        output_file = f"{bundle_name}.yaml"
         output_path = Path.cwd() / output_file
 
         with open(output_path, "w") as f:
@@ -379,7 +379,7 @@ def _write_manifest_file(pipeline_name: str, content: str) -> Path:
 
 
 def _display_creation_summary(
-    pipeline_name: str,
+    bundle_name: str,
     domain_name: str,
     output_path: Path,
     stages: List[str],
@@ -390,7 +390,7 @@ def _display_creation_summary(
     Display summary of manifest creation and next steps.
 
     Args:
-        pipeline_name: Name of the created pipeline
+        bundle_name: Name of the created bundle
         domain_name: Domain name used
         output_path: Path to the created manifest file
         stages: List of stages that were created
@@ -398,7 +398,7 @@ def _display_creation_summary(
         dev_project_id: Dev project ID if provided
     """
     typer.echo(f"✅ Pipeline manifest created: {output_path}")
-    typer.echo(f"📝 Pipeline name: {pipeline_name}")
+    typer.echo(f"📝 Bundle name: {bundle_name}")
     typer.echo(f"🌐 Domain: {domain_name}")
     typer.echo(f"📁 Output file: {output_path.absolute()}")
     typer.echo(f"🎯 Stages: {', '.join(stages)}")

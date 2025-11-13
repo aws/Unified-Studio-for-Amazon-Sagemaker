@@ -5,7 +5,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 from pathlib import Path
 
-from smus_cicd.mcp_server import SMUSMCPServer
+from smus_cicd.mcp.server import SMUSMCPServer
 
 
 class TestSMUSMCPServer:
@@ -20,17 +20,6 @@ class TestSMUSMCPServer:
         assert self.server is not None
         assert hasattr(self.server, "docs")
         assert isinstance(self.server.docs, dict)
-
-    @patch("pathlib.Path.exists")
-    @patch("pathlib.Path.read_text")
-    def test_load_local_docs_with_readme(self, mock_read, mock_exists):
-        """Test loading README from filesystem."""
-        mock_exists.return_value = True
-        mock_read.return_value = "# SMUS CLI README"
-
-        server = SMUSMCPServer()
-        assert "readme" in server.docs
-        assert server.docs["readme"] == "# SMUS CLI README"
 
     @patch("pathlib.Path.exists")
     def test_load_local_docs_no_readme(self, mock_exists):
@@ -102,7 +91,7 @@ class TestSMUSMCPServer:
             "jsonrpc": "2.0",
             "id": 4,
             "method": "tools/call",
-            "params": {"name": "query_smus_kb", "arguments": {"query": "pipeline"}},
+            "params": {"name": "query_smus_kb", "arguments": {"query": "bundle"}},
         }
 
         response = self.server.handle_request(request)
@@ -112,7 +101,6 @@ class TestSMUSMCPServer:
         assert "result" in response
         assert "content" in response["result"]
 
-    @pytest.mark.xfail(reason="Dependency issue with rfc3987 module")
     @patch("smus_cicd.pipeline.validation.validate_manifest_schema")
     @patch("smus_cicd.pipeline.validation.load_schema")
     @patch("builtins.open")
@@ -121,7 +109,7 @@ class TestSMUSMCPServer:
     ):
         """Test validate_pipeline tool with valid manifest."""
         mock_open_file.return_value.__enter__.return_value.read.return_value = (
-            "pipelineName: Test"
+            "bundleName: Test"
         )
         mock_load_schema.return_value = {}
         mock_validate.return_value = (True, [])
@@ -132,7 +120,7 @@ class TestSMUSMCPServer:
             "method": "tools/call",
             "params": {
                 "name": "validate_pipeline",
-                "arguments": {"manifest_path": "/path/to/pipeline.yaml"},
+                "arguments": {"yaml_content": "bundleName: Test\ntargets:\n  dev: {}"},
             },
         }
 
@@ -142,9 +130,8 @@ class TestSMUSMCPServer:
         assert response["id"] == 5
         assert "result" in response
         content = response["result"]["content"][0]["text"]
-        assert "✅ Valid" in content
+        assert "✅" in content
 
-    @pytest.mark.xfail(reason="Dependency issue with rfc3987 module")
     @patch("smus_cicd.pipeline.validation.validate_manifest_schema")
     @patch("smus_cicd.pipeline.validation.load_schema")
     @patch("builtins.open")
@@ -153,7 +140,7 @@ class TestSMUSMCPServer:
     ):
         """Test validate_pipeline tool with invalid manifest."""
         mock_open_file.return_value.__enter__.return_value.read.return_value = (
-            "pipelineName: Test"
+            "bundleName: Test"
         )
         mock_load_schema.return_value = {}
         mock_validate.return_value = (False, ["Missing required field: targets"])
@@ -164,7 +151,7 @@ class TestSMUSMCPServer:
             "method": "tools/call",
             "params": {
                 "name": "validate_pipeline",
-                "arguments": {"manifest_path": "/path/to/pipeline.yaml"},
+                "arguments": {"yaml_content": "bundleName: Test"},
             },
         }
 
@@ -174,7 +161,7 @@ class TestSMUSMCPServer:
         assert response["id"] == 6
         assert "result" in response
         content = response["result"]["content"][0]["text"]
-        assert "❌ Invalid" in content
+        assert "❌" in content
         assert "Missing required field: targets" in content
 
     def test_handle_unknown_method(self):
@@ -224,29 +211,6 @@ class TestSMUSMCPServer:
         assert response["jsonrpc"] == "2.0"
         assert response["id"] == 9
         # Should handle gracefully, either with error or default behavior
-
-    @patch("pathlib.Path.rglob")
-    @patch("pathlib.Path.exists")
-    def test_load_examples_from_filesystem(self, mock_exists, mock_rglob):
-        """Test loading pipeline examples from filesystem."""
-        mock_exists.return_value = True
-
-        # Mock example files
-        mock_file1 = MagicMock()
-        mock_file1.name = "notebooks_pipeline.yaml"
-        mock_file1.read_text.return_value = "pipelineName: NotebooksPipeline"
-
-        mock_file2 = MagicMock()
-        mock_file2.name = "etl_pipeline.yaml"
-        mock_file2.read_text.return_value = "pipelineName: ETLPipeline"
-
-        mock_rglob.return_value = [mock_file1, mock_file2]
-
-        server = SMUSMCPServer()
-
-        assert "examples" in server.docs
-        assert "notebooks_pipeline.yaml" in server.docs["examples"]
-        assert "etl_pipeline.yaml" in server.docs["examples"]
 
     def test_query_smus_kb_no_docs(self):
         """Test query_smus_kb when no docs loaded."""

@@ -20,7 +20,7 @@ class TestRunCommand:
     def create_test_manifest(self):
         """Create a test manifest file."""
         manifest_content = """
-pipelineName: TestPipeline
+bundleName: TestPipeline
 targets:
   dev:
     domain:
@@ -46,7 +46,7 @@ workflows:
 
         try:
             result = runner.invoke(
-                app, ["run", "--pipeline", manifest_file, "--command", "dags list"]
+                app, ["run", "--bundle", manifest_file, "--command", "dags list"]
             )
             assert result.exit_code == 1
             # Error messages go to stderr in typer
@@ -66,7 +66,7 @@ workflows:
 
         try:
             result = runner.invoke(
-                app, ["run", "--pipeline", manifest_file, "--workflow", "test_workflow"]
+                app, ["run", "--bundle", manifest_file, "--workflow", "test_workflow"]
             )
             assert result.exit_code == 1
             # Error messages go to stderr in typer
@@ -89,7 +89,7 @@ workflows:
                 app,
                 [
                     "run",
-                    "--pipeline",
+                    "--bundle",
                     manifest_file,
                     "--workflow",
                     "test_workflow",
@@ -110,7 +110,7 @@ workflows:
 
             os.unlink(manifest_file)
 
-    @patch("smus_cicd.commands.run.PipelineManifest.from_file")
+    @patch("smus_cicd.commands.run.BundleManifest.from_file")
     @patch("smus_cicd.helpers.mwaa.validate_mwaa_health")
     @patch("smus_cicd.commands.run.load_config")
     @patch("smus_cicd.commands.run.get_datazone_project_info")
@@ -160,7 +160,7 @@ workflows:
                 app,
                 [
                     "run",
-                    "--pipeline",
+                    "--bundle",
                     manifest_file,
                     "--workflow",
                     "test_workflow",
@@ -180,7 +180,7 @@ workflows:
 
             os.unlink(manifest_file)
 
-    @patch("smus_cicd.commands.run.PipelineManifest.from_file")
+    @patch("smus_cicd.commands.run.BundleManifest.from_file")
     @patch("smus_cicd.helpers.mwaa.validate_mwaa_health")
     @patch("smus_cicd.commands.run.load_config")
     @patch("smus_cicd.commands.run.get_datazone_project_info")
@@ -230,7 +230,7 @@ workflows:
                 app,
                 [
                     "run",
-                    "--pipeline",
+                    "--bundle",
                     manifest_file,
                     "--workflow",
                     "test_workflow",
@@ -266,7 +266,7 @@ workflows:
 
             os.unlink(manifest_file)
 
-    @patch("smus_cicd.commands.run.PipelineManifest.from_file")
+    @patch("smus_cicd.commands.run.BundleManifest.from_file")
     @patch("smus_cicd.helpers.mwaa.validate_mwaa_health")
     @patch("smus_cicd.commands.run.load_config")
     @patch("smus_cicd.commands.run.get_datazone_project_info")
@@ -295,7 +295,7 @@ workflows:
                 app,
                 [
                     "run",
-                    "--pipeline",
+                    "--bundle",
                     manifest_file,
                     "--workflow",
                     "test_workflow",

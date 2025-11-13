@@ -21,9 +21,9 @@ def parse_s3_url(s3_url: str) -> Tuple[str, str]:
     return bucket, key
 
 
-def get_bundle_path(bundles_directory: str, pipeline_name: str) -> str:
+def get_bundle_path(bundles_directory: str, bundle_name: str) -> str:
     """Get the full path to the bundle file."""
-    bundle_filename = f"{pipeline_name}.zip"
+    bundle_filename = f"{bundle_name}.zip"
 
     if is_s3_url(bundles_directory):
         # For S3, join with forward slash
@@ -51,14 +51,14 @@ def ensure_bundle_directory_exists(bundles_directory: str, region: str = None) -
 def upload_bundle(
     local_bundle_path: str,
     bundles_directory: str,
-    pipeline_name: str,
+    bundle_name: str,
     region: str = None,
 ) -> str:
     """Upload bundle to storage location and return the final path."""
     if is_s3_url(bundles_directory):
         # Upload to S3
         bucket, prefix = parse_s3_url(bundles_directory)
-        bundle_filename = f"{pipeline_name}.zip"
+        bundle_filename = f"{bundle_name}.zip"
         s3_key = f"{prefix}/{bundle_filename}" if prefix else bundle_filename
 
         s3_client = create_s3_client(region=region)
@@ -67,7 +67,7 @@ def upload_bundle(
         return f"s3://{bucket}/{s3_key}"
     else:
         # Move to local directory
-        bundle_filename = f"{pipeline_name}.zip"
+        bundle_filename = f"{bundle_name}.zip"
         final_path = os.path.join(bundles_directory, bundle_filename)
 
         # If source and destination are different, move the file
@@ -101,7 +101,7 @@ def download_bundle(bundle_path: str, region: str = None) -> str:
 
 
 def find_bundle_file(
-    bundles_directory: str, pipeline_name: str, region: str = None
+    bundles_directory: str, bundle_name: str, region: str = None
 ) -> Optional[str]:
     """Find the bundle file for the pipeline in the storage location."""
     if is_s3_url(bundles_directory):
@@ -124,7 +124,7 @@ def find_bundle_file(
                 filename = os.path.basename(key)
                 if (
                     filename.endswith(".zip")
-                    and pipeline_name.lower() in filename.lower()
+                    and bundle_name.lower() in filename.lower()
                 ):
                     return f"s3://{bucket}/{key}"
 
@@ -146,7 +146,7 @@ def find_bundle_file(
 
         # Look for bundle file matching pipeline name
         for file in os.listdir(bundles_directory):
-            if file.endswith(".zip") and pipeline_name.lower() in file.lower():
+            if file.endswith(".zip") and bundle_name.lower() in file.lower():
                 return os.path.join(bundles_directory, file)
 
         # Fallback to any zip file

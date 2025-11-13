@@ -17,7 +17,7 @@ This document shows realistic conversations between users and Q CLI using the SM
 - Automated deployments
 - Workflow orchestration with Airflow
 
-Would you like me to generate a pipeline manifest for you?
+Would you like me to generate a bundle manifest for you?
 
 **User:** Yes, please. I need dev, test, and prod environments.
 
@@ -25,10 +25,10 @@ Would you like me to generate a pipeline manifest for you?
 
 *[Q calls: get_pipeline_example("etl")]*
 
-**Q:** Here's your `pipeline.yaml`:
+**Q:** Here's your `bundle.yaml`:
 
 ```yaml
-pipelineName: ETLPipeline
+bundleName: ETLBundle
 
 targets:
   dev:
@@ -117,18 +117,18 @@ jobs:
       
       - name: Deploy to Dev
         if: github.ref == 'refs/heads/main'
-        run: smus-cli deploy -p pipeline.yaml -t dev
+        run: smus-cli deploy -p bundle.yaml -t dev
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       
       - name: Deploy to Test
         if: github.ref == 'refs/heads/main'
-        run: smus-cli deploy -p pipeline.yaml -t test
+        run: smus-cli deploy -p bundle.yaml -t test
       
       - name: Deploy to Prod (Manual Approval)
         if: github.event_name == 'workflow_dispatch'
-        run: smus-cli deploy -p pipeline.yaml -t prod
+        run: smus-cli deploy -p bundle.yaml -t prod
 ```
 
 This workflow will:
@@ -153,7 +153,7 @@ This workflow will:
 **Q:** Here's a notebook deployment pipeline:
 
 ```yaml
-pipelineName: NotebookPipeline
+bundleName: NotebookBundle
 
 targets:
   dev:
@@ -213,11 +213,11 @@ Your notebooks will be:
 
 ### Conversation Flow
 
-**User:** Can you validate my pipeline.yaml file?
+**User:** Can you validate my bundle.yaml file?
 
-**Q:** I can validate your pipeline against the official schema. Please share your pipeline.yaml content.
+**Q:** I can validate your pipeline against the official schema. Please share your bundle.yaml content.
 
-**User:** [Pastes pipeline.yaml content]
+**User:** [Pastes bundle.yaml content]
 
 **Q:** Let me validate that for you.
 

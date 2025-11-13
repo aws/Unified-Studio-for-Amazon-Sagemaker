@@ -31,7 +31,7 @@ turns:
   - type: assertion
     check: contains
     target: pipeline_example
-    value: "pipelineName"
+    value: "bundleName"
 
   - type: assertion
     check: contains

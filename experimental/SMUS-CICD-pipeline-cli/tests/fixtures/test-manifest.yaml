@@ -1,4 +1,4 @@
-pipelineName: YourPipelineName
+bundleName: YourBundleName
 bundle:
   bundlesDirectory: /tmp/bundles
 targets:

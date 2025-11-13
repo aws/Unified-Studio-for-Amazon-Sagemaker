@@ -35,4 +35,4 @@ Connection configuration examples and schemas:
 1. Complete validation of all 8 supported connection types
 2. Create validated examples for working connection types
 3. Build connection helper for gamma endpoint integration
-4. Integrate with CICD pipeline manifest processing
+4. Integrate with bundle manifest processing

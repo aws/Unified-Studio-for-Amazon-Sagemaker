@@ -1,7 +1,6 @@
 """Integration commands for SMUS CLI."""
 
 import subprocess
-import sys
 from pathlib import Path
 
 

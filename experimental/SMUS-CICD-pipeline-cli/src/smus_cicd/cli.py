@@ -13,10 +13,10 @@ from .commands.bundle import bundle_command
 from .commands.create import create_command_with_output
 from .commands.delete import delete_command
 from .commands.deploy import deploy_command
-from .commands.integrate import integrate_qcli
 
 # Import command functions
 from .commands.describe import describe_command
+from .commands.integrate import integrate_qcli
 from .commands.logs import logs_command
 from .commands.monitor import monitor_command
 from .commands.run import run_command
@@ -48,7 +48,7 @@ def show_help_suggestion():
     console.print("   [cyan]smus-cli deploy -p my-pipeline.yaml -t prod[/cyan]")
 
     console.print("\n[yellow]🔧 Universal switches (work on all commands):[/yellow]")
-    console.print("   [green]--pipeline/-p[/green]  - Path to pipeline manifest")
+    console.print("   [green]--bundle/-b[/green]  - Path to bundle manifest")
     console.print("   [green]--target/-t[/green]    - Target environment")
     console.print("   [green]--output[/green]       - Output format (TEXT/JSON)")
 
@@ -95,7 +95,7 @@ def describe(
         help="Show workflow information (for backward compatibility)",
     ),
     file_path: str = typer.Option(
-        "pipeline.yaml", "--pipeline", "-p", help="Path to pipeline manifest file"
+        "bundle.yaml", "--bundle", "-b", help="Path to bundle manifest file"
     ),
 ):
     """Describe and validate pipeline manifest file."""
@@ -109,7 +109,7 @@ def describe(
 )
 def bundle(
     manifest_file: str = typer.Option(
-        "pipeline.yaml", "--pipeline", "-p", help="Path to pipeline manifest file"
+        "bundle.yaml", "--bundle", "-b", help="Path to bundle manifest file"
     ),
     output_dir: str = typer.Option(
         "./bundles", "--output-dir", "-d", help="Output directory for bundle files"
@@ -155,7 +155,7 @@ def bundle(
 )
 def deploy(
     manifest_file: str = typer.Option(
-        "pipeline.yaml", "--pipeline", "-p", help="Path to pipeline manifest file"
+        "bundle.yaml", "--bundle", "-b", help="Path to bundle manifest file"
     ),
     targets: str = typer.Option(
         None,
@@ -165,8 +165,7 @@ def deploy(
     ),
     bundle: str = typer.Option(
         None,
-        "--bundle",
-        "-b",
+        "--bundle-archive-path",
         help="Path to pre-created bundle file",
     ),
     emit_events: bool = typer.Option(
@@ -196,7 +195,7 @@ def deploy(
 )
 def monitor(
     manifest_file: str = typer.Option(
-        "pipeline.yaml", "--pipeline", "-p", help="Path to pipeline manifest file"
+        "bundle.yaml", "--bundle", "-b", help="Path to bundle manifest file"
     ),
     output: str = typer.Option(
         "TEXT", "--output", "-o", help="Output format: TEXT (default) or JSON"
@@ -304,7 +303,7 @@ def run(
         help="Target name(s) - single target or comma-separated list (optional, defaults to first available)",
     ),
     manifest_file: str = typer.Option(
-        "pipeline.yaml", "--pipeline", "-p", help="Path to pipeline manifest file"
+        "bundle.yaml", "--bundle", "-b", help="Path to bundle manifest file"
     ),
     output: str = typer.Option(
         "TEXT", "--output", "-o", help="Output format: TEXT (default) or JSON"
@@ -338,7 +337,7 @@ def test(
         help="Test output mode: console (stream test output directly)",
     ),
     file_path: str = typer.Option(
-        "pipeline.yaml", "--pipeline", "-p", help="Path to pipeline manifest file"
+        "bundle.yaml", "--bundle", "-b", help="Path to bundle manifest file"
     ),
 ):
     """Run tests for pipeline targets."""
@@ -352,7 +351,7 @@ def test(
 )
 def delete(
     pipeline: str = typer.Option(
-        "pipeline.yaml", "--pipeline", "-p", help="Path to pipeline manifest file"
+        "bundle.yaml", "--bundle", "-b", help="Path to bundle manifest file"
     ),
     targets: str = typer.Option(
         None,
@@ -444,7 +443,7 @@ def main():
     SMUS CI/CD CLI - Manage SageMaker Unified Studio CI/CD pipelines
 
     Universal switches that work on all commands:
-    • --pipeline/-p : Path to pipeline manifest file
+    • --bundle/-b : Path to bundle manifest file
     • --target/-t   : Target environment
     • --output      : Output format (TEXT/JSON)
     """

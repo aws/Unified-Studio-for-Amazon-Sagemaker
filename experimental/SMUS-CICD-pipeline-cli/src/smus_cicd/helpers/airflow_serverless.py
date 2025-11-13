@@ -163,7 +163,7 @@ def create_workflow(
         if "ConflictException" in str(e):
             logger.info(f"Workflow {workflow_name} already exists")
 
-            # If EnvironmentVariables are needed, delete and recreate (update doesn't support them)
+            # If EnvironmentVariables are needed, delete and recreate (update doesn't support them yet)
             if datazone_domain_id or datazone_project_id:
                 logger.info(
                     f"EnvironmentVariables needed - deleting and recreating workflow {workflow_name}"
@@ -173,33 +173,92 @@ def create_workflow(
                     client = create_airflow_serverless_client(connection_info, region)
 
                     # Get existing workflow ARN
-                    workflows = list_workflows(connection_info, region)
                     workflow_arn = None
-                    for wf in workflows:
-                        if wf["name"] == workflow_name:
-                            workflow_arn = wf["workflow_arn"]
+                    next_token = None
+                    max_pages = 10
+                    page_count = 0
+
+                    while page_count < max_pages:
+                        if next_token:
+                            workflows_response = client.list_workflows(
+                                MaxResults=50, NextToken=next_token
+                            )
+                        else:
+                            workflows_response = client.list_workflows(MaxResults=50)
+
+                        for wf in workflows_response.get("Workflows", []):
+                            if wf["Name"] == workflow_name:
+                                workflow_arn = wf["WorkflowArn"]
+                                break
+
+                        if workflow_arn:
                             break
 
-                    if workflow_arn:
-                        logger.info(f"Deleting existing workflow: {workflow_arn}")
-                        client.delete_workflow(WorkflowArn=workflow_arn)
-                        logger.info(
-                            f"Deleted workflow, recreating with EnvironmentVariables"
+                        next_token = workflows_response.get("NextToken")
+                        if not next_token:
+                            break
+
+                        page_count += 1
+
+                    if not workflow_arn:
+                        raise Exception(
+                            f"Workflow {workflow_name} exists but could not be found in list"
                         )
 
-                        # Retry creation
-                        response = client.create_workflow(**params)
-                        workflow_arn = response["WorkflowArn"]
-                        logger.info(f"Successfully recreated workflow: {workflow_arn}")
+                    # Check for active runs before deleting
+                    logger.info(f"Checking for active runs on workflow: {workflow_arn}")
+                    runs = list_workflow_runs(
+                        workflow_arn, connection_info, region, max_results=5
+                    )
+                    active_runs = [
+                        r
+                        for r in runs
+                        if r.get("status")
+                        not in ["SUCCESS", "FAILED", "STOPPED", "COMPLETED"]
+                    ]
 
-                        return {
-                            "workflow_arn": workflow_arn,
-                            "workflow_version": response["WorkflowVersion"],
-                            "created_at": response["CreatedAt"],
-                            "revision_id": response["RevisionId"],
-                            "success": True,
-                            "recreated": True,
-                        }
+                    if active_runs:
+                        error_msg = f"Cannot update workflow {workflow_name}: {len(active_runs)} active run(s) in progress. Wait for runs to complete or stop them first."
+                        logger.error(error_msg)
+                        raise Exception(error_msg)
+
+                    logger.info(
+                        f"No active runs found, deleting workflow: {workflow_arn}"
+                    )
+                    client.delete_workflow(WorkflowArn=workflow_arn)
+                    logger.info(
+                        "Deleted workflow, recreating with EnvironmentVariables"
+                    )
+
+                    # Wait for deletion to complete with exponential backoff
+                    max_retries = 5
+                    for attempt in range(max_retries):
+                        try:
+                            time.sleep(2**attempt)
+                            response = client.create_workflow(**params)
+                            break
+                        except Exception as retry_error:
+                            if (
+                                "ConflictException" in str(retry_error)
+                                and attempt < max_retries - 1
+                            ):
+                                logger.info(
+                                    f"Workflow still exists, retrying in {2 ** (attempt + 1)}s (attempt {attempt + 1}/{max_retries})"
+                                )
+                                continue
+                            raise
+
+                    workflow_arn = response["WorkflowArn"]
+                    logger.info(f"Successfully recreated workflow: {workflow_arn}")
+
+                    return {
+                        "workflow_arn": workflow_arn,
+                        "workflow_version": response["WorkflowVersion"],
+                        "created_at": response["CreatedAt"],
+                        "revision_id": response["RevisionId"],
+                        "success": True,
+                        "recreated": True,
+                    }
                 except Exception as delete_error:
                     logger.error(f"Failed to delete/recreate workflow: {delete_error}")
                     raise
@@ -207,27 +266,44 @@ def create_workflow(
             # No EnvironmentVariables needed, just update
             logger.info(f"Updating existing workflow {workflow_name}")
 
-            # Get existing workflow info and update it
             try:
                 client = create_airflow_serverless_client(connection_info, region)
 
                 # Get existing workflow ARN
-                workflows = list_workflows(connection_info, region)
                 workflow_arn = None
-                for wf in workflows:
-                    if wf["name"] == workflow_name:
-                        workflow_arn = wf["workflow_arn"]
+                next_token = None
+                max_pages = 10
+                page_count = 0
+
+                while page_count < max_pages:
+                    if next_token:
+                        workflows_response = client.list_workflows(
+                            MaxResults=50, NextToken=next_token
+                        )
+                    else:
+                        workflows_response = client.list_workflows(MaxResults=50)
+
+                    for wf in workflows_response.get("Workflows", []):
+                        if wf["Name"] == workflow_name:
+                            workflow_arn = wf["WorkflowArn"]
+                            break
+
+                    if workflow_arn:
                         break
 
+                    next_token = workflows_response.get("NextToken")
+                    if not next_token:
+                        break
+
+                    page_count += 1
+
                 if not workflow_arn:
-                    logger.error(
-                        f"Could not find existing workflow {workflow_name} in list"
+                    raise Exception(
+                        f"Workflow {workflow_name} exists but could not be found in list"
                     )
-                    raise Exception(f"Could not find existing workflow {workflow_name}")
 
                 logger.info(f"Found existing workflow: {workflow_arn}, updating it")
 
-                # Update the existing workflow
                 update_params = {
                     "WorkflowArn": workflow_arn,
                     "DefinitionS3Location": {
@@ -256,12 +332,11 @@ def create_workflow(
                 logger.error(
                     f"Failed to update workflow {workflow_name}: {update_error}"
                 )
-                raise Exception(
-                    f"Failed to update workflow {workflow_name}: {update_error}"
-                )
-
-        logger.error(f"Failed to create workflow {workflow_name}: {e}")
-        raise Exception(f"Failed to create workflow {workflow_name}: {e}")
+                raise
+        else:
+            # Not a ConflictException, raise the original error
+            logger.error(f"Failed to create workflow {workflow_name}: {e}")
+            raise Exception(f"Failed to create workflow {workflow_name}: {e}")
 
 
 def get_workflow_status(
@@ -290,44 +365,54 @@ def get_workflow_status(
 def list_workflows(
     connection_info: Dict[str, Any] = None, region: str = None, max_results: int = 50
 ) -> List[Dict[str, Any]]:
-    """List all serverless Airflow workflows."""
+    """List all serverless Airflow workflows with pagination."""
     logger = get_logger("airflow_serverless")
     try:
         client = create_airflow_serverless_client(connection_info, region)
-        response = client.list_workflows(MaxResults=max_results)
-
-        # Debug: Print the raw response
-        logger.debug(f"Raw list_workflows response: {response}")
-
         workflows = []
-        for workflow in response.get("Workflows", []):
-            workflow_data = {
-                "workflow_arn": workflow["WorkflowArn"],
-                "workflow_version": workflow.get("WorkflowVersion"),
-                "name": workflow["Name"],
-                "status": workflow[
-                    "WorkflowStatus"
-                ],  # Use WorkflowStatus instead of Status
-                "created_at": workflow["CreatedAt"],
-                "updated_at": workflow[
-                    "ModifiedAt"
-                ],  # Use ModifiedAt instead of UpdatedAt
-                "tags": {},
-            }
+        next_token = None
 
-            # Fetch tags for each workflow
-            try:
-                tags_response = client.list_tags_for_resource(
-                    ResourceArn=workflow["WorkflowArn"]
+        # Paginate through all workflows
+        while True:
+            if next_token:
+                response = client.list_workflows(
+                    MaxResults=max_results, NextToken=next_token
                 )
-                workflow_data["tags"] = tags_response.get("Tags", {})
-            except Exception as tag_error:
-                logger.warning(
-                    f"Failed to fetch tags for workflow {workflow['Name']}: {tag_error}"
-                )
-                workflow_data["tags"] = {}
+            else:
+                response = client.list_workflows(MaxResults=max_results)
 
-            workflows.append(workflow_data)
+            # Debug: Print the raw response
+            logger.debug(f"Raw list_workflows response: {response}")
+
+            for workflow in response.get("Workflows", []):
+                workflow_data = {
+                    "workflow_arn": workflow["WorkflowArn"],
+                    "workflow_version": workflow.get("WorkflowVersion"),
+                    "name": workflow["Name"],
+                    "status": workflow["WorkflowStatus"],
+                    "created_at": workflow["CreatedAt"],
+                    "updated_at": workflow["ModifiedAt"],
+                    "tags": {},
+                }
+
+                # Fetch tags for each workflow
+                try:
+                    tags_response = client.list_tags_for_resource(
+                        ResourceArn=workflow["WorkflowArn"]
+                    )
+                    workflow_data["tags"] = tags_response.get("Tags", {})
+                except Exception as tag_error:
+                    logger.warning(
+                        f"Failed to fetch tags for workflow {workflow['Name']}: {tag_error}"
+                    )
+                    workflow_data["tags"] = {}
+
+                workflows.append(workflow_data)
+
+            # Check if there are more pages
+            next_token = response.get("NextToken")
+            if not next_token:
+                break
 
         return workflows
 

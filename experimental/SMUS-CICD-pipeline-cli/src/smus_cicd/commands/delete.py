@@ -9,14 +9,14 @@ from rich.prompt import Confirm
 
 from ..helpers.cloudformation import delete_project_stack
 from ..helpers.datazone import get_domain_id_by_name
-from ..pipeline import PipelineManifest
+from ..pipeline import BundleManifest
 
 console = Console()
 
 
 def delete_command(
     pipeline: str = typer.Option(
-        "pipeline.yaml", "--pipeline", "-p", help="Path to pipeline manifest file"
+        "bundle.yaml", "--bundle", "-b", help="Path to bundle manifest file"
     ),
     targets: Optional[str] = typer.Option(
         None,
@@ -39,7 +39,7 @@ def delete_command(
     """
     try:
         # Parse manifest
-        manifest = PipelineManifest.from_file(pipeline)
+        manifest = BundleManifest.from_file(pipeline)
 
         # Determine targets to delete
         if targets:
@@ -58,7 +58,7 @@ def delete_command(
 
         # Show what will be deleted
         if output.upper() != "JSON":
-            console.print(f"[yellow]Pipeline:[/yellow] {manifest.pipeline_name}")
+            console.print(f"[yellow]Pipeline:[/yellow] {manifest.bundle_name}")
             console.print()
             console.print("[yellow]Targets to delete:[/yellow]")
 
@@ -111,7 +111,7 @@ def delete_command(
                     target.project.name,
                     target.domain.name,
                     target.domain.region,
-                    manifest.pipeline_name,
+                    manifest.bundle_name,
                     target_name,
                     output,
                 )
@@ -174,7 +174,7 @@ def delete_command(
             print(
                 json.dumps(
                     {
-                        "pipeline": manifest.pipeline_name,
+                        "bundle": manifest.bundle_name,
                         "results": results,
                     },
                     indent=2,

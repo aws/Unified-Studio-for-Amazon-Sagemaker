@@ -8,7 +8,7 @@ import sys
 import typer
 
 from ..helpers.utils import get_datazone_project_info, load_config
-from ..pipeline import PipelineManifest
+from ..pipeline import BundleManifest
 
 
 def _display_target_summary(target_name: str, test_results: dict, output: str):
@@ -52,7 +52,7 @@ def test_command(
         help="Test output mode: console (stream test output directly)",
     ),
     manifest_file: str = typer.Option(
-        "pipeline.yaml", "--pipeline", "-p", help="Path to pipeline manifest file"
+        "bundle.yaml", "--bundle", "-b", help="Path to bundle manifest file"
     ),
 ):
     """Run tests for pipeline targets."""
@@ -62,7 +62,7 @@ def test_command(
             output = "TEXT"
 
         # Load pipeline manifest
-        manifest = PipelineManifest.from_file(manifest_file)
+        manifest = BundleManifest.from_file(manifest_file)
 
         # Parse target list
         if targets:
@@ -81,7 +81,7 @@ def test_command(
         domain_config = first_target.domain
 
         if output.upper() != "JSON":
-            typer.echo(f"Pipeline: {manifest.pipeline_name}")
+            typer.echo(f"Pipeline: {manifest.bundle_name}")
             typer.echo(f"Domain: {domain_config.name} ({domain_config.region})")
             typer.echo()
 
@@ -295,7 +295,7 @@ def smus_config():
         # Output results
         if output.upper() == "JSON":
             result_data = {
-                "pipeline": manifest.pipeline_name,
+                "bundle": manifest.bundle_name,
                 "domain": domain_config.name,
                 "region": domain_config.region,
                 "targets": test_results,

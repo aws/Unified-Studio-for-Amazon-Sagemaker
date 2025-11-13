@@ -14,7 +14,7 @@ class TestJSONOutput:
     def create_test_manifest(self):
         """Create a test manifest file."""
         manifest_content = """
-pipelineName: TestPipeline
+bundleName: TestPipeline
 targets:
   dev:
     domain:
@@ -40,23 +40,23 @@ workflows:
 
         try:
             result = runner.invoke(
-                app, ["describe", "--pipeline", manifest_file, "--output", "JSON"]
+                app, ["describe", "--bundle", manifest_file, "--output", "JSON"]
             )
 
             assert result.exit_code == 0
 
             # Should be valid JSON
             output_data = json.loads(result.stdout)
-            assert "pipeline" in output_data
+            assert "bundle" in output_data
             assert "targets" in output_data
-            assert output_data["pipeline"] == "TestPipeline"
+            assert output_data["bundle"] == "TestPipeline"
             assert "domain" in output_data["targets"]["dev"]
         finally:
             import os
 
             os.unlink(manifest_file)
 
-    @patch("smus_cicd.commands.run.PipelineManifest.from_file")
+    @patch("smus_cicd.commands.run.BundleManifest.from_file")
     @patch("smus_cicd.helpers.mwaa.validate_mwaa_health")
     @patch("smus_cicd.commands.run.load_config")
     @patch("smus_cicd.commands.run.get_datazone_project_info")
@@ -107,7 +107,7 @@ workflows:
                 app,
                 [
                     "run",
-                    "--pipeline",
+                    "--bundle",
                     manifest_file,
                     "--workflow",
                     "test_workflow",
@@ -199,7 +199,7 @@ workflows:
             import os
 
             os.chdir(temp_dir)
-            output_file = "tests/fixtures/test-pipeline.yaml"
+            output_file = "tests/fixtures/test-bundle.yaml"
 
             result = runner.invoke(
                 app,
@@ -218,7 +218,7 @@ workflows:
             # This test will be updated when we add it
             assert result.exit_code in [0, 2]  # May not have --format option yet
 
-    @patch("smus_cicd.commands.run.PipelineManifest.from_file")
+    @patch("smus_cicd.commands.run.BundleManifest.from_file")
     @patch("smus_cicd.helpers.mwaa.validate_mwaa_health")
     @patch("smus_cicd.commands.run.load_config")
     @patch("smus_cicd.commands.run.get_datazone_project_info")
@@ -269,7 +269,7 @@ workflows:
                 app,
                 [
                     "run",
-                    "--pipeline",
+                    "--bundle",
                     manifest_file,
                     "--workflow",
                     "test_workflow",
@@ -305,7 +305,7 @@ workflows:
 
             os.unlink(manifest_file)
 
-    @patch("smus_cicd.commands.run.PipelineManifest.from_file")
+    @patch("smus_cicd.commands.run.BundleManifest.from_file")
     @patch("smus_cicd.helpers.mwaa.validate_mwaa_health")
     @patch("smus_cicd.commands.run.load_config")
     @patch("smus_cicd.commands.run.get_datazone_project_info")
@@ -356,7 +356,7 @@ workflows:
                 app,
                 [
                     "run",
-                    "--pipeline",
+                    "--bundle",
                     manifest_file,
                     "--workflow",
                     "test_workflow",
@@ -398,7 +398,7 @@ workflows:
 
         # Test with non-existent manifest file
         result = runner.invoke(
-            app, ["describe", "--pipeline", "nonexistent.yaml", "--output", "JSON"]
+            app, ["describe", "--bundle", "nonexistent.yaml", "--output", "JSON"]
         )
 
         assert result.exit_code == 1

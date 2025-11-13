@@ -10,7 +10,7 @@ from ..helpers.utils import (  # noqa: F401
     get_datazone_project_info,
     load_config,
 )
-from ..pipeline import PipelineManifest
+from ..pipeline import BundleManifest
 
 
 def describe_command(
@@ -37,7 +37,7 @@ def describe_command(
     """Describe and validate pipeline manifest file."""
     try:
         # Load pipeline manifest using centralized parser
-        manifest = PipelineManifest.from_file(manifest_file)
+        manifest = BundleManifest.from_file(manifest_file)
 
         # Determine which targets to show
         targets_to_show = {}
@@ -68,14 +68,14 @@ def describe_command(
 
         # Prepare output data structure for JSON format
         output_data = {
-            "pipeline": manifest.pipeline_name,
+            "bundle": manifest.bundle_name,
             "domain": {"name": domain_config.name, "region": domain_config.region},
             "targets": {},
         }
 
         # TEXT output header
         if output.upper() != "JSON":
-            typer.echo(f"Pipeline: {manifest.pipeline_name}")
+            typer.echo(f"Pipeline: {manifest.bundle_name}")
             typer.echo(f"Domain: {domain_config.name} ({domain_config.region})")
             typer.echo("\nTargets:")
 

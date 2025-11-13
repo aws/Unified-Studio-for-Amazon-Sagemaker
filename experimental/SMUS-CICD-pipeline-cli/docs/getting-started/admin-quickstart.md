@@ -1,8 +1,8 @@
 # Admin Quick Start
 
-**Goal:** Set up complete multi-environment CI/CD infrastructure in 15-20 minutes
+**Goal:** Understand and configure SMUS CI/CD infrastructure for data teams
 
-**Audience:** Platform administrators configuring SageMaker Unified Studio for data science teams
+**Audience:** Platform administrators and DevOps engineers setting up deployment pipelines
 
 ---
 
@@ -10,25 +10,20 @@
 
 - ✅ AWS account with admin access
 - ✅ SageMaker Unified Studio domain created
-- ✅ Understanding of AWS IAM, S3, and MWAA
 - ✅ Python 3.8+ and AWS CLI installed
-- ✅ Terraform or CloudFormation knowledge (optional)
+- ✅ Understanding of AWS IAM and S3
 
 ---
 
 ## Overview
 
-You'll set up a complete 3-environment pipeline:
-- **Dev** - Development and experimentation
-- **Test** - Integration testing and validation  
-- **Prod** - Production deployment
+As an admin, you'll configure:
+- **Bundle targets** - Test and Prod environments where data applications deploy
+- **Project initialization** - Automated project creation with proper settings
+- **CI/CD pipelines** - GitHub Actions or similar automation
+- **Monitoring** - Deployment validation and health checks
 
-Each environment gets its own:
-- SageMaker Unified Studio project
-- S3 bucket for storage
-- MWAA environment for workflows
-- Athena workgroup for analytics
-- Glue database for catalog
+**Key concept:** A SMUS project is a deployment target. Multiple data application bundles can deploy to the same target.
 
 ---
 
@@ -42,101 +37,105 @@ pip install -e .
 
 ---
 
-## Step 2: Create OIDC Role for GitHub Actions
+## Step 2: Understand Bundle Targets
 
-If using GitHub Actions for CI/CD, create an OIDC role for secure authentication:
+A **target** is a SMUS project where bundles deploy. Data teams typically use:
+- **Dev** - Local development (not a deployment target, used for bundling only)
+- **Test** - Integration testing and validation
+- **Prod** - Production deployment
 
-```bash
-# 1. Create OIDC identity provider (one-time setup)
-aws iam create-open-id-connect-provider \
-  --url https://token.actions.githubusercontent.com \
-  --client-id-list sts.amazonaws.com \
-  --thumbprint-list 6938fd4d98bab03faadb97b34396831e3780aea1
+### Target Configuration
 
-# 2. Create trust policy for GitHub Actions
-cat > github-trust-policy.json << 'EOF'
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": {
-        "Federated": "arn:aws:iam::111122223333:oidc-provider/token.actions.githubusercontent.com"
-      },
-      "Action": "sts:AssumeRoleWithWebIdentity",
-      "Condition": {
-        "StringEquals": {
-          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
-        },
-        "StringLike": {
-          "token.actions.githubusercontent.com:sub": "repo:YOUR-ORG/YOUR-REPO:*"
-        }
-      }
-    }
-  ]
-}
-EOF
-
-# 3. Create IAM role
-aws iam create-role \
-  --role-name GitHubActionsRole-SMUS-Pipeline \
-  --assume-role-policy-document file://github-trust-policy.json
-
-# 4. Attach required permissions
-aws iam attach-role-policy \
-  --role-name GitHubActionsRole-SMUS-Pipeline \
-  --policy-arn arn:aws:iam::aws:policy/PowerUserAccess
-```
-
-**Note:** Replace `111122223333` with your AWS account ID and `YOUR-ORG/YOUR-REPO` with your GitHub repository.
-
----
-
-## Step 3: Create Dev Project in Console
-
-1. Navigate to SageMaker Unified Studio console
-2. Select your domain
-3. Create the dev project:
-   - Name: `dev-data-platform`
-   - Profile: `All capabilities`
-   - Add yourself as owner
-4. Add the OIDC role to the project:
-   - Go to **Settings** → **Members**
-   - Click **Add member** → **IAM role**
-   - Enter: `arn:aws:iam::111122223333:role/GitHubActionsRole-SMUS-Pipeline`
-   - Assign role: **Project owner**
-
----
-
-## Step 4: Create Master Pipeline Configuration
-
-Create `infrastructure/pipeline.yaml`:
+Each target in `bundle.yaml` specifies:
 
 ```yaml
-pipelineName: DataPlatformPipeline
+targets:
+  test:
+    domain:
+      name: my-domain          # SMUS domain name
+      region: us-east-1        # AWS region
+    project:
+      name: test-project       # SMUS project name
+      create: true             # Let CLI create project
+    initialization:            # Project creation settings
+      project:
+        create: true
+        profileName: 'All capabilities'
+        owners: [admin@example.com]
+      environments:
+        - EnvironmentConfigurationName: 'OnDemand Workflows'
+```
+
+**Key points:**
+- `create: false` - Project already exists (typical for dev)
+- `create: true` - CLI will create project on first deployment
+- `initialization` - Only used when `create: true`
+
+---
+
+## Step 3: Configure Project Initialization
+
+When `create: true`, the CLI automatically creates projects with these settings:
+
+### Basic Project Creation
+
+```yaml
+initialization:
+  project:
+    create: true
+    profileName: 'All capabilities'    # Project profile
+    owners:                             # Project owners
+      - admin@example.com
+      - arn:aws:iam::123456789:role/GitHubActionsRole
+```
+
+### With Environment Configuration
+
+```yaml
+initialization:
+  project:
+    create: true
+    profileName: 'All capabilities'
+    owners: [admin@example.com]
+  environments:
+    - EnvironmentConfigurationName: 'OnDemand Workflows'  # Enables MWAA
+```
+
+**Available profiles:**
+- `All capabilities` - Full analytics, ML, and GenAI
+- `Analytics` - Data engineering only
+- `ML and AI` - Machine learning only
+
+---
+
+## Step 4: Set Up Multi-Target Configuration
+
+Create a reference `bundle.yaml` for your organization:
+
+```yaml
+bundleName: CustomerChurnModel
+
+bundle:
+  storage:
+    - name: data-platform-workflows
+      connectionName: default.s3_shared
+      include:
+        - 'workflows/'
 
 targets:
-  dev:
-    domain:
-      name: my-domain
-      region: us-east-1
-    project:
-      name: dev-data-platform
-      create: false  # Already created in console
-    
   test:
     domain:
       name: my-domain
       region: us-east-1
     project:
       name: test-data-platform
-      create: true  # CLI will create this
+      create: true
     initialization:
       project:
         create: true
         profileName: 'All capabilities'
-        owners: [arn:aws:iam::111122223333:role/GitHubActionsRole-SMUS-Pipeline]
-      environments: 
+        owners: [arn:aws:iam::123456789:role/GitHubActionsRole]
+      environments:
         - EnvironmentConfigurationName: 'OnDemand Workflows'
     
   prod:
@@ -145,126 +144,286 @@ targets:
       region: us-east-1
     project:
       name: prod-data-platform
-      create: true  # CLI will create this
+      create: true
     initialization:
       project:
         create: true
         profileName: 'All capabilities'
-        owners: [arn:aws:iam::111122223333:role/GitHubActionsRole-SMUS-Pipeline]
-      environments: 
+        owners: [arn:aws:iam::123456789:role/GitHubActionsRole]
+      environments:
         - EnvironmentConfigurationName: 'OnDemand Workflows'
-
-bundle:
-  storage:
-    - name: workflows
-      connectionName: default.s3_shared
-      include:
-        - 'workflows/'
 ```
 
-**Note:** The CLI will automatically create test and prod projects with the OIDC role as owner when you first deploy.
+**Note:** Dev project is typically created manually in the console by data teams.
 
 ---
 
-## Step 5: Validate Infrastructure
+## Step 5: Configure Project Connections
 
-```bash
-smus-cli describe --pipeline infrastructure/pipeline.yaml --connect
-```
+Connections define integrations with AWS services and data sources. They can be created automatically during project initialization or manually via the console.
 
-**Expected output:**
-```
-Pipeline: DataPlatformPipeline
+### Default Connections
 
-Targets: 3
-  ✓ dev (dev-data-platform)
-  ✓ test (test-data-platform)  
-  ✓ prod (prod-data-platform)
+SMUS projects automatically include these connections:
+- `default.s3_shared` - Project S3 bucket
+- `project.workflow_mwaa` - MWAA environment (if OnDemand Workflows enabled)
+- `project.athena` - Athena workgroup
+- `project.default_lakehouse` - Lakehouse connection
 
-Connections per target:
-  Dev:
-    ✓ default.s3_shared
-    ✓ project.workflow_mwaa
-    ✓ project.athena
-    ✓ project.default_lakehouse
-  
-  Test:
-    ✓ default.s3_shared
-    ✓ project.workflow_mwaa
-    ✓ project.athena
-    ✓ project.default_lakehouse
-  
-  Prod:
-    ✓ default.s3_shared
-    ✓ project.workflow_mwaa
-    ✓ project.athena
-    ✓ project.default_lakehouse
+### Create Connections via Manifest
 
-✅ All infrastructure validated
-```
+The recommended approach is to define connections in the bundle manifest under `initialization.connections`:
 
----
-
-## Supported Services & Capabilities
-
-The SMUS CI/CD CLI enables deployment of workflows using these AWS services:
-
-### 🎯 Analytics & Data Processing (Primary Focus)
-- **Amazon Athena** - Interactive SQL queries on S3 data lakes
-- **AWS Glue** - Serverless ETL and data catalog management
-- **Amazon EMR** - Managed Hadoop and Spark clusters
-- **Amazon Redshift** - Cloud data warehouse operations
-- **AWS Lake Formation** - Data lake security and governance
-
-### 🤖 Machine Learning (Primary Focus)
-- **Amazon SageMaker Training** - Distributed ML model training
-- **SageMaker Pipelines** - End-to-end ML workflow orchestration
-- **SageMaker Feature Store** - Centralized feature repository
-- **SageMaker Model Registry** - Model versioning and deployment
-- **SageMaker Batch Transform** - Large-scale batch inference
-- **SageMaker Endpoints** - Real-time model serving
-
-### 🧠 Generative AI (Primary Focus)
-- **Amazon Bedrock** - Foundation model inference (Claude, Titan, etc.)
-- **Bedrock Agents** - Autonomous AI agent orchestration
-- **Bedrock Knowledge Bases** - RAG (Retrieval Augmented Generation)
-- **Bedrock Guardrails** - Content filtering and safety controls
-
-### 📊 Additional Supported Services
-- **Amazon S3** - Object storage operations
-- **AWS Lambda** - Serverless function execution
-- **AWS Step Functions** - Workflow orchestration
-- **Amazon DynamoDB** - NoSQL database operations
-- **Amazon RDS** - Relational database management
-- **Amazon SNS/SQS** - Messaging and notifications
-- **AWS Batch** - Batch computing jobs
-
-**Complete operator list:** See [Airflow AWS Operators Reference](../airflow-aws-operators.md)
-
----
-
----
-
-## Step 6: Set Up GitHub Actions for Teams
-
-Create organization-level GitHub Actions workflow template:
-
-**`.github/workflows/deploy-template.yml`:**
 ```yaml
-name: Deploy to SMUS
+targets:
+  test:
+    domain:
+      name: my-domain
+      region: us-east-1
+    project:
+      name: test-data-platform
+      create: true
+    initialization:
+      project:
+        create: true
+        profileName: 'All capabilities'
+        owners: [admin@example.com]
+      environments:
+        - EnvironmentConfigurationName: 'OnDemand Workflows'
+      
+      # Connections created automatically during initialization
+      connections:
+        - name: s3-raw-data
+          type: S3
+          properties:
+            s3Uri: "s3://raw-data-bucket/incoming/"
+        
+        - name: spark-etl
+          type: SPARK_GLUE
+          properties:
+            glueVersion: "4.0"
+            workerType: "G.2X"
+            numberOfWorkers: 10
+        
+        - name: athena-analytics
+          type: ATHENA
+          properties:
+            workgroupName: "analytics-workgroup"
+        
+        - name: redshift-warehouse
+          type: REDSHIFT
+          properties:
+            storage:
+              clusterName: "analytics-cluster"
+            databaseName: "analytics"
+            host: "analytics-cluster.abc123.us-east-1.redshift.amazonaws.com"
+            port: 5439
+```
+
+### Supported Connection Types
+
+#### S3 - Object Storage
+```yaml
+- name: s3-data-lake
+  type: S3
+  properties:
+    s3Uri: "s3://my-data-bucket/data/"
+```
+
+#### SPARK_GLUE - Spark on AWS Glue
+```yaml
+- name: spark-processing
+  type: SPARK_GLUE
+  properties:
+    glueVersion: "4.0"
+    workerType: "G.1X"
+    numberOfWorkers: 5
+```
+
+#### ATHENA - SQL Query Engine
+```yaml
+- name: athena-analytics
+  type: ATHENA
+  properties:
+    workgroupName: "primary"
+```
+
+#### REDSHIFT - Data Warehouse
+```yaml
+- name: redshift-warehouse
+  type: REDSHIFT
+  properties:
+    storage:
+      clusterName: "analytics-cluster"
+    databaseName: "analytics"
+    host: "analytics-cluster.abc123.us-east-1.redshift.amazonaws.com"
+    port: 5439
+```
+
+#### SPARK_EMR - Spark on EMR
+```yaml
+- name: spark-emr
+  type: SPARK_EMR
+  properties:
+    computeArn: "arn:aws:emr-serverless:us-east-1:123456789012:/applications/00abc123def456"
+    runtimeRole: "arn:aws:iam::123456789012:role/EMRServerlessExecutionRole"
+```
+
+#### MLFLOW - ML Experiment Tracking
+```yaml
+- name: mlflow-experiments
+  type: MLFLOW
+  properties:
+    trackingServerName: "ml-tracking-server"
+    trackingServerArn: "arn:aws:sagemaker:us-east-1:123456789012:mlflow-tracking-server/ml-tracking-server"
+```
+
+#### WORKFLOWS_MWAA - Apache Airflow
+```yaml
+- name: mwaa-workflows
+  type: WORKFLOWS_MWAA
+  properties:
+    mwaaEnvironmentName: "production-airflow-env"
+```
+
+#### WORKFLOWS_SERVERLESS - Serverless Airflow
+```yaml
+- name: serverless-workflows
+  type: WORKFLOWS_SERVERLESS
+  properties: {}
+```
+
+**See more:** [Bundle Manifest Reference - Connections](../bundle-manifest.md#connections)
+
+### Create Connections Manually (Console)
+
+For existing projects, you can also create connections via the SMUS console:
+
+1. Navigate to SMUS project
+2. Go to **Connections** tab
+3. Click **Create connection**
+4. Select connection type and configure properties
+
+### Reference Connections in Workflows
+
+Data teams reference these connections in their workflows using variable substitution:
+
+```yaml
+# workflows/data_processing.yaml
+tasks:
+  load_from_redshift:
+    operator: "airflow.providers.amazon.aws.transfers.redshift_to_s3.RedshiftToS3Operator"
+    redshift_conn_id: "${proj.connection.redshift_warehouse.id}"
+    s3_bucket: "${proj.s3.root}"
+    s3_key: "data/export.csv"
+```
+
+**See more:** [Substitutions and Variables Guide](../substitutions-and-variables.md)
+
+---
+
+## Step 6: Understand CLI Usage Across Stages
+
+The CLI is used differently at each stage:
+
+### Development Stage (Data Teams)
+```bash
+# Data teams work in their dev project
+# They create bundles FROM dev environment
+smus-cli bundle --bundle bundle.yaml --targets dev
+```
+
+### Testing Stage (CI/CD or Data Teams)
+```bash
+# Deploy bundle TO test environment
+smus-cli deploy --targets test --bundle bundle.yaml
+
+# Validate deployment
+smus-cli test --targets test --bundle bundle.yaml
+
+# Check logs
+smus-cli logs --targets test --workflow my_workflow --live
+
+# Monitor health
+smus-cli monitor --targets test --bundle bundle.yaml
+```
+
+### Production Stage (CI/CD)
+```bash
+# Deploy to production after test validation
+smus-cli deploy --targets prod --bundle bundle.yaml
+
+# Monitor production deployment
+smus-cli monitor --targets prod --bundle bundle.yaml
+```
+
+**Key insight:** 
+- `bundle` creates from dev
+- `deploy` deploys to test/prod
+- `test`, `logs`, `monitor` validate deployments
+
+---
+
+## Step 7: Understand Multiple Bundles per Target
+
+A single SMUS project (target) can host multiple data application bundles. Each bundle is self-contained and can be deployed and promoted to production independently:
+
+```
+my-smus-project/
+├── monthly-metrics/           # Data application 1
+│   ├── bundle.yaml
+│   ├── workflows/
+│   │   ├── metrics_etl.yaml
+│   │   └── metrics_report.yaml
+│   └── notebooks/
+│       └── metrics_analysis.ipynb
+│
+├── churn-model/               # Data application 2
+│   ├── bundle.yaml
+│   ├── workflows/
+│   │   ├── feature_engineering.yaml
+│   │   └── model_training.yaml
+│   ├── notebooks/
+│   │   ├── prepare_features.ipynb
+│   │   └── train_model.ipynb
+│   └── tests/
+│       └── test_model.py
+│
+└── README.md
+```
+
+Each bundle deploys independently to the same target:
+```bash
+# Deploy and promote monthly-metrics bundle
+cd monthly-metrics
+smus-cli deploy --targets test --bundle bundle.yaml
+smus-cli deploy --targets prod --bundle bundle.yaml
+
+# Deploy and promote churn-model bundle separately
+cd ../churn-model
+smus-cli deploy --targets test --bundle bundle.yaml
+smus-cli deploy --targets prod --bundle bundle.yaml
+```
+
+All workflows from both bundles appear in the same MWAA environment within the project.
+
+---
+
+## Step 8: Set Up GitHub Actions CI/CD
+
+Create `.github/workflows/deploy.yml` for automated deployments:
+
+```yaml
+name: Deploy Data Application
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
     branches: [main]
 
-env:
-  AWS_REGION: us-east-1
-  PIPELINE_FILE: pipeline.yaml
-
 jobs:
-  validate:
+  deploy-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -280,40 +439,23 @@ jobs:
           cd Unified-Studio-for-Amazon-Sagemaker/experimental/SMUS-CICD-pipeline-cli
           pip install -e .
       
-      - name: Configure AWS
+      - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: arn:aws:iam::123456789:role/GitHubActionsRole
+          aws-region: us-east-1
       
-      - name: Validate Pipeline
-        run: smus-cli describe --pipeline ${{ env.PIPELINE_FILE }} --connect
-
-  deploy-dev:
-    needs: validate
-    if: github.ref == 'refs/heads/develop'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Deploy to Dev
-        run: |
-          smus-cli bundle --pipeline ${{ env.PIPELINE_FILE }} --targets dev
-          smus-cli deploy --targets dev --pipeline ${{ env.PIPELINE_FILE }}
-
-  deploy-test:
-    needs: validate
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
+      - name: Create Bundle
+        run: smus-cli bundle --bundle bundle.yaml --targets dev
+      
       - name: Deploy to Test
-        run: |
-          smus-cli bundle --pipeline ${{ env.PIPELINE_FILE }} --targets dev
-          smus-cli deploy --targets test --pipeline ${{ env.PIPELINE_FILE }}
+        run: smus-cli deploy --targets test --bundle bundle.yaml
       
-      - name: Run Tests
-        run: smus-cli test --targets test --pipeline ${{ env.PIPELINE_FILE }}
+      - name: Validate Deployment
+        run: smus-cli test --targets test --bundle bundle.yaml
+      
+      - name: Check Deployment Health
+        run: smus-cli monitor --targets test --bundle bundle.yaml
 
   deploy-prod:
     needs: deploy-test
@@ -322,111 +464,230 @@ jobs:
     environment: production
     steps:
       - uses: actions/checkout@v3
+      
       - name: Deploy to Production
-        run: smus-cli deploy --targets prod --pipeline ${{ env.PIPELINE_FILE }}
+        run: smus-cli deploy --targets prod --bundle bundle.yaml
+      
+      - name: Monitor Production
+        run: smus-cli monitor --targets prod --bundle bundle.yaml
+```
+
+**See more:** [GitHub Actions Integration Guide](../github-actions-integration.md)
+
+---
+
+## Step 9: Validate Deployment with Monitoring
+
+After deployment, use these commands to verify everything works:
+
+### Check Deployment Status
+```bash
+# View overall bundle health
+smus-cli monitor --targets test --bundle bundle.yaml
+```
+
+**Output:**
+```
+Target: test
+Project: test-data-platform
+Status: ✓ Healthy
+
+Workflows:
+  ✓ metrics_etl (Active, Last run: Success)
+  ✓ model_training (Active, Last run: Success)
+
+Storage:
+  ✓ workflows/ (3 files synced)
+
+Connections:
+  ✓ default.s3_shared
+  ✓ project.workflow_mwaa
+```
+
+### View Workflow Logs
+```bash
+# Live logs for specific workflow
+smus-cli logs --targets test --workflow metrics_etl --live
+
+# Historical logs
+smus-cli logs --targets test --workflow metrics_etl --date 2025-01-13
+```
+
+### Run Tests
+```bash
+# Execute validation tests
+smus-cli test --targets test --bundle bundle.yaml
+```
+
+**Output:**
+```
+Running tests for target: test
+
+✓ Workflow files validated
+✓ Connections accessible
+✓ S3 storage accessible
+✓ MWAA environment healthy
+
+All tests passed
 ```
 
 ---
 
-## Step 7: Document for Teams
+## Step 10: Set Up Monitoring and Metrics Integration
 
-Create team documentation:
+### CloudWatch Integration
 
-**`docs/team-guide.md`:**
+The CLI automatically creates CloudWatch metrics for deployments:
+
+```bash
+# View deployment metrics
+aws cloudwatch get-metric-statistics \
+  --namespace SMUS/CICD \
+  --metric-name DeploymentSuccess \
+  --dimensions Name=Target,Value=test \
+  --start-time 2025-01-01T00:00:00Z \
+  --end-time 2025-01-13T23:59:59Z \
+  --period 3600 \
+  --statistics Sum
+```
+
+### Create CloudWatch Dashboard
+
+```bash
+# Create monitoring dashboard
+aws cloudwatch put-dashboard \
+  --dashboard-name SMUS-CICD-Monitor \
+  --dashboard-body file://dashboard.json
+```
+
+**dashboard.json:**
+```json
+{
+  "widgets": [
+    {
+      "type": "metric",
+      "properties": {
+        "metrics": [
+          ["SMUS/CICD", "DeploymentSuccess", {"stat": "Sum"}],
+          [".", "DeploymentFailure", {"stat": "Sum"}]
+        ],
+        "period": 300,
+        "stat": "Sum",
+        "region": "us-east-1",
+        "title": "Deployment Status"
+      }
+    }
+  ]
+}
+```
+
+### Set Up Alerts
+
+```bash
+# Create SNS topic for alerts
+aws sns create-topic --name smus-cicd-alerts
+
+# Create alarm for deployment failures
+aws cloudwatch put-metric-alarm \
+  --alarm-name smus-deployment-failures \
+  --alarm-description "Alert on SMUS deployment failures" \
+  --metric-name DeploymentFailure \
+  --namespace SMUS/CICD \
+  --statistic Sum \
+  --period 300 \
+  --threshold 1 \
+  --comparison-operator GreaterThanThreshold \
+  --evaluation-periods 1 \
+  --alarm-actions arn:aws:sns:us-east-1:123456789:smus-cicd-alerts
+```
+
+---
+
+## Step 11: Document for Data Teams
+
+Create team documentation explaining the setup:
+
+**`docs/deployment-guide.md`:**
 ```markdown
-# Data Platform CI/CD Guide
+# Data Application Deployment Guide
 
-## Quick Start
-1. Clone this repository
-2. Create your pipeline.yaml
-3. Push to develop branch → deploys to dev
-4. Push to main branch → deploys to test → prod
+## Overview
+Our SMUS projects are configured as deployment targets:
+- **test-data-platform** - Testing and validation
+- **prod-data-platform** - Production deployment
 
-## Environments
-- Dev: Automatic deployment on develop branch
-- Test: Automatic deployment on main branch (requires tests to pass)
-- Prod: Automatic deployment after test (requires manual approval)
+Multiple data applications can deploy to the same project.
 
-## Getting Help
+## Deployment Process
+1. Develop in your dev project
+2. Create bundle: `smus-cli bundle --bundle bundle.yaml --targets dev`
+3. Push to GitHub → Automatic deployment to test
+4. After validation → Automatic deployment to prod
+
+## Monitoring Your Deployment
+- Check status: `smus-cli monitor --targets test --bundle bundle.yaml`
+- View logs: `smus-cli logs --targets test --workflow YOUR_WORKFLOW --live`
+- Run tests: `smus-cli test --targets test --bundle bundle.yaml`
+
+## Support
 - Slack: #data-platform-support
-- Email: data-platform-team@example.com
-- Docs: https://wiki.example.com/data-platform
+- Email: platform-team@example.com
 ```
 
 ---
 
-## Step 8: Test End-to-End
+## Troubleshooting
 
-Deploy a test workflow to verify everything works:
-
+### Project Creation Fails
 ```bash
-# Create test workflow
-mkdir -p workflows
-cat > workflows/test_dag.yaml << 'EOF'
-test_workflow:
-  dag_id: "test_dag"
-  default_args:
-    owner: "admin"
-  tasks:
-    hello_task:
-      operator: "airflow.operators.bash.BashOperator"
-      bash_command: "echo 'Hello from SMUS CI/CD!'"
-EOF
+# Check initialization settings
+smus-cli describe --bundle bundle.yaml --targets test --verbose
 
-# Deploy to all environments
-smus-cli bundle --pipeline infrastructure/pipeline.yaml --targets dev
-smus-cli deploy --targets dev --pipeline infrastructure/pipeline.yaml
-smus-cli deploy --targets test --pipeline infrastructure/pipeline.yaml
-smus-cli deploy --targets prod --pipeline infrastructure/pipeline.yaml
-
-# Verify deployment
-smus-cli monitor --pipeline infrastructure/pipeline.yaml
+# Verify IAM permissions for project creation
+aws sts get-caller-identity
 ```
 
----
-
-## Maintenance Tasks
-
-### Regular Health Checks
+### Deployment Not Syncing
 ```bash
-# Check all environments
-smus-cli monitor --pipeline infrastructure/pipeline.yaml --targets dev,test,prod
+# Check bundle contents
+smus-cli bundle --bundle bundle.yaml --targets dev --verbose
 
-# View deployment history
-smus-cli describe --pipeline infrastructure/pipeline.yaml --history
+# Verify MWAA connection
+smus-cli monitor --targets test --workflows
 ```
 
-### Update Infrastructure
+### Multiple Bundles Conflicting
 ```bash
-# Redeploy with updated configuration
-smus-cli deploy --targets test --pipeline infrastructure/pipeline.yaml
+# List all workflows in target
+smus-cli monitor --targets test --all-workflows
+
+# Check for naming conflicts
+smus-cli describe --targets test --bundle bundle.yaml
 ```
-
-### Manage Catalog Subscriptions
-```bash
-# List pending subscriptions
-smus-cli monitor --targets test --catalog-subscriptions
-
-# Approve subscription
-aws datazone approve-subscription --subscription-id sub_abc123
-```
-
----
 
 ---
 
 ## Next Steps
 
-### For Your Team
-- **[Quick Start Guide](quickstart.md)** - Guide for DevOps teams
+### For Data Teams
+- **[Data Team Quick Start](quickstart.md)** - Guide for building and deploying bundles
 
 ### Advanced Configuration
-- **[Pipeline Manifest Reference](../pipeline-manifest.md)** - Complete YAML guide
-- **[GitHub Actions Integration](../github-actions-integration.md)** - CI/CD automation
+- **[Bundle Manifest Reference](../bundle-manifest.md)** - Complete YAML specification
+- **[CLI Commands Reference](../cli-commands.md)** - All available commands
+- **[Monitoring and Metrics](../monitoring-and-metrics.md)** - Detailed monitoring setup
 
 ### Examples
 - See [examples directory](../../examples/) for complete working examples
 
 ---
+
+## Key Takeaways
+
+1. **Projects are targets** - One SMUS project can host multiple data application bundles
+2. **Dev is for bundling** - Data teams create bundles FROM dev, deploy TO test/prod
+3. **Initialization is automatic** - CLI creates projects with proper settings on first deployment
+4. **Monitoring is essential** - Use `monitor`, `logs`, and `test` commands to validate deployments
+5. **CI/CD automates flow** - GitHub Actions handles bundle → test → prod progression
 
 **Questions?** Contact the platform team for support.

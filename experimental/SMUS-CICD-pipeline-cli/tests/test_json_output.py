@@ -47,15 +47,15 @@ workflows:
 
             # Should be valid JSON
             output_data = json.loads(result.stdout)
-            assert "pipeline" in output_data
+            assert "bundle" in output_data
             assert "targets" in output_data
-            assert output_data["pipeline"] == "TestPipeline"
+            assert output_data["bundle"] == "TestPipeline"
             assert "domain" in output_data["targets"]["dev"]
         finally:
             import os
             os.unlink(manifest_file)
 
-    @patch("smus_cicd.commands.run.PipelineManifest.from_file")
+    @patch("smus_cicd.commands.run.BundleManifest.from_file")
     @patch("smus_cicd.helpers.mwaa.validate_mwaa_health")
     @patch("smus_cicd.commands.run.load_config")
     @patch("smus_cicd.commands.run.get_datazone_project_info")

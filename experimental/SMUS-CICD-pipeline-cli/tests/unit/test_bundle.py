@@ -12,7 +12,7 @@ runner = CliRunner()
 @pytest.fixture
 def sample_manifest():
     return """
-pipelineName: TestPipeline
+bundleName: TestPipeline
 bundle:
   bundlesDirectory: /tmp/bundles
   storage:
@@ -39,10 +39,10 @@ def test_bundle_default_target(sample_manifest):
     """Test bundle with default target - basic validation."""
     with patch("os.path.exists", return_value=True):
         with patch(
-            "smus_cicd.commands.bundle.PipelineManifest.from_file"
+            "smus_cicd.commands.bundle.BundleManifest.from_file"
         ) as mock_manifest:
-            from smus_cicd.pipeline import PipelineManifest
-            mock_manifest.return_value = PipelineManifest.from_dict(yaml.safe_load(sample_manifest))
+            from smus_cicd.pipeline import BundleManifest
+            mock_manifest.return_value = BundleManifest.from_dict(yaml.safe_load(sample_manifest))
             with patch(
                 "smus_cicd.helpers.utils.load_config",
                 return_value={"region": "us-east-1"},
@@ -81,7 +81,7 @@ def test_bundle_no_tree_for_json(sample_manifest):
 def test_bundle_no_bundle_section():
     """Test bundle with missing bundle section."""
     manifest = """
-pipelineName: TestPipeline
+bundleName: TestPipeline
 targets:
   dev:
     stage: DEV
@@ -94,10 +94,10 @@ targets:
 
     with patch("os.path.exists", return_value=True):
         with patch(
-            "smus_cicd.commands.bundle.PipelineManifest.from_file"
+            "smus_cicd.commands.bundle.BundleManifest.from_file"
         ) as mock_manifest:
-            from smus_cicd.pipeline import PipelineManifest
-            mock_manifest.return_value = PipelineManifest.from_dict(yaml.safe_load(manifest))
+            from smus_cicd.pipeline import BundleManifest
+            mock_manifest.return_value = BundleManifest.from_dict(yaml.safe_load(manifest))
             with patch(
                 "smus_cicd.helpers.utils.load_config",
                 return_value={"region": "us-east-1"},
@@ -117,7 +117,7 @@ targets:
 def test_bundle_no_default_target():
     """Test bundle with no default target specified."""
     manifest = """
-pipelineName: TestPipeline
+bundleName: TestPipeline
 bundle:
   storage: []
 targets:
@@ -132,10 +132,10 @@ targets:
 
     with patch("os.path.exists", return_value=True):
         with patch(
-            "smus_cicd.commands.bundle.PipelineManifest.from_file"
+            "smus_cicd.commands.bundle.BundleManifest.from_file"
         ) as mock_manifest:
-            from smus_cicd.pipeline import PipelineManifest
-            mock_manifest.return_value = PipelineManifest.from_dict(yaml.safe_load(manifest))
+            from smus_cicd.pipeline import BundleManifest
+            mock_manifest.return_value = BundleManifest.from_dict(yaml.safe_load(manifest))
             with patch(
                 "smus_cicd.helpers.utils.load_config",
                 return_value={"region": "us-east-1"},

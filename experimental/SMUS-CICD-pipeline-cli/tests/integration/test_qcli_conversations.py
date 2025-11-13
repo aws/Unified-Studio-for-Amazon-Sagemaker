@@ -80,7 +80,7 @@ def test_conversation_context_passing(simulator):
     turn1 = {
         "type": "tool_call",
         "tool": "query_smus_kb",
-        "arguments": {"query": "pipeline"},
+        "arguments": {"query": "bundle"},
         "save_as": "search_result",
     }
     simulator._execute_turn(turn1, 0)

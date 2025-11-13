@@ -40,7 +40,7 @@ def create_project_via_cloudformation(
     profile_name,
     domain_name,
     region,
-    pipeline_name,
+    bundle_name,
     target_name,
     target_stage=None,
     user_parameters=None,
@@ -125,14 +125,14 @@ def create_project_via_cloudformation(
             raise Exception(f"Failed to find project profile {profile_name}: {e}")
 
         # Generate stack name: SMUS-{pipeline}-{target}-{project}-{template}
-        clean_pipeline = pipeline_name.replace("_", "-").replace(" ", "-").lower()
+        clean_pipeline = bundle_name.replace("_", "-").replace(" ", "-").lower()
         clean_target = target_name.replace("_", "-").replace(" ", "-").lower()
         clean_project = project_name.replace("_", "-").replace(" ", "-").lower()
         stack_name = f"SMUS-{clean_pipeline}-{clean_target}-{clean_project}-project"
 
         # Prepare stack tags
         tags = [
-            {"Key": "PipelineName", "Value": pipeline_name},
+            {"Key": "BundleName", "Value": bundle_name},
             {"Key": "TargetName", "Value": target_name},
             {"Key": "CreatedBy", "Value": "SMUS-CLI"},
         ]
@@ -219,12 +219,12 @@ def create_project_via_cloudformation(
             {"ParameterKey": "ProjectName", "ParameterValue": project_name},
             {
                 "ParameterKey": "ProjectDescription",
-                "ParameterValue": f"Auto-created project for {project_name} in {pipeline_name} pipeline",
+                "ParameterValue": f"Auto-created project for {project_name} in {bundle_name} bundle",
             },
         ]
 
         typer.echo(f"Creating CloudFormation stack: {stack_name}")
-        typer.echo(f"Pipeline: {pipeline_name}")
+        typer.echo(f"Bundle: {bundle_name}")
         typer.echo(f"Project: {project_name}")
         typer.echo(f"Profile: {profile_name}")
 
@@ -325,7 +325,7 @@ def create_project_via_cloudformation(
                             updated_parameters.append(
                                 {
                                     "ParameterKey": "ProjectDescription",
-                                    "ParameterValue": f"Auto-created project for {project_name} in {pipeline_name} pipeline (updated)",
+                                    "ParameterValue": f"Auto-created project for {project_name} in {bundle_name} bundle (updated)",
                                 }
                             )
 
@@ -431,12 +431,12 @@ def wait_for_project_deployment(project_name, project_id, domain_id, region):
 
 
 def delete_project_stack(
-    project_name, domain_name, region, pipeline_name, target_name, output="TEXT"
+    project_name, domain_name, region, bundle_name, target_name, output="TEXT"
 ):
     """Delete CloudFormation stack for a project."""
     try:
         # Generate stack name: SMUS-{pipeline}-{target}-{project}-{template}
-        clean_pipeline = pipeline_name.replace("_", "-").replace(" ", "-").lower()
+        clean_pipeline = bundle_name.replace("_", "-").replace(" ", "-").lower()
         clean_target = target_name.replace("_", "-").replace(" ", "-").lower()
         clean_project = project_name.replace("_", "-").replace(" ", "-").lower()
         stack_name = f"SMUS-{clean_pipeline}-{clean_target}-{clean_project}-project"

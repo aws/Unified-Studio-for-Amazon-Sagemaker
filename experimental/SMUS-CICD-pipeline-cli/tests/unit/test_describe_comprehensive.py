@@ -23,7 +23,7 @@ class TestDescribeCommand:
         manifest_file = self.create_manifest_file(manifest_content)
         try:
             runner = CliRunner()
-            cmd_args = ["describe", "--pipeline", manifest_file] + (args or [])
+            cmd_args = ["describe", "--bundle", manifest_file] + (args or [])
             with patch("smus_cicd.commands.describe.get_datazone_project_info") as mock_project:
                 with patch("smus_cicd.commands.describe.load_config") as mock_config:
                     mock_project.return_value = {"connections": {}, "status": "ACTIVE", "project_id": "test-id"}
@@ -36,7 +36,7 @@ class TestDescribeCommand:
     def test_minimal_valid_manifest(self):
         """Test minimal valid manifest."""
         manifest = """
-pipelineName: MinimalPipeline
+bundleName: MinimalPipeline
 bundle:
   bundlesDirectory: /tmp/bundles
 targets:
@@ -56,7 +56,7 @@ targets:
     def test_complex_manifest_with_workflows(self):
         """Test complex manifest with multiple workflows and targets."""
         manifest = """
-pipelineName: ComplexPipeline
+bundleName: ComplexPipeline
 bundle:
   bundlesDirectory: /tmp/bundles
   storage:
@@ -130,7 +130,7 @@ workflows:
 
         for bundle_dir in test_cases:
             manifest = f"""
-pipelineName: BundleDirTest
+bundleName: BundleDirTest
 bundle:
   bundlesDirectory: {bundle_dir}
 targets:
@@ -151,7 +151,7 @@ targets:
         """Test different project configuration formats."""
         # Object format
         manifest1 = """
-pipelineName: StringProject
+bundleName: StringProject
 bundle:
   bundlesDirectory: /tmp/bundles
 targets:
@@ -170,7 +170,7 @@ targets:
 
         # Object format with all fields
         manifest2 = """
-pipelineName: ObjectProject
+bundleName: ObjectProject
 bundle:
   bundlesDirectory: /tmp/bundles
 targets:
@@ -190,7 +190,7 @@ targets:
     def test_workflow_parameter_variations(self):
         """Test workflows with different parameter combinations."""
         manifest = """
-pipelineName: WorkflowParams
+bundleName: WorkflowParams
 bundle:
   bundlesDirectory: /tmp/bundles
 targets:
@@ -228,8 +228,8 @@ workflows:
         )
 
     # Negative test cases
-    def test_missing_pipeline_name(self):
-        """Test error when pipelineName is missing."""
+    def test_missing_bundle_name(self):
+        """Test error when bundleName is missing."""
         manifest = """
 bundle:
   bundlesDirectory: /tmp/bundles
@@ -245,12 +245,12 @@ targets:
         result = self.run_describe(manifest)
         assert result.exit_code == 1
         assert "Error describing manifest" in result.stderr
-        assert "'pipelineName' is a required property" in result.stderr
+        assert "'bundleName' is a required property" in result.stderr
 
     def test_missing_domain(self):
         """Test error when domain is missing."""
         manifest = """
-pipelineName: TestPipeline
+bundleName: TestPipeline
 bundle:
   bundlesDirectory: /tmp/bundles
 targets:
@@ -267,7 +267,7 @@ targets:
     def test_missing_domain_name(self):
         """Test that domain name is optional (can use tags instead)."""
         manifest = """
-pipelineName: TestPipeline
+bundleName: TestPipeline
 bundle:
   bundlesDirectory: /tmp/bundles
 targets:
@@ -286,7 +286,7 @@ targets:
     def test_missing_domain_region(self):
         """Test error when domain region is missing."""
         manifest = """
-pipelineName: TestPipeline
+bundleName: TestPipeline
 bundle:
   bundlesDirectory: /tmp/bundles
 targets:
@@ -305,7 +305,7 @@ targets:
     def test_missing_targets(self):
         """Test error when targets section is missing."""
         manifest = """
-pipelineName: TestPipeline
+bundleName: TestPipeline
 domain:
   name: test-domain
   region: ${DEV_DOMAIN_REGION:us-east-1}
@@ -320,7 +320,7 @@ bundle:
     def test_empty_targets(self):
         """Test error when targets section is empty."""
         manifest = """
-pipelineName: TestPipeline
+bundleName: TestPipeline
 domain:
   name: test-domain
   region: ${DEV_DOMAIN_REGION:us-east-1}
@@ -336,7 +336,7 @@ targets: {}
     def test_target_missing_project(self):
         """Test error when target is missing project."""
         manifest = """
-pipelineName: TestPipeline
+bundleName: TestPipeline
 domain:
   name: test-domain
   region: ${DEV_DOMAIN_REGION:us-east-1}
@@ -353,7 +353,7 @@ targets:
     def test_workflow_missing_name(self):
         """Test error when workflow is missing name."""
         manifest = """
-pipelineName: TestPipeline
+bundleName: TestPipeline
 domain:
   name: test-domain
   region: ${DEV_DOMAIN_REGION:us-east-1}
@@ -376,7 +376,7 @@ workflows:
     def test_workflow_missing_connection(self):
         """Test error when workflow is missing connection."""
         manifest = """
-pipelineName: TestPipeline
+bundleName: TestPipeline
 targets:
   test:
     stage: TEST
@@ -397,7 +397,7 @@ workflows:
     def test_invalid_yaml_syntax(self):
         """Test error with invalid YAML syntax."""
         manifest = """
-pipelineName: TestPipeline
+bundleName: TestPipeline
 domain:
   name: test-domain
   region: ${DEV_DOMAIN_REGION:us-east-1}
@@ -419,7 +419,7 @@ targets:
         """Test error when manifest file doesn't exist."""
         runner = CliRunner()
         result = runner.invoke(
-            app, ["describe", "--pipeline", "/nonexistent/file.yaml"]
+            app, ["describe", "--bundle", "/nonexistent/file.yaml"]
         )
         assert result.exit_code == 1
         assert "Error describing manifest" in result.stderr
@@ -429,7 +429,7 @@ targets:
         """Test that default values are properly applied and not hardcoded."""
         # Test minimal manifest to ensure defaults are applied
         manifest = """
-pipelineName: DefaultTest
+bundleName: DefaultTest
 targets:
   test:
     domain:
@@ -451,7 +451,7 @@ targets:
     def test_bundle_defaults(self):
         """Test bundle configuration defaults."""
         manifest = """
-pipelineName: BundleDefaultTest
+bundleName: BundleDefaultTest
 targets:
   test:
     domain:
@@ -469,7 +469,7 @@ targets:
     def test_workflow_defaults(self):
         """Test workflow configuration defaults."""
         manifest = """
-pipelineName: WorkflowDefaultTest
+bundleName: WorkflowDefaultTest
 bundle:
   bundlesDirectory: /tmp/bundles
 targets:
@@ -496,7 +496,7 @@ workflows:
     def test_edge_case_empty_strings(self):
         """Test handling of empty string values."""
         manifest = """
-pipelineName: ""
+bundleName: ""
 bundle:
   bundlesDirectory: "/tmp/bundles"
 targets:
@@ -515,7 +515,7 @@ targets:
     def test_special_characters_in_names(self):
         """Test handling of special characters in names."""
         manifest = """
-pipelineName: "Pipeline-With_Special_Characters123"
+bundleName: "Pipeline-With_Special_Characters123"
 bundle:
   bundlesDirectory: "/tmp/bundles-with-dashes"
 targets:

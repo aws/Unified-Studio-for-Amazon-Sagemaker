@@ -8,7 +8,7 @@ import typer
 from ..helpers import airflow_serverless, mwaa
 from ..helpers.airflow_parser import parse_airflow_output
 from ..helpers.utils import get_datazone_project_info, load_config
-from ..pipeline import PipelineManifest
+from ..pipeline import BundleManifest
 
 # TEMPORARY: Airflow Serverless (Overdrive) configuration
 # TODO: Remove these overrides once service is available in all regions
@@ -50,7 +50,7 @@ def run_command(
     _validate_required_parameters(workflow, output)
 
     try:
-        manifest = PipelineManifest.from_file(manifest_file)
+        manifest = BundleManifest.from_file(manifest_file)
         targets_to_check = _resolve_targets(targets, manifest)
 
         # Check if any workflow uses serverless Airflow
@@ -150,7 +150,7 @@ def _validate_required_parameters(workflow: str, output: str = "TEXT") -> None:
 
 
 def _resolve_targets(
-    targets: Optional[str], manifest: PipelineManifest
+    targets: Optional[str], manifest: BundleManifest
 ) -> Dict[str, Any]:
     """
     Resolve target configurations from manifest.
@@ -173,7 +173,7 @@ def _resolve_targets(
 
 
 def _validate_and_get_targets(
-    target_list: List[str], manifest: PipelineManifest
+    target_list: List[str], manifest: BundleManifest
 ) -> Dict[str, Any]:
     """
     Validate target names and return their configurations.
@@ -203,7 +203,7 @@ def _validate_and_get_targets(
 
 def _execute_commands_on_targets(
     targets_to_check: Dict[str, Any],
-    manifest: PipelineManifest,
+    manifest: BundleManifest,
     workflow: str,
     command: str,
     output: str,
@@ -243,7 +243,7 @@ def _execute_commands_on_targets(
 def _execute_command_on_target(
     target_name: str,
     target_config: Any,
-    manifest: PipelineManifest,
+    manifest: BundleManifest,
     workflow: str,
     command: str,
     output: str,
@@ -524,7 +524,7 @@ def _handle_execution_error(
 
 def _execute_airflow_serverless_workflows(
     targets_to_check: Dict[str, Any],
-    manifest: PipelineManifest,
+    manifest: BundleManifest,
     workflow: str,
     output: str,
 ) -> List[Dict[str, Any]]:
@@ -549,10 +549,10 @@ def _execute_airflow_serverless_workflows(
 
         try:
             # Generate expected workflow name based on naming pattern from deploy command
-            pipeline_name = manifest.pipeline_name
+            bundle_name = manifest.bundle_name
             dag_name = workflow
             target_name = target_config.project.name.replace("-", "_")
-            safe_pipeline = pipeline_name.replace("-", "_")
+            safe_pipeline = bundle_name.replace("-", "_")
             safe_dag = dag_name.replace("-", "_")
             expected_workflow_name = f"{safe_pipeline}_{target_name}_{safe_dag}"
 

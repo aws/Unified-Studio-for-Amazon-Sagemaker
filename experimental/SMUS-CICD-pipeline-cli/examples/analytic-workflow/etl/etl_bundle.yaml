@@ -1,0 +1,58 @@
+bundleName: IntegrationTestETLWorkflow
+
+bundle:
+  bundlesDirectory: /tmp/bundles
+  storage:
+    - name: etl
+      connectionName: default.s3_shared
+      include: ['etl']
+      exclude: ['.ipynb_checkpoints/', '__pycache__/', '*.pyc', 'test_*.sh']
+  git:
+    - repository: covid-19-dataset
+      url: https://github.com/datasets/covid-19.git
+
+targets:
+  dev: 
+    stage: DEV
+    domain:
+      tags:
+        purpose: smus-cicd-testing
+      region: ${DEV_DOMAIN_REGION:us-east-2}
+    project: 
+      name: dev-marketing
+    environment_variables:
+      S3_PREFIX: dev
+
+  test: 
+    stage: TEST
+    domain:
+      tags:
+        purpose: smus-cicd-testing
+      region: ${DEV_DOMAIN_REGION:us-east-1}
+    project: 
+      name: test-marketing
+    tests:
+      folder: examples/analytic-workflow/etl/pipeline_tests/
+    initialization:
+      project: 
+        create: true
+        owners: [Eng1, arn:aws:iam::*:role/GitHubActionsRole-SMUS-CLI-Tests]
+        contributors: []
+        role:
+          arn: arn:aws:iam::*:role/SMUSCICDTestRole
+    bundle_target_configuration:
+      storage:
+        - name: etl
+          connectionName: default.s3_shared
+          targetDirectory: 'etl/bundle'
+      git:
+        - name: covid-19-dataset
+          connectionName: default.s3_shared
+          targetDirectory: 'repos'
+    environment_variables:
+      S3_PREFIX: test
+      AWS_REGION: ${DEV_DOMAIN_REGION:us-east-1}
+
+workflows:
+  - workflowName: covid_etl_pipeline
+    engine: airflow-serverless

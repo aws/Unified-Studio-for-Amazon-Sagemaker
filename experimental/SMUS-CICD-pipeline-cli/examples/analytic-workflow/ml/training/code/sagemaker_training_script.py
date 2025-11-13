@@ -140,8 +140,6 @@ if __name__ == '__main__':
     import shutil
     code_dir = os.path.join(model_dir, 'code')
     os.makedirs(code_dir, exist_ok=True)
-    inference_src = os.path.join(os.path.dirname(__file__), 'inference.py')
-    shutil.copy(inference_src, os.path.join(code_dir, 'inference.py'))
     
     print("Model training completed and saved")
 

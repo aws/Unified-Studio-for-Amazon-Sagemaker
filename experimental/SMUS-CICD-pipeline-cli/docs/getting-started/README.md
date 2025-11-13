@@ -2,21 +2,21 @@
 
 Choose the guide that matches your role:
 
-## 👨‍💻 For DevOps Teams
+## 👨‍💻 For Data Teams (Data Scientists, Data Engineers, GenAI App Developers)
 
-**Build and deploy CI/CD pipelines for your workflows**
+**Build and deploy data application bundles**
 
-You want to create automated deployment pipelines for data engineering, ML, or GenAI workflows.
+You want to create deployable data applications with Spark code, Python scripts, Airflow workflows, and notebooks.
 
 → **[Quick Start Guide](quickstart.md)** (10-15 minutes)
 
 **What you'll learn:**
 - Install the CLI
-- Create pipeline manifests
+- Create bundle manifests
 - Build workflows (Glue, Notebooks, SageMaker, Bedrock)
 - Configure multi-environment deployment
-- Set up GitHub Actions
 - Use variable substitution
+- Deploy your data applications
 
 **Includes examples for:**
 - Data Engineering with Glue
@@ -26,20 +26,21 @@ You want to create automated deployment pipelines for data engineering, ML, or G
 
 ---
 
-## 🔧 For Platform Administrators
+## 🔧 For DevOps Teams
 
-**Set up complete infrastructure for DevOps teams**
+**Set up CI/CD pipelines and infrastructure**
 
-You're responsible for configuring SageMaker Unified Studio projects and managing the platform.
+You're responsible for configuring CI/CD pipelines (GitHub Actions), managing SageMaker Unified Studio projects, and setting up infrastructure for data teams.
 
 → **[Admin Quick Start](admin-quickstart.md)** (15-20 minutes)
 
 **What you'll learn:**
 - Create projects for dev/test/prod
 - Configure connections and resources
-- Set up monitoring and alerts
+- Set up GitHub Actions CI/CD pipelines
 - Manage team access
-- Configure GitHub Actions for teams
+- Configure monitoring and alerts
+- Control infrastructure templates
 
 ---
 
@@ -47,20 +48,20 @@ You're responsible for configuring SageMaker Unified Studio projects and managin
 
 ### I want to...
 
-**Deploy workflows and build pipelines**  
+**Build and deploy data applications (bundles)**  
 → [Quick Start Guide](quickstart.md)
 
-**Set up the infrastructure**  
+**Set up CI/CD pipelines and infrastructure**  
 → [Admin Quick Start](admin-quickstart.md)
 
 **Understand how it works first**  
-→ [Pipeline Architecture](../concepts/pipeline-architecture.md)
+→ [Bundle Manifest Reference](../bundle-manifest.md)
 
 **See examples**  
-→ [Examples](../examples/)
+→ [Examples](../../examples/)
 
 **Read complete documentation**  
-→ [CLI Commands](../guides/cli-commands.md) | [Pipeline Manifest](../guides/pipeline-manifest.md)
+→ [CLI Commands](../cli-commands.md) | [Bundle Manifest](../bundle-manifest.md)
 
 ---
 
@@ -81,16 +82,16 @@ All guides assume you have:
 
 After completing a quick start guide:
 
-1. **Explore Examples** - See [examples/](../examples/) for real-world scenarios
-2. **Read Concepts** - Understand [how pipelines work](../concepts/pipeline-architecture.md)
-3. **Reference Docs** - Check [CLI commands](../guides/cli-commands.md) and [manifest syntax](../guides/pipeline-manifest.md)
-4. **Set Up CI/CD** - Configure [GitHub Actions](../guides/github-actions-integration.md)
+1. **Explore Examples** - See [examples/](../../examples/) for real-world scenarios
+2. **Read Concepts** - Understand [bundle manifests](../bundle-manifest.md)
+3. **Reference Docs** - Check [CLI commands](../cli-commands.md) and [manifest syntax](../bundle-manifest.md)
+4. **Set Up CI/CD** - Configure [GitHub Actions](../github-actions-integration.md)
 
 ---
 
 ## Need Help?
 
 - **Documentation**: Browse [docs/](../)
-- **Examples**: Check [examples/](../examples/)
+- **Examples**: Check [examples/](../../examples/)
 - **Issues**: [GitHub Issues](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/issues)
 - **Contributing**: [Development Guide](../development.md)

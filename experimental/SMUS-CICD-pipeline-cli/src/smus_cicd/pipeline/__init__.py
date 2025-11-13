@@ -1,15 +1,15 @@
 """
 Pipeline module for SMUS CI/CD.
 
-Contains pipeline manifest and validation functionality.
+Contains bundle manifest and validation functionality.
 """
 
-from .pipeline_manifest import (
+from .bundle_manifest import (
     BundleConfig,
+    BundleManifest,
     BundleTargetConfig,
     DomainConfig,
     InitializationConfig,
-    PipelineManifest,
     ProjectConfig,
     TargetConfig,
     WorkflowConfig,
@@ -21,7 +21,7 @@ from .validation import (
 )
 
 __all__ = [
-    "PipelineManifest",
+    "BundleManifest",
     "DomainConfig",
     "TargetConfig",
     "BundleConfig",

@@ -59,7 +59,7 @@ class TestETLWorkflow(IntegrationTestBase):
     def get_pipeline_file(self):
         return os.path.join(
             os.path.dirname(__file__),
-            "../../../../examples/analytic-workflow/etl/etl_pipeline.yaml"
+            "../../../../examples/analytic-workflow/etl/etl_bundle.yaml"
         )
 
     @pytest.mark.integration
@@ -85,7 +85,7 @@ class TestETLWorkflow(IntegrationTestBase):
 
         # Step 1: Describe --connect
         print("\n=== Step 1: Describe with Connections ===")
-        result = self.run_cli_command(["describe", "--pipeline", pipeline_file, "--connect"])
+        result = self.run_cli_command(["describe", "--bundle", pipeline_file, "--connect"])
         assert result["success"], f"Describe --connect failed: {result['output']}"
         print("✅ Describe --connect successful")
 
@@ -127,26 +127,26 @@ class TestETLWorkflow(IntegrationTestBase):
 
         # Step 3: Bundle from dev
         print("\n=== Step 3: Bundle from dev ===")
-        result = self.run_cli_command(["bundle", "--pipeline", pipeline_file, "--target", "dev"])
+        result = self.run_cli_command(["bundle", "--bundle", pipeline_file, "--target", "dev"])
         assert result["success"], f"Bundle failed: {result['output']}"
         print("✅ Bundle successful")
 
         # Step 4: Deploy
         print("\n=== Step 4: Deploy ===")
-        result = self.run_cli_command(["deploy", "test", "--pipeline", pipeline_file])
+        result = self.run_cli_command(["deploy", "test", "--bundle", pipeline_file])
         assert result["success"], f"Deploy failed: {result['output']}"
         print("✅ Deploy successful")
 
         # Step 5: Monitor
         print("\n=== Step 5: Monitor ===")
-        result = self.run_cli_command(["monitor", "--targets", "test", "--pipeline", pipeline_file])
+        result = self.run_cli_command(["monitor", "--targets", "test", "--bundle", pipeline_file])
         assert result["success"], f"Monitor failed: {result['output']}"
         print("✅ Monitor successful")
 
         # Step 6: Run workflow and extract ARN
         print("\n=== Step 6: Run Workflow ===")
         result = self.run_cli_command(
-            ["run", "--workflow", workflow_name, "--targets", "test", "--pipeline", pipeline_file]
+            ["run", "--workflow", workflow_name, "--targets", "test", "--bundle", pipeline_file]
         )
         assert result["success"], f"Run workflow failed: {result['output']}"
         
@@ -161,7 +161,7 @@ class TestETLWorkflow(IntegrationTestBase):
 
         # Step 7: Monitor workflow status
         print("\n=== Step 7: Monitor Workflow Status ===")
-        result = self.run_cli_command(["monitor", "--targets", "test", "--pipeline", pipeline_file])
+        result = self.run_cli_command(["monitor", "--targets", "test", "--bundle", pipeline_file])
         assert result["success"], f"Monitor after run failed: {result['output']}"
         print("✅ Monitor after run successful")
 
@@ -181,6 +181,7 @@ class TestETLWorkflow(IntegrationTestBase):
         
         # Step 9: Run pipeline tests
         print("\n=== Step 9: Run Pipeline Tests ===")
-        result = self.run_cli_command(["test", "--targets", "test", "--test-output", "console", "--pipeline", pipeline_file])
+        result = self.run_cli_command(["test", "--targets", "test", "--test-output", "console", "--bundle", pipeline_file])
         assert result["success"], f"Pipeline tests failed: {result['output']}"
         print("✅ Pipeline tests passed")
+        print("✅ ETL workflow test completed successfully")

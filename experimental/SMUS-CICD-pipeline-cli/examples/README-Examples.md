@@ -34,8 +34,8 @@ This directory contains two versions of the DemoMarketingPipeline to demonstrate
 
 ```
 examples/
-├── DemoMarketingPipeline-MWAA.yaml      # MWAA pipeline manifest
-├── DemoMarketingPipeline-Serverless.yaml # Serverless pipeline manifest
+├── DemoMarketingPipeline-MWAA.yaml      # MWAA bundle manifest
+├── DemoMarketingPipeline-Serverless.yaml # Serverless bundle manifest
 ├── workflows-mwaa/
 │   └── dags/
 │       └── sample_dag.py                 # Traditional Python DAG

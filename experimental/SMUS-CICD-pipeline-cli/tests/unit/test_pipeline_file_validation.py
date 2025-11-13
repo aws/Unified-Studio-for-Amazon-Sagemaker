@@ -14,7 +14,7 @@ class TestPipelineFileValidation:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(
                 """
-pipelineName: TestPipeline
+bundleName: TestPipeline
 domain:
   name: test-domain
   region: us-east-1
@@ -28,7 +28,7 @@ targets:
 
             try:
                 result = load_yaml(f.name)
-                assert result["pipelineName"] == "TestPipeline"
+                assert result["bundleName"] == "TestPipeline"
                 assert result["domain"]["name"] == "test-domain"
                 assert result["targets"]["dev"]["project"]["name"] == "test-project"
             finally:
@@ -36,21 +36,21 @@ targets:
 
     def test_load_yaml_file_not_exists(self):
         """Test loading YAML file when it doesn't exist."""
-        non_existent_file = "non-existent-pipeline.yaml"
+        non_existent_file = "non-existent-bundle.yaml"
 
         with pytest.raises(FileNotFoundError) as exc_info:
             load_yaml(non_existent_file)
 
         error_message = str(exc_info.value)
-        assert "Pipeline manifest file not found" in error_message
+        assert "Bundle manifest file not found" in error_message or "Pipeline manifest file not found" in error_message
         assert non_existent_file in error_message
-        assert "--pipeline/-p option" in error_message
+        assert "--bundle" in error_message or "--bundle/-b option" in error_message or "--bundle/-p option" in error_message
 
     def test_load_yaml_default_pipeline_file_not_exists(self):
-        """Test loading default pipeline.yaml when it doesn't exist."""
-        # Use a temporary directory that we know doesn't have pipeline.yaml
+        """Test loading default bundle.yaml when it doesn't exist."""
+        # Use a temporary directory that we know doesn't have bundle.yaml
         with tempfile.TemporaryDirectory() as temp_dir:
-            # Change to temp directory and ensure no pipeline.yaml exists
+            # Change to temp directory and ensure no bundle.yaml exists
             original_dir = None
             try:
                 original_dir = os.getcwd()
@@ -62,13 +62,13 @@ targets:
                 os.chdir(temp_dir)
 
                 with pytest.raises(FileNotFoundError) as exc_info:
-                    load_yaml("pipeline.yaml")
+                    load_yaml("bundle.yaml")
 
                 error_message = str(exc_info.value)
                 assert (
-                    "Pipeline manifest file not found: pipeline.yaml" in error_message
+                    "Bundle manifest file not found: bundle.yaml" in error_message
                 )
-                assert "--pipeline/-p option" in error_message
+                assert "--bundle/-b option" in error_message
             finally:
                 if original_dir:
                     os.chdir(original_dir)

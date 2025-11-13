@@ -19,7 +19,7 @@ class TestRunCommandExitCodes:
     @patch("smus_cicd.helpers.mwaa.validate_mwaa_health")
     @patch("smus_cicd.commands.run.load_config")
     @patch("smus_cicd.commands.run.get_datazone_project_info")
-    @patch("smus_cicd.commands.run.PipelineManifest.from_file")
+    @patch("smus_cicd.commands.run.BundleManifest.from_file")
     def test_no_workflow_connections_returns_exit_code_1(
         self, mock_manifest, mock_project_info, mock_config, mock_mwaa_health
     ):
@@ -52,7 +52,7 @@ class TestRunCommandExitCodes:
             app,
             [
                 "run",
-                "--pipeline",
+                "--bundle",
                 "test.yaml",
                 "--targets",
                 "test",
@@ -71,7 +71,7 @@ class TestRunCommandExitCodes:
     @patch("smus_cicd.helpers.mwaa.validate_mwaa_health")
     @patch("smus_cicd.commands.run.load_config")
     @patch("smus_cicd.commands.run.get_datazone_project_info")
-    @patch("smus_cicd.commands.run.PipelineManifest.from_file")
+    @patch("smus_cicd.commands.run.BundleManifest.from_file")
     def test_project_info_error_returns_exit_code_1(
         self, mock_manifest, mock_project_info, mock_config, mock_mwaa_health
     ):
@@ -101,7 +101,7 @@ class TestRunCommandExitCodes:
             app,
             [
                 "run",
-                "--pipeline",
+                "--bundle",
                 "test.yaml",
                 "--targets",
                 "test",
@@ -123,7 +123,7 @@ class TestRunCommandExitCodes:
             app,
             [
                 "run",
-                "--pipeline",
+                "--bundle",
                 "test.yaml",
                 "--targets",
                 "test",
@@ -144,7 +144,7 @@ class TestRunCommandExitCodes:
             app,
             [
                 "run",
-                "--pipeline",
+                "--bundle",
                 "test.yaml",
                 "--targets",
                 "test",

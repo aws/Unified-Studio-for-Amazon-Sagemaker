@@ -448,6 +448,170 @@ class IntegrationTestBase:
         if self.created_resources:
             print(f"Would clean up resources: {self.created_resources}")
 
+    def download_and_validate_notebooks(self, s3_bucket: str, run_id: Optional[str] = None) -> bool:
+        """Download workflow notebook outputs and validate for errors.
+        
+        Args:
+            s3_bucket: S3 bucket name containing workflow outputs
+            run_id: Optional specific run ID to download (defaults to latest)
+            
+        Returns:
+            True if notebooks downloaded and contain no errors, False otherwise
+        """
+        import subprocess
+        import tarfile
+        import json
+        
+        output_dir = Path("tests/test-outputs/notebooks")
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        s3_prefix = f"s3://{s3_bucket}/shared/workflows/output/"
+        
+        print(f"\n=== Downloading Workflow Notebooks ===")
+        print(f"Searching for outputs in {s3_prefix}...")
+        
+        result = subprocess.run(
+            ["aws", "s3", "ls", s3_prefix, "--recursive"],
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode != 0:
+            print(f"❌ Error listing S3: {result.stderr}")
+            return False
+        
+        # Parse runs and find latest if no run_id specified
+        runs = {}
+        for line in result.stdout.strip().split("\n"):
+            if not line or "output.tar.gz" not in line:
+                continue
+            
+            parts = line.split()
+            if len(parts) < 4:
+                continue
+            
+            timestamp = f"{parts[0]} {parts[1]}"
+            s3_key = " ".join(parts[3:])
+            
+            # Extract workflow name and run ID from path
+            # Path format: shared/workflows/output/{workflow_path}/{execution-id}/output/output.tar.gz
+            key_parts = s3_key.split("/")
+            if len(key_parts) < 6 or key_parts[-1] != "output.tar.gz":
+                continue
+            
+            # Find execution ID (the part before /output/output.tar.gz)
+            execution_id = key_parts[-3]
+            
+            # Workflow name is everything between "output/" and execution ID
+            workflow_path_parts = key_parts[3:-3]  # Skip shared/workflows/output and execution-id/output/output.tar.gz
+            workflow_name = "/".join(workflow_path_parts) if workflow_path_parts else "unknown"
+            
+            if workflow_name not in runs:
+                runs[workflow_name] = {}
+            if execution_id not in runs[workflow_name]:
+                runs[workflow_name][execution_id] = {"timestamp": timestamp, "files": []}
+            runs[workflow_name][execution_id]["files"].append(s3_key)
+        
+        if not runs:
+            print("⚠️ No workflow outputs found")
+            return False
+        
+        # Get latest run per workflow if no run_id specified
+        if not run_id:
+            latest_runs = {}
+            for workflow_name, workflow_runs in runs.items():
+                latest_run = max(workflow_runs.items(), key=lambda x: x[1]["timestamp"])
+                latest_runs[workflow_name] = {latest_run[0]: latest_run[1]}
+            runs = latest_runs
+        
+        downloaded_notebooks = []
+        
+        for workflow_name, workflow_runs in runs.items():
+            for current_run_id, run_data in workflow_runs.items():
+                if run_id and current_run_id != run_id:
+                    continue
+                
+                notebook_dir = output_dir / workflow_name
+                notebook_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Convert UTC timestamp to local timezone
+                from datetime import datetime
+                import time
+                utc_timestamp = run_data["timestamp"]
+                utc_dt = datetime.strptime(utc_timestamp, "%Y-%m-%d %H:%M:%S")
+                local_dt = datetime.fromtimestamp(utc_dt.timestamp())
+                local_time_str = local_dt.strftime("%Y-%m-%d %H:%M:%S %Z")
+                
+                print(f"\n📓 Workflow: {workflow_name}")
+                print(f"   Executed: {local_time_str}")
+                
+                for s3_key in run_data["files"]:
+                    s3_path = f"s3://{s3_bucket}/{s3_key}"
+                    
+                    with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp:
+                        tmp_path = tmp.name
+                    
+                    print(f"   Downloading...")
+                    result = subprocess.run(
+                        ["aws", "s3", "cp", s3_path, tmp_path],
+                        capture_output=True,
+                        text=True
+                    )
+                    
+                    if result.returncode != 0:
+                        print(f"  ❌ Error: {result.stderr}")
+                        Path(tmp_path).unlink(missing_ok=True)
+                        continue
+                    
+                    try:
+                        with tarfile.open(tmp_path, "r:gz") as tar:
+                            for member in tar.getmembers():
+                                if member.name.startswith("_") and member.name.endswith(".ipynb"):
+                                    tar.extract(member, notebook_dir)
+                                    notebook_path = notebook_dir / member.name
+                                    downloaded_notebooks.append(notebook_path)
+                                    print(f"  ✅ {notebook_path}")
+                    except Exception as e:
+                        print(f"  ❌ Error extracting: {e}")
+                        return False
+                    finally:
+                        Path(tmp_path).unlink(missing_ok=True)
+        
+        if not downloaded_notebooks:
+            print("⚠️ No notebooks downloaded")
+            return False
+        
+        print(f"\n✅ Downloaded {len(downloaded_notebooks)} notebooks")
+        for nb_path in downloaded_notebooks:
+            print(f"  📓 {nb_path}")
+        
+        # Validate notebooks for errors
+        print("\n=== Validating Notebooks ===")
+        has_errors = False
+        
+        for notebook_path in downloaded_notebooks:
+            try:
+                with open(notebook_path) as f:
+                    notebook = json.load(f)
+                
+                error_count = 0
+                for cell in notebook.get("cells", []):
+                    for output in cell.get("outputs", []):
+                        if output.get("output_type") == "error":
+                            error_count += 1
+                            if not has_errors:
+                                print(f"❌ Errors found in {notebook_path.name}:")
+                            has_errors = True
+                            print(f"  - {output.get('ename', 'Error')}: {output.get('evalue', '')}")
+                
+                if error_count == 0:
+                    print(f"✅ {notebook_path.name}: No errors")
+            except Exception as e:
+                print(f"❌ Error reading {notebook_path.name}: {e}")
+                has_errors = True
+        
+        return not has_errors
+
     def generate_test_report(self, test_name: str, results: list) -> Dict[str, Any]:
         """Generate test report."""
         total_commands = len(results)

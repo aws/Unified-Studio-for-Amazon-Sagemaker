@@ -1,6 +1,6 @@
 # Substitutions and Variables
 
-← [Back to Main README](../README.md) | [Pipeline Manifest Reference](pipeline-manifest.md)
+← [Back to Main README](../README.md) | [Bundle Manifest Reference](bundle-manifest.md)
 
 Dynamic variable substitution system for workflow YAMLs that resolves project-specific and environment values at deployment time.
 
@@ -26,7 +26,7 @@ Variables use the format: `{namespace.property.path}`
 
 ### Environment Variables
 
-Access any environment variable defined in the pipeline manifest:
+Access any environment variable defined in the bundle manifest:
 
 ```yaml
 {env.VARIABLE_NAME}
@@ -122,7 +122,7 @@ tasks:
 
 When you run `deploy test`, the system:
 
-1. Loads the target configuration from the pipeline manifest
+1. Loads the target configuration from the bundle manifest
 2. Initializes the MaxDome Project SDK for the target project
 3. Queries all project connections dynamically
 4. Downloads workflow YAMLs from S3
@@ -153,9 +153,9 @@ The resolver automatically discovers ALL connections in the project, not just pr
 script_location: '{proj.connection.my-redshift.host}'
 ```
 
-## Pipeline Manifest Configuration
+## Bundle Manifest Configuration
 
-Define environment variables in your pipeline manifest:
+Define environment variables in your bundle manifest:
 
 ```yaml
 targets:
@@ -342,13 +342,13 @@ Potential additions:
 ### Variable Not Resolving
 
 1. Check variable syntax matches exactly: `{namespace.property}`
-2. Verify connection exists in project: `smus describe --pipeline manifest.yaml --connect`
-3. Check environment variable is defined in pipeline manifest
+2. Verify connection exists in project: `smus describe --bundle manifest.yaml --connect`
+3. Check environment variable is defined in bundle manifest
 4. Review deploy logs for resolution errors
 
 ### Connection Property Not Found
 
-1. List all connections: `smus describe --pipeline manifest.yaml --connect`
+1. List all connections: `smus describe --bundle manifest.yaml --connect`
 2. Check connection type matches expected properties
 3. Verify connection is in READY status
 4. Check property name spelling (case-sensitive)
@@ -356,6 +356,6 @@ Potential additions:
 ### Wrong Value After Resolution
 
 1. Verify you're deploying to correct target
-2. Check target configuration in pipeline manifest
+2. Check target configuration in bundle manifest
 3. Confirm project has correct connections configured
 4. Review resolved YAML in S3 after deployment

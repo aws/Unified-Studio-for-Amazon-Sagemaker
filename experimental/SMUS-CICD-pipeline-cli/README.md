@@ -1,8 +1,8 @@
 # SMUS CI/CD Pipeline CLI
 
-**Automate deployment of data science workflows across SageMaker Unified Studio environments**
+**Automate deployment of data applications across SageMaker Unified Studio environments**
 
-Deploy Airflow DAGs, Jupyter notebooks, and ML pipelines from development to production with confidence. Built for data engineers, ML engineers, and platform teams managing multi-environment data science workflows.
+Deploy Airflow DAGs, Jupyter notebooks, and ML workflows from development to production with confidence. Built for data scientists, data engineers, ML engineers, and GenAI app developers working with DevOps teams.
 
 ---
 
@@ -11,8 +11,8 @@ Deploy Airflow DAGs, Jupyter notebooks, and ML pipelines from development to pro
 ✅ **Deploy with Confidence** - Automated testing and validation before production  
 ✅ **Multi-Environment Management** - Dev → Test → Prod with environment-specific configuration  
 ✅ **DataZone Integration** - Automatic catalog asset subscription and approval workflows  
-✅ **Infrastructure as Code** - Version-controlled pipeline definitions and reproducible deployments  
-✅ **GitHub Actions Ready** - Native CI/CD integration for automated deployments  
+✅ **Infrastructure as Code** - Version-controlled bundle definitions and reproducible deployments  
+✅ **GitHub Actions Ready** - Native CI/CD pipeline integration for automated deployments  
 
 ---
 
@@ -25,19 +25,19 @@ cd Unified-Studio-for-Amazon-Sagemaker/experimental/SMUS-CICD-pipeline-cli
 pip install -e .
 ```
 
-**Deploy your first pipeline:**
+**Deploy your first bundle:**
 ```bash
 # Validate configuration
-smus-cli describe --pipeline pipeline.yaml --connect
+smus-cli describe --bundle bundle.yaml --connect
 
 # Create deployment bundle
-smus-cli bundle --pipeline pipeline.yaml --targets dev
+smus-cli bundle --bundle bundle.yaml --targets dev
 
 # Deploy to test environment
-smus-cli deploy --targets test --pipeline pipeline.yaml
+smus-cli deploy --targets test --bundle bundle.yaml
 
 # Run validation tests
-smus-cli test --pipeline pipeline.yaml --targets test
+smus-cli test --bundle bundle.yaml --targets test
 ```
 
 **See it in action:** [Live GitHub Actions Example](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/actions/runs/17631303500)
@@ -46,18 +46,18 @@ smus-cli test --pipeline pipeline.yaml --targets test
 
 ## Who Is This For?
 
-### 👨‍💻 DevOps Teams
-Build and deploy CI/CD pipelines for data engineering, ML, and GenAI workflows.  
-→ **[Quick Start Guide](docs/getting-started/quickstart.md)** - Deploy your first pipeline in 10 minutes  
+### 👨‍💻 Data Teams (Data Scientists, Data Engineers, GenAI App Developers)
+Build and deploy data applications including Spark code, Python scripts, Airflow workflows, and notebooks.  
+→ **[Quick Start Guide](docs/getting-started/quickstart.md)** - Deploy your first bundle in 10 minutes  
 
 **Includes examples for:**
 - Data Engineering (Glue, Notebooks, Athena)
 - ML Workflows (SageMaker, Notebooks)
 - GenAI Applications (Bedrock, Notebooks)
 
-### 🔧 Platform Administrators
-Set up and manage multi-environment infrastructure for DevOps teams.  
-→ **[Admin Guide](docs/getting-started/admin-quickstart.md)** - Configure infrastructure in 15 minutes
+### 🔧 DevOps Teams
+Set up CI/CD pipelines (GitHub Actions) and manage multi-environment infrastructure for data teams.  
+→ **[Admin Guide](docs/getting-started/admin-quickstart.md)** - Configure infrastructure and pipelines in 15 minutes
 
 ---
 
@@ -67,7 +67,7 @@ Set up and manage multi-environment infrastructure for DevOps teams.
 - **Bundle Creation** - Package workflows, notebooks, and data assets into deployable artifacts
 - **Multi-Target Deployment** - Deploy to dev, test, and prod with a single command
 - **Environment Variables** - Dynamic configuration using `${VAR}` substitution
-- **Rollback Support** - Revert to previous versions when needed
+- **Version Control** - Track bundle versions in S3 for deployment history
 
 ### 🔍 Testing & Validation
 - **Automated Tests** - Run validation tests before promoting to production
@@ -75,15 +75,9 @@ Set up and manage multi-environment infrastructure for DevOps teams.
 - **Workflow Monitoring** - Track execution status and logs
 - **Health Checks** - Verify deployment correctness
 
-### 📊 DataZone Catalog Integration
-- **Asset Discovery** - Automatically find required catalog assets
-- **Subscription Management** - Request access to tables and datasets
-- **Approval Workflows** - Handle cross-project data access
-- **Asset Tracking** - Monitor catalog dependencies
-
-### 🔄 CI/CD Integration
-- **GitHub Actions** - Pre-built workflows for automated deployment
-- **GitLab CI** - Native support for GitLab pipelines
+### 🔄 CI/CD Pipeline Integration
+- **GitHub Actions** - Pre-built CI/CD pipeline workflows for automated deployment
+- **GitLab CI** - Native support for GitLab CI/CD pipelines
 - **Environment Variables** - Flexible configuration for any CI/CD platform
 - **Webhook Support** - Trigger deployments from external events
 
@@ -92,6 +86,12 @@ Set up and manage multi-environment infrastructure for DevOps teams.
 - **Connection Setup** - Configure S3, Airflow, Athena, and Lakehouse connections
 - **Resource Mapping** - Link AWS resources to project connections
 - **Permission Management** - Control access and collaboration
+
+### 📊 Catalog Integration
+- **Asset Discovery** - Automatically find required catalog assets (Glue, Lake Formation, DataZone)
+- **Subscription Management** - Request access to tables and datasets
+- **Approval Workflows** - Handle cross-project data access
+- **Asset Tracking** - Monitor catalog dependencies
 
 ---
 
@@ -117,19 +117,27 @@ S3 • Lambda • Step Functions • DynamoDB • RDS • SNS/SQS • Batch
 
 ## Core Concepts
 
-### Pipeline
-A YAML manifest defining your complete CI/CD workflow:
-- Target environments (dev, test, prod)
-- Bundle configuration (what to deploy)
-- Workflow definitions and parameters
-- Environment-specific settings
-
 ### Bundle
-A deployable package containing:
+A deployable data application package created by data teams containing:
 - Airflow DAGs and Python scripts
 - Jupyter notebooks and data files
 - ML models and configuration
 - Git repository dependencies
+
+### Workflow
+Orchestration logic that defines task execution and dependencies:
+- Typically Airflow DAGs (Directed Acyclic Graphs)
+- Supports MWAA (Managed Workflows for Apache Airflow) and Airflow Serverless
+- Extensible architecture allows additional orchestration engines to be added
+- Defined in YAML format for easy configuration
+
+### Pipeline
+The CI/CD automation (e.g., GitHub Actions workflows) created by DevOps teams that:
+- Automates bundle deployment across environments
+- Runs tests and quality gates
+- Manages promotion from dev → test → prod
+- Example: `.github/workflows/mwaa-pipeline-lifecycle.yml`
+- Reference: [GitHub Actions Workflows](https://docs.github.com/en/actions/how-tos/write-workflows)
 
 ### Target
 A deployment environment mapping to a SageMaker Unified Studio project:
@@ -138,29 +146,28 @@ A deployment environment mapping to a SageMaker Unified Studio project:
 - Deployment settings and parameters
 - Access control and permissions
 
-**How it works:** Bundles code → Deploys to projects → Runs workflows → Monitors execution
-
----
-
+**How it works:** Data teams create bundles → DevOps teams create CI/CD pipelines → Bundles deploy to targets → Workflows execute → Monitor results
 ## Documentation
 
 ### Getting Started
-- **[Quick Start Guide](docs/getting-started/quickstart.md)** - Deploy your first pipeline (10 min)
+- **[Quick Start Guide](docs/getting-started/quickstart.md)** - Deploy your first bundle (10 min)
 - **[Admin Guide](docs/getting-started/admin-quickstart.md)** - Set up infrastructure (15 min)
 
 ### Guides
-- **[Pipeline Manifest Reference](docs/pipeline-manifest.md)** - Complete YAML configuration guide
+- **[Bundle Manifest Reference](docs/bundle-manifest.md)** - Complete YAML configuration guide
+- **[Connections Guide](docs/connections.md)** - Configure AWS service integrations
 - **[CLI Commands](docs/cli-commands.md)** - Detailed command documentation
 - **[Substitutions & Variables](docs/substitutions-and-variables.md)** - Dynamic configuration
-- **[GitHub Actions Integration](docs/github-actions-integration.md)** - Automated CI/CD workflows
+- **[GitHub Actions Integration](docs/github-actions-integration.md)** - CI/CD pipeline automation
+- **[Bundle Deployment Metrics](docs/pipeline-deployment-metrics.md)** - Monitoring and operational metrics with EventBridge
 
 ### Reference
-- **[Pipeline Manifest Schema](docs/pipeline-manifest-schema.md)** - YAML schema reference
+- **[Bundle Manifest Schema](docs/pipeline-manifest-schema.md)** - YAML schema reference
 - **[Airflow AWS Operators](docs/airflow-aws-operators.md)** - Custom operators
 
 ### Examples
-- **[ETL Pipeline](examples/analytic-workflow/etl/)** - Glue jobs with Airflow orchestration
-- **[ML Pipeline](examples/analytic-workflow/ml/)** - SageMaker training with MLflow tracking
+- **[ETL Bundle](examples/analytic-workflow/etl/)** - Glue jobs with Airflow orchestration
+- **[ML Bundle](examples/analytic-workflow/ml/)** - SageMaker training with MLflow tracking
 - **[Serverless Example](examples/serverless-example/)** - Airflow Serverless workflows
 - **[MWAA Example](examples/mwaa-example/)** - Managed Airflow workflows
 
@@ -193,9 +200,9 @@ graph LR
 
 ---
 
-## Example Pipelines
+## Example Bundles
 
-### ETL Pipeline (`examples/analytic-workflow/etl/`)
+### ETL Bundle (`examples/analytic-workflow/etl/`)
 
 **What it deploys:**
 - **2 AWS Glue jobs** running on Glue 4.0
@@ -204,7 +211,7 @@ graph LR
 - **Airflow Serverless workflow** orchestrating job dependencies
 - **Python scripts** bundled and uploaded to S3 shared storage
 
-**Pipeline manifest (`etl_pipeline.yaml`):**
+**Bundle manifest (`etl_bundle.yaml`):**
 - Bundles `etl/` directory to S3 connection `default.s3_shared`
 - Deploys to `dev` (DEV stage) and `test` (TEST stage with auto-created project)
 - Injects environment variables (`S3_PREFIX`, `AWS_REGION`)
@@ -232,11 +239,11 @@ workflow_combined:
 **Deploy:**
 ```bash
 cd examples/analytic-workflow/etl
-smus-cli bundle --pipeline etl_pipeline.yaml --targets dev
-smus-cli deploy --targets test --pipeline etl_pipeline.yaml
+smus-cli bundle --bundle etl_bundle.yaml --targets dev
+smus-cli deploy --targets test --bundle etl_bundle.yaml
 ```
 
-### ML Training Pipeline (`examples/analytic-workflow/ml/`)
+### ML Training Bundle (`examples/analytic-workflow/ml/`)
 
 **What it deploys:**
 - **SageMaker Notebook Operator** executing ML orchestration notebook
@@ -244,7 +251,7 @@ smus-cli deploy --targets test --pipeline etl_pipeline.yaml
 - **Workflow definition** with MLflow connection injection
 - **MLflow tracking server** connection for experiment tracking
 
-**Pipeline manifest (`ml_pipeline.yaml`):**
+**Bundle manifest (`ml_bundle.yaml`):**
 - Bundles 2 storage locations:
   - `training-code` → compressed tarball with training script + inference code
   - `ml-workflows` → notebook and workflow definitions
@@ -281,8 +288,8 @@ ml_dev_workflow:
 **Deploy:**
 ```bash
 cd examples/analytic-workflow/ml
-smus-cli bundle --pipeline ml_pipeline.yaml --targets dev
-smus-cli deploy --targets test --pipeline ml_pipeline.yaml
+smus-cli bundle --bundle ml_bundle.yaml --targets dev
+smus-cli deploy --targets test --bundle ml_bundle.yaml
 ```
 
 **Key features:**
@@ -324,14 +331,14 @@ smus-cli monitor --targets test  # Track approval status
 ```yaml
 # .github/workflows/deploy.yml
 - name: Deploy to Test
-  run: smus-cli deploy --targets test --pipeline pipeline.yaml
+  run: smus-cli deploy --targets test --bundle bundle.yaml
   
 - name: Run Tests
-  run: smus-cli test --targets test --pipeline pipeline.yaml
+  run: smus-cli test --targets test --bundle bundle.yaml
   
 - name: Deploy to Prod
   if: success()
-  run: smus-cli deploy --targets prod --pipeline pipeline.yaml
+  run: smus-cli deploy --targets prod --bundle bundle.yaml
 ```
 
 ---
@@ -365,21 +372,22 @@ pip install smus-cicd-cli  # May contain malicious code
 
 ### 📚 Documentation
 - **[Getting Started Hub](docs/getting-started/README.md)** - Role-based navigation for DevOps teams and admins
-- **[Quick Start Guide](docs/getting-started/quickstart.md)** - Deploy your first pipeline in 10 minutes
+- **[Quick Start Guide](docs/getting-started/quickstart.md)** - Deploy your first bundle in 10 minutes
 - **[Admin Quick Start](docs/getting-started/admin-quickstart.md)** - Infrastructure setup in 15 minutes
 
 ### 📖 Reference Guides
-- **[Pipeline Manifest](docs/pipeline-manifest.md)** - Complete YAML configuration reference
+- **[Bundle Manifest](docs/bundle-manifest.md)** - Complete YAML configuration reference
 - **[CLI Commands](docs/cli-commands.md)** - All available commands and options
 - **[Substitutions & Variables](docs/substitutions-and-variables.md)** - Dynamic configuration guide
 - **[GitHub Actions Integration](docs/github-actions-integration.md)** - CI/CD automation setup
+- **[Bundle Deployment Metrics](docs/pipeline-deployment-metrics.md)** - Monitoring and operational metrics
 - **[Airflow AWS Operators](docs/airflow-aws-operators.md)** - Custom operator reference
-- **[Pipeline Manifest Schema](docs/pipeline-manifest-schema.md)** - YAML schema validation
+- **[Bundle Manifest Schema](docs/pipeline-manifest-schema.md)** - YAML schema validation
 
 ### 💡 Examples
 - **[Examples Overview](examples/README.md)** - All available examples and usage
-- **[ETL Pipeline](examples/analytic-workflow/etl/)** - Glue jobs with Airflow orchestration
-- **[ML Pipeline](examples/analytic-workflow/ml/README.md)** - SageMaker training with MLflow tracking
+- **[ETL Bundle](examples/analytic-workflow/etl/)** - Glue jobs with Airflow orchestration
+- **[ML Bundle](examples/analytic-workflow/ml/README.md)** - SageMaker training with MLflow tracking
 - **[ML Training Code](examples/analytic-workflow/ml/job-code/README.md)** - Training script details
 - **[Serverless Example](examples/serverless-example/README.md)** - Airflow Serverless workflows
 - **[MWAA Example](examples/mwaa-example/README.md)** - Managed Airflow workflows

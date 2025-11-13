@@ -1,7 +1,7 @@
 # SMUS CI/CD Pipeline Manifest - Airflow Serverless Version
 # Modern serverless pipeline with environment variables and simplified configuration
 
-pipelineName: DemoMarketingPipeline-Serverless
+bundleName: DemoMarketingBundle-Serverless
 
 # Bundle configuration for serverless
 bundle:

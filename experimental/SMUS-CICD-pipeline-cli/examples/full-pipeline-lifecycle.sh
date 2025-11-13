@@ -119,45 +119,45 @@ run_command "smus-cli create --name \"$PIPELINE_NAME\" --domain-id \"$DOMAIN_ID\
 pause_if_needed
 
 # Step 2: Validate pipeline configuration
-run_command "smus-cli describe --pipeline \"$PIPELINE_FILE\" --workflows --connections --connect --output TEXT"
+run_command "smus-cli describe --bundle \"$PIPELINE_FILE\" --workflows --connections --connect --output TEXT"
 
 pause_if_needed
 
 # Step 3: Create deployment bundle
-run_command "smus-cli bundle --pipeline \"$PIPELINE_FILE\" --targets dev --output JSON"
+run_command "smus-cli bundle --bundle \"$PIPELINE_FILE\" --targets dev --output JSON"
 
 pause_if_needed
 
 # Step 4: Deploy to test environment
-run_command "smus-cli deploy --pipeline \"$PIPELINE_FILE\" --targets test"
+run_command "smus-cli deploy --bundle \"$PIPELINE_FILE\" --targets test"
 
 pause_if_needed
 
 # Step 5: Run tests
-run_command "smus-cli test --pipeline \"$PIPELINE_FILE\" --targets test"
+run_command "smus-cli test --bundle \"$PIPELINE_FILE\" --targets test"
 
 pause_if_needed
 
 # Step 6: Monitor pipeline
-run_command "smus-cli monitor --pipeline \"$PIPELINE_FILE\" --output TEXT"
+run_command "smus-cli monitor --bundle \"$PIPELINE_FILE\" --output TEXT"
 
 pause_if_needed
 
 # Step 7: Execute workflow commands
-run_command "smus-cli run --pipeline \"$PIPELINE_FILE\" --targets dev --workflow test_dag --command \"dags trigger test_dag\""
+run_command "smus-cli run --bundle \"$PIPELINE_FILE\" --targets dev --workflow test_dag --command \"dags trigger test_dag\""
 
 pause_if_needed
 
-run_command "smus-cli run --pipeline \"$PIPELINE_FILE\" --targets dev --workflow test_dag --command \"tasks list test_dag\""
+run_command "smus-cli run --bundle \"$PIPELINE_FILE\" --targets dev --workflow test_dag --command \"tasks list test_dag\""
 
 pause_if_needed
 
-run_command "smus-cli run --pipeline \"$PIPELINE_FILE\" --targets dev --workflow test_dag --command \"tasks state test_dag hello_world \$(date -u +'manual__%Y-%m-%dT%H:%M:%S+00:00')\""
+run_command "smus-cli run --bundle \"$PIPELINE_FILE\" --targets dev --workflow test_dag --command \"tasks state test_dag hello_world \$(date -u +'manual__%Y-%m-%dT%H:%M:%S+00:00')\""
 
 pause_if_needed
 
 # Step 8: Cleanup
-run_command "smus-cli delete --targets test --pipeline \"$PIPELINE_FILE\" --force"
+run_command "smus-cli delete --targets test --bundle \"$PIPELINE_FILE\" --force"
 
 if [ "$PAUSE_MODE" = true ]; then
     echo ""

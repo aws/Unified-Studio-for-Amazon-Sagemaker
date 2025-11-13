@@ -12,18 +12,18 @@ export PROD_DOMAIN_REGION="us-east-1"
 
 # Pipeline operations
 echo "📋 1. Parsing pipeline manifest..."
-python -m smus_cicd.cli parse --pipeline DemoMarketingPipeline-Serverless.yaml
+python -m smus_cicd.cli parse --bundle DemoMarketingPipeline-Serverless.yaml
 
 echo "📦 2. Creating bundle..."
-python -m smus_cicd.cli bundle --pipeline DemoMarketingPipeline-Serverless.yaml
+python -m smus_cicd.cli bundle --bundle DemoMarketingPipeline-Serverless.yaml
 
 echo "🚀 3. Deploying to dev (with environment variables)..."
-python -m smus_cicd.cli deploy --pipeline DemoMarketingPipeline-Serverless.yaml dev
+python -m smus_cicd.cli deploy --bundle DemoMarketingPipeline-Serverless.yaml dev
 
 echo "🚀 4. Deploying to test..."
-python -m smus_cicd.cli deploy --pipeline DemoMarketingPipeline-Serverless.yaml test
+python -m smus_cicd.cli deploy --bundle DemoMarketingPipeline-Serverless.yaml test
 
 echo "📊 5. Monitoring pipeline..."
-python -m smus_cicd.cli monitor --pipeline DemoMarketingPipeline-Serverless.yaml
+python -m smus_cicd.cli monitor --bundle DemoMarketingPipeline-Serverless.yaml
 
 echo "✅ Serverless pipeline example completed!"

@@ -1,4 +1,4 @@
-pipelineName: DemoMarketingPipeline-MWAA
+bundleName: DemoMarketingBundle-MWAA
 bundle:
   bundlesDirectory: ./bundles
   storage:

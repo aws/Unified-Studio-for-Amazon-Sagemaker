@@ -58,7 +58,7 @@ Tests fundamental pipeline operations with simple workflows.
 - Connection creation (S3, Athena)
 
 **Key files:**
-- `basic_pipeline.yaml` - Simple pipeline with one workflow
+- `basic_bundle.yaml` - Simple pipeline with one workflow
 - `test_basic_pipeline.py` - Test suite
 
 ---
@@ -109,8 +109,8 @@ Tests complete ETL pipeline with AWS Glue jobs processing COVID-19 data.
 - Athena query validation
 
 **Pipeline components:**
-- `etl_pipeline.yaml` - Pipeline manifest with git bundle
-- `covid_etl_pipeline.yaml` - Airflow DAG definition
+- `etl_bundle.yaml` - Pipeline manifest with git bundle
+- `covid_etl_bundle.yaml` - Airflow DAG definition
 - `glue_setup_covid_db.py` - Database/table setup
 - `glue_s3_list_job.py` - Data discovery
 - `glue_covid_summary_job.py` - Data aggregation
@@ -136,7 +136,7 @@ Tests machine learning pipeline with SageMaker training and MLflow tracking.
 - Workflow orchestration with dependencies
 
 **Key files:**
-- `ml_pipeline.yaml` - ML pipeline manifest
+- `ml_bundle.yaml` - ML bundle manifest
 - `test_ml_workflow.py` - ML workflow tests
 - `job-code/` - Training scripts
 
@@ -152,7 +152,7 @@ Tests parallel execution of multiple example notebooks.
 - Validation that all notebooks complete successfully
 
 **Pipeline components:**
-- `notebooks_pipeline.yaml` - Pipeline manifest
+- `notebooks_bundle.yaml` - Pipeline manifest
 - `parallel_notebooks_workflow.yaml` - Airflow DAG with 9 parallel tasks
 - `notebooks/` - 9 example notebooks (Pandas, Spark, DuckDB, MLflow, etc.)
 - `pipeline_tests/test_notebooks_execution.py` - Success validation
@@ -420,15 +420,15 @@ Minimal pipeline for testing basic functionality:
 - S3 storage bundle
 
 ```bash
-smus-cli describe --pipeline examples/TestPipeline.yaml
-smus-cli deploy dev --pipeline examples/TestPipeline.yaml
+smus-cli describe --bundle examples/TestPipeline.yaml
+smus-cli deploy dev --bundle examples/TestPipeline.yaml
 ```
 
 ---
 
 ### Demo Pipeline
 
-**File:** `demo-pipeline.yaml`
+**File:** `demo-bundle.yaml`
 
 Comprehensive demo showing all features:
 - Multi-target deployment (dev/test/prod)
@@ -437,8 +437,8 @@ Comprehensive demo showing all features:
 - Environment-specific parameters
 
 ```bash
-smus-cli describe --pipeline examples/demo-pipeline.yaml --connect
-smus-cli deploy test --pipeline examples/demo-pipeline.yaml
+smus-cli describe --bundle examples/demo-bundle.yaml --connect
+smus-cli deploy test --bundle examples/demo-bundle.yaml
 ```
 
 ---
@@ -456,9 +456,9 @@ Complete ETL workflow with:
 
 ```bash
 cd examples/analytic-workflow/etl
-smus-cli deploy test --pipeline etl_pipeline.yaml
-smus-cli run --workflow covid_etl_pipeline --targets test --pipeline etl_pipeline.yaml
-smus-cli test --targets test --pipeline etl_pipeline.yaml
+smus-cli deploy test --bundle etl_bundle.yaml
+smus-cli run --workflow covid_etl_pipeline --targets test --bundle etl_bundle.yaml
+smus-cli test --targets test --bundle etl_bundle.yaml
 ```
 
 #### ML Pipeline
@@ -471,7 +471,7 @@ Machine learning workflow with:
 
 ```bash
 cd examples/analytic-workflow/ml
-smus-cli deploy test --pipeline ml_pipeline.yaml
+smus-cli deploy test --bundle ml_bundle.yaml
 ```
 
 ---
@@ -480,5 +480,5 @@ smus-cli deploy test --pipeline ml_pipeline.yaml
 
 - **Setup Guide:** `tests/scripts/setup/README.md`
 - **CLI Documentation:** `docs/cli-commands.md`
-- **Pipeline Manifest Schema:** `docs/pipeline-manifest-schema.md`
+- **Bundle Manifest Schema:** `docs/pipeline-manifest-schema.md`
 - **Pipeline Deployment Metrics:** `docs/pipeline-deployment-metrics.md`

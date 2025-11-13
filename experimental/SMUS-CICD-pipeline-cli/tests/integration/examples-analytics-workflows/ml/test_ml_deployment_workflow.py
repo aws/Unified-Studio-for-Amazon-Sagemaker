@@ -19,7 +19,7 @@ class TestMLDeploymentWorkflow(IntegrationTestBase):
     def get_pipeline_file(self):
         return os.path.join(
             os.path.dirname(__file__),
-            "../../../../examples/analytic-workflow/ml/ml_pipeline.yaml"
+            "../../../../examples/analytic-workflow/ml/deployment/ml_deployment_bundle.yaml"
         )
 
     def get_latest_training_job(self):
@@ -53,7 +53,7 @@ class TestMLDeploymentWorkflow(IntegrationTestBase):
 
         # Step 1: Describe --connect
         print("\n=== Step 1: Describe with Connections ===")
-        result = self.run_cli_command(["describe", "--pipeline", pipeline_file, "--connect"])
+        result = self.run_cli_command(["describe", "--bundle", pipeline_file, "--connect"])
         assert result["success"], f"Describe --connect failed: {result['output']}"
         print("✅ Describe --connect successful")
 
@@ -93,20 +93,20 @@ class TestMLDeploymentWorkflow(IntegrationTestBase):
 
         # Step 3: Bundle from dev
         print("\n=== Step 3: Bundle from dev ===")
-        result = self.run_cli_command(["bundle", "--pipeline", pipeline_file, "--target", "dev"])
+        result = self.run_cli_command(["bundle", "--bundle", pipeline_file, "--target", "dev"])
         assert result["success"], f"Bundle failed: {result['output']}"
         print("✅ Bundle successful")
 
         # Step 4: Deploy to test
         print("\n=== Step 4: Deploy to test ===")
-        result = self.run_cli_command(["deploy", "test", "--pipeline", pipeline_file])
+        result = self.run_cli_command(["deploy", "test", "--bundle", pipeline_file])
         assert result["success"], f"Deploy failed: {result['output']}"
         print("✅ Deploy successful")
 
         # Step 5: Run workflow
         print("\n=== Step 5: Run Workflow ===")
         result = self.run_cli_command(
-            ["run", "--workflow", workflow_name, "--targets", "test", "--pipeline", pipeline_file]
+            ["run", "--workflow", workflow_name, "--targets", "test", "--bundle", pipeline_file]
         )
         assert result["success"], f"Run workflow failed: {result['output']}"
         print("✅ Workflow started")
@@ -118,7 +118,7 @@ class TestMLDeploymentWorkflow(IntegrationTestBase):
         client = boto3.client('mwaaserverless', region_name=region, endpoint_url=endpoint)
         response = client.list_workflows()
         workflow_arn = None
-        expected_name = 'IntegrationTestMLWorkflow_test_marketing_ml_deployment_workflow'
+        expected_name = 'IntegrationTestMLDeployment_test_marketing_ml_deployment_workflow'
         for wf in response.get('Workflows', []):
             if wf.get('Name') == expected_name:
                 workflow_arn = wf.get('WorkflowArn')
@@ -131,7 +131,52 @@ class TestMLDeploymentWorkflow(IntegrationTestBase):
         result = self.run_cli_command(
             ["logs", "--live", "--workflow", workflow_arn]
         )
-        if result["success"]:
+        workflow_succeeded = result["success"]
+        if workflow_succeeded:
             print("✅ Deployment workflow completed successfully")
         else:
-            print(f"⚠️ Workflow logs: {result['output']}")
+            print(f"⚠️ Workflow failed: {result['output']}")
+        
+        # Step 8: Download and validate output notebooks (always run, even if workflow failed)
+        print("\n=== Step 8: Download and Validate Output Notebooks ===")
+        
+        # Extract S3 bucket from test project (not dev)
+        test_s3_uri_match = re.search(
+            r"test: test-marketing.*?default\.s3_shared:.*?s3Uri: (s3://[^\s]+)",
+            result["output"] if not workflow_succeeded else "",
+            re.DOTALL
+        )
+        # Fallback to describe output from Step 1
+        if not test_s3_uri_match:
+            describe_result = self.run_cli_command(["describe", "--bundle", pipeline_file, "--connect"])
+            test_s3_uri_match = re.search(
+                r"test: test-marketing.*?default\.s3_shared:.*?s3Uri: (s3://[^\s]+)",
+                describe_result["output"],
+                re.DOTALL
+            )
+        
+        s3_bucket_match = test_s3_uri_match
+        if s3_bucket_match:
+            test_s3_uri = s3_bucket_match.group(1)
+            s3_bucket = re.search(r"s3://([^/]+)", test_s3_uri).group(1)
+            
+            # Extract run_id from workflow ARN or logs
+            run_id_match = re.search(r"run_id=([^/\s]+)", result["output"])
+            run_id = run_id_match.group(1) if run_id_match else None
+            
+            notebooks_valid = self.download_and_validate_notebooks(
+                s3_bucket=s3_bucket,
+                run_id=run_id
+            )
+            
+            # Only assert if workflow succeeded
+            if workflow_succeeded:
+                assert notebooks_valid, "Output notebooks contain errors"
+                print("✅ All output notebooks validated successfully")
+            else:
+                print(f"⚠️ Notebooks downloaded for inspection (workflow failed)")
+        else:
+            print("⚠️ Could not determine S3 bucket, skipping notebook validation")
+        
+        # Final assertion - workflow must succeed
+        assert workflow_succeeded, "Workflow execution failed"

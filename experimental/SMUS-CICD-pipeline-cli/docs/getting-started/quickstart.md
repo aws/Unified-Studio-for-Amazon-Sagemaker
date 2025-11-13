@@ -1,6 +1,6 @@
-# DevOps Quick Start
+# Data Team Quick Start
 
-**Goal:** Deploy your first CI/CD pipeline in 10-15 minutes
+****Goal:** Deploy your first data application bundle in 10-15 minutes
 
 **Audience:** DevOps teams building automated deployment pipelines for data engineering, ML, and GenAI workflows
 
@@ -26,12 +26,22 @@ pip install -e .
 
 ---
 
-## Step 2: Create Pipeline Manifest
+## Step 2: Create Bundle Manifest
 
-Create a `pipeline.yaml` file defining your deployment:
+Create a `bundle.yaml` file defining your deployment:
 
 ```yaml
-pipelineName: MyDataPipeline
+bundleName: MonthlyReportAnalysis
+
+bundle:
+  storage:
+    - name: monthly-report-metrics
+      connectionName: default.s3_shared
+      include:
+        - 'workflows/'
+      exclude:
+        - '__pycache__/'
+        - '*.pyc'
 
 targets:
   dev:
@@ -67,24 +77,15 @@ targets:
         create: true
         profileName: 'All capabilities'
         owners: [admin@example.com]
-
-bundle:
-  storage:
-    - name: workflows
-      connectionName: default.s3_shared
-      include:
-        - 'workflows/'
-      exclude:
-        - '__pycache__/'
-        - '*.pyc'
 ```
 
 **Key sections:**
-- `targets`: Define dev/test/prod environments
+- `bundleName`: Name of your data application bundle
 - `bundle`: Specify what files to deploy
+- `targets`: Define dev/test/prod environments
 - `initialization`: Auto-create projects with settings
 
-**See more:** [Pipeline Manifest Reference](../pipeline-manifest.md)
+**See more:** [Bundle Manifest Reference](../bundle-manifest.md)
 
 ---
 
@@ -166,21 +167,18 @@ ml_training_pipeline:
       wait_for_completion: true
     
     train_model:
-      operator: "airflow.providers.amazon.aws.operators.sagemaker.SageMakerTrainingOperator"
-      config:
-        TrainingJobName: "customer-churn-{{ ds_nodash }}"
-        RoleArn: "${proj.connection.sagemaker.role_arn}"
-        AlgorithmSpecification:
-          TrainingImage: "123456789012.dkr.ecr.${target.region}.amazonaws.com/xgboost:latest"
-          TrainingInputMode: "File"
-        InputDataConfig:
-          - ChannelName: "training"
-            DataSource:
-              S3DataSource:
-                S3Uri: "s3://${proj.s3.root}/training-data/"
-        OutputDataConfig:
-          S3OutputPath: "s3://${proj.s3.root}/models/"
+      operator: "airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator"
+      input_config:
+        input_path: "notebooks/train_model.ipynb"
+        input_params:
+          training_data: "s3://${proj.s3.root}/training-data/"
+          model_output: "s3://${proj.s3.root}/models/"
+      output_config:
+        output_formats: ['NOTEBOOK']
+      wait_for_completion: true
 ```
+
+**Example notebook:** See [ml_deployment_notebook.ipynb](../../examples/analytic-workflow/ml/deployment/workflows/ml_deployment_notebook.ipynb) for a complete example showing SageMaker training, MLflow tracking, and model deployment.
 
 ### Example 4: GenAI with Bedrock
 
@@ -277,7 +275,7 @@ data_processing:
 ## Step 5: Validate Configuration
 
 ```bash
-smus-cli describe --pipeline pipeline.yaml --connect
+smus-cli describe --bundle bundle.yaml --connect
 ```
 
 **Expected output:**
@@ -306,28 +304,25 @@ Bundle includes:
 
 ---
 
-## Step 6: Deploy to Dev
+## Step 6: Create Bundle and Deploy to Test
 
 ```bash
 # Create bundle from dev environment
-smus-cli bundle --pipeline pipeline.yaml --targets dev
+smus-cli bundle --bundle bundle.yaml --targets dev
 
-# Deploy to dev for testing
-smus-cli deploy --targets dev --pipeline pipeline.yaml
+# Deploy to test environment
+smus-cli deploy --targets test --bundle bundle.yaml
 ```
 
 **See more:** [CLI Commands - bundle & deploy](../cli-commands.md#bundle)
 
 ---
 
-## Step 7: Test in Test Environment
+## Step 7: Validate in Test Environment
 
 ```bash
-# Deploy to test
-smus-cli deploy --targets test --pipeline pipeline.yaml
-
 # Run validation tests
-smus-cli test --targets test --pipeline pipeline.yaml
+smus-cli test --targets test --bundle bundle.yaml
 
 # Trigger workflow manually
 smus-cli run --targets test --workflow data_processing_dag
@@ -337,58 +332,16 @@ smus-cli run --targets test --workflow data_processing_dag
 
 ---
 
-## Step 8: Set Up GitHub Actions
+## Step 8: Deploy to Production
 
-Create `.github/workflows/deploy.yml`:
+After validating in test, deploy to production:
 
-```yaml
-name: Deploy Pipeline
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    
-    steps:
-      - uses: actions/checkout@v3
-      
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
-      
-      - name: Install CLI
-        run: |
-          git clone https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker.git
-          cd Unified-Studio-for-Amazon-Sagemaker/experimental/SMUS-CICD-pipeline-cli
-          pip install -e .
-      
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
-      
-      - name: Deploy to Test
-        run: |
-          smus-cli bundle --pipeline pipeline.yaml --targets dev
-          smus-cli deploy --targets test --pipeline pipeline.yaml
-      
-      - name: Run Tests
-        run: smus-cli test --targets test --pipeline pipeline.yaml
-      
-      - name: Deploy to Prod
-        if: github.ref == 'refs/heads/main' && success()
-        run: smus-cli deploy --targets prod --pipeline pipeline.yaml
+```bash
+# Deploy to production
+smus-cli deploy --targets prod --bundle bundle.yaml
 ```
 
-**See more:** [GitHub Actions Integration Guide](../github-actions-integration.md)
+**See more:** [CLI Commands - deploy](../cli-commands.md#deploy)
 
 ---
 
@@ -396,7 +349,7 @@ jobs:
 
 If your workflows need DataZone catalog assets:
 
-**Update `pipeline.yaml`:**
+**Update `bundle.yaml`:**
 ```yaml
 bundle:
   catalog:
@@ -411,12 +364,12 @@ bundle:
 
 **Deploy with catalog integration:**
 ```bash
-smus-cli deploy --targets test --pipeline pipeline.yaml
+smus-cli deploy --targets test --bundle bundle.yaml
 ```
 
 The CLI will automatically request subscriptions to catalog assets for your project.
 
-**See more:** [Pipeline Manifest Reference - Catalog Assets](../pipeline-manifest.md#catalog-assets)
+**See more:** [Bundle Manifest Reference - Catalog Assets](../bundle-manifest.md#catalog-assets)
 
 ---
 
@@ -424,13 +377,13 @@ The CLI will automatically request subscriptions to catalog assets for your proj
 
 ```bash
 # Monitor workflow status
-smus-cli monitor --targets test --pipeline pipeline.yaml
+smus-cli monitor --targets test --bundle bundle.yaml
 
 # View workflow logs
 smus-cli logs --workflow data_processing_dag --targets test --live
 
 # Check deployment history
-smus-cli describe --targets test --pipeline pipeline.yaml
+smus-cli describe --targets test --bundle bundle.yaml
 ```
 
 **See more:** [CLI Commands - monitor & logs](../cli-commands.md#monitor)
@@ -442,7 +395,7 @@ smus-cli describe --targets test --pipeline pipeline.yaml
 ### Multi-Stage Deployment
 
 ```yaml
-# pipeline.yaml
+# bundle.yaml
 targets:
   test:
     domain:
@@ -501,32 +454,40 @@ tasks:
 
 ## Project Structure Best Practices
 
+A single project can contain multiple data applications, each with its own bundle:
+
 ```
-my-data-pipeline/
-├── pipeline.yaml              # Pipeline manifest
-├── workflows/                 # Airflow workflows (YAML)
-│   ├── data_processing.yaml
-│   └── ml_training.yaml
-├── notebooks/                 # Jupyter notebooks
-│   └── analysis.ipynb
-├── config/                    # Configuration files
-│   ├── dev.yaml
-│   ├── test.yaml
-│   └── prod.yaml
-├── tests/                     # Validation tests
-│   └── test_workflows.py
-├── .github/
-│   └── workflows/
-│       └── deploy.yml         # GitHub Actions
+my-smus-project/
+├── monthly-metrics/           # Data application 1
+│   ├── bundle.yaml
+│   ├── workflows/
+│   │   ├── metrics_etl.yaml
+│   │   └── metrics_report.yaml
+│   └── notebooks/
+│       └── metrics_analysis.ipynb
+│
+├── churn-model/               # Data application 2
+│   ├── bundle.yaml
+│   ├── workflows/
+│   │   ├── feature_engineering.yaml
+│   │   └── model_training.yaml
+│   ├── notebooks/
+│   │   ├── prepare_features.ipynb
+│   │   └── train_model.ipynb
+│   └── tests/
+│       └── test_model.py
+│
 └── README.md
 ```
+
+Each data application is self-contained with its own bundle manifest and can be deployed independently.
 
 ---
 
 ## Next Steps
 
 ### Learn More
-- **[Pipeline Manifest Reference](../pipeline-manifest.md)** - Complete YAML guide
+- **[Bundle Manifest Reference](../bundle-manifest.md)** - Complete YAML guide
 - **[Variable Substitution](../substitutions-and-variables.md)** - Dynamic configuration
 - **[CLI Commands](../cli-commands.md)** - All available commands
 - **[GitHub Actions Integration](../github-actions-integration.md)** - CI/CD automation
@@ -544,13 +505,13 @@ my-data-pipeline/
 ### Variable Substitution Not Working
 ```bash
 # Debug variable resolution
-smus-cli describe --pipeline pipeline.yaml --targets test --verbose
+smus-cli describe --bundle bundle.yaml --targets test --verbose
 ```
 
 ### Workflow Not Syncing to MWAA
 ```bash
 # Check bundle contents
-smus-cli bundle --pipeline pipeline.yaml --targets dev --verbose
+smus-cli bundle --bundle bundle.yaml --targets dev --verbose
 
 # Verify deployment
 smus-cli monitor --targets test --workflows
@@ -559,7 +520,7 @@ smus-cli monitor --targets test --workflows
 ### Tests Failing
 ```bash
 # Run tests with verbose output
-smus-cli test --targets test --pipeline pipeline.yaml --verbose
+smus-cli test --targets test --bundle bundle.yaml --verbose
 
 # Check individual workflow execution
 smus-cli run --targets test --workflow my_dag

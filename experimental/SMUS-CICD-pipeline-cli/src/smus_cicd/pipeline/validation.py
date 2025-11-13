@@ -1,5 +1,5 @@
 """
-Manifest validation utilities for SMUS CI/CD pipeline manifests.
+Manifest validation utilities for SMUS CI/CD bundle manifests.
 """
 
 from pathlib import Path
@@ -11,8 +11,8 @@ from ..helpers.utils import load_yaml
 
 
 def load_schema() -> Dict[str, Any]:
-    """Load the pipeline manifest schema."""
-    schema_path = Path(__file__).parent / "pipeline-manifest-schema.yaml"
+    """Load the bundle manifest schema."""
+    schema_path = Path(__file__).parent / "bundle-manifest-schema.yaml"
     if not schema_path.exists():
         raise FileNotFoundError(f"Schema file not found: {schema_path}")
 

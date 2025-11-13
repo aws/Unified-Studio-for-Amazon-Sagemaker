@@ -63,14 +63,14 @@ class TestSubstituteEnvVars:
         """Test substitution in nested data structures."""
         with patch.dict(os.environ, {"REGION": "us-east-1", "DOMAIN": "test-domain"}):
             data = {
-                "pipeline": {
+                "bundle": {
                     "domain": {"name": "${DOMAIN}", "region": "${REGION}"},
                     "targets": ["${REGION}", "us-west-2"],
                 }
             }
             result = substitute_env_vars(data)
             expected = {
-                "pipeline": {
+                "bundle": {
                     "domain": {"name": "test-domain", "region": "us-east-1"},
                     "targets": ["us-east-1", "us-west-2"],
                 }

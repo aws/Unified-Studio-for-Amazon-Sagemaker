@@ -17,7 +17,7 @@ turns:
   - type: assertion
     check: contains
     target: pipeline_yaml
-    value: "pipelineName"
+    value: "bundleName"
 
 expected_outcome:
   pipeline_example_retrieved: true

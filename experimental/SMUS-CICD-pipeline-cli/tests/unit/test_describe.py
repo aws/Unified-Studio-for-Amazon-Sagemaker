@@ -12,7 +12,7 @@ from smus_cicd.cli import app
 def sample_manifest():
     """Create a sample manifest file for testing."""
     manifest_content = """
-pipelineName: TestPipeline
+bundleName: TestPipeline
 bundle:
   bundlesDirectory: /tmp/bundles
 targets:
@@ -48,7 +48,7 @@ def test_describe_basic(mock_load_config, mock_get_region, sample_manifest):
         with open("test.yaml", "w") as f:
             f.write(open(sample_manifest).read())
 
-        result = runner.invoke(app, ["describe", "--pipeline", "test.yaml"])
+        result = runner.invoke(app, ["describe", "--bundle", "test.yaml"])
         assert result.exit_code == 0
         assert "Pipeline: TestPipeline" in result.stdout
         assert "Domain: test-domain" in result.stdout
@@ -72,7 +72,7 @@ def test_describe_with_connections(mock_load_config_utils, mock_get_region, mock
             f.write(open(sample_manifest).read())
 
         result = runner.invoke(
-            app, ["describe", "--pipeline", "test.yaml", "--connections"]
+            app, ["describe", "--bundle", "test.yaml", "--connections"]
         )
         assert result.exit_code == 0
         # Connections flag shows basic pipeline info
@@ -95,7 +95,7 @@ def test_describe_with_targets(mock_load_config, mock_get_region, sample_manifes
 
         # Test filtering to specific target
         result = runner.invoke(
-            app, ["describe", "--pipeline", "test.yaml", "--targets", "dev"]
+            app, ["describe", "--bundle", "test.yaml", "--targets", "dev"]
         )
         assert result.exit_code == 0
         assert "Targets:" in result.stdout
@@ -112,7 +112,7 @@ def test_describe_with_connect_flag(sample_manifest):
 
         # This might fail due to AWS access, but should show basic info
         result = runner.invoke(
-            app, ["describe", "--pipeline", "test.yaml", "--connect"]
+            app, ["describe", "--bundle", "test.yaml", "--connect"]
         )
         # Exit code might be 1 due to AWS connection issues, but should not be a crash
         assert result.exit_code in [0, 1]

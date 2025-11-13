@@ -89,7 +89,7 @@ class EventEmitter:
 
     def _build_base_detail(
         self,
-        pipeline_name: str,
+        bundle_name: str,
         target: Dict[str, Any],
         stage: str,
         status: str,
@@ -99,7 +99,7 @@ class EventEmitter:
         detail = {
             "version": self.EVENT_VERSION,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "pipelineName": pipeline_name,
+            "bundleName": bundle_name,
             "stage": stage,
             "status": status,
             "target": target,
@@ -112,14 +112,14 @@ class EventEmitter:
 
     def deploy_started(
         self,
-        pipeline_name: str,
+        bundle_name: str,
         target: Dict[str, Any],
         bundle_info: Dict[str, Any],
         metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Emit deploy started event."""
         detail = self._build_base_detail(
-            pipeline_name, target, "deploy", "started", metadata
+            bundle_name, target, "deploy", "started", metadata
         )
         detail["bundle"] = bundle_info
 
@@ -127,14 +127,14 @@ class EventEmitter:
 
     def deploy_completed(
         self,
-        pipeline_name: str,
+        bundle_name: str,
         target: Dict[str, Any],
         deployment_summary: Dict[str, Any],
         metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Emit deploy completed event."""
         detail = self._build_base_detail(
-            pipeline_name, target, "deploy", "completed", metadata
+            bundle_name, target, "deploy", "completed", metadata
         )
         detail.update(deployment_summary)
 
@@ -142,14 +142,14 @@ class EventEmitter:
 
     def deploy_failed(
         self,
-        pipeline_name: str,
+        bundle_name: str,
         target: Dict[str, Any],
         error: Dict[str, Any],
         metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Emit deploy failed event."""
         detail = self._build_base_detail(
-            pipeline_name, target, "deploy", "failed", metadata
+            bundle_name, target, "deploy", "failed", metadata
         )
         detail["error"] = error
 
@@ -157,14 +157,14 @@ class EventEmitter:
 
     def project_init_started(
         self,
-        pipeline_name: str,
+        bundle_name: str,
         target: Dict[str, Any],
         project_config: Dict[str, Any],
         metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Emit project initialization started event."""
         detail = self._build_base_detail(
-            pipeline_name, target, "project-init", "started", metadata
+            bundle_name, target, "project-init", "started", metadata
         )
         detail["projectConfig"] = project_config
 
@@ -172,14 +172,14 @@ class EventEmitter:
 
     def project_init_completed(
         self,
-        pipeline_name: str,
+        bundle_name: str,
         target: Dict[str, Any],
         project_info: Dict[str, Any],
         metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Emit project initialization completed event."""
         detail = self._build_base_detail(
-            pipeline_name, target, "project-init", "completed", metadata
+            bundle_name, target, "project-init", "completed", metadata
         )
         detail["projectInfo"] = project_info
 
@@ -187,14 +187,14 @@ class EventEmitter:
 
     def project_init_failed(
         self,
-        pipeline_name: str,
+        bundle_name: str,
         target: Dict[str, Any],
         error: Dict[str, Any],
         metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Emit project initialization failed event."""
         detail = self._build_base_detail(
-            pipeline_name, target, "project-init", "failed", metadata
+            bundle_name, target, "project-init", "failed", metadata
         )
         detail["error"] = error
 
@@ -202,14 +202,14 @@ class EventEmitter:
 
     def bundle_upload_started(
         self,
-        pipeline_name: str,
+        bundle_name: str,
         target: Dict[str, Any],
         bundle_info: Dict[str, Any],
         metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Emit bundle upload started event."""
         detail = self._build_base_detail(
-            pipeline_name, target, "bundle-upload", "started", metadata
+            bundle_name, target, "bundle-upload", "started", metadata
         )
         detail["bundle"] = bundle_info
 
@@ -217,14 +217,14 @@ class EventEmitter:
 
     def bundle_upload_completed(
         self,
-        pipeline_name: str,
+        bundle_name: str,
         target: Dict[str, Any],
         deployment_results: Dict[str, Any],
         metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Emit bundle upload completed event."""
         detail = self._build_base_detail(
-            pipeline_name, target, "bundle-upload", "completed", metadata
+            bundle_name, target, "bundle-upload", "completed", metadata
         )
         detail["deployment"] = deployment_results
 
@@ -232,14 +232,14 @@ class EventEmitter:
 
     def bundle_upload_failed(
         self,
-        pipeline_name: str,
+        bundle_name: str,
         target: Dict[str, Any],
         error: Dict[str, Any],
         metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Emit bundle upload failed event."""
         detail = self._build_base_detail(
-            pipeline_name, target, "bundle-upload", "failed", metadata
+            bundle_name, target, "bundle-upload", "failed", metadata
         )
         detail["error"] = error
 
@@ -247,14 +247,14 @@ class EventEmitter:
 
     def workflow_creation_started(
         self,
-        pipeline_name: str,
+        bundle_name: str,
         target: Dict[str, Any],
         workflows: List[Dict[str, Any]],
         metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Emit workflow creation started event."""
         detail = self._build_base_detail(
-            pipeline_name, target, "workflow-creation", "started", metadata
+            bundle_name, target, "workflow-creation", "started", metadata
         )
         detail["workflows"] = workflows
 
@@ -262,14 +262,14 @@ class EventEmitter:
 
     def workflow_creation_completed(
         self,
-        pipeline_name: str,
+        bundle_name: str,
         target: Dict[str, Any],
         workflow_results: List[Dict[str, Any]],
         metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Emit workflow creation completed event."""
         detail = self._build_base_detail(
-            pipeline_name, target, "workflow-creation", "completed", metadata
+            bundle_name, target, "workflow-creation", "completed", metadata
         )
         detail["workflows"] = workflow_results
 
@@ -277,14 +277,14 @@ class EventEmitter:
 
     def workflow_creation_failed(
         self,
-        pipeline_name: str,
+        bundle_name: str,
         target: Dict[str, Any],
         error: Dict[str, Any],
         metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Emit workflow creation failed event."""
         detail = self._build_base_detail(
-            pipeline_name, target, "workflow-creation", "failed", metadata
+            bundle_name, target, "workflow-creation", "failed", metadata
         )
         detail["error"] = error
 
@@ -292,14 +292,14 @@ class EventEmitter:
 
     def catalog_assets_started(
         self,
-        pipeline_name: str,
+        bundle_name: str,
         target: Dict[str, Any],
         asset_configs: List[Dict[str, Any]],
         metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Emit catalog assets processing started event."""
         detail = self._build_base_detail(
-            pipeline_name, target, "catalog-assets", "started", metadata
+            bundle_name, target, "catalog-assets", "started", metadata
         )
         detail["assetConfigs"] = asset_configs
 
@@ -307,14 +307,14 @@ class EventEmitter:
 
     def catalog_assets_completed(
         self,
-        pipeline_name: str,
+        bundle_name: str,
         target: Dict[str, Any],
         asset_results: List[Dict[str, Any]],
         metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Emit catalog assets processing completed event."""
         detail = self._build_base_detail(
-            pipeline_name, target, "catalog-assets", "completed", metadata
+            bundle_name, target, "catalog-assets", "completed", metadata
         )
         detail["catalogAssets"] = asset_results
 
@@ -322,14 +322,14 @@ class EventEmitter:
 
     def catalog_assets_failed(
         self,
-        pipeline_name: str,
+        bundle_name: str,
         target: Dict[str, Any],
         error: Dict[str, Any],
         metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Emit catalog assets processing failed event."""
         detail = self._build_base_detail(
-            pipeline_name, target, "catalog-assets", "failed", metadata
+            bundle_name, target, "catalog-assets", "failed", metadata
         )
         detail["error"] = error
 

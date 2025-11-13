@@ -12,7 +12,7 @@ runner = CliRunner()
 @pytest.fixture
 def sample_manifest():
     return """
-pipelineName: TestPipeline
+bundleName: TestPipeline
 bundlesDirectory: /tmp/bundles
 bundle:
   storage:
@@ -39,10 +39,10 @@ def test_bundle_uses_temp_directory(sample_manifest):
 
     with patch("os.path.exists", return_value=True):
         with patch(
-            "smus_cicd.commands.bundle.PipelineManifest.from_file"
+            "smus_cicd.commands.bundle.BundleManifest.from_file"
         ) as mock_manifest:
-            from smus_cicd.pipeline import PipelineManifest
-            mock_manifest.return_value = PipelineManifest.from_dict(yaml.safe_load(sample_manifest))
+            from smus_cicd.pipeline import BundleManifest
+            mock_manifest.return_value = BundleManifest.from_dict(yaml.safe_load(sample_manifest))
             with patch(
                 "smus_cicd.helpers.utils.load_config",
                 return_value={"region": "us-east-1"},

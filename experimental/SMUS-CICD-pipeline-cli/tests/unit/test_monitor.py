@@ -11,7 +11,7 @@ runner = CliRunner()
 @pytest.fixture
 def sample_manifest():
     return """
-pipelineName: TestPipeline
+bundleName: TestPipeline
 targets:
   dev:
     domain:
@@ -62,7 +62,7 @@ def create_mock_manifest():
     mock_target_test.stage = "TEST"
 
     mock_manifest = MagicMock()
-    mock_manifest.pipeline_name = "TestPipeline"
+    mock_manifest.bundle_name = "TestPipeline"
     mock_manifest.targets = {"dev": mock_target_dev, "test": mock_target_test}
     mock_manifest.workflows = []
     mock_manifest.get_target_config = lambda target_name: mock_target_dev if target_name == "dev" else mock_target_test
@@ -73,7 +73,7 @@ def create_mock_manifest():
 @patch("smus_cicd.helpers.mwaa.validate_mwaa_health")
 @patch("smus_cicd.helpers.utils.load_config")
 @patch("smus_cicd.commands.monitor.get_datazone_project_info")
-@patch("smus_cicd.pipeline.PipelineManifest.from_file")
+@patch("smus_cicd.pipeline.BundleManifest.from_file")
 def test_monitor_all_targets(
     mock_from_file,
     mock_get_project_info,
@@ -95,7 +95,7 @@ def test_monitor_all_targets(
     mock_mwaa_health.return_value = True  # Mock MWAA as healthy
 
     with patch("builtins.open", mock_open(read_data=sample_manifest)):
-        result = runner.invoke(app, ["monitor", "--pipeline", "test.yaml"])
+        result = runner.invoke(app, ["monitor", "--bundle", "test.yaml"])
         # Debug output
         if result.exit_code != 0:
             print(f"\nExit code: {result.exit_code}")
@@ -109,7 +109,7 @@ def test_monitor_all_targets(
 @patch("smus_cicd.helpers.mwaa.validate_mwaa_health")
 @patch("smus_cicd.helpers.utils.load_config")
 @patch("smus_cicd.commands.monitor.get_datazone_project_info")
-@patch("smus_cicd.pipeline.PipelineManifest.from_file")
+@patch("smus_cicd.pipeline.BundleManifest.from_file")
 def test_monitor_single_target(
     mock_from_file,
     mock_get_project_info,
@@ -140,7 +140,7 @@ def test_monitor_single_target(
 
     with patch("builtins.open", mock_open(read_data=sample_manifest)):
         result = runner.invoke(
-            app, ["monitor", "--pipeline", "test.yaml", "--targets", "dev"]
+            app, ["monitor", "--bundle", "test.yaml", "--targets", "dev"]
         )
         assert result.exit_code == 0
         assert "Pipeline: TestPipeline" in result.stdout
@@ -150,7 +150,7 @@ def test_monitor_single_target(
 @patch("smus_cicd.helpers.mwaa.validate_mwaa_health")
 @patch("smus_cicd.helpers.utils.load_config")
 @patch("smus_cicd.commands.monitor.get_datazone_project_info")
-@patch("smus_cicd.pipeline.PipelineManifest.from_file")
+@patch("smus_cicd.pipeline.BundleManifest.from_file")
 def test_monitor_inactive_project(
     mock_from_file,
     mock_get_project_info,
@@ -175,7 +175,7 @@ def test_monitor_inactive_project(
 
     with patch("builtins.open", mock_open(read_data=sample_manifest)):
         result = runner.invoke(
-            app, ["monitor", "--pipeline", "test.yaml", "--targets", "dev"]
+            app, ["monitor", "--bundle", "test.yaml", "--targets", "dev"]
         )
         assert result.exit_code == 1  # Should fail when no healthy MWAA environments
         assert "Pipeline: TestPipeline" in result.stdout
@@ -183,7 +183,7 @@ def test_monitor_inactive_project(
 
 
 @patch("smus_cicd.helpers.utils.load_config")
-@patch("smus_cicd.pipeline.PipelineManifest.from_file")
+@patch("smus_cicd.pipeline.BundleManifest.from_file")
 def test_monitor_no_domain(mock_from_file, mock_load_config, sample_manifest):
     """Test monitor command with missing domain configuration."""
     mock_load_config.return_value = {}
@@ -193,7 +193,7 @@ def test_monitor_no_domain(mock_from_file, mock_load_config, sample_manifest):
         "MockManifest",
         (),
         {
-            "pipeline_name": "TestPipeline",
+            "bundle_name": "TestPipeline",
             "targets": {},
             "workflows": [],
         },
@@ -201,5 +201,5 @@ def test_monitor_no_domain(mock_from_file, mock_load_config, sample_manifest):
     mock_from_file.return_value = mock_manifest
 
     with patch("builtins.open", mock_open(read_data=sample_manifest)):
-        result = runner.invoke(app, ["monitor", "--pipeline", "test.yaml"])
+        result = runner.invoke(app, ["monitor", "--bundle", "test.yaml"])
         assert result.exit_code == 1  # Should fail without domain

@@ -2,13 +2,13 @@
 
 from typing import Any, Dict, Optional
 
-from ..pipeline import PipelineManifest
+from ..pipeline import BundleManifest
 from .event_emitter import EventEmitter
 from .metadata_collector import MetadataCollector
 
 
 def create_event_emitter(
-    manifest: PipelineManifest,
+    manifest: BundleManifest,
     region: str,
     emit_events: Optional[bool] = None,
     event_bus_name: Optional[str] = None,
@@ -90,7 +90,7 @@ def build_bundle_info(bundle_path: str) -> Dict[str, Any]:
     return bundle_info
 
 
-def collect_metadata(manifest: PipelineManifest) -> Optional[Dict[str, Any]]:
+def collect_metadata(manifest: BundleManifest) -> Optional[Dict[str, Any]]:
     """
     Collect metadata if enabled in manifest.
 

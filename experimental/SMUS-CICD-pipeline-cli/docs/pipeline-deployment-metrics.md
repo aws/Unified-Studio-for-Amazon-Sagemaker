@@ -1,17 +1,21 @@
-# Pipeline Deployment Metrics with EventBridge
+# Bundle Deployment Metrics and Monitoring with EventBridge
 
-The SMUS CICD CLI emits deployment lifecycle events to Amazon EventBridge, enabling you to track pipeline deployments, build custom alerts, and automate workflows.
+**Track deployment lifecycle events, operational metrics, and build custom alerts for your data application bundles.**
 
-> **Note:** This is different from the `monitor` CLI command which tracks workflow execution status. This feature tracks pipeline deployment events.
+The SMUS CICD CLI emits deployment lifecycle events to Amazon EventBridge, enabling you to monitor bundle deployments, track operational metrics, build custom alerts, and automate workflows.
+
+> **Note:** This is different from the `monitor` CLI command which tracks workflow execution status. This feature tracks bundle deployment events and operational metrics for observability and alerting.
+
+**Keywords:** monitoring, metrics, observability, alerting, EventBridge, deployment tracking, operational metrics, deployment lifecycle
 
 ## Quick Start
 
-### 1. Enable Monitoring in Your Pipeline
+### 1. Enable Monitoring in Your Bundle
 
-Add to `pipeline.yaml`:
+Add to `bundle.yaml`:
 
 ```yaml
-pipelineName: MyPipeline
+bundleName: MyBundle
 
 monitoring:
   eventbridge:
@@ -25,7 +29,7 @@ monitoring:
 ### 2. Deploy with Monitoring
 
 ```bash
-smus-cli deploy --targets prod --pipeline pipeline.yaml
+smus-cli deploy --targets prod --bundle bundle.yaml
 ```
 
 ### 3. Create EventBridge Rule
@@ -57,7 +61,7 @@ aws events put-rule \
     "source": ["com.amazon.smus.cicd"],
     "detail-type": ["SMUS-CICD-Deploy-Completed"],
     "detail": {
-      "pipelineName": ["MyPipeline"],
+      "bundleName": ["MyPipeline"],
       "target": {"stage": ["PROD"]}
     }
   }'
@@ -80,12 +84,12 @@ During deployment, the CLI emits events at key stages:
 
 ## Configuration
 
-### Pipeline Manifest
+### Bundle Manifest
 
-Add monitoring configuration to your `pipeline.yaml`:
+Add monitoring configuration to your `bundle.yaml`:
 
 ```yaml
-pipelineName: MyPipeline
+bundleName: MyBundle
 
 monitoring:
   eventbridge:
@@ -141,7 +145,7 @@ All events follow this structure:
 {
   "version": "1.0",
   "timestamp": "2025-11-04T12:30:00Z",
-  "pipelineName": "MyPipeline",
+  "bundleName": "MyPipeline",
   "stage": "deploy|project-init|bundle-upload|workflow-creation|catalog-assets",
   "status": "started|completed|failed",
   "target": {
@@ -222,7 +226,7 @@ aws s3 cp s3://smus-cicd-events-123456789012-us-east-1/smus-events/2025/11/07/ev
 
 # Query with Athena (create table first)
 SELECT * FROM smus_events 
-WHERE pipelineName = 'MyPipeline' 
+WHERE bundleName = 'MyPipeline' 
   AND status = 'failed'
 ORDER BY timestamp DESC
 LIMIT 10;
@@ -317,7 +321,7 @@ logs_client.delete_log_group(logGroupName=log_group)
 {
   "source": ["com.amazon.smus.cicd"],
   "detail": {
-    "pipelineName": ["MyPipeline"]
+    "bundleName": ["MyPipeline"]
   }
 }
 ```
@@ -370,7 +374,7 @@ logs_client.delete_log_group(logGroupName=log_group)
     "source": ["com.amazon.smus.cicd"],
     "detail-type": ["SMUS-CICD-Deploy-Completed"],
     "detail": {
-      "pipelineName": ["MyPipeline"],
+      "bundleName": ["MyPipeline"],
       "target": {"stage": ["PROD"]}
     }
   },
@@ -494,7 +498,7 @@ Use EventBridge → Step Functions to implement manual approval gates for produc
 ## Working Example
 
 See `tests/integration/basic_pipeline/` for a complete working example that:
-- Enables monitoring in pipeline manifest
+- Enables monitoring in bundle manifest
 - Creates EventBridge rule programmatically
 - Captures events to CloudWatch Logs
 - Validates event delivery in tests

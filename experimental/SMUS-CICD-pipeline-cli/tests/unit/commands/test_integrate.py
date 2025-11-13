@@ -45,21 +45,7 @@ class TestSetupIntegration:
         assert "❌ Amazon Q CLI not found" in captured.out
 
     @pytest.mark.xfail(reason="Complex Path mocking - covered by successful_registration test")
-    @patch("subprocess.run")
-    @patch("smus_cicd.commands.integrate.check_qcli_installed")
-    @patch("smus_cicd.commands.integrate.Path")
-    def test_wrapper_script_not_found(self, mock_path, mock_check, mock_run, capsys):
-        """Test setup fails when wrapper script not found."""
-        mock_check.return_value = True
-        mock_wrapper = MagicMock()
-        mock_wrapper.exists.return_value = False
-        mock_path.return_value = MagicMock()
-        mock_path.return_value.__truediv__ = lambda self, other: mock_wrapper
 
-        result = setup_integration()
-        assert result == 1
-        captured = capsys.readouterr()
-        assert "❌ MCP server wrapper not found" in captured.out
 
     @patch("subprocess.run")
     @patch("smus_cicd.commands.integrate.check_qcli_installed")

@@ -1,5 +1,9 @@
 # Refactor Manifest Task - Terminology Change
 
+## ✅ COMPLETED - 2025-11-12
+
+All unit tests passing: 229 passed, 0 xfailed, 9 xpassed
+
 ## Objective
 Clarify terminology to distinguish between:
 - **Bundle**: The manifest definition (what gets deployed - workflows, code, dependencies)
@@ -75,3 +79,249 @@ The term "pipeline" is overloaded:
 - CICD teams own GitHub workflows
 - Data/science teams own bundle definitions
 - All references must be updated atomically
+
+---
+
+## 🟢 Phase 1: Code Changes - COMPLETED 2025-11-13
+
+### Changes Made:
+✅ Updated `bundle_manifest.py` - changed `pipeline_name` field to `bundle_name`
+✅ Updated `cloudformation.py` - changed CloudFormation tag from "PipelineName" to "BundleName"
+✅ Updated `project_manager.py` - changed tag from "Pipeline" to "Bundle"
+✅ Updated all Python references from `.pipeline_name` to `.bundle_name`
+✅ Updated schema file - changed `pipelineName` to `bundleName` in YAML schema
+✅ Updated MCP server templates - changed `pipelineName:` to `bundleName:`
+✅ Updated create command - changed generated YAML to use `bundleName:`
+✅ Updated event emitter - changed event field from "pipelineName" to "bundleName"
+
+### Remaining Work:
+- Phase 2: Documentation (all .md files need `pipelineName:` → `bundleName:`)
+- Phase 3: Examples (all *bundle.yaml files)
+- Phase 4: Tests (all test YAML files and assertions)
+- Phase 5: Validation
+
+### Note on Remaining `pipeline_name` References:
+Function parameters and local variables named `pipeline_name` are intentionally kept as-is. These are internal implementation details and don't affect the public API or YAML format.
+
+### Objective
+Change the YAML field from `pipelineName` to `bundleName` throughout the codebase.
+
+### Impact Analysis
+This is a **BREAKING CHANGE** that affects:
+- All bundle manifest YAML files (examples, tests, documentation)
+- Python code that reads/writes this field
+- Schema validation
+- Error messages
+- All user-created bundle manifests
+
+### Implementation Plan
+
+#### Phase 1: Code Changes
+
+##### 1. Update Bundle Manifest Class (`src/smus_cicd/pipeline/bundle_manifest.py`)
+```python
+# Line 186: Change field name
+pipeline_name: str  →  bundle_name: str
+
+# Line 215-216: Update validation
+if not data.get("pipelineName"):  →  if not data.get("bundleName"):
+    raise ValueError("pipelineName is required...")  →  raise ValueError("bundleName is required...")
+
+# Line 442: Update constructor
+pipeline_name=data.get("pipelineName", "")  →  bundle_name=data.get("bundleName", "")
+```
+
+**Search pattern:** `grep -rn "pipeline_name\|pipelineName" src/smus_cicd/`
+
+##### 2. Update Helper Files
+- `src/smus_cicd/helpers/cloudformation.py` (line 135)
+  - Change tag: `{"Key": "PipelineName", "Value": pipeline_name}` → `{"Key": "BundleName", "Value": bundle_name}`
+- `src/smus_cicd/helpers/project_manager.py` (line 257)
+  - Change tag: `{"Key": "Pipeline", "Value": self.manifest.pipeline_name}` → `{"Key": "Bundle", "Value": self.manifest.bundle_name}`
+
+##### 3. Update All Python References
+```bash
+# Find all references
+grep -rn "\.pipeline_name\|pipeline_name=" src/ tests/
+
+# Update to:
+.bundle_name
+bundle_name=
+```
+
+##### 4. Update Schema File (`src/smus_cicd/pipeline/bundle-manifest-schema.yaml`)
+```yaml
+# Change required field
+required:
+  - pipelineName  →  - bundleName
+
+# Change property definition
+properties:
+  pipelineName:  →  bundleName:
+    type: string
+    description: "Unique pipeline identifier"  →  "Unique bundle identifier"
+```
+
+#### Phase 2: Documentation Changes
+
+##### 1. Update All Documentation Files
+**Files to update:**
+- `docs/bundle-manifest-schema.md` (lines 20, 168, 181)
+- `docs/pipeline-deployment-metrics.md` (lines 18, 64, 92, 148, 229, 324, 377)
+- `docs/getting-started/admin-quickstart.md` (line 116)
+- `docs/getting-started/quickstart.md` (line 34)
+- `docs/Q_CLI_CONVERSATION_EXAMPLES.md` (lines 31, 156)
+- `docs/bundle-manifest.md` (lines 18, 64, 762, 890, 945)
+
+**Search and replace:**
+```bash
+# In all .md files
+pipelineName:  →  bundleName:
+"pipelineName"  →  "bundleName"
+```
+
+##### 2. Update Error Messages and Help Text
+```bash
+# Find all user-facing messages
+grep -rn "pipelineName" src/smus_cicd/ --include="*.py" | grep -i "error\|message\|help\|description"
+```
+
+#### Phase 3: Example Files
+
+##### 1. Update All Example Bundle Files
+**Files to update:**
+```bash
+# Find all example bundle files
+find examples/ -name "*bundle.yaml" -o -name "*_bundle.yaml"
+
+# Update each file:
+pipelineName: ExampleName  →  bundleName: ExampleName
+```
+
+**Known files:**
+- `examples/analytic-workflow/etl/etl_bundle.yaml`
+- `examples/analytic-workflow/ml/ml_bundle.yaml`
+- `examples/serverless-example/bundle.yaml`
+- `examples/mwaa-example/bundle.yaml`
+
+##### 2. Update Example Documentation
+Update any README files in examples/ that reference `pipelineName`
+
+#### Phase 4: Test Files
+
+##### 1. Update Test Data
+```bash
+# Find all test bundle files
+find tests/ -name "*.yaml" -o -name "*.yml"
+
+# Update each file:
+pipelineName:  →  bundleName:
+```
+
+##### 2. Update Test Assertions
+```bash
+# Find test assertions
+grep -rn "pipelineName\|pipeline_name" tests/ --include="*.py"
+
+# Update assertions to check for bundleName
+assert manifest.pipeline_name  →  assert manifest.bundle_name
+```
+
+##### 3. Update Test Fixtures
+Update any test fixtures that create or validate bundle manifests
+
+#### Phase 5: Validation & Testing
+
+##### 1. Run All Tests
+```bash
+pytest tests/ -v
+```
+
+##### 2. Validate Examples
+```bash
+# Validate each example bundle
+for file in examples/**/*bundle.yaml; do
+    smus-cli describe --bundle "$file"
+done
+```
+
+##### 3. Check for Missed References
+```bash
+# Final search for any remaining pipelineName references
+grep -rn "pipelineName" . --include="*.py" --include="*.yaml" --include="*.yml" --include="*.md"
+```
+
+### Migration Guide for Users
+
+#### Breaking Change Notice
+```markdown
+## Breaking Change: pipelineName → bundleName
+
+**Version:** X.X.X
+**Date:** TBD
+
+### What Changed
+The YAML field `pipelineName` has been renamed to `bundleName` to align with terminology.
+
+### Migration Required
+Update your bundle manifest files:
+
+**Before:**
+```yaml
+pipelineName: MyDataPipeline
+```
+
+**After:**
+```yaml
+bundleName: MyDataPipeline
+```
+
+### Error Message
+If you don't update, you'll see:
+```
+ValueError: bundleName is required and cannot be empty
+```
+
+### Automated Migration
+Run this command to update your files:
+```bash
+sed -i 's/pipelineName:/bundleName:/g' bundle.yaml
+```
+```
+
+### Rollout Strategy
+
+#### Option 1: Hard Break (Recommended)
+- Make all changes in one release
+- Update all documentation and examples
+- Provide clear migration guide
+- No backward compatibility
+
+#### Option 2: Deprecation Period (More Complex)
+- Support both `pipelineName` and `bundleName` for 2 releases
+- Emit deprecation warning when `pipelineName` is used
+- Remove `pipelineName` support in future release
+- Requires additional code complexity
+
+**Recommendation:** Use Option 1 (Hard Break) since this is experimental software and the change is straightforward.
+
+### Checklist
+
+- [ ] Update `bundle_manifest.py` class definition
+- [ ] Update all Python code references
+- [ ] Update schema file
+- [ ] Update all documentation files
+- [ ] Update all example files
+- [ ] Update all test files
+- [ ] Update error messages
+- [ ] Run full test suite
+- [ ] Validate all examples
+- [ ] Create migration guide
+- [ ] Update CHANGELOG
+- [ ] Search for any remaining `pipelineName` references
+
+### Estimated Effort
+- Code changes: 2-3 hours
+- Documentation updates: 1-2 hours
+- Testing and validation: 1-2 hours
+- **Total: 4-7 hours**

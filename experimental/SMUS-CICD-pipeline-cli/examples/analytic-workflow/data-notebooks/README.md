@@ -26,7 +26,7 @@ This example demonstrates parallel execution of multiple notebooks using SageMak
 
 ```bash
 # Deploy to test environment
-python -m smus_cicd.cli deploy test --pipeline examples/analytic-workflow/notebooks/notebooks_pipeline.yaml
+python -m smus_cicd.cli deploy test --bundle examples/analytic-workflow/notebooks/notebooks_bundle.yaml
 ```
 
 ### Run Workflow
@@ -34,7 +34,7 @@ python -m smus_cicd.cli deploy test --pipeline examples/analytic-workflow/notebo
 ```bash
 # Execute all notebooks in parallel
 python -m smus_cicd.cli run --workflow parallel_notebooks_workflow --targets test \
-  --pipeline examples/analytic-workflow/notebooks/notebooks_pipeline.yaml
+  --bundle examples/analytic-workflow/notebooks/notebooks_bundle.yaml
 ```
 
 ### Run Tests
@@ -46,7 +46,7 @@ pytest tests/integration/examples-analytics-workflows/notebooks/test_notebooks_w
 
 ## Architecture
 
-- **Pipeline Manifest**: `notebooks_pipeline.yaml` - Defines targets and bundle configuration
+- **Bundle Manifest**: `notebooks_bundle.yaml` - Defines targets and bundle configuration
 - **Workflow**: `workflows/parallel_notebooks_workflow.yaml` - Airflow DAG with 9 parallel tasks
 - **Pipeline Tests**: `pipeline_tests/test_notebooks_execution.py` - Validates execution success
 - **Integration Test**: `tests/integration/.../test_notebooks_workflow.py` - End-to-end test

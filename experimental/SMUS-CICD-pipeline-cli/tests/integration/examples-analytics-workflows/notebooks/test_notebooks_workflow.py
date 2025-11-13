@@ -14,7 +14,7 @@ class TestNotebooksWorkflow(IntegrationTestBase):
     def get_pipeline_file(self):
         return os.path.join(
             os.path.dirname(__file__),
-            "../../../../examples/analytic-workflow/data-notebooks/notebooks_pipeline.yaml"
+            "../../../../examples/analytic-workflow/data-notebooks/notebooks_bundle.yaml"
         )
     
     def test_notebooks_workflow_deployment(self):
@@ -24,7 +24,7 @@ class TestNotebooksWorkflow(IntegrationTestBase):
         
         # Step 1: Describe with connections
         print("\n=== Step 1: Describe with Connections ===")
-        result = self.run_cli_command(["describe", "--pipeline", pipeline_file, "--connect"])
+        result = self.run_cli_command(["describe", "--bundle", pipeline_file, "--connect"])
         assert result["success"], f"Describe failed: {result['output']}"
         print("✅ Describe successful")
         
@@ -52,7 +52,7 @@ class TestNotebooksWorkflow(IntegrationTestBase):
                         "--exclude", "*.pyc",
                         "--exclude", "__pycache__/*",
                         "--exclude", ".ipynb_checkpoints/*",
-                        "--exclude", "*_pipeline.yaml",
+                        "--exclude", "*_bundle.yaml",
                         "--exclude", "*.md",
                         "--exclude", "pipeline_tests/*"
                     ],
@@ -69,20 +69,20 @@ class TestNotebooksWorkflow(IntegrationTestBase):
         
         # Step 3: Bundle from dev
         print("\n=== Step 3: Bundle from dev ===")
-        result = self.run_cli_command(["bundle", "--pipeline", pipeline_file, "--target", "dev"])
+        result = self.run_cli_command(["bundle", "--bundle", pipeline_file, "--target", "dev"])
         assert result["success"], f"Bundle failed: {result['output']}"
         print("✅ Bundle successful")
         
         # Step 4: Deploy to test target
         print("\n=== Step 4: Deploy to test ===")
-        result = self.run_cli_command(["deploy", "test", "--pipeline", pipeline_file])
+        result = self.run_cli_command(["deploy", "test", "--bundle", pipeline_file])
         assert result["success"], f"Deploy failed: {result['output']}"
         print("✅ Deploy successful")
         
         # Step 5: Run workflow
         print("\n=== Step 5: Run Workflow ===")
         result = self.run_cli_command(
-            ["run", "--workflow", "parallel_notebooks_workflow", "--targets", "test", "--pipeline", pipeline_file]
+            ["run", "--workflow", "parallel_notebooks_workflow", "--targets", "test", "--bundle", pipeline_file]
         )
         assert result["success"], f"Run workflow failed: {result['output']}"
         
@@ -100,6 +100,16 @@ class TestNotebooksWorkflow(IntegrationTestBase):
         
         # Step 7: Run pipeline tests to validate all notebooks succeeded
         print("\n=== Step 7: Run Pipeline Tests ===")
-        result = self.run_cli_command(["test", "--targets", "test", "--test-output", "console", "--pipeline", pipeline_file])
+        result = self.run_cli_command(["test", "--targets", "test", "--test-output", "console", "--bundle", pipeline_file])
         assert result["success"], f"Pipeline tests failed: {result['output']}"
         print("✅ All tests passed")
+
+        # Step 8: Download and validate notebooks
+        print("\n=== Step 8: Download and Validate Notebooks ===")
+        if s3_uri_match:
+            s3_bucket = s3_uri_match.group(1).replace("s3://", "").split("/")[0]
+            notebooks_valid = self.download_and_validate_notebooks(s3_bucket)
+            assert notebooks_valid, "Notebook validation failed - errors found in notebook outputs"
+            print("✅ Notebooks validated successfully")
+        else:
+            print("⚠️ Skipping notebook validation - S3 bucket not found")

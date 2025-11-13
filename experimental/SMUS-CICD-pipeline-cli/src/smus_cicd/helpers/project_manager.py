@@ -159,7 +159,7 @@ class ProjectManager:
         #     profile_name,
         #     domain_name,
         #     region,
-        #     self.manifest.pipeline_name,
+        #     self.manifest.bundle_name,
         #     target_name,
         #     target_config.stage,
         #     user_parameters,
@@ -252,9 +252,9 @@ class ProjectManager:
         typer.echo("Updating project stack tags...")
 
         # Construct stack name and tags
-        stack_name = f"{self.manifest.pipeline_name}-{target_name}-{project_name}"
+        stack_name = f"{self.manifest.bundle_name}-{target_name}-{project_name}"
         tags = [
-            {"Key": "Pipeline", "Value": self.manifest.pipeline_name},
+            {"Key": "Bundle", "Value": self.manifest.bundle_name},
             {"Key": "Target", "Value": target_name},
             {"Key": "Project", "Value": project_name},
             {"Key": "Stage", "Value": target_config.stage},
@@ -540,7 +540,7 @@ class ProjectManager:
 
     def _build_user_parameters(self, yaml_user_params: List) -> List:
         """Build user parameters from YAML data."""
-        from smus_cicd.pipeline.pipeline_manifest import (
+        from smus_cicd.pipeline.bundle_manifest import (
             EnvironmentUserParameters,
             UserParameter,
         )

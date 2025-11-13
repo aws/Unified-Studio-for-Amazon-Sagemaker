@@ -13,7 +13,7 @@ import typer
 
 from ..helpers import deployment
 from ..helpers.utils import get_datazone_project_info, load_config
-from ..pipeline import PipelineManifest
+from ..pipeline import BundleManifest
 
 
 def display_bundle_tree(zip_path: str, output: str):
@@ -81,7 +81,7 @@ def bundle_command(
     """Create bundle zip files by downloading from S3 connection locations."""
     try:
         config = load_config()
-        manifest = PipelineManifest.from_file(manifest_file)
+        manifest = BundleManifest.from_file(manifest_file)
 
         # Parse targets - handle single target or comma-separated list
         target_list = []
@@ -158,8 +158,8 @@ def bundle_command(
         ensure_bundle_directory_exists(bundles_directory, region)
 
         # Create zip file path (always create locally first, then upload if S3)
-        pipeline_name = manifest.pipeline_name
-        zip_filename = f"{pipeline_name}.zip"
+        bundle_name = manifest.bundle_name
+        zip_filename = f"{bundle_name}.zip"
 
         if is_s3_url(bundles_directory):
             # Create temporary local file for S3 upload
@@ -260,7 +260,7 @@ def bundle_command(
                             check=True,
                             capture_output=True,
                             text=True,
-                            timeout=60,
+                            timeout=180,
                         )
 
                         # Remove .git directory and Python cache files
@@ -303,7 +303,7 @@ def bundle_command(
 
                     except subprocess.TimeoutExpired:
                         typer.echo(
-                            "Error: Git clone timed out after 60 seconds", err=True
+                            "Error: Git clone timed out after 180 seconds", err=True
                         )
                     except Exception as e:
                         typer.echo(f"Error cloning Git repository: {str(e)}", err=True)
@@ -338,7 +338,7 @@ def bundle_command(
 
                 # Upload to final location (S3 or local)
                 final_bundle_path = upload_bundle(
-                    zip_path, bundles_directory, pipeline_name, region
+                    zip_path, bundles_directory, bundle_name, region
                 )
 
                 file_size = os.path.getsize(zip_path)

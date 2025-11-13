@@ -31,7 +31,7 @@ echo "===================================="
 
 # Step 1: Get S3 connection details
 echo "📋 Step 1: Get S3 connection details"
-run_command "python -m smus_cicd.cli describe --pipeline \"$PIPELINE_FILE\" --connect"
+run_command "python -m smus_cicd.cli describe --bundle \"$PIPELINE_FILE\" --connect"
 
 # Step 1.5: Upload local files to S3 before bundling
 echo "📤 Step 1.5: Upload local files to dev project S3"
@@ -40,19 +40,19 @@ echo "Uploading workflows/dags/marketing_dag.py and src/marketing_utils.py to S3
 
 # Step 2: Create bundle
 echo "📦 Step 2: Create bundle"
-run_command "python -m smus_cicd.cli bundle --pipeline \"$PIPELINE_FILE\""
+run_command "python -m smus_cicd.cli bundle --bundle \"$PIPELINE_FILE\""
 
 # Step 3: Deploy to test
 echo "🚀 Step 3: Deploy to test"
-run_command "python -m smus_cicd.cli deploy --pipeline \"$PIPELINE_FILE\" test"
+run_command "python -m smus_cicd.cli deploy --bundle \"$PIPELINE_FILE\" test"
 
 # Step 4: Deploy to prod
 echo "🚀 Step 4: Deploy to prod"
-run_command "python -m smus_cicd.cli deploy --pipeline \"$PIPELINE_FILE\" prod"
+run_command "python -m smus_cicd.cli deploy --bundle \"$PIPELINE_FILE\" prod"
 
 # Step 5: Monitor pipeline
 echo "📊 Step 5: Monitor pipeline"
-run_command "python -m smus_cicd.cli monitor --pipeline \"$PIPELINE_FILE\""
+run_command "python -m smus_cicd.cli monitor --bundle \"$PIPELINE_FILE\""
 
 echo "✅ MWAA pipeline lifecycle completed!"
 echo "🔍 Environment variables were automatically resolved:"

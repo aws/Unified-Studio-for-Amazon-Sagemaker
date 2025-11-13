@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 
 from smus_cicd.helpers.utils import _get_region_from_config, load_config
-from smus_cicd.pipeline import PipelineManifest
+from smus_cicd.pipeline import BundleManifest
 
 
 class TestRegionConfiguration:

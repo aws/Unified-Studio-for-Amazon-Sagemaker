@@ -95,8 +95,8 @@ def load_yaml(file_path: str) -> Dict[str, Any]:
     """
     if not os.path.exists(file_path):
         raise FileNotFoundError(
-            f"Pipeline manifest file not found: {file_path}\n"
-            f"Please create a pipeline manifest file or specify the correct path using --pipeline/-p option."
+            f"Bundle manifest file not found: {file_path}\n"
+            f"Please create a bundle manifest file or specify the correct path using --bundle/-b option."
         )
 
     try:

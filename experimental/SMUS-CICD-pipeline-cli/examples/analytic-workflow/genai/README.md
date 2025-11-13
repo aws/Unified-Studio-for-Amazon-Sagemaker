@@ -7,7 +7,7 @@ This workflow demonstrates how to create and test AWS Bedrock Agents using SageM
 ```
 genai/
 ├── README.md                           # This file
-├── genai_pipeline.yaml                 # Pipeline configuration
+├── genai_bundle.yaml                 # Pipeline configuration
 ├── job-code/                           # Lambda functions and agent code
 │   ├── lambda_mask_string.py          # Lambda function for masking strings
 │   └── requirements.txt               # Python dependencies
@@ -41,8 +41,8 @@ genai/
 
 ```bash
 # Deploy to test environment
-smus-cli deploy test --pipeline genai/genai_pipeline.yaml
+smus-cli deploy test --bundle genai/genai_bundle.yaml
 
 # Run workflow
-smus-cli run --workflow genai_dev_workflow --targets test --pipeline genai/genai_pipeline.yaml
+smus-cli run --workflow genai_dev_workflow --targets test --bundle genai/genai_bundle.yaml
 ```

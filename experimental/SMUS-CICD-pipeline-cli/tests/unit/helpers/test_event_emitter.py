@@ -83,7 +83,7 @@ class TestEventEmitter:
         assert result is True
         call_args = mock_client.put_events.call_args[1]
         detail = json.loads(call_args["Entries"][0]["Detail"])
-        assert detail["pipelineName"] == "TestPipeline"
+        assert detail["bundleName"] == "TestPipeline"
         assert detail["stage"] == "deploy"
         assert detail["status"] == "started"
 
