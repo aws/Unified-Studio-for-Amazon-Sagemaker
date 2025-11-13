@@ -73,23 +73,7 @@ class TestMLDeploymentWorkflow(IntegrationTestBase):
             )
             
             if os.path.exists(ml_dir):
-                upload_result = subprocess.run(
-                    [
-                        "aws", "s3", "sync",
-                        ml_dir, s3_uri + "ml/",
-                        "--delete",
-                        "--exclude", "*.pyc",
-                        "--exclude", "__pycache__/*",
-                        "--exclude", ".ipynb_checkpoints/*",
-                    ],
-                    capture_output=True,
-                    text=True
-                )
-                
-                if upload_result.returncode == 0:
-                    print(f"✅ ML code uploaded to S3: {s3_uri}ml/")
-                else:
-                    print(f"⚠️ Upload failed: {upload_result.stderr}")
+                self.sync_to_s3(ml_dir, s3_uri + "ml/", exclude_patterns=["*.pyc", "__pycache__/*", ".ipynb_checkpoints/*"])
 
         # Step 3: Bundle from dev
         print("\n=== Step 3: Bundle from dev ===")
@@ -160,18 +144,22 @@ class TestMLDeploymentWorkflow(IntegrationTestBase):
             test_s3_uri = s3_bucket_match.group(1)
             s3_bucket = re.search(r"s3://([^/]+)", test_s3_uri).group(1)
             
-            # Extract run_id from workflow ARN or logs
-            run_id_match = re.search(r"run_id=([^/\s]+)", result["output"])
-            run_id = run_id_match.group(1) if run_id_match else None
+            # Wait for S3 propagation
+            import time
+            print("⏳ Waiting 10s for S3 propagation...")
+            time.sleep(10)
             
+            # Download latest notebook output (don't pass run_id as workflow run ID != task execution ID)
             notebooks_valid = self.download_and_validate_notebooks(
                 s3_bucket=s3_bucket,
-                run_id=run_id
+                workflow_filter="deployment"
             )
             
             # Only assert if workflow succeeded
             if workflow_succeeded:
-                assert notebooks_valid, "Output notebooks contain errors"
+                if not notebooks_valid:
+                    print("❌ Notebook validation failed - check logs above for details")
+                assert notebooks_valid, "Output notebooks contain errors or were not found"
                 print("✅ All output notebooks validated successfully")
             else:
                 print(f"⚠️ Notebooks downloaded for inspection (workflow failed)")

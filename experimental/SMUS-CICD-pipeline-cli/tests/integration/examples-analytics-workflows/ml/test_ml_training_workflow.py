@@ -53,23 +53,7 @@ class TestMLTrainingWorkflow(IntegrationTestBase):
             )
             
             if os.path.exists(ml_dir):
-                upload_result = subprocess.run(
-                    [
-                        "aws", "s3", "sync",
-                        ml_dir, s3_uri + "ml/",
-                        "--delete",
-                        "--exclude", "*.pyc",
-                        "--exclude", "__pycache__/*",
-                        "--exclude", ".ipynb_checkpoints/*",
-                    ],
-                    capture_output=True,
-                    text=True
-                )
-                
-                if upload_result.returncode == 0:
-                    print(f"✅ ML code uploaded to S3: {s3_uri}ml/")
-                else:
-                    print(f"⚠️ Upload failed: {upload_result.stderr}")
+                self.sync_to_s3(ml_dir, s3_uri + "ml/", exclude_patterns=["*.pyc", "__pycache__/*", ".ipynb_checkpoints/*"])
 
         # Step 3: Bundle
         print("\n=== Step 3: Bundle ===")

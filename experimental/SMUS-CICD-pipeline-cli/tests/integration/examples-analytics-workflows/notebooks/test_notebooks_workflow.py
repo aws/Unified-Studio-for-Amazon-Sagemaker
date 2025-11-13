@@ -44,26 +44,18 @@ class TestNotebooksWorkflow(IntegrationTestBase):
             )
             
             if os.path.exists(notebooks_dir):
-                upload_result = subprocess.run(
-                    [
-                        "aws", "s3", "sync",
-                        notebooks_dir, s3_uri + "notebooks/",
-                        "--delete",
-                        "--exclude", "*.pyc",
-                        "--exclude", "__pycache__/*",
-                        "--exclude", ".ipynb_checkpoints/*",
-                        "--exclude", "*_bundle.yaml",
-                        "--exclude", "*.md",
-                        "--exclude", "pipeline_tests/*"
-                    ],
-                    capture_output=True,
-                    text=True
+                self.sync_to_s3(
+                    notebooks_dir,
+                    s3_uri,
+                    exclude_patterns=[
+                        "*.pyc",
+                        "__pycache__/*",
+                        ".ipynb_checkpoints/*",
+                        "*_bundle.yaml",
+                        "*.md",
+                        "pipeline_tests/*"
+                    ]
                 )
-                
-                if upload_result.returncode == 0:
-                    print(f"✅ Notebooks uploaded to S3: {s3_uri}notebooks/")
-                else:
-                    print(f"⚠️ Upload failed: {upload_result.stderr}")
         else:
             print("⚠️ Could not extract S3 URI from describe output")
         

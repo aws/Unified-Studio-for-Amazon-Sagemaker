@@ -105,23 +105,7 @@ class TestETLWorkflow(IntegrationTestBase):
             )
             
             if os.path.exists(etl_dir):
-                upload_result = subprocess.run(
-                    [
-                        "aws", "s3", "sync",
-                        etl_dir, s3_uri + "etl/",
-                        "--delete",
-                        "--exclude", "*.pyc",
-                        "--exclude", "__pycache__/*",
-                        "--exclude", "test_*.sh",
-                    ],
-                    capture_output=True,
-                    text=True
-                )
-                
-                if upload_result.returncode == 0:
-                    print(f"✅ ETL code uploaded to S3: {s3_uri}etl/")
-                else:
-                    print(f"⚠️ Upload failed: {upload_result.stderr}")
+                self.sync_to_s3(etl_dir, s3_uri + "etl/", exclude_patterns=["*.pyc", "__pycache__/*", "test_*.sh"])
         else:
             print("⚠️ Could not extract S3 URI from describe output")
 

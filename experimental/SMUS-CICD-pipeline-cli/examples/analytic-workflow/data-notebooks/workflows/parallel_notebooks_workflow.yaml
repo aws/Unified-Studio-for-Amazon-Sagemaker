@@ -12,6 +12,9 @@ parallel_notebooks_workflow:
         - NOTEBOOK
       compute:
         instance_type: ml.c5.xlarge
+        image_details:
+          image_name: sagemaker-distribution-prod
+          image_version: '3'
       wait_for_completion: true
     notebook_04_athena:
       operator: airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator
@@ -24,6 +27,9 @@ parallel_notebooks_workflow:
         - NOTEBOOK
       compute:
         instance_type: ml.c5.xlarge
+        image_details:
+          image_name: sagemaker-distribution-prod
+          image_version: '3'
       wait_for_completion: true
     notebook_05_spark:
       operator: airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator
@@ -36,6 +42,9 @@ parallel_notebooks_workflow:
         - NOTEBOOK
       compute:
         instance_type: ml.c5.xlarge
+        image_details:
+          image_name: sagemaker-distribution-prod
+          image_version: '3'
       wait_for_completion: true
     notebook_06_duckdb:
       operator: airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator
@@ -48,6 +57,9 @@ parallel_notebooks_workflow:
         - NOTEBOOK
       compute:
         instance_type: ml.c5.xlarge
+        image_details:
+          image_name: sagemaker-distribution-prod
+          image_version: '3'
       wait_for_completion: true
     notebook_08_genai:
       operator: airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator
@@ -60,6 +72,9 @@ parallel_notebooks_workflow:
         - NOTEBOOK
       compute:
         instance_type: ml.c5.xlarge
+        image_details:
+          image_name: sagemaker-distribution-prod
+          image_version: '3'
       wait_for_completion: true
     notebook_09_temperature:
       operator: airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator
@@ -72,6 +87,9 @@ parallel_notebooks_workflow:
         - NOTEBOOK
       compute:
         instance_type: ml.c5.xlarge
+        image_details:
+          image_name: sagemaker-distribution-prod
+          image_version: '3'
       wait_for_completion: true
     notebook_10_chronos:
       operator: airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator
@@ -84,6 +102,9 @@ parallel_notebooks_workflow:
         - NOTEBOOK
       compute:
         instance_type: ml.c5.xlarge
+        image_details:
+          image_name: sagemaker-distribution-prod
+          image_version: '3'
       wait_for_completion: true
     notebook_11_dynamodb:
       operator: airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator
@@ -96,6 +117,9 @@ parallel_notebooks_workflow:
         - NOTEBOOK
       compute:
         instance_type: ml.c5.xlarge
+        image_details:
+          image_name: sagemaker-distribution-prod
+          image_version: '3'
       wait_for_completion: true
     notebook_12_mlflow:
       operator: airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator
@@ -108,4 +132,7 @@ parallel_notebooks_workflow:
         - NOTEBOOK
       compute:
         instance_type: ml.c5.xlarge
+        image_details:
+          image_name: sagemaker-distribution-prod
+          image_version: '3'
       wait_for_completion: true

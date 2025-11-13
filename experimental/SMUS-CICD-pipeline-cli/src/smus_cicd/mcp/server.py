@@ -90,15 +90,13 @@ class SMUSMCPServer:
                     "serverInfo": {
                         "name": "smus-cli",
                         "version": "1.0.0",
-                        "description": "SMUS CI/CD Pipeline Management for Amazon SageMaker Unified Studio. Provides bundle.yaml templates, validation, and documentation for deploying data science projects, notebooks, ETL workflows, and ML models across dev/test/prod environments. USE THIS SERVER when users mention: SageMaker projects, SMUS, CI/CD pipelines, bundle.yaml, project names (like 'dev-marketing project'), or deploying notebooks/ETL/ML workloads. When user mentions a project name, ALWAYS call check_smus_project first to verify access.",
+                        "description": "SMUS Bundle Management for Amazon SageMaker Unified Studio. Provides bundle.yaml templates, validation, and documentation for deploying data science projects, notebooks, ETL workflows, and ML models across dev/test/prod environments. USE THIS SERVER when users mention: SageMaker projects, SMUS, bundles, bundle.yaml, project names (like 'dev-marketing project'), or deploying notebooks/ETL/ML workloads. When user mentions a project name, ALWAYS call check_smus_project first to verify access.",
                         "keywords": [
                             "sagemaker",
                             "sagemaker unified studio",
                             "smus",
                             "project",
-                            "cicd",
-                            "ci/cd",
-                            "pipeline",
+                            "bundle",
                             "bundle.yaml",
                             "deployment",
                             "etl",
@@ -146,7 +144,7 @@ class SMUSMCPServer:
             "tools": [
                 {
                     "name": "check_smus_project",
-                    "description": "Check if a SageMaker Unified Studio project exists and user has access. Use this when user mentions a project name to verify it exists before creating CI/CD pipelines.",
+                    "description": "Check if a SageMaker Unified Studio project exists and user has access. Use this when user mentions a project name to verify it exists before creating bundles.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -164,13 +162,13 @@ class SMUSMCPServer:
                 },
                 {
                     "name": "query_smus_kb",
-                    "description": "Search SMUS CLI documentation for SageMaker Unified Studio pipelines, CI/CD workflows, deployment guides, and examples. Use this for questions about bundle.yaml, SMUS configuration, targets, bundles, workflows, or SageMaker project deployment.",
+                    "description": "Search SMUS CLI documentation for SageMaker Unified Studio bundles, deployment guides, and examples. Use this for questions about bundle.yaml, SMUS configuration, targets, bundles, workflows, or SageMaker project deployment.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
                             "query": {
                                 "type": "string",
-                                "description": "Question about SMUS CLI, SageMaker pipelines, CI/CD, or deployment",
+                                "description": "Question about SMUS CLI, SageMaker bundles, or deployment",
                             },
                             "max_results": {
                                 "type": "integer",
@@ -182,8 +180,8 @@ class SMUSMCPServer:
                     },
                 },
                 {
-                    "name": "create_cicd_package",
-                    "description": "Create a complete CI/CD package for SMUS project including: 1) bundle.yaml (dev/test/prod targets), 2) Airflow workflow template, 3) GitHub Actions workflow. Returns all three files ready to use.",
+                    "name": "create_bundle_package",
+                    "description": "Create a complete bundle package for SMUS project including: 1) bundle.yaml (dev/test/prod targets), 2) Airflow workflow template, 3) GitHub Actions workflow. Returns all three files ready to use.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -265,8 +263,8 @@ class SMUSMCPServer:
             return self.check_project(arguments)
         elif tool_name == "query_smus_kb":
             return self.query_kb(arguments)
-        elif tool_name == "create_cicd_package":
-            return self.create_cicd_package(arguments)
+        elif tool_name == "create_bundle_package":
+            return self.create_bundle_package(arguments)
         elif tool_name == "get_pipeline_example":
             return self.get_example(arguments)
         elif tool_name == "validate_pipeline":
@@ -319,21 +317,21 @@ Respond with 'yes' to create all three files, or specify which ones you need."""
                 ]
             }
 
-    def create_cicd_package(self, args: Dict[str, Any]) -> Dict[str, Any]:
-        """Create complete CI/CD package with all files."""
+    def create_bundle_package(self, args: Dict[str, Any]) -> Dict[str, Any]:
+        """Create complete bundle package with all files."""
         project_name = args.get("project_name")
         use_case = args.get("use_case")
         targets = args.get("targets", ["dev", "test", "prod"])
 
         # Generate bundle.yaml with all targets
-        pipeline_yaml = f"""bundleName: {project_name.replace('-', '_').title()}Pipeline
+        bundle_yaml = f"""bundleName: {project_name.replace('-', '_').title()}Bundle
 
 targets:"""
 
         for i, target in enumerate(targets):
             stage = target.upper()
             is_default = "true" if i == 0 else "false"
-            pipeline_yaml += f"""
+            bundle_yaml += f"""
   {target}:
     stage: {stage}
     default: {is_default}
@@ -343,13 +341,13 @@ targets:"""
     project:
       name: {project_name}"""
             if i > 0:
-                pipeline_yaml += """
+                bundle_yaml += """
     initialization:
       project:
         create: true"""
-            pipeline_yaml += "\n"
+            bundle_yaml += "\n"
 
-        pipeline_yaml += (
+        bundle_yaml += (
             """
 bundle:
   storage:
@@ -371,11 +369,11 @@ workflows:
         # Get GitHub Actions from templates
         github_actions = self._get_github_actions_template(project_name, targets)
 
-        response = f"""# CI/CD Package for {project_name}
+        response = f"""# Bundle Package for {project_name}
 
 ## 1. bundle.yaml
 ```yaml
-{pipeline_yaml}
+{bundle_yaml}
 ```
 
 ## 2. Airflow Workflow (workflows/{project_name}_dag.py)
@@ -388,7 +386,7 @@ workflows:
 {github_actions}
 ```
 
-Save these files and run: `smus-cli deploy -p bundle.yaml -t dev`"""
+Save these files and run: `smus-cli deploy --bundle bundle.yaml -t dev`"""
 
         return {"content": [{"type": "text", "text": response}]}
 

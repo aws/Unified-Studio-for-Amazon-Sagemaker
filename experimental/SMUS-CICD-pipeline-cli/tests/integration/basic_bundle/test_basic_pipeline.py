@@ -106,42 +106,14 @@ class TestBasicPipeline(IntegrationTestBase):
             # Upload code directory
             code_dir = os.path.join(base_dir, "code")
             if os.path.exists(code_dir):
-                upload_result = subprocess.run(
-                    [
-                        "aws", "s3", "sync",
-                        code_dir, s3_uri,
-                        "--exclude", "*.pyc",
-                        "--exclude", "__pycache__/*",
-                    ],
-                    capture_output=True,
-                    text=True,
-                )
-                
-                if upload_result.returncode == 0:
-                    print(f"✅ Code uploaded to S3: {s3_uri}")
-                else:
-                    print(f"⚠️ Code upload failed: {upload_result.stderr}")
+                self.sync_to_s3(code_dir, s3_uri, exclude_patterns=["*.pyc", "__pycache__/*"])
             else:
                 print(f"⚠️ Code directory not found: {code_dir}")
             
             # Upload code/src directory to S3 code/src/
             code_src_dir = os.path.join(base_dir, "code", "src")
             if os.path.exists(code_src_dir):
-                upload_result = subprocess.run(
-                    [
-                        "aws", "s3", "sync",
-                        code_src_dir, s3_uri + "code/src/",
-                        "--exclude", "*.pyc",
-                        "--exclude", "__pycache__/*",
-                    ],
-                    capture_output=True,
-                    text=True,
-                )
-                
-                if upload_result.returncode == 0:
-                    print(f"✅ Code uploaded to S3: {s3_uri}code/src/")
-                else:
-                    print(f"⚠️ Code upload failed: {upload_result.stderr}")
+                self.sync_to_s3(code_src_dir, s3_uri + "code/src/", exclude_patterns=["*.pyc", "__pycache__/*"])
             else:
                 print(f"⚠️ Code/src directory not found: {code_src_dir}")
         else:

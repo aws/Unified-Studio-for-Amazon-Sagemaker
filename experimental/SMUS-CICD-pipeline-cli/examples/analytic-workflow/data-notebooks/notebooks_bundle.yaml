@@ -53,7 +53,7 @@ targets:
       storage:
         - name: notebooks
           connectionName: default.s3_shared
-          targetDirectory: 'notebooks/bundle'
+          targetDirectory: 'notebooks/bundle/notebooks'
     environment_variables:
       S3_PREFIX: test
 

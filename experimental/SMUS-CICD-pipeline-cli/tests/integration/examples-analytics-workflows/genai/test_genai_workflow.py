@@ -53,23 +53,7 @@ class TestGenAIWorkflow(IntegrationTestBase):
             )
             
             if os.path.exists(genai_dir):
-                upload_result = subprocess.run(
-                    [
-                        "aws", "s3", "sync",
-                        genai_dir, s3_uri + "genai/",
-                        "--delete",
-                        "--exclude", "*.pyc",
-                        "--exclude", "__pycache__/*",
-                        "--exclude", ".ipynb_checkpoints/*",
-                    ],
-                    capture_output=True,
-                    text=True
-                )
-                
-                if upload_result.returncode == 0:
-                    print(f"✅ GenAI code uploaded to S3: {s3_uri}genai/")
-                else:
-                    print(f"⚠️ Upload failed: {upload_result.stderr}")
+                self.sync_to_s3(genai_dir, s3_uri + "genai/", exclude_patterns=["*.pyc", "__pycache__/*", ".ipynb_checkpoints/*"])
         else:
             print("⚠️ Could not extract S3 URI from describe output")
 

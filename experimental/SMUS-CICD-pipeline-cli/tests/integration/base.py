@@ -276,6 +276,52 @@ class IntegrationTestBase:
         """Get full path to pipeline file."""
         return str(Path(__file__).parent / pipeline_file)
 
+    def sync_to_s3(
+        self,
+        source_dir: str,
+        s3_uri: str,
+        exclude_patterns: list = None
+    ) -> None:
+        """Sync local directory to S3 with proper error handling.
+        
+        Args:
+            source_dir: Local directory to sync
+            s3_uri: S3 URI destination (e.g., s3://bucket/prefix/)
+            exclude_patterns: List of patterns to exclude (optional)
+        
+        Raises:
+            AssertionError: If sync fails
+        """
+        import subprocess
+        
+        if exclude_patterns is None:
+            exclude_patterns = [
+                "*.pyc",
+                "__pycache__/*",
+                ".ipynb_checkpoints/*",
+                "*_bundle.yaml",
+                "*.md"
+            ]
+        
+        cmd = ["aws", "s3", "sync", source_dir, s3_uri, "--delete"]
+        for pattern in exclude_patterns:
+            cmd.extend(["--exclude", pattern])
+        
+        self.logger.info(f"Syncing {source_dir} to {s3_uri}")
+        
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.stdout:
+            self.logger.info(f"S3 sync output: {result.stdout}")
+        if result.stderr:
+            self.logger.warning(f"S3 sync stderr: {result.stderr}")
+        
+        if result.returncode != 0:
+            self.logger.error(f"S3 sync failed with code {result.returncode}")
+            assert False, f"S3 sync failed: {result.stderr}"
+        
+        self.logger.info(f"✅ Successfully synced to {s3_uri}")
+
     def run_cli_command(
         self, command: list, expected_exit_code: int = 0
     ) -> Dict[str, Any]:
@@ -448,12 +494,13 @@ class IntegrationTestBase:
         if self.created_resources:
             print(f"Would clean up resources: {self.created_resources}")
 
-    def download_and_validate_notebooks(self, s3_bucket: str, run_id: Optional[str] = None) -> bool:
+    def download_and_validate_notebooks(self, s3_bucket: str, run_id: Optional[str] = None, workflow_filter: Optional[str] = None) -> bool:
         """Download workflow notebook outputs and validate for errors.
         
         Args:
             s3_bucket: S3 bucket name containing workflow outputs
             run_id: Optional specific run ID to download (defaults to latest)
+            workflow_filter: Optional workflow name filter (e.g., 'deployment' to match deployment workflows)
             
         Returns:
             True if notebooks downloaded and contain no errors, False otherwise
@@ -483,7 +530,11 @@ class IntegrationTestBase:
         # Parse runs and find latest if no run_id specified
         runs = {}
         for line in result.stdout.strip().split("\n"):
-            if not line or "output.tar.gz" not in line:
+            if not line:
+                continue
+            
+            # Only process OUTPUT notebooks (not input notebooks)
+            if "/output/output.tar.gz" not in line:
                 continue
             
             parts = line.split()
@@ -496,7 +547,7 @@ class IntegrationTestBase:
             # Extract workflow name and run ID from path
             # Path format: shared/workflows/output/{workflow_path}/{execution-id}/output/output.tar.gz
             key_parts = s3_key.split("/")
-            if len(key_parts) < 6 or key_parts[-1] != "output.tar.gz":
+            if len(key_parts) < 6 or key_parts[-1] != "output.tar.gz" or key_parts[-2] != "output":
                 continue
             
             # Find execution ID (the part before /output/output.tar.gz)
@@ -516,13 +567,37 @@ class IntegrationTestBase:
             print("⚠️ No workflow outputs found")
             return False
         
-        # Get latest run per workflow if no run_id specified
+        # Apply workflow filter if specified
+        if workflow_filter:
+            runs = {k: v for k, v in runs.items() if workflow_filter.lower() in k.lower()}
+            if not runs:
+                print(f"⚠️ No workflows matching filter '{workflow_filter}' found")
+                return False
+        
+        # Get all runs from the latest workflow execution
+        # For parallel workflows, multiple tasks execute at similar times
         if not run_id:
-            latest_runs = {}
+            # Find the latest timestamp across all workflows
+            latest_timestamp = None
             for workflow_name, workflow_runs in runs.items():
-                latest_run = max(workflow_runs.items(), key=lambda x: x[1]["timestamp"])
-                latest_runs[workflow_name] = {latest_run[0]: latest_run[1]}
-            runs = latest_runs
+                for exec_id, run_data in workflow_runs.items():
+                    if latest_timestamp is None or run_data["timestamp"] > latest_timestamp:
+                        latest_timestamp = run_data["timestamp"]
+            
+            # Get all runs within 30 minutes of the latest timestamp (same workflow execution)
+            from datetime import datetime, timedelta
+            latest_dt = datetime.strptime(latest_timestamp, "%Y-%m-%d %H:%M:%S")
+            time_window = timedelta(minutes=30)
+            
+            filtered_runs = {}
+            for workflow_name, workflow_runs in runs.items():
+                for exec_id, run_data in workflow_runs.items():
+                    run_dt = datetime.strptime(run_data["timestamp"], "%Y-%m-%d %H:%M:%S")
+                    if abs(latest_dt - run_dt) <= time_window:
+                        if workflow_name not in filtered_runs:
+                            filtered_runs[workflow_name] = {}
+                        filtered_runs[workflow_name][exec_id] = run_data
+            runs = filtered_runs
         
         downloaded_notebooks = []
         
