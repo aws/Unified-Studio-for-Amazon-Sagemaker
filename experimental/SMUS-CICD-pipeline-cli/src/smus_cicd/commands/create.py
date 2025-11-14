@@ -218,14 +218,13 @@ def _generate_manifest_content(
         stages, dev_project_name, domain_name, region
     )
 
-    return f"""# SMUS CI/CD Pipeline Manifest
+    return f"""# SMUS CI/CD Application Manifest
 # Generated template with required fields and optional field examples
 
-bundleName: {bundle_name}
+applicationName: {bundle_name}
 
-# Bundle configuration (optional)
-bundle:
-  bundlesDirectory: ./bundles
+# Application content configuration
+content:
   storage:
     - name: workflows
       connectionName: default.s3_shared
@@ -246,11 +245,16 @@ bundle:
         - '*.pyc'
         - '.libs.json'
 
-targets:
+# Test configuration (optional)
+# tests:
+#   folder: ./tests
+
+stages:
 {targets_config}
-# Workflows configuration (optional)
-# workflows:
-#   - workflowName: your_workflow_name
+# Initialization actions (optional)
+# initialization:
+#   - type: workflow
+#     workflowName: your_workflow_name
 #     connectionName: project.workflow_mwaa
 #     logging: console
 #     engine: MWAA
@@ -299,16 +303,12 @@ def _generate_targets_section(
       create: {str(create_project).lower()}  # {'Auto-create project' if create_project else 'Use existing project'}
 {default_comment}
 
-    # Bundle target configuration
-    bundle_target_configuration:
+    # Deployment configuration
+    deployment_configuration:
       storage:
         - name: code
           connectionName: default.s3_shared
           targetDirectory: 'src'
-
-    # Test configuration (optional)
-    tests:
-      folder: ./tests
 
 """
 

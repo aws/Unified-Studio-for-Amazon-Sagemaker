@@ -101,8 +101,8 @@ class TestSMUSMCPServer:
         assert "result" in response
         assert "content" in response["result"]
 
-    @patch("smus_cicd.pipeline.validation.validate_manifest_schema")
-    @patch("smus_cicd.pipeline.validation.load_schema")
+    @patch("smus_cicd.application.validation.validate_manifest_schema")
+    @patch("smus_cicd.application.validation.load_schema")
     @patch("builtins.open")
     def test_handle_validate_pipeline_tool_valid(
         self, mock_open_file, mock_load_schema, mock_validate
@@ -132,8 +132,8 @@ class TestSMUSMCPServer:
         content = response["result"]["content"][0]["text"]
         assert "✅" in content
 
-    @patch("smus_cicd.pipeline.validation.validate_manifest_schema")
-    @patch("smus_cicd.pipeline.validation.load_schema")
+    @patch("smus_cicd.application.validation.validate_manifest_schema")
+    @patch("smus_cicd.application.validation.load_schema")
     @patch("builtins.open")
     def test_handle_validate_pipeline_tool_invalid(
         self, mock_open_file, mock_load_schema, mock_validate

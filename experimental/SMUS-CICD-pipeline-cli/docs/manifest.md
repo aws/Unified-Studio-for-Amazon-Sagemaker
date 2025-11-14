@@ -4,49 +4,27 @@
 
 The Application Deployment Manifest is a YAML file that defines **what** your application is and **where** it should be deployed in Amazon SageMaker Unified Studio.
 
-> **Note on Terminology:** This was previously called a "bundle manifest." We've renamed it to "Application Deployment Manifest" because "bundle" implied only artifact-based deployment. The new name supports multiple CI/CD strategies: artifact-based (bundling), git-based (direct), branch-based, and tag-based deployments.
-
 ## What is an Application Deployment Manifest?
 
-The manifest is a **declarative configuration** that separates concerns between what you're deploying and how you deploy it:
+The manifest is a **declarative configuration** that defines:
 
-**The manifest declares:**
-- **WHAT to deploy**: Application identity, workflows, code, dependencies, and configurations
-- **WHERE to deploy**: Target environments (dev, test, prod) with their specific settings
+- **Application identity**: Name and description
+- **Content**: Code from git, data/models from storage
+- **Activation**: How to run it (workflows, events, etc.)
+- **Stages**: Where to deploy (dev, test, prod environments)
+- **Configuration**: Environment-specific settings
 
-**The manifest does NOT define:**
-- **HOW to deploy**: Defined by your CI/CD system (GitHub Actions, GitLab CI, etc.)
-- **WHEN to deploy**: Defined by your CI/CD triggers (on push, on schedule, manual, etc.)
+### Who Owns What
 
-### Separation of Concerns
-
-This separation enables different teams to own different aspects:
-
-- **Data/Science Teams** own the manifest
-  - Define application content (workflows, code, data)
-  - Specify deployment targets (dev, test, prod)
-  - Configure environment-specific settings
-  
-- **CI/CD/Platform Teams** own the automation
-  - Design deployment workflows (GitHub Actions, etc.)
-  - Set up triggers and schedules
-  - Implement deployment strategies (bundle-based, git-based, etc.)
-
-This means data scientists can focus on their application logic while DevOps teams handle the deployment mechanics.
+- **Data Teams** own the manifest - Define what to deploy and where
+- **DevOps Teams** own CI/CD automation - Define how and when to deploy
 
 ## Content Sources
 
 Your application content can come from:
-- **Storage** (S3, local files) - for artifacts, configs, large files
-- **Git repositories** - for source code, version-controlled content
-- **Both together** - storage for some content, git for other content
-
-## Deployment Approaches
-
-You can deploy your application in two ways:
-
-### 1. Bundle-Based Deployment (Artifact-Based)
-Create a versioned archive containing your application content, then deploy that archive to targets.
+- **Git repositories** - for source code
+- **Storage (S3)** - for data, models, large files
+- **Both together** - common pattern for most applications
 
 **Workflow:**
 ```bash
@@ -54,8 +32,8 @@ Create a versioned archive containing your application content, then deploy that
 smus-cli bundle --manifest manifest.yaml --output ./bundles/
 
 # Step 2: Deploy the same bundle to multiple targets
-smus-cli deploy --manifest manifest.yaml --target test --bundle myapp-v1.0.0.tar.gz
-smus-cli deploy --manifest manifest.yaml --target prod --bundle myapp-v1.0.0.tar.gz
+smus-cli deploy --manifest manifest.yaml --stage test --bundle myapp-v1.0.0.tar.gz
+smus-cli deploy --manifest manifest.yaml --stage prod --bundle myapp-v1.0.0.tar.gz
 ```
 
 **What happens:**
@@ -69,30 +47,6 @@ smus-cli deploy --manifest manifest.yaml --target prod --bundle myapp-v1.0.0.tar
 - Require rollback capability
 - Compliance and governance requirements
 - CI/CD pipelines that create artifacts once, deploy many times
-
-### 2. Direct Deployment (Git-Based)
-Deploy directly from sources without creating intermediate archives.
-
-**Workflow:**
-```bash
-# Single step: Deploy directly from sources
-smus-cli deploy --manifest manifest.yaml --target test
-```
-
-**What happens:**
-1. CLI clones git repositories (if specified in `content.git`)
-2. CLI collects storage items (if specified in `content.storage`)
-3. Content is synced directly to the target project
-4. No intermediate archive is created
-
-**Best for:**
-- Simpler CI/CD pipelines
-- Branch-based or tag-based workflows
-- Don't need intermediate artifacts
-- Prefer git as source of truth
-- Rapid development iterations
-
-**Key Point:** Both deployment modes work with any combination of storage and git sources. The choice is about workflow preference, not content sources.
 
 ## Quick Links
 
@@ -109,10 +63,6 @@ applicationName: SimpleETLPipeline
 
 # Application content to deploy
 content:
-  workflows:
-    - workflowName: etl_workflow
-      engine: airflow-serverless
-  
   # Code from git repository
   git:
     - repository: etl-pipeline
@@ -124,8 +74,14 @@ content:
       connectionName: default.s3_shared
       include: ['data/reference/']
 
+# How to activate/run the application
+activation:
+  workflows:
+    - workflowName: etl_workflow
+      engine: airflow-serverless
+
 # Where to deploy
-targets:
+stages:
   test:
     stage: TEST
     domain:
@@ -133,11 +89,11 @@ targets:
       region: us-east-1
     project:
       name: test-project
-    bundle_target_configuration:
+    deployment_configuration:
       storage:
         - name: reference-data
           connectionName: default.s3_shared
-          targetDirectory: 'data'
+          stageDirectory: 'data'
 ```
 
 This minimal example:
@@ -160,10 +116,6 @@ bundlesDirectory: s3://sagemaker-unified-studio-123456789012-us-east-1-domain/bu
 
 # Application content - what to include in deployments
 content:
-  workflows:
-    - workflowName: ml_training_workflow
-      engine: airflow-serverless
-  
   # Application code from git
   git:
     - repository: MLTrainingPipeline
@@ -178,6 +130,12 @@ content:
       append: false
       include: ['models/pretrained/']
       exclude: ['*.tmp', '.DS_Store']
+
+# How to activate/run the application
+activation:
+  workflows:
+    - workflowName: ml_training_workflow
+      engine: airflow-serverless
     
     - name: training-data
       connectionName: default.s3_shared
@@ -196,7 +154,7 @@ content:
         requestReason: Required for model training
 
 # Target environments
-targets:
+stages:
   test:
     stage: DEV
     domain:
@@ -207,24 +165,20 @@ targets:
     
     # Deployment configuration: where content gets deployed in the target project
     # Maps content items to target locations and connections
-    bundle_target_configuration:
+    deployment_configuration:
       storage:
         - name: code
           connectionName: default.s3_shared
-          targetDirectory: 'src'
+          stageDirectory: 'src'
         - name: workflows
           connectionName: default.s3_shared
-          targetDirectory: 'workflows'
+          stageDirectory: 'workflows'
     
     # Target-specific workflow parameters
     environment_variables:
       S3_PREFIX: "dev"
       DEBUG_MODE: true
       MAX_RETRIES: 3
-    
-    # Integration tests
-    tests:
-      folder: tests/integration/
 
   test:
     stage: TEST
@@ -280,22 +234,19 @@ targets:
           type: WORKFLOWS_SERVERLESS
           properties: {}
     
-    bundle_target_configuration:
+    deployment_configuration:
       storage:
         - name: code
           connectionName: default.s3_shared
-          targetDirectory: 'src'
+          stageDirectory: 'src'
         - name: workflows
           connectionName: default.s3_shared
-          targetDirectory: 'workflows'
+          stageDirectory: 'workflows'
     
     environment_variables:
       S3_PREFIX: "test"
       DEBUG_MODE: false
       MAX_RETRIES: 5
-    
-    tests:
-      folder: tests/integration/
 
   prod:
     stage: PROD
@@ -314,14 +265,14 @@ targets:
       environments:
         - EnvironmentConfigurationName: 'OnDemand Workflows'
     
-    bundle_target_configuration:
+    deployment_configuration:
       storage:
         - name: code
           connectionName: default.s3_shared
-          targetDirectory: 'src'
+          stageDirectory: 'src'
         - name: workflows
           connectionName: default.s3_shared
-          targetDirectory: 'workflows'
+          stageDirectory: 'workflows'
       catalog:
         disable: true  # Disable catalog processing for prod
     
@@ -330,23 +281,27 @@ targets:
       DEBUG_MODE: false
       MAX_RETRIES: 10
 
-# Global workflows (apply to all targets unless overridden)
-workflows:
-  - workflowName: marketing_etl_dag
-    connectionName: project.workflow_mwaa
-    engine: MWAA
-    triggerPostDeployment: true
-    logging: console
-    parameters:
-      data_source: s3://marketing-data/
-      output_bucket: s3://marketing-results/
+# How to activate/run the application (apply to all stages unless overridden)
+activation:
+  workflows:
+    - workflowName: marketing_etl_dag
+      connectionName: project.workflow_mwaa
+      engine: MWAA
+      triggerPostDeployment: true
+      logging: console
+      parameters:
+        data_source: s3://marketing-data/
+        output_bucket: s3://marketing-results/
+  
+  tests:
+    folder: tests/integration/
 ```
 
 ---
 
-## Bundle Section
+## Content Section
 
-The `bundle` section defines what content to package and deploy to target environments.
+The `content` section defines what to package and deploy to target environments.
 
 ### Bundle Storage Location
 
@@ -365,7 +320,7 @@ bundlesDirectory: s3://my-bucket/bundles  # S3 location
 
 ### Storage Items
 
-Package source code, libraries, data files, and workflows:
+Package source code, libraries, and data files:
 
 ```yaml
 content:
@@ -461,7 +416,7 @@ Targets represent deployment environments (dev, test, prod). Each target defines
 ### Basic Target Configuration
 
 ```yaml
-targets:
+stages:
   dev:
     stage: DEV
     domain:
@@ -482,7 +437,7 @@ targets:
 Auto-create projects, environments, and connections:
 
 ```yaml
-targets:
+stages:
   test:
     stage: TEST
     domain:
@@ -541,7 +496,7 @@ targets:
 Specify where bundles are deployed in each target using name-based matching:
 
 ```yaml
-targets:
+stages:
   test:
     stage: TEST
     domain:
@@ -550,17 +505,17 @@ targets:
     project:
       name: test-marketing
     
-    bundle_target_configuration:
+    deployment_configuration:
       storage:
         - name: code                    # Matches bundle.storage[name=code]
           connectionName: default.s3_shared
-          targetDirectory: 'src'
+          stageDirectory: 'src'
         - name: workflows               # Matches bundle.storage[name=workflows]
           connectionName: default.s3_shared
-          targetDirectory: 'workflows'
+          stageDirectory: 'workflows'
       git:
         - connectionName: default.s3_shared
-          targetDirectory: 'repos'      # All git repos deploy here
+          stageDirectory: 'repos'      # All git repos deploy here
       catalog:
         disable: false
 ```
@@ -569,63 +524,37 @@ targets:
 - `storage` (list): Storage deployment configuration
   - `name` (required): Name matching bundle storage item
   - `connectionName` (required): Target S3 connection
-  - `targetDirectory` (required): Target directory path (use `.` or `''` for root)
+  - `stageDirectory` (required): Target directory path (use `.` or `''` for root)
 - `git` (list): Git deployment configuration
   - `connectionName` (required): Target S3 connection
-  - `targetDirectory` (required): Target directory path
+  - `stageDirectory` (required): Target directory path
 - `catalog.disable` (optional): Disable catalog asset processing (default: `false`)
 
-**Note:** Use `targetDirectory: '.'` or `targetDirectory: ''` to deploy to the connection root without a subdirectory.
+**Note:** Use `stageDirectory: '.'` or `stageDirectory: ''` to deploy to the connection root without a subdirectory.
 
 ### Target Tests
 
-Run integration tests after deployment:
-
-```yaml
-targets:
-  test:
-    stage: TEST
-    domain:
-      name: my-studio-domain
-      region: us-east-1
-    project:
-      name: test-marketing
-    
-    tests:
-      folder: tests/integration/
-```
-
-**Properties:**
-- `folder` (required): Relative path to folder containing Python test files
-
-**Environment Variables Available to Tests:**
-- `SMUS_DOMAIN_ID`: Domain ID
-- `SMUS_PROJECT_ID`: Project ID
-- `SMUS_PROJECT_NAME`: Project name
-- `SMUS_TARGET_NAME`: Target name
-- `SMUS_REGION`: AWS region
-- `SMUS_DOMAIN_NAME`: Domain name
-
 ---
 
-## Workflow Section
+## Activation Section
 
-Workflows define DAGs or pipelines to trigger after deployment.
+The `activation` section defines how to run and trigger your application. Currently supports workflows and tests, with future support for events, CloudFormation stacks, and other activation methods.
 
-### Global Workflows
+### Workflows
 
-Apply to all targets unless overridden:
+Workflows define DAGs or pipelines to trigger after deployment. Apply to all stages unless overridden:
 
 ```yaml
-workflows:
-  - workflowName: marketing_etl_dag
-    connectionName: project.workflow_mwaa
-    engine: MWAA
-    triggerPostDeployment: true
-    logging: console
-    parameters:
-      data_source: s3://marketing-data/
-      output_bucket: s3://marketing-results/
+activation:
+  workflows:
+    - workflowName: marketing_etl_dag
+      connectionName: project.workflow_mwaa
+      engine: MWAA
+      triggerPostDeployment: true
+      logging: console
+      parameters:
+        data_source: s3://marketing-data/
+        output_bucket: s3://marketing-results/
 ```
 
 **Properties:**
@@ -635,6 +564,34 @@ workflows:
 - `triggerPostDeployment` (optional): Trigger after deployment (default: `false`)
 - `logging` (optional): Logging level (`console`, `file`, `none`) (default: `console`)
 - `parameters` (optional): Global workflow parameters
+
+### Tests
+
+Integration tests to run after deployment:
+
+```yaml
+activation:
+  tests:
+    folder: tests/integration/
+```
+
+**Properties:**
+- `folder` (required): Relative path to folder containing Python test files
+
+**Environment Variables Available to Tests:**
+- `SMUS_DOMAIN_ID`: Domain ID
+- `SMUS_PROJECT_ID`: Project ID
+- `SMUS_PROJECT_NAME`: Project name
+- `SMUS_STAGE_NAME`: Target name
+- `SMUS_REGION`: AWS region
+- `SMUS_DOMAIN_NAME`: Domain name
+
+### Future Activation Methods
+
+The `activation` section will support additional methods:
+- **Events**: Trigger EventBridge events for event-driven architectures
+- **CloudFormation**: Deploy resources (S3 buckets, ECR repos) alongside application
+- **Custom**: Extensible framework for team-specific activation needs
 
 ---
 
@@ -858,7 +815,7 @@ Use environment variables in the manifest with `${VAR_NAME:default_value}` synta
 ```yaml
 bundleName: ${BUNDLE_NAME:MarketingBundle}
 
-targets:
+stages:
   dev:
     domain:
       name: ${DOMAIN_NAME:my-studio-domain}
@@ -874,7 +831,7 @@ export AWS_REGION=us-west-2
 export PROJECT_PREFIX=analytics
 export TEAM_NAME=datascience
 
-smus-cli deploy --bundle bundle.yaml --target dev
+smus-cli deploy --bundle bundle.yaml --stage dev
 ```
 
 **Resolution Rules:**
@@ -888,24 +845,25 @@ Parameters can be defined at two levels:
 
 #### 1. Global Workflow Parameters
 
-Defined in the `workflows` section, apply to all targets:
+Defined in the `activation.workflows` section, apply to all stages:
 
 ```yaml
-workflows:
-  - workflowName: marketing_etl_dag
-    connectionName: project.workflow_mwaa
-    parameters:
-      data_source: s3://marketing-data/
-      output_bucket: s3://marketing-results/
-      timeout: 3600
+activation:
+  workflows:
+    - workflowName: marketing_etl_dag
+      connectionName: project.workflow_mwaa
+      parameters:
+        data_source: s3://marketing-data/
+        output_bucket: s3://marketing-results/
+        timeout: 3600
 ```
 
-#### 2. Target Environment Variables
+#### 2. Stage Environment Variables
 
-Defined in `targets[].environment_variables`, substituted in workflow files:
+Defined in `stages[].environment_variables`, substituted in workflow files:
 
 ```yaml
-targets:
+stages:
   dev:
     environment_variables:
       S3_PREFIX: "dev"
@@ -984,9 +942,9 @@ environment_variables:
 ### Complete Parameterization Example
 
 ```yaml
-bundleName: ${BUNDLE_NAME:DataBundle}
+applicationName: ${APPLICATION_NAME:DataApplication}
 
-targets:
+stages:
   dev:
     domain:
       name: ${DOMAIN_NAME}
@@ -1001,13 +959,14 @@ targets:
       MAX_RETRIES: 3
       DB_HOST: "dev-db.company.com"
 
-workflows:
+activation:
   # Global workflow parameters
-  - workflowName: etl_dag
-    connectionName: project.workflow_mwaa
-    parameters:
-      data_source: s3://data-bucket/
-      timeout: 3600
+  workflows:
+    - workflowName: etl_dag
+      connectionName: project.workflow_mwaa
+      parameters:
+        data_source: s3://data-bucket/
+        timeout: 3600
 ```
 
 **Workflow DAG file (`workflows/dags/etl_dag.yaml`):**

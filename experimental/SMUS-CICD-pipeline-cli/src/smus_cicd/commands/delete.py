@@ -7,9 +7,9 @@ import typer
 from rich.console import Console
 from rich.prompt import Confirm
 
+from ..application import ApplicationManifest
 from ..helpers.cloudformation import delete_project_stack
 from ..helpers.datazone import get_domain_id_by_name
-from ..pipeline import BundleManifest
 
 console = Console()
 
@@ -39,33 +39,33 @@ def delete_command(
     """
     try:
         # Parse manifest
-        manifest = BundleManifest.from_file(pipeline)
+        manifest = ApplicationManifest.from_file(pipeline)
 
         # Determine targets to delete
         if targets:
             target_list = [t.strip() for t in targets.split(",")]
         else:
-            target_list = list(manifest.targets.keys())
+            target_list = list(manifest.stages.keys())
 
         # Validate targets exist in manifest
-        invalid_targets = [t for t in target_list if t not in manifest.targets]
+        invalid_targets = [t for t in target_list if t not in manifest.stages]
         if invalid_targets:
             console.print(
                 f"[red]Error: Target(s) not found in manifest: {', '.join(invalid_targets)}[/red]"
             )
-            console.print(f"Available targets: {', '.join(manifest.targets.keys())}")
+            console.print(f"Available targets: {', '.join(manifest.stages.keys())}")
             raise typer.Exit(1)
 
         # Show what will be deleted
         if output.upper() != "JSON":
-            console.print(f"[yellow]Pipeline:[/yellow] {manifest.bundle_name}")
+            console.print(f"[yellow]Pipeline:[/yellow] {manifest.application_name}")
             console.print()
             console.print("[yellow]Targets to delete:[/yellow]")
 
-            for target_name in target_list:
-                target = manifest.targets[target_name]
+            for stage_name in target_list:
+                target = manifest.stages[stage_name]
                 console.print(
-                    f"  - {target_name}: {target.project.name} (Domain: {target.domain.name})"
+                    f"  - {stage_name}: {target.project.name} (Domain: {target.domain.name})"
                 )
 
         # Confirmation prompt (unless --force)
@@ -82,10 +82,10 @@ def delete_command(
 
         # Delete each target
         results = []
-        for target_name in target_list:
-            target = manifest.targets[target_name]
+        for stage_name in target_list:
+            target = manifest.stages[stage_name]
             if output.upper() != "JSON":
-                console.print(f"\n[blue]🗑️  Deleting target: {target_name}[/blue]")
+                console.print(f"\n[blue]🗑️  Deleting target: {stage_name}[/blue]")
 
             try:
                 # Get domain ID for this target
@@ -98,7 +98,7 @@ def delete_command(
                     )
                     results.append(
                         {
-                            "target": target_name,
+                            "target": stage_name,
                             "project_name": target.project.name,
                             "status": "error",
                             "message": f"Domain '{target.domain.name}' not found",
@@ -111,15 +111,15 @@ def delete_command(
                     target.project.name,
                     target.domain.name,
                     target.domain.region,
-                    manifest.bundle_name,
-                    target_name,
+                    manifest.application_name,
+                    stage_name,
                     output,
                 )
 
                 if not stack_deleted:
                     results.append(
                         {
-                            "target": target_name,
+                            "target": stage_name,
                             "project_name": target.project.name,
                             "status": "error",
                             "message": "Failed to delete CloudFormation stack",
@@ -134,7 +134,7 @@ def delete_command(
                         )
                     results.append(
                         {
-                            "target": target_name,
+                            "target": stage_name,
                             "project_name": target.project.name,
                             "status": "deletion_initiated",
                             "message": "Stack deletion started (async mode)",
@@ -148,7 +148,7 @@ def delete_command(
                         )
                     results.append(
                         {
-                            "target": target_name,
+                            "target": stage_name,
                             "project_name": target.project.name,
                             "status": "deleted",
                             "message": "Successfully deleted via CloudFormation stack",
@@ -162,7 +162,7 @@ def delete_command(
                     )
                 results.append(
                     {
-                        "target": target_name,
+                        "target": stage_name,
                         "project_name": target.project.name,
                         "status": "error",
                         "message": str(e),
@@ -174,7 +174,7 @@ def delete_command(
             print(
                 json.dumps(
                     {
-                        "bundle": manifest.bundle_name,
+                        "bundle": manifest.application_name,
                         "results": results,
                     },
                     indent=2,

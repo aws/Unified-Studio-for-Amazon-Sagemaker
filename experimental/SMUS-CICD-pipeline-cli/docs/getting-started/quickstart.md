@@ -28,22 +28,15 @@ pip install -e .
 
 ## Step 2: Create Application Deployment Manifest
 
-Create a `manifest.yaml` file defining your application and deployment targets:
+Create a `manifest.yaml` file defining your application and deployment stages:
 
 ```yaml
 applicationName: CustomerAnalyticsPipeline
 
 content:
-  workflows:
-    - workflowName: customer_analytics
-      engine: airflow-serverless
-  
-  # Application code from git
   git:
     - repository: customer-analytics
       url: https://github.com/myorg/customer-analytics.git
-  
-  # Reference data from storage
   storage:
     - name: reference-data
       connectionName: default.s3_shared
@@ -52,6 +45,16 @@ content:
       exclude:
         - '__pycache__/'
         - '*.pyc'
+
+activation:
+  workflows:
+    - workflowName: customer_analytics
+      engine: airflow-serverless
+  # Future activation options:
+  # events:
+  #   - eventBridgeRule: data-ingestion-trigger
+  # cloudformation:
+  #   - stackName: model-training-resources  # S3 buckets, ECR repos, etc.
 
 stages:
   dev:
@@ -269,7 +272,7 @@ data_processing:
       # Variables are automatically replaced during deployment
       database: "${proj.connection.athena.database}"
       output_location: "s3://${proj.s3.root}/results/"
-      region: "${target.region}"
+      region: "${stage.region}"
 ```
 
 **Variables are automatically replaced during deployment:**
@@ -280,8 +283,8 @@ data_processing:
 **Available variables:**
 - `${proj.s3.root}` - Project S3 bucket
 - `${proj.connection.NAME.PROPERTY}` - Connection properties
-- `${target.region}` - Target region
-- `${target.name}` - Target name (dev/test/prod)
+- `${stage.region}` - Target region
+- `${stage.name}` - Target name (dev/test/prod)
 
 **See more:** [Substitutions and Variables Guide](../substitutions-and-variables.md)
 
@@ -298,7 +301,7 @@ smus-cli describe --manifest manifest.yaml --connect
 Pipeline: MyDataPipeline
 Version: 1.0.0
 
-Targets:
+Stages:
   ✓ dev (dev-data-project)
   ✓ test (test-data-project)
   ✓ prod (prod-data-project)
@@ -357,7 +360,7 @@ smus-cli deploy --stages test --manifest manifest.yaml --bundle path/to/bundle.t
 smus-cli test --stages test --manifest manifest.yaml
 
 # Trigger workflow manually
-smus-cli run --targets test --workflow data_processing_dag
+smus-cli run --stages test --workflow data_processing_dag
 ```
 
 **See more:** [CLI Commands - test & run](../cli-commands.md#test)
@@ -396,7 +399,7 @@ bundle:
 
 **Deploy with catalog integration:**
 ```bash
-smus-cli deploy --targets test --manifest manifest.yaml
+smus-cli deploy --stages test --manifest manifest.yaml
 ```
 
 The CLI will automatically request subscriptions to catalog assets for your project.
@@ -409,13 +412,13 @@ The CLI will automatically request subscriptions to catalog assets for your proj
 
 ```bash
 # Monitor workflow status
-smus-cli monitor --targets test --manifest manifest.yaml
+smus-cli monitor --stages test --manifest manifest.yaml
 
 # View workflow logs
-smus-cli logs --workflow data_processing_dag --targets test --live
+smus-cli logs --workflow data_processing_dag --stages test --live
 
 # Check deployment history
-smus-cli describe --targets test --manifest manifest.yaml
+smus-cli describe --stages test --manifest manifest.yaml
 ```
 
 **See more:** [CLI Commands - monitor & logs](../cli-commands.md#monitor)
@@ -428,7 +431,7 @@ smus-cli describe --targets test --manifest manifest.yaml
 
 ```yaml
 # manifest.yaml
-targets:
+stages:
   test:
     domain:
       name: my-domain
@@ -467,7 +470,7 @@ schedule: "0 * * * *"
 
 # Parameters injected at deployment time
 default_args:
-  environment: ${target.name}
+  environment: ${stage.name}
   max_workers: ${config.max_workers}
   retry_count: ${config.retry_count}
 
@@ -475,10 +478,10 @@ tasks:
   - task_id: run_job
     operator: glue.operators.glue.GlueJobOperator
     params:
-      job_name: data-processing-${target.name}
+      job_name: data-processing-${stage.name}
       script_location: s3://${proj.s3.root}/scripts/process.py
       arguments:
-        --ENVIRONMENT: ${target.name}
+        --ENVIRONMENT: ${stage.name}
         --MAX_WORKERS: ${config.max_workers}
 ```
 
@@ -537,25 +540,25 @@ Each data application is self-contained with its own bundle manifest and can be 
 ### Variable Substitution Not Working
 ```bash
 # Debug variable resolution
-smus-cli describe --manifest manifest.yaml --targets test --verbose
+smus-cli describe --manifest manifest.yaml --stages test --verbose
 ```
 
 ### Workflow Not Syncing to MWAA
 ```bash
 # Check bundle contents
-smus-cli bundle --manifest manifest.yaml --targets dev --verbose
+smus-cli bundle --manifest manifest.yaml --stages dev --verbose
 
 # Verify deployment
-smus-cli monitor --targets test --workflows
+smus-cli monitor --stages test --workflows
 ```
 
 ### Tests Failing
 ```bash
 # Run tests with verbose output
-smus-cli test --targets test --manifest manifest.yaml --verbose
+smus-cli test --stages test --manifest manifest.yaml --verbose
 
 # Check individual workflow execution
-smus-cli run --targets test --workflow my_dag
+smus-cli run --stages test --workflow my_dag
 ```
 
 ---

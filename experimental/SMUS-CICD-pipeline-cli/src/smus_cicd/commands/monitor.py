@@ -7,12 +7,12 @@ from typing import Optional
 
 import typer
 
+from ..application import ApplicationManifest
 from ..helpers.utils import (  # noqa: F401
     build_domain_config,
     get_datazone_project_info,
     load_config,
 )
-from ..pipeline import BundleManifest
 
 
 def monitor_command(
@@ -57,7 +57,7 @@ def _check_status_changes(
     targets: Optional[str], manifest_file: str, output: str, previous_states: dict
 ) -> bool:
     """Check for workflow status changes and report them. Returns True if any workflows are running."""
-    manifest = BundleManifest.from_file(manifest_file)
+    manifest = ApplicationManifest.from_file(manifest_file)
 
     # Parse targets
     target_list = []
@@ -66,15 +66,15 @@ def _check_status_changes(
 
     targets_to_monitor = {}
     if target_list:
-        for target_name in target_list:
-            if target_name in manifest.targets:
-                targets_to_monitor[target_name] = manifest.targets[target_name]
+        for stage_name in target_list:
+            if stage_name in manifest.stages:
+                targets_to_monitor[stage_name] = manifest.stages[stage_name]
     else:
-        targets_to_monitor = manifest.targets
+        targets_to_monitor = manifest.stages
 
     has_running = False
 
-    for target_name, target_config in targets_to_monitor.items():
+    for stage_name, target_config in targets_to_monitor.items():
         config = build_domain_config(target_config)
 
         # Check if this target uses serverless Airflow
@@ -89,7 +89,7 @@ def _check_status_changes(
             all_workflows = airflow_serverless.list_workflows(
                 region=config.get("region")
             )
-            bundle_name = manifest.bundle_name
+            bundle_name = manifest.application_name
             target_project = target_config.project.name
 
             relevant_workflows = [
@@ -122,7 +122,7 @@ def _check_status_changes(
                         has_running = True
 
                     # Check for status change
-                    key = f"{target_name}:{workflow_name}:{run_id}"
+                    key = f"{stage_name}:{workflow_name}:{run_id}"
                     prev_status = previous_states.get(key)
 
                     if prev_status and prev_status != run_status:
@@ -147,7 +147,7 @@ def _monitor_once(
     """Monitor workflow status across target environments once."""
     try:
         # Load pipeline manifest using centralized parser
-        manifest = BundleManifest.from_file(manifest_file)
+        manifest = ApplicationManifest.from_file(manifest_file)
 
         # Parse targets - handle single target or comma-separated list
         target_list = []
@@ -156,7 +156,7 @@ def _monitor_once(
 
         # Prepare output data structure for JSON format
         output_data = {
-            "bundle": manifest.bundle_name,
+            "bundle": manifest.application_name,
             "targets": {},
             "monitoring_timestamp": None,
         }
@@ -165,12 +165,12 @@ def _monitor_once(
         targets_to_monitor = {}
         if target_list:
             # Monitor specific targets from the list
-            for target_name in target_list:
-                if target_name in manifest.targets:
-                    targets_to_monitor[target_name] = manifest.targets[target_name]
+            for stage_name in target_list:
+                if stage_name in manifest.stages:
+                    targets_to_monitor[stage_name] = manifest.stages[stage_name]
                 else:
-                    error_msg = f"Target '{target_name}' not found in manifest"
-                    available_targets = list(manifest.targets.keys())
+                    error_msg = f"Target '{stage_name}' not found in manifest"
+                    available_targets = list(manifest.stages.keys())
                     if output.upper() == "JSON":
                         output_data["error"] = error_msg
                         output_data["available_targets"] = available_targets
@@ -183,21 +183,21 @@ def _monitor_once(
                         )
                     raise typer.Exit(1)
         else:
-            targets_to_monitor = manifest.targets
+            targets_to_monitor = manifest.stages
 
         # TEXT output header
         if output.upper() != "JSON":
-            typer.echo(f"Pipeline: {manifest.bundle_name}")
+            typer.echo(f"Pipeline: {manifest.application_name}")
 
         # Validate MWAA/Overdrive health for targets before monitoring
         healthy_targets = []
-        for target_name, target_config in targets_to_monitor.items():
+        for stage_name, target_config in targets_to_monitor.items():
             # Load AWS config
             config = build_domain_config(target_config)
 
             project_name = target_config.project.name
             if output.upper() != "JSON":
-                typer.echo(f"\n📋 Target: {target_name} (Project: {project_name})")
+                typer.echo(f"\n📋 Target: {stage_name} (Project: {project_name})")
                 typer.echo(
                     f"   Domain: {target_config.domain.name} ({target_config.domain.region})"
                 )
@@ -214,24 +214,24 @@ def _monitor_once(
                 )
 
                 if validate_airflow_serverless_health(project_name, config):
-                    healthy_targets.append(target_name)
+                    healthy_targets.append(stage_name)
                     if output.upper() != "JSON":
                         typer.echo("   🚀 Serverless Airflow service is healthy")
                 else:
                     if output.upper() != "JSON":
                         typer.echo(
-                            f"⚠️  Skipping monitoring for target '{target_name}' - Overdrive not healthy"
+                            f"⚠️  Skipping monitoring for target '{stage_name}' - Overdrive not healthy"
                         )
             else:
                 # Validate MWAA health before monitoring
                 from ..helpers.mwaa import validate_mwaa_health
 
                 if validate_mwaa_health(project_name, config):
-                    healthy_targets.append(target_name)
+                    healthy_targets.append(stage_name)
                 else:
                     if output.upper() != "JSON":
                         typer.echo(
-                            f"⚠️  Skipping monitoring for target '{target_name}' - MWAA not healthy"
+                            f"⚠️  Skipping monitoring for target '{stage_name}' - MWAA not healthy"
                         )
 
         if not healthy_targets:
@@ -252,9 +252,9 @@ def _monitor_once(
         has_errors = False
 
         # Monitor each target
-        for target_name, target_config in targets_to_monitor.items():
+        for stage_name, target_config in targets_to_monitor.items():
             # Skip unhealthy targets
-            if target_name not in healthy_targets:
+            if stage_name not in healthy_targets:
                 continue
 
             target_data = {
@@ -269,7 +269,7 @@ def _monitor_once(
             }
 
             if output.upper() != "JSON":
-                typer.echo(f"\n🎯 Target: {target_name}")
+                typer.echo(f"\n🎯 Target: {stage_name}")
                 typer.echo(f"   Project: {target_config.project.name}")
 
             try:
@@ -337,7 +337,7 @@ def _monitor_once(
                 if output.upper() != "JSON":
                     typer.echo(f"   ❌ Error monitoring target: {e}")
 
-            output_data["targets"][target_name] = target_data
+            output_data["targets"][stage_name] = target_data
 
         # Show manifest workflows summary
         if (
@@ -398,7 +398,9 @@ def _monitor_once(
         raise typer.Exit(1)
 
 
-def _target_uses_airflow_serverless(manifest: BundleManifest, target_config) -> bool:
+def _target_uses_airflow_serverless(
+    manifest: ApplicationManifest, target_config
+) -> bool:
     """
     Check if a target uses serverless Airflow workflows.
 
@@ -419,7 +421,7 @@ def _target_uses_airflow_serverless(manifest: BundleManifest, target_config) -> 
 
 
 def _monitor_airflow_serverless_workflows(
-    manifest: BundleManifest,
+    manifest: ApplicationManifest,
     target_config,
     config: dict,
     output: str,
@@ -449,8 +451,8 @@ def _monitor_airflow_serverless_workflows(
         all_workflows = airflow_serverless.list_workflows(region=config.get("region"))
 
         # Filter workflows that belong to this pipeline/target using tags
-        bundle_name = manifest.bundle_name
-        target_name = target_config.project.name
+        bundle_name = manifest.application_name
+        stage_name = target_config.project.name
 
         relevant_workflows = []
         for workflow in all_workflows:
@@ -458,7 +460,7 @@ def _monitor_airflow_serverless_workflows(
             # Check if workflow tags match our pipeline and target
             if (
                 workflow_tags.get("Pipeline") == bundle_name
-                and workflow_tags.get("Target") == target_name
+                and workflow_tags.get("Target") == stage_name
             ):
                 relevant_workflows.append(workflow)
 
@@ -626,7 +628,7 @@ def _monitor_airflow_serverless_workflows(
 
 
 def _monitor_mwaa_workflows(
-    manifest: BundleManifest, target_config, project_connections: dict, output: str
+    manifest: ApplicationManifest, target_config, project_connections: dict, output: str
 ) -> dict:
     """
     Monitor MWAA workflows for a target.

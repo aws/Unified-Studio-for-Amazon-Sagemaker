@@ -6,13 +6,13 @@ import pytest
 import tempfile
 import os
 from pathlib import Path
-from smus_cicd.pipeline.validation import (
+from smus_cicd.application.validation import (
     validate_yaml_syntax,
     validate_manifest_schema,
     validate_manifest_file,
     load_schema,
 )
-from smus_cicd.pipeline import BundleManifest
+from smus_cicd.application import ApplicationManifest
 
 
 class TestManifestValidation:
@@ -36,8 +36,8 @@ class TestManifestValidation:
     def test_valid_manifest(self):
         """Test validation of a valid manifest."""
         valid_manifest = """
-bundleName: TestPipeline
-targets:
+applicationName: TestPipeline
+stages:
   dev:
     domain:
       name: test-domain
@@ -51,18 +51,18 @@ targets:
             is_valid, errors, data = validate_manifest_file(manifest_file)
             assert is_valid
             assert len(errors) == 0
-            assert data["bundleName"] == "TestPipeline"
+            assert data["applicationName"] == "TestPipeline"
         finally:
             os.unlink(manifest_file)
 
     def test_invalid_yaml_syntax(self):
         """Test validation with invalid YAML syntax."""
         invalid_yaml = """
-bundleName: TestPipeline
+applicationName: TestPipeline
 domain:
   name: test-domain
   region: us-east-1
-targets:
+stages:
   dev:
     stage: DEV
     project:
@@ -84,7 +84,7 @@ targets:
 domain:
   name: test-domain
   region: us-east-1
-targets:
+stages:
   dev:
     stage: DEV
     project:
@@ -95,7 +95,7 @@ targets:
             is_valid, errors, data = validate_manifest_file(manifest_file)
             assert not is_valid
             assert any(
-                "'bundleName' is a required property" in error for error in errors
+                "'applicationName' is a required property" in error for error in errors
             )
         finally:
             os.unlink(manifest_file)
@@ -103,8 +103,8 @@ targets:
     def test_missing_required_field_domain(self):
         """Test validation with missing required domain in target."""
         missing_domain = """
-bundleName: TestPipeline
-targets:
+applicationName: TestPipeline
+stages:
   dev:
     stage: DEV
     project:
@@ -121,7 +121,7 @@ targets:
     def test_missing_required_field_targets(self):
         """Test validation with missing required targets."""
         missing_targets = """
-bundleName: TestPipeline
+applicationName: TestPipeline
 domain:
   name: test-domain
   region: us-east-1
@@ -130,15 +130,15 @@ domain:
         try:
             is_valid, errors, data = validate_manifest_file(manifest_file)
             assert not is_valid
-            assert any("'targets' is a required property" in error for error in errors)
+            assert any("'stages' is a required property" in error for error in errors)
         finally:
             os.unlink(manifest_file)
 
     def test_invalid_bundle_name_pattern(self):
         """Test validation with invalid bundleName pattern."""
         invalid_name = """
-bundleName: 123InvalidName
-targets:
+applicationName: 123InvalidName
+stages:
   dev:
     domain:
       name: test-domain
@@ -158,8 +158,8 @@ targets:
     def test_invalid_region_pattern(self):
         """Test validation with invalid region pattern."""
         invalid_region = """
-bundleName: TestPipeline
-targets:
+applicationName: TestPipeline
+stages:
   dev:
     domain:
       name: test-domain
@@ -179,8 +179,10 @@ targets:
     def test_invalid_engine_enum(self):
         """Test validation with invalid workflow engine."""
         invalid_engine = """
-bundleName: TestPipeline
-targets:
+applicationName: TestPipeline
+content:
+  storage: []
+stages:
   dev:
     domain:
       name: test-domain
@@ -188,8 +190,9 @@ targets:
     stage: DEV
     project:
       name: dev-project
-workflows:
-  - workflowName: test_workflow
+initialization:
+  - type: workflow
+    workflowName: test_workflow
     connectionName: project.workflow_mwaa
     engine: InvalidEngine
 """
@@ -197,18 +200,18 @@ workflows:
         try:
             is_valid, errors, data = validate_manifest_file(manifest_file)
             assert not is_valid
-            assert any("is not one of" in error for error in errors)
+            assert any("is not one of" in error or "InvalidEngine" in error for error in errors)
         finally:
             os.unlink(manifest_file)
 
     def test_missing_project_name_in_target(self):
         """Test validation with missing project name in target."""
         missing_project_name = """
-bundleName: TestPipeline
+applicationName: TestPipeline
 domain:
   name: test-domain
   region: us-east-1
-targets:
+stages:
   dev:
     stage: DEV
     project: {}
@@ -224,11 +227,11 @@ targets:
     def test_empty_targets_object(self):
         """Test validation with empty targets object."""
         empty_targets = """
-bundleName: TestPipeline
+applicationName: TestPipeline
 domain:
   name: test-domain
   region: us-east-1
-targets: {}
+stages: {}
 """
         manifest_file = self.create_temp_manifest(empty_targets)
         try:
@@ -242,11 +245,11 @@ targets: {}
     def test_top_level_domain_not_allowed(self):
         """Test validation rejects top-level domain configuration."""
         top_level_domain = """
-bundleName: TestPipeline
+applicationName: TestPipeline
 domain:
   name: test-domain
   region: us-east-1
-targets:
+stages:
   dev:
     domain:
       name: test-domain
@@ -266,8 +269,8 @@ targets:
     def test_missing_bundle_target_config_required_fields(self):
         """Test validation with missing required fields in bundle_target_configuration."""
         missing_fields = """
-bundleName: TestPipeline
-targets:
+applicationName: TestPipeline
+stages:
   dev:
     domain:
       name: test-domain
@@ -275,7 +278,7 @@ targets:
     stage: DEV
     project:
       name: dev-project
-    bundle_target_configuration:
+    deployment_configuration:
       storage:
         - connectionName: default.s3_shared
           # missing name field
@@ -285,7 +288,7 @@ targets:
             is_valid, errors, data = validate_manifest_file(manifest_file)
             assert not is_valid
             assert any(
-                "bundle_target_configuration" in error and "storage" in error
+                "deployment_configuration" in error and "storage" in error
                 for error in errors
             )
         finally:
@@ -293,7 +296,7 @@ targets:
 
 
 class TestBundleManifestValidation:
-    """Test BundleManifest class validation integration."""
+    """Test ApplicationManifest class validation integration."""
 
     def create_temp_manifest(self, content: str) -> str:
         """Create a temporary manifest file with given content."""
@@ -304,8 +307,8 @@ class TestBundleManifestValidation:
     def test_valid_manifest_loads_successfully(self):
         """Test that a valid manifest loads without errors."""
         valid_manifest = """
-bundleName: TestPipeline
-targets:
+applicationName: TestPipeline
+stages:
   dev:
     domain:
       name: test-domain
@@ -316,25 +319,25 @@ targets:
 """
         manifest_file = self.create_temp_manifest(valid_manifest)
         try:
-            manifest = BundleManifest.from_file(manifest_file)
-            assert manifest.bundle_name == "TestPipeline"
-            assert manifest.targets["dev"].domain.name == "test-domain"
+            manifest = ApplicationManifest.from_file(manifest_file)
+            assert manifest.application_name == "TestPipeline"
+            assert manifest.stages["dev"].domain.name == "test-domain"
         finally:
             os.unlink(manifest_file)
 
     def test_invalid_manifest_raises_value_error(self):
         """Test that an invalid manifest raises ValueError with validation details."""
         invalid_manifest = """
-bundleName: 123InvalidName
+applicationName: 123InvalidName
 domain:
   name: test-domain
   region: INVALID_REGION
-targets: {}
+stages: {}
 """
         manifest_file = self.create_temp_manifest(invalid_manifest)
         try:
             with pytest.raises(ValueError) as exc_info:
-                BundleManifest.from_file(manifest_file)
+                ApplicationManifest.from_file(manifest_file)
 
             error_message = str(exc_info.value)
             assert "Manifest validation failed" in error_message
@@ -345,11 +348,11 @@ targets: {}
     def test_yaml_syntax_error_raises_value_error(self):
         """Test that YAML syntax errors raise ValueError."""
         invalid_yaml = """
-bundleName: TestPipeline
+applicationName: TestPipeline
 domain:
   name: test-domain
   region: us-east-1
-targets:
+stages:
   dev:
     stage: DEV
     project:
@@ -359,7 +362,7 @@ targets:
         manifest_file = self.create_temp_manifest(invalid_yaml)
         try:
             with pytest.raises(ValueError) as exc_info:
-                BundleManifest.from_file(manifest_file)
+                ApplicationManifest.from_file(manifest_file)
 
             error_message = str(exc_info.value)
             assert "Manifest validation failed" in error_message

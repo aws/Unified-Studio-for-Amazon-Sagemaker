@@ -99,7 +99,7 @@ class EventEmitter:
         detail = {
             "version": self.EVENT_VERSION,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "bundleName": bundle_name,
+            "applicationName": bundle_name,
             "stage": stage,
             "status": status,
             "target": target,

@@ -24,7 +24,7 @@ class TestNotebooksWorkflow(IntegrationTestBase):
         
         # Step 1: Describe with connections
         print("\n=== Step 1: Describe with Connections ===")
-        result = self.run_cli_command(["describe", "--bundle", pipeline_file, "--connect"])
+        result = self.run_cli_command(["describe", "--manifest", pipeline_file, "--connect"])
         assert result["success"], f"Describe failed: {result['output']}"
         print("✅ Describe successful")
         
@@ -61,20 +61,20 @@ class TestNotebooksWorkflow(IntegrationTestBase):
         
         # Step 3: Bundle from dev
         print("\n=== Step 3: Bundle from dev ===")
-        result = self.run_cli_command(["bundle", "--bundle", pipeline_file, "--target", "dev"])
+        result = self.run_cli_command(["bundle", "--manifest", pipeline_file, "--target", "dev"])
         assert result["success"], f"Bundle failed: {result['output']}"
         print("✅ Bundle successful")
         
         # Step 4: Deploy to test target
         print("\n=== Step 4: Deploy to test ===")
-        result = self.run_cli_command(["deploy", "test", "--bundle", pipeline_file])
+        result = self.run_cli_command(["deploy", "test", "--manifest", pipeline_file])
         assert result["success"], f"Deploy failed: {result['output']}"
         print("✅ Deploy successful")
         
         # Step 5: Run workflow
         print("\n=== Step 5: Run Workflow ===")
         result = self.run_cli_command(
-            ["run", "--workflow", "parallel_notebooks_workflow", "--targets", "test", "--bundle", pipeline_file]
+            ["run", "--workflow", "parallel_notebooks_workflow", "--targets", "test", "--manifest", pipeline_file]
         )
         assert result["success"], f"Run workflow failed: {result['output']}"
         
@@ -90,9 +90,15 @@ class TestNotebooksWorkflow(IntegrationTestBase):
         assert result["success"], f"Logs streaming failed: {result['output']}"
         print("✅ Workflow completed")
         
+        # Extract run_id from logs output
+        run_id_match = re.search(r'Run ID: ([a-f0-9-]+)', result["output"])
+        assert run_id_match, "Could not find run ID in logs output"
+        run_id = run_id_match.group(1)
+        print(f"📋 Run ID: {run_id}")
+        
         # Step 7: Run pipeline tests to validate all notebooks succeeded
         print("\n=== Step 7: Run Pipeline Tests ===")
-        result = self.run_cli_command(["test", "--targets", "test", "--test-output", "console", "--bundle", pipeline_file])
+        result = self.run_cli_command(["test", "--targets", "test", "--test-output", "console", "--manifest", pipeline_file])
         assert result["success"], f"Pipeline tests failed: {result['output']}"
         print("✅ All tests passed")
 
@@ -100,7 +106,7 @@ class TestNotebooksWorkflow(IntegrationTestBase):
         print("\n=== Step 8: Download and Validate Notebooks ===")
         if s3_uri_match:
             s3_bucket = s3_uri_match.group(1).replace("s3://", "").split("/")[0]
-            notebooks_valid = self.download_and_validate_notebooks(s3_bucket)
+            notebooks_valid = self.download_and_validate_notebooks(s3_bucket, workflow_arn, run_id)
             assert notebooks_valid, "Notebook validation failed - errors found in notebook outputs"
             print("✅ Notebooks validated successfully")
         else:

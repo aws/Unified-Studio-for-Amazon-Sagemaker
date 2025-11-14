@@ -101,7 +101,7 @@ bundle:
 
 ### Target Configuration
 ```yaml
-targets:
+stages:
   dev:                         # Target name (required)
     stage: DEV                 # Optional: Stage identifier
     default: true              # Optional: Default target flag
@@ -117,7 +117,7 @@ targets:
           arn: arn:aws:iam::123456789012:role/MyProjectRole
       environments:            # Optional: Environment configs
         - EnvironmentConfigurationName: 'OnDemand Workflows'
-    bundle_target_configuration: # Optional: Target-specific bundle config
+    deployment_configuration: # Optional: Target-specific bundle config
       storage:
         - name: code           # Required: Name matching bundle storage item
           connectionName: default.s3_shared
@@ -125,22 +125,23 @@ targets:
         - name: workflows
           connectionName: default.s3_shared
           targetDirectory: 'workflows'
-    workflows:                 # Optional: Target-specific workflows
+    workflows:                 # Optional: Stage-specific workflows
       - workflowName: prepareData
         parameters:
           stage_database: DevDB
 ```
 
-### Workflow Configuration
+### Activation Configuration
 ```yaml
-workflows:
-  - workflowName: test_dag           # Required: Workflow name
-    connectionName: project.workflow_mwaa  # Required: Connection
-    triggerPostDeployment: true      # Optional: Auto-trigger
-    engine: MWAA                     # Optional: Engine type
-    parameters:                      # Optional: Workflow parameters
-      default-sql-connection: project.athena
-    logging: console                 # Optional: Logging config
+activation:
+  workflows:
+    - workflowName: test_dag           # Required: Workflow name
+      connectionName: project.workflow_mwaa  # Required: Connection
+      triggerPostDeployment: true      # Optional: Auto-trigger
+      engine: MWAA                     # Optional: Engine type
+      parameters:                      # Optional: Workflow parameters
+        default-sql-connection: project.athena
+      logging: console                 # Optional: Logging config
 ```
 
 ## Validation Rules
@@ -169,7 +170,7 @@ bundleName: DevOnlyBundle
 domain:
   name: my-domain
   region: us-east-1
-targets:
+stages:
   dev:
     default: true
     project:
@@ -182,7 +183,7 @@ bundleName: MultiTargetBundle
 domain:
   name: my-domain
   region: us-east-1
-targets:
+stages:
   dev:
     default: true
     project:

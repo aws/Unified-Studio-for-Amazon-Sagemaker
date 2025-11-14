@@ -73,7 +73,7 @@ class TestBasicPipeline(IntegrationTestBase):
         # Step 1: Describe with connections
         print("\n=== Step 1: Describe with Connections ===")
         self.logger.info("=== STEP 1: Describe with Connections ===")
-        result = self.run_cli_command(["describe", "--bundle", pipeline_file, "--connect"])
+        result = self.run_cli_command(["describe", "--manifest", pipeline_file, "--connect"])
         results.append(result)
         assert result["success"], f"Describe --connect failed: {result['output']}"
         print("✅ Describe --connect successful")
@@ -89,7 +89,7 @@ class TestBasicPipeline(IntegrationTestBase):
         with open(pipeline_file, 'r') as f:
             manifest = yaml.safe_load(f)
         
-        dev_project_name = manifest['targets']['dev']['project']['name']
+        dev_project_name = manifest['stages']['dev']['project']['name']
         
         # Extract S3 URI for dev project from describe output (look for s3_shared connection)
         s3_uri_pattern = rf"dev: {re.escape(dev_project_name)}.*?default\.s3_shared:.*?s3Uri: (s3://[^\s]+)"
@@ -123,7 +123,7 @@ class TestBasicPipeline(IntegrationTestBase):
         print("\n=== Step 3: Bundle ===")
         self.logger.info("=== STEP 3: Bundle ===")
         # Bundle from dev target (default behavior, no --target needed)
-        result = self.run_cli_command(["bundle", "--bundle", pipeline_file])
+        result = self.run_cli_command(["bundle", "--manifest", pipeline_file])
         results.append(result)
         assert result["success"], f"Bundle failed: {result['output']}"
         print("✅ Bundle successful")
@@ -131,7 +131,7 @@ class TestBasicPipeline(IntegrationTestBase):
         # Step 4: Deploy
         print("\n=== Step 4: Deploy ===")
         self.logger.info("=== STEP 4: Deploy ===")
-        result = self.run_cli_command(["deploy", "test", "--bundle", pipeline_file])
+        result = self.run_cli_command(["deploy", "test", "--manifest", pipeline_file])
         results.append(result)
         assert result["success"], f"Deploy failed: {result['output']}"
         print("✅ Deploy successful")
@@ -140,7 +140,7 @@ class TestBasicPipeline(IntegrationTestBase):
         print("\n=== Step 5: Monitor ===")
         self.logger.info("=== STEP 5: Monitor ===")
         result = self.run_cli_command(
-            ["monitor", "--targets", "test", "--bundle", pipeline_file]
+            ["monitor", "--targets", "test", "--manifest", pipeline_file]
         )
         results.append(result)
         assert result["success"], f"Monitor failed: {result['output']}"
@@ -150,7 +150,7 @@ class TestBasicPipeline(IntegrationTestBase):
         print("\n=== Step 6: Run Workflow ===")
         self.logger.info("=== STEP 6: Run Workflow ===")
         result = self.run_cli_command(
-            ["run", "--workflow", workflow_name, "--targets", "test", "--bundle", pipeline_file]
+            ["run", "--workflow", workflow_name, "--targets", "test", "--manifest", pipeline_file]
         )
         results.append(result)
         assert result["success"], f"Run workflow failed: {result['output']}"
@@ -160,7 +160,7 @@ class TestBasicPipeline(IntegrationTestBase):
         print("\n=== Step 7: Monitor Workflow Status ===")
         self.logger.info("=== STEP 7: Monitor Workflow Status ===")
         result = self.run_cli_command(
-            ["monitor", "--targets", "test", "--bundle", pipeline_file]
+            ["monitor", "--targets", "test", "--manifest", pipeline_file]
         )
         results.append(result)
         assert result["success"], f"Monitor after run failed: {result['output']}"
@@ -170,7 +170,7 @@ class TestBasicPipeline(IntegrationTestBase):
         print("\n=== Step 8: Start Basic Test Workflow ===")
         self.logger.info("=== STEP 8: Start Basic Test Workflow ===")
         result = self.run_cli_command(
-            ["run", "--workflow", workflow_name, "--targets", "test", "--bundle", pipeline_file]
+            ["run", "--workflow", workflow_name, "--targets", "test", "--manifest", pipeline_file]
         )
         results.append(result)
         assert result["success"], f"Run workflow failed: {result['output']}"
@@ -181,7 +181,7 @@ class TestBasicPipeline(IntegrationTestBase):
         self.logger.info("=== STEP 9: Start Expected Failure Workflow ===")
         failure_workflow_name = "expected_failure_workflow"
         result = self.run_cli_command(
-            ["run", "--workflow", failure_workflow_name, "--targets", "test", "--bundle", pipeline_file]
+            ["run", "--workflow", failure_workflow_name, "--targets", "test", "--manifest", pipeline_file]
         )
         results.append(result)
         assert result["success"], f"Run failure workflow failed: {result['output']}"
@@ -190,9 +190,116 @@ class TestBasicPipeline(IntegrationTestBase):
         # Step 10: Monitor both workflows
         print("\n=== Step 10: Monitor Both Workflows ===")
         self.logger.info("=== STEP 10: Monitor Both Workflows ===")
-        result = self.run_cli_command(["monitor", "--targets", "test", "--bundle", pipeline_file])
+        result = self.run_cli_command(["monitor", "--targets", "test", "--manifest", pipeline_file])
         results.append(result)
         print("✅ Monitor completed")
+
+        # Step 10.5: Download and validate notebook outputs
+        print("\n=== Step 10.5: Download and Validate Notebook Outputs ===")
+        self.logger.info("=== STEP 10.5: Download and Validate Notebook Outputs ===")
+        
+        # Get S3 bucket and workflow info from manifest
+        with open(pipeline_file, 'r') as f:
+            manifest = yaml.safe_load(f)
+        test_project_name = manifest['stages']['test']['project']['name']
+        
+        # Get project info to find S3 bucket
+        from smus_cicd.helpers.utils import get_datazone_project_info, build_domain_config
+        from smus_cicd.application import ApplicationManifest
+        app_manifest = ApplicationManifest.from_file(pipeline_file)
+        test_config = app_manifest.stages['test']
+        config = build_domain_config(test_config)
+        project_info = get_datazone_project_info(test_project_name, config)
+        
+        # Extract bucket from S3 connection
+        s3_connection = project_info.get('connections', {}).get('default.s3_shared', {})
+        s3_uri = s3_connection.get('s3Uri', '')
+        if s3_uri:
+            # Extract bucket name from s3://bucket/path
+            s3_bucket = s3_uri.replace('s3://', '').split('/')[0]
+            print(f"📦 S3 Bucket: {s3_bucket}")
+            
+            # Get workflow ARN and latest run ID for the success workflow
+            import boto3
+            import os
+            # Find the basic_test_workflow (the one that should succeed)
+            expected_name = f'BasicTestBundle_test_marketing_{workflow_name}'
+            success_workflow_arn = self.get_workflow_arn(expected_name)
+            print(f"📋 Workflow ARN: {success_workflow_arn}")
+            
+            # Get latest run
+            client = self.get_airflow_client()
+            runs_response = client.list_workflow_runs(WorkflowArn=success_workflow_arn, MaxResults=1)
+            runs = runs_response.get('WorkflowRuns', [])
+            if not runs:
+                pytest.fail("Could not find run ID for notebook download")
+            success_run_id = runs[0].get('RunId')
+            print(f"📋 Run ID: {success_run_id}")
+            
+            # Download notebooks
+            notebooks_downloaded = self.download_and_validate_notebooks(s3_bucket, success_workflow_arn, success_run_id)
+            
+            # Now validate specific notebooks
+            import json
+            from pathlib import Path
+            
+            # Extract workflow name from ARN
+            workflow_name_from_arn = success_workflow_arn.split('/')[-1] if '/' in success_workflow_arn else success_run_id
+            output_dir = Path("tests/test-outputs/notebooks") / workflow_name_from_arn
+            
+            # Find the downloaded notebooks
+            param_test_notebook = None
+            failing_notebook = None
+            
+            for nb_path in output_dir.rglob("*.ipynb"):
+                if "param_test" in nb_path.name.lower():
+                    param_test_notebook = nb_path
+                elif "failing" in nb_path.name.lower():
+                    failing_notebook = nb_path
+            
+            # Assert param_test_notebook has no errors
+            if param_test_notebook:
+                print(f"\n✅ Found param_test notebook: {param_test_notebook}")
+                with open(param_test_notebook) as f:
+                    notebook = json.load(f)
+                
+                error_count = 0
+                for cell in notebook.get("cells", []):
+                    for output in cell.get("outputs", []):
+                        if output.get("output_type") == "error":
+                            error_count += 1
+                
+                assert error_count == 0, f"param_test_notebook should have no errors, but found {error_count}"
+                print("✅ param_test_notebook has no errors")
+            else:
+                pytest.fail("param_test_notebook output not found")
+            
+            # Assert failing_notebook has the expected error
+            if failing_notebook:
+                print(f"\n✅ Found failing notebook: {failing_notebook}")
+                with open(failing_notebook) as f:
+                    notebook = json.load(f)
+                
+                error_found = False
+                expected_error = "Intentional failure for testing error handling"
+                
+                for cell in notebook.get("cells", []):
+                    for output in cell.get("outputs", []):
+                        if output.get("output_type") == "error":
+                            error_value = output.get("evalue", "")
+                            if expected_error in error_value or "ValueError" in str(output):
+                                error_found = True
+                                print(f"✅ Found expected error: {output.get('ename', 'Error')}")
+                                break
+                    if error_found:
+                        break
+                
+                assert error_found, f"failing_notebook should contain expected error: {expected_error}"
+                print("✅ failing_notebook has expected error")
+            else:
+                pytest.fail("failing_notebook output not found")
+        else:
+            pytest.fail("Could not determine S3 bucket from project info")
 
         # Step 11: Fetch logs for failure workflow (expect failure)
         print("\n=== Step 11: Fetch Workflow Logs (Failure Expected) ===")
@@ -200,26 +307,10 @@ class TestBasicPipeline(IntegrationTestBase):
         import boto3
         import os
         
-        region = os.environ.get('DEV_DOMAIN_REGION', 'us-east-1')
-        endpoint = os.environ.get('AIRFLOW_SERVERLESS_ENDPOINT')
-        if not endpoint:
-            endpoint = f'https://airflow-serverless.{region}.api.aws/'
-        
         try:
-            client = boto3.client('mwaaserverless', region_name=region, endpoint_url=endpoint)
-            response = client.list_workflows()
-            workflows = response.get('Workflows', [])
-            expected_failure_name = f'BasicTestPipeline_test_marketing_{failure_workflow_name}'
-            
-            failure_workflow_arn = None
-            response = client.list_workflows()
-            workflows = response.get('Workflows', [])
-            for wf in workflows:
-                if wf.get('Name') == expected_failure_name:
-                    failure_workflow_arn = wf.get('WorkflowArn')
-                    break
-            
-            if failure_workflow_arn:
+            expected_failure_name = f'BasicTestBundle_test_marketing_{failure_workflow_name}'
+            try:
+                failure_workflow_arn = self.get_workflow_arn(expected_failure_name)
                 print(f"📋 Failure Workflow ARN: {failure_workflow_arn}")
                 # Fetch logs with --live flag
                 result = self.run_cli_command(
@@ -243,7 +334,7 @@ class TestBasicPipeline(IntegrationTestBase):
                         pytest.fail(f"Could not determine failure workflow status from logs:\n{output}")
                 else:
                     pytest.fail(f"Logs command failed for failure workflow: {result['output']}")
-            else:
+            except AssertionError:
                 pytest.fail("Failure workflow ARN not found")
         except Exception as e:
             pytest.fail(f"Could not fetch failure workflow logs: {e}")
@@ -253,15 +344,8 @@ class TestBasicPipeline(IntegrationTestBase):
         self.logger.info("=== STEP 12: Fetch Workflow Logs (Success Expected) ===")
         try:
             expected_name = f'BasicTestPipeline_test_marketing_{workflow_name}'
-            
-            workflow_arn = None
-            for wf in workflows:
-                if wf.get('Name') == expected_name:
-                    workflow_arn = wf.get('WorkflowArn')
-                    break
-            
-            if workflow_arn:
-                print(f"📋 Workflow ARN: {workflow_arn}")
+            workflow_arn = self.get_workflow_arn(expected_name)
+            print(f"📋 Workflow ARN: {workflow_arn}")
                 # Fetch logs with --live flag
                 result = self.run_cli_command(
                     ["logs", "--workflow", workflow_arn, "--live"]
@@ -281,8 +365,8 @@ class TestBasicPipeline(IntegrationTestBase):
                         print("✅ Logs retrieved successfully")
                 else:
                     pytest.fail(f"Logs command failed: {result['output']}")
-            else:
-                pytest.fail("Workflow ARN not found")
+        except AssertionError:
+            pytest.fail("Workflow ARN not found")
         except Exception as e:
             pytest.fail(f"Could not fetch logs: {e}")
 

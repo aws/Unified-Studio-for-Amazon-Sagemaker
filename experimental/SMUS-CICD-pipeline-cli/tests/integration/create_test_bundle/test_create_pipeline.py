@@ -70,7 +70,7 @@ class TestCreatePipeline(IntegrationTestBase):
         try:
             # Step 1: Describe Pipeline
             print("\n=== Step 1: Describe Pipeline ===")
-            result = self.run_cli_command(["describe", "--bundle", pipeline_file])
+            result = self.run_cli_command(["describe", "--manifest", pipeline_file])
             results.append(result)
 
             if result["success"]:
@@ -88,7 +88,7 @@ class TestCreatePipeline(IntegrationTestBase):
             # Step 2: Attempt Deploy Project (will fail due to credentials but validates userParameters)
             print("\n=== Step 2: Attempt Deploy Project with userParameters ===")
             result = self.run_cli_command(
-                ["deploy", "--targets", "create-test", "--bundle", pipeline_file]
+                ["deploy", "--targets", "create-test", "--manifest", pipeline_file]
             )
             results.append(result)
 
@@ -201,10 +201,10 @@ class TestCreatePipeline(IntegrationTestBase):
         pipeline_file = str(Path(__file__).parent / "create_test_bundle.yaml")
 
         print("\n=== Quick Describe Test ===")
-        result = self.run_cli_command(["describe", "--bundle", pipeline_file])
+        result = self.run_cli_command(["describe", "--manifest", pipeline_file])
 
         assert result["success"], f"Describe failed: {result['error']}"
-        assert "CreateTestPipeline" in result["output"], "Pipeline name not found"
+        assert "CreateTestBundle" in result["output"], "Pipeline name not found"
         assert "create-test" in result["output"], "Target name not found"
 
         print("✅ Quick describe test passed")
@@ -216,7 +216,7 @@ class TestCreatePipeline(IntegrationTestBase):
 
         print("\n=== Schema Validation Test ===")
         result = self.run_cli_command(
-            ["describe", "--bundle", pipeline_file, "--output", "JSON"]
+            ["describe", "--manifest", pipeline_file, "--output", "JSON"]
         )
 
         assert result["success"], f"JSON describe failed: {result['error']}"

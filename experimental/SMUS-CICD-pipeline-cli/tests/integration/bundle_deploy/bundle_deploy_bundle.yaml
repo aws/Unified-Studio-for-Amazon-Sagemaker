@@ -1,6 +1,5 @@
-bundleName: IntegrationTestMultiTarget
-bundle:
-  bundlesDirectory: /tmp/bundles
+applicationName: IntegrationTestMultiTarget
+content:
   storage:
   - connectionName: default.s3_shared
     append: false
@@ -20,7 +19,7 @@ bundle:
     - __pycache__/
     - '*.pyc'
     name: workflows
-targets:
+stages:
   test:
     stage: TEST
     domain:
@@ -29,8 +28,6 @@ targets:
       region: ${DEV_DOMAIN_REGION:us-east-2}
     project:
       name: integration-test-test
-    tests:
-      folder: tests/integration/bundle_deploy_pipeline/pipeline_tests/
     initialization:
       project:
         create: true
@@ -42,7 +39,7 @@ targets:
         contributors: []
       environments:
       - EnvironmentConfigurationName: OnDemand Workflows
-    bundle_target_configuration:
+    deployment_configuration:
       storage:
       - connectionName: default.s3_shared
         name: code
@@ -50,7 +47,10 @@ targets:
       - connectionName: default.s3_shared
         name: workflows
         targetDirectory: workflows
-workflows:
+initialization:
 - workflowName: execute_notebooks_dag
   connectionName: project.workflow_mwaa
   engine: MWAA
+  type: workflow
+tests:
+  folder: tests/integration/bundle_deploy_pipeline/pipeline_tests/

@@ -16,13 +16,13 @@ class ProjectManager:
         self.manifest = manifest
         self.config = config
 
-    def ensure_project_exists(self, target_name: str, target_config) -> Dict[str, Any]:
+    def ensure_project_exists(self, stage_name: str, target_config) -> Dict[str, Any]:
         """Ensure project exists, create if needed and configured to do so."""
         from .logger import get_logger
 
         logger = get_logger("project_manager")
 
-        logger.debug(f"ensure_project_exists called for target: {target_name}")
+        logger.debug(f"ensure_project_exists called for target: {stage_name}")
 
         project_name = target_config.project.name
         domain_name = target_config.domain.name
@@ -52,10 +52,10 @@ class ProjectManager:
             logger.debug("Project exists path - calling _ensure_environments_exist")
             handle_success(f"✅ Project '{project_name}' already exists")
             self._update_existing_project(
-                target_name, target_config, project_name, region
+                stage_name, target_config, project_name, region
             )
             environments_ready = self._ensure_environments_exist(
-                target_name, target_config, project_info, domain_name, region
+                stage_name, target_config, project_info, domain_name, region
             )
             if not environments_ready:
                 raise Exception(
@@ -68,7 +68,7 @@ class ProjectManager:
         if self._should_create_project(target_config):
             logger.debug("Should create project - calling _create_new_project")
             project_info = self._create_new_project(
-                target_name, target_config, project_name, domain_name, region
+                stage_name, target_config, project_name, domain_name, region
             )
             logger.debug("_create_new_project returned")
             logger.debug(
@@ -83,7 +83,7 @@ class ProjectManager:
                     "🔍 DEBUG: Project created successfully - calling _ensure_environments_exist"
                 )
                 environments_ready = self._ensure_environments_exist(
-                    target_name, target_config, project_info, domain_name, region
+                    stage_name, target_config, project_info, domain_name, region
                 )
                 if not environments_ready:
                     raise Exception(
@@ -114,7 +114,7 @@ class ProjectManager:
 
     def _create_new_project(
         self,
-        target_name: str,
+        stage_name: str,
         target_config,
         project_name: str,
         domain_name: str,
@@ -140,7 +140,7 @@ class ProjectManager:
         # Extract project configuration
         profile_name = self._get_profile_name(target_config)
         _ = self._extract_user_parameters(
-            target_config, target_name
+            target_config, stage_name
         )  # Reserved for future use
         owners, contributors = self._extract_memberships(target_config)
         role_arn = self._get_role_arn(target_config)
@@ -159,8 +159,8 @@ class ProjectManager:
         #     profile_name,
         #     domain_name,
         #     region,
-        #     self.manifest.bundle_name,
-        #     target_name,
+        #     self.manifest.application_name,
+        #     stage_name,
         #     target_config.stage,
         #     user_parameters,
         #     owners,
@@ -246,16 +246,16 @@ class ProjectManager:
         return None
 
     def _update_existing_project(
-        self, target_name: str, target_config, project_name: str, region: str
+        self, stage_name: str, target_config, project_name: str, region: str
     ):
         """Update existing project stack tags and memberships."""
         typer.echo("Updating project stack tags...")
 
         # Construct stack name and tags
-        stack_name = f"{self.manifest.bundle_name}-{target_name}-{project_name}"
+        stack_name = f"{self.manifest.application_name}-{stage_name}-{project_name}"
         tags = [
-            {"Key": "Bundle", "Value": self.manifest.bundle_name},
-            {"Key": "Target", "Value": target_name},
+            {"Key": "Bundle", "Value": self.manifest.application_name},
+            {"Key": "Target", "Value": stage_name},
             {"Key": "Project", "Value": project_name},
             {"Key": "Stage", "Value": target_config.stage},
         ]
@@ -335,14 +335,28 @@ class ProjectManager:
         dz_client = boto3.client("datazone", region_name=region)
         response = dz_client.list_project_profiles(domainIdentifier=domain_id)
         profile_id = None
+        available_profiles = []
         for profile in response.get("items", []):
+            available_profiles.append(profile["name"])
             if profile["name"] == profile_name:
                 profile_id = profile["id"]
                 break
 
         if not profile_id:
-            handle_error(f"Project profile '{profile_name}' not found")
-            return False
+            # Try to use first available profile as default
+            if available_profiles:
+                default_profile = available_profiles[0]
+                typer.echo(f"⚠️ Profile '{profile_name}' not found. Using default profile: '{default_profile}'")
+                for profile in response.get("items", []):
+                    if profile["name"] == default_profile:
+                        profile_id = profile["id"]
+                        profile_name = default_profile
+                        break
+            
+            if not profile_id:
+                profiles_list = ", ".join(available_profiles) if available_profiles else "none"
+                handle_error(f"Project profile '{profile_name}' not found. Available profiles: {profiles_list}")
+                return False
 
         # Prepare create project parameters
         params = {
@@ -485,15 +499,13 @@ class ProjectManager:
         return False
 
     def _extract_user_parameters(
-        self, target_config, target_name: str
+        self, target_config, stage_name: str
     ) -> Optional[List]:
         """Extract user parameters from target configuration."""
-        print(f"🔍 DEBUG: Extracting user parameters for target: {target_name}")
+        print(f"🔍 DEBUG: Extracting user parameters for target: {stage_name}")
 
         if not (target_config.initialization and target_config.initialization.project):
-            print(
-                f"🔍 DEBUG: No initialization.project found for target: {target_name}"
-            )
+            print(f"🔍 DEBUG: No initialization.project found for target: {stage_name}")
             return None
 
         # Parse userParameters directly from YAML since dataclass parsing doesn't handle nested structure
@@ -502,7 +514,7 @@ class ProjectManager:
         with open(self.manifest._file_path, "r") as f:
             pipeline_data = yaml.safe_load(f)
 
-        target_data = pipeline_data.get("targets", {}).get(target_name, {})
+        target_data = pipeline_data.get("targets", {}).get(stage_name, {})
         init_data = target_data.get("initialization", {})
         project_data = init_data.get("project", {})
 
@@ -540,7 +552,7 @@ class ProjectManager:
 
     def _build_user_parameters(self, yaml_user_params: List) -> List:
         """Build user parameters from YAML data."""
-        from smus_cicd.pipeline.bundle_manifest import (
+        from smus_cicd.application.application_manifest import (
             EnvironmentUserParameters,
             UserParameter,
         )
@@ -563,14 +575,14 @@ class ProjectManager:
 
     def _ensure_environments_exist(
         self,
-        target_name: str,
+        stage_name: str,
         target_config,
         project_info: Dict[str, Any],
         domain_name: str,
         region: str,
     ) -> bool:
         """Ensure required environments exist in the project."""
-        print(f"🔍 DEBUG: _ensure_environments_exist called for target: {target_name}")
+        print(f"🔍 DEBUG: _ensure_environments_exist called for target: {stage_name}")
         print(
             f"🔍 DEBUG: target_config.initialization exists: {target_config.initialization is not None}"
         )
@@ -594,7 +606,7 @@ class ProjectManager:
             target_config.initialization
             and hasattr(target_config.initialization, "environments")
         ):
-            print(f"🔍 DEBUG: No environments specified for target: {target_name}")
+            print(f"🔍 DEBUG: No environments specified for target: {stage_name}")
             # Still create connections even if no environments specified
             if target_config.initialization:
                 project_id = project_info.get("project_id")

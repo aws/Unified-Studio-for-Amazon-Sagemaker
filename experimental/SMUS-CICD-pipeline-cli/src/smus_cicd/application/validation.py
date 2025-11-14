@@ -11,8 +11,8 @@ from ..helpers.utils import load_yaml
 
 
 def load_schema() -> Dict[str, Any]:
-    """Load the bundle manifest schema."""
-    schema_path = Path(__file__).parent / "bundle-manifest-schema.yaml"
+    """Load the application manifest schema."""
+    schema_path = Path(__file__).parent / "application-manifest-schema.yaml"
     if not schema_path.exists():
         raise FileNotFoundError(f"Schema file not found: {schema_path}")
 

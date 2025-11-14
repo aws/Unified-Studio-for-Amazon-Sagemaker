@@ -5,12 +5,12 @@ import json
 import boto3
 import typer
 
+from ..application import ApplicationManifest
 from ..helpers.utils import (  # noqa: F401
     build_domain_config,
     get_datazone_project_info,
     load_config,
 )
-from ..pipeline import BundleManifest
 
 
 def describe_command(
@@ -37,16 +37,16 @@ def describe_command(
     """Describe and validate pipeline manifest file."""
     try:
         # Load pipeline manifest using centralized parser
-        manifest = BundleManifest.from_file(manifest_file)
+        manifest = ApplicationManifest.from_file(manifest_file)
 
         # Determine which targets to show
         targets_to_show = {}
         if targets:
-            if targets in manifest.targets:
-                targets_to_show[targets] = manifest.targets[targets]
+            if targets in manifest.stages:
+                targets_to_show[targets] = manifest.stages[targets]
             else:
                 error_msg = f"Target '{targets}' not found in manifest"
-                available_targets = list(manifest.targets.keys())
+                available_targets = list(manifest.stages.keys())
                 if output.upper() == "JSON":
                     output_data = {
                         "error": error_msg,
@@ -60,22 +60,22 @@ def describe_command(
                     )
                 raise typer.Exit(1)
         else:
-            targets_to_show = manifest.targets
+            targets_to_show = manifest.stages
 
         # Get the first target's domain for display (they should all be the same)
-        first_target = next(iter(manifest.targets.values()))
+        first_target = next(iter(manifest.stages.values()))
         domain_config = first_target.domain
 
         # Prepare output data structure for JSON format
         output_data = {
-            "bundle": manifest.bundle_name,
+            "bundle": manifest.application_name,
             "domain": {"name": domain_config.name, "region": domain_config.region},
             "targets": {},
         }
 
         # TEXT output header
         if output.upper() != "JSON":
-            typer.echo(f"Pipeline: {manifest.bundle_name}")
+            typer.echo(f"Pipeline: {manifest.application_name}")
             typer.echo(f"Domain: {domain_config.name} ({domain_config.region})")
             typer.echo("\nTargets:")
 
@@ -83,7 +83,7 @@ def describe_command(
         has_errors = False
 
         # Process targets
-        for target_name, target_config in targets_to_show.items():
+        for stage_name, target_config in targets_to_show.items():
             target_data = {
                 "project": {"name": target_config.project.name},
                 "domain": {
@@ -142,7 +142,7 @@ def describe_command(
                         target_data["initialization"]["connections"].append(conn_data)
 
             if output.upper() != "JSON":
-                typer.echo(f"  - {target_name}: {target_config.project.name}")
+                typer.echo(f"  - {stage_name}: {target_config.project.name}")
 
             # Add connections if requested or if connect flag is used
             if connections or connect:
@@ -450,7 +450,7 @@ def describe_command(
                     if output.upper() != "JSON":
                         typer.echo(f"    ❌ Error connecting to AWS: {e}")
 
-            output_data["targets"][target_name] = target_data
+            output_data["targets"][stage_name] = target_data
 
         # Show manifest workflows if they exist
         if (
@@ -469,7 +469,7 @@ def describe_command(
         # Show connections from initialization if they exist
         connections_found = False
         if output.upper() != "JSON":
-            for target_name, target_config in manifest.targets.items():
+            for stage_name, target_config in manifest.stages.items():
                 if (
                     hasattr(target_config, "initialization")
                     and target_config.initialization
@@ -480,7 +480,7 @@ def describe_command(
                         typer.echo("\nInitialization Connections:")
                         connections_found = True
 
-                    typer.echo(f"  Target: {target_name}")
+                    typer.echo(f"  Target: {stage_name}")
                     for conn in target_config.initialization.connections:
                         typer.echo(f"    - {conn.name} ({conn.type})")
                         if conn.properties:

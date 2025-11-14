@@ -7,16 +7,16 @@ import sys
 
 import typer
 
+from ..application import ApplicationManifest
 from ..helpers.utils import get_datazone_project_info, load_config
-from ..pipeline import BundleManifest
 
 
-def _display_target_summary(target_name: str, test_results: dict, output: str):
+def _display_target_summary(stage_name: str, test_results: dict, output: str):
     """Display test summary for a single target."""
     if output.upper() == "JSON":
         return
 
-    target_result = test_results.get(target_name, {})
+    target_result = test_results.get(stage_name, {})
     status = target_result.get("status", "unknown")
 
     if status == "skipped":
@@ -62,61 +62,61 @@ def test_command(
             output = "TEXT"
 
         # Load pipeline manifest
-        manifest = BundleManifest.from_file(manifest_file)
+        manifest = ApplicationManifest.from_file(manifest_file)
 
         # Parse target list
         if targets:
             target_list = [t.strip() for t in targets.split(",")]
         else:
-            target_list = list(manifest.targets.keys())
+            target_list = list(manifest.stages.keys())
 
         # Validate targets exist
-        for target_name in target_list:
-            if target_name not in manifest.targets:
-                typer.echo(f"❌ Error: Target '{target_name}' not found in manifest")
+        for stage_name in target_list:
+            if stage_name not in manifest.stages:
+                typer.echo(f"❌ Error: Target '{stage_name}' not found in manifest")
                 raise typer.Exit(1)
 
         # Get the first target's domain for display (they should all be the same)
-        first_target = next(iter(manifest.targets.values()))
+        first_target = next(iter(manifest.stages.values()))
         domain_config = first_target.domain
 
         if output.upper() != "JSON":
-            typer.echo(f"Pipeline: {manifest.bundle_name}")
+            typer.echo(f"Pipeline: {manifest.application_name}")
             typer.echo(f"Domain: {domain_config.name} ({domain_config.region})")
             typer.echo()
 
         test_results = {}
         overall_success = True
 
-        for target_name in target_list:
-            target_config = manifest.targets[target_name]
+        for stage_name in target_list:
+            target_config = manifest.stages[stage_name]
 
             if output.upper() != "JSON":
-                typer.echo(f"🎯 Target: {target_name}")
+                typer.echo(f"🎯 Target: {stage_name}")
 
-            # Check if target has tests configured
-            if not target_config.tests:
+            # Check if manifest has tests configured
+            if not manifest.tests:
                 if output.upper() != "JSON":
-                    typer.echo(f"  ❌ No tests configured for target '{target_name}'")
-                test_results[target_name] = {
+                    typer.echo("  ❌ No tests configured in manifest")
+                test_results[stage_name] = {
                     "status": "error",
                     "reason": "no_tests_configured",
                 }
                 overall_success = False
-                _display_target_summary(target_name, test_results, output)
+                _display_target_summary(stage_name, test_results, output)
                 continue
 
             # Prepare test environment
-            test_folder = os.path.abspath(target_config.tests.folder)
+            test_folder = os.path.abspath(manifest.tests.folder)
             if not os.path.exists(test_folder):
                 if output.upper() != "JSON":
                     typer.echo(f"  ❌ Test folder not found: {test_folder}")
-                test_results[target_name] = {
+                test_results[stage_name] = {
                     "status": "error",
                     "error": f"Test folder not found: {test_folder}",
                 }
                 overall_success = False
-                _display_target_summary(target_name, test_results, output)
+                _display_target_summary(stage_name, test_results, output)
                 continue
 
             # Load AWS config
@@ -138,12 +138,12 @@ def test_command(
                     typer.echo(
                         f"  ❌ Error getting project info: {project_info['error']}"
                     )
-                test_results[target_name] = {
+                test_results[stage_name] = {
                     "status": "error",
                     "error": project_info["error"],
                 }
                 overall_success = False
-                _display_target_summary(target_name, test_results, output)
+                _display_target_summary(stage_name, test_results, output)
                 continue
 
             # Get domain name from domain_id if not provided
@@ -173,7 +173,7 @@ def test_command(
                 domain_id=project_info.get("domainId", ""),
                 domain_name=domain_name,
                 region=target_config.domain.region,
-                target_name=target_name,
+                target_name=stage_name,
                 env_vars=target_config.environment_variables or {},
             )
 
@@ -212,7 +212,7 @@ def smus_config():
                         "project_id", project_info.get("projectId", "")
                     ),
                     "SMUS_PROJECT_NAME": target_config.project.name,
-                    "SMUS_TARGET_NAME": target_name,
+                    "SMUS_TARGET_NAME": stage_name,
                     "SMUS_REGION": target_config.domain.region,
                     "SMUS_DOMAIN_NAME": domain_name or "",
                     "SMUS_TEST_CONFIG": config_file,
@@ -255,7 +255,7 @@ def smus_config():
                         typer.echo("  ✅ Tests passed")
                         if verbose and test_output_text:
                             typer.echo(f"  Output:\n{test_output_text}")
-                    test_results[target_name] = {
+                    test_results[stage_name] = {
                         "status": "passed",
                         "output": test_output_text,
                         "project_id": project_info.get("id"),
@@ -266,7 +266,7 @@ def smus_config():
                         typer.echo("  ❌ Tests failed")
                         if test_output_text:
                             typer.echo(f"  Output:\n{test_output_text}")
-                    test_results[target_name] = {
+                    test_results[stage_name] = {
                         "status": "failed",
                         "output": test_output_text,
                         "project_id": project_info.get("id"),
@@ -277,7 +277,7 @@ def smus_config():
             except Exception as e:
                 if output.upper() != "JSON":
                     typer.echo(f"  ❌ Error running tests: {e}")
-                test_results[target_name] = {"status": "error", "error": str(e)}
+                test_results[stage_name] = {"status": "error", "error": str(e)}
                 overall_success = False
             finally:
                 # Cleanup generated files
@@ -295,7 +295,7 @@ def smus_config():
         # Output results
         if output.upper() == "JSON":
             result_data = {
-                "bundle": manifest.bundle_name,
+                "bundle": manifest.application_name,
                 "domain": domain_config.name,
                 "region": domain_config.region,
                 "targets": test_results,

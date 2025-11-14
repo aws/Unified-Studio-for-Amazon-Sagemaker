@@ -1,5 +1,25 @@
-bundleName: CreateTestBundle
-targets:
+applicationName: CreateTestBundle
+content:
+  storage:
+  - connectionName: default.s3_shared
+    append: false
+    include:
+    - src
+    exclude:
+    - .ipynb_checkpoints/
+    - __pycache__/
+    - '*.pyc'
+    name: code
+  - connectionName: default.s3_shared
+    append: true
+    include:
+    - workflows
+    exclude:
+    - .ipynb_checkpoints/
+    - __pycache__/
+    - '*.pyc'
+    name: workflows
+stages:
   dev:
     stage: DEV
     domain:
@@ -31,7 +51,7 @@ targets:
             value: create_test_db
       environments:
       - EnvironmentConfigurationName: OnDemand Workflows
-    bundle_target_configuration:
+    deployment_configuration:
       storage:
       - connectionName: default.s3_shared
         name: code
@@ -39,28 +59,8 @@ targets:
       - connectionName: default.s3_shared
         name: workflows
         targetDirectory: workflows
-workflows:
+initialization:
 - workflowName: simple_dag
   connectionName: project.workflow_mwaa
   engine: MWAA
-bundle:
-  bundlesDirectory: /tmp/bundles
-  storage:
-  - connectionName: default.s3_shared
-    append: false
-    include:
-    - src
-    exclude:
-    - .ipynb_checkpoints/
-    - __pycache__/
-    - '*.pyc'
-    name: code
-  - connectionName: default.s3_shared
-    append: true
-    include:
-    - workflows
-    exclude:
-    - .ipynb_checkpoints/
-    - __pycache__/
-    - '*.pyc'
-    name: workflows
+  type: workflow

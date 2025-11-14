@@ -564,7 +564,7 @@ targets:
       region: ${AWS_REGION}
     project:
       name: dev-project
-    bundle_target_configuration:
+    deployment_configuration:
       storage:
         - name: notebooks
           connectionName: default.s3_shared
@@ -685,7 +685,7 @@ workflows:
         try:
             import yaml
 
-            from smus_cicd.pipeline.validation import (
+            from smus_cicd.application.validation import (
                 load_schema,
                 validate_manifest_schema,
             )

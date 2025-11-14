@@ -4,7 +4,6 @@ import pytest
 import os
 import subprocess
 import re
-import boto3
 from tests.integration.base import IntegrationTestBase
 
 
@@ -15,6 +14,12 @@ class TestGenAIWorkflow(IntegrationTestBase):
         """Set up test environment."""
         super().setup_method(method)
         self.setup_test_directory()
+
+    def teardown_method(self, method):
+        """Clean up test environment."""
+        super().teardown_method(method)
+        self.cleanup_resources()
+        self.cleanup_test_directory()
 
     def get_pipeline_file(self):
         return os.path.join(
@@ -33,7 +38,7 @@ class TestGenAIWorkflow(IntegrationTestBase):
 
         # Step 1: Describe --connect
         print("\n=== Step 1: Describe with Connections ===")
-        result = self.run_cli_command(["describe", "--bundle", pipeline_file, "--connect"])
+        result = self.run_cli_command(["describe", "--manifest", pipeline_file, "--connect"])
         assert result["success"], f"Describe --connect failed: {result['output']}"
         print("✅ Describe --connect successful")
 
@@ -59,59 +64,100 @@ class TestGenAIWorkflow(IntegrationTestBase):
 
         # Step 3: Bundle from dev
         print("\n=== Step 3: Bundle from dev ===")
-        result = self.run_cli_command(["bundle", "--bundle", pipeline_file, "--target", "dev"])
+        result = self.run_cli_command(["bundle", "--manifest", pipeline_file, "--target", "dev"])
         assert result["success"], f"Bundle failed: {result['output']}"
         print("✅ Bundle successful")
 
+        # Step 3.5: Check for active workflow runs - fail if any exist
+        print("\n=== Step 3.5: Check for Active Workflow Runs ===")
+        expected_name = 'IntegrationTestGenAIWorkflow_test_marketing_genai_dev_workflow'
+        try:
+            workflow_arn = self.get_workflow_arn(expected_name)
+            active_runs = self.check_active_workflow_runs(workflow_arn)
+            if active_runs:
+                pytest.fail(f"❌ Found {len(active_runs)} active workflow run(s) from previous test: {active_runs}. Clean up before running tests.")
+            print("✅ No active workflow runs found")
+        except AssertionError:
+            print("✅ Workflow doesn't exist yet (first run)")
+
+
         # Step 4: Deploy
         print("\n=== Step 4: Deploy ===")
-        result = self.run_cli_command(["deploy", "test", "--bundle", pipeline_file])
+        result = self.run_cli_command(["deploy", "test", "--manifest", pipeline_file])
         assert result["success"], f"Deploy failed: {result['output']}"
         print("✅ Deploy successful")
 
         # Step 5: Monitor
         print("\n=== Step 5: Monitor ===")
-        result = self.run_cli_command(["monitor", "--targets", "test", "--bundle", pipeline_file])
+        result = self.run_cli_command(["monitor", "--targets", "test", "--manifest", pipeline_file])
         assert result["success"], f"Monitor failed: {result['output']}"
         print("✅ Monitor successful")
 
         # Step 6: Run workflow
         print("\n=== Step 6: Run Workflow ===")
         result = self.run_cli_command(
-            ["run", "--workflow", workflow_name, "--targets", "test", "--bundle", pipeline_file]
+            ["run", "--workflow", workflow_name, "--targets", "test", "--manifest", pipeline_file]
         )
         assert result["success"], f"Run workflow failed: {result['output']}"
         print("✅ Workflow started")
 
         # Step 7: Get workflow ARN
         print("\n=== Step 7: Get Workflow ARN ===")
-        region = os.environ.get('DEV_DOMAIN_REGION', 'us-east-2')
-        endpoint = os.environ.get('AIRFLOW_SERVERLESS_ENDPOINT', f'https://airflow-serverless.{region}.api.aws/')
-        client = boto3.client('mwaaserverless', region_name=region, endpoint_url=endpoint)
-        response = client.list_workflows()
-        workflow_arn = None
         expected_name = 'IntegrationTestGenAIWorkflow_test_marketing_genai_dev_workflow'
-        for wf in response.get('Workflows', []):
-            if wf.get('Name') == expected_name:
-                workflow_arn = wf.get('WorkflowArn')
-                break
-        assert workflow_arn, "Could not find workflow ARN"
+        workflow_arn = self.get_workflow_arn(expected_name)
         print(f"✅ Workflow ARN: {workflow_arn}")
+
 
         # Step 8: Fetch workflow logs and wait for completion
         print("\n=== Step 8: Fetch Workflow Logs and Wait ===")
         result = self.run_cli_command(
             ["logs", "--live", "--workflow", workflow_arn]
         )
-        assert result["success"], f"Workflow execution failed: {result['output']}"
-        print("✅ Workflow completed successfully")
+        workflow_succeeded = result["success"]
+        
+        # Extract run_id from logs output - match pattern like "Run: dyo4EXeWXjVP4nd"
+        run_id_match = re.search(r"Run:\s+([a-zA-Z0-9]+)", result["output"])
+        run_id = run_id_match.group(1) if run_id_match else None
+        
+        if workflow_succeeded:
+            print("✅ Workflow completed successfully")
+        else:
+            print(f"⚠️ Workflow failed: {result['output']}")
 
         # Step 9: Download and validate notebooks
         print("\n=== Step 9: Download and Validate Notebooks ===")
-        if s3_uri_match:
-            s3_bucket = s3_uri_match.group(1).replace("s3://", "").split("/")[0]
-            notebooks_valid = self.download_and_validate_notebooks(s3_bucket)
-            assert notebooks_valid, "Notebook validation failed - errors found in notebook outputs"
-            print("✅ Notebooks validated successfully")
+        
+        # Extract S3 bucket from test project (not dev)
+        describe_result = self.run_cli_command(["describe", "--manifest", pipeline_file, "--connect"])
+        test_s3_uri_match = re.search(
+            r"test: test-marketing.*?default\.s3_shared:.*?s3Uri: (s3://[^\s]+)",
+            describe_result["output"],
+            re.DOTALL
+        )
+        
+        if test_s3_uri_match and run_id:
+            test_s3_uri = test_s3_uri_match.group(1)
+            s3_bucket = re.search(r"s3://([^/]+)", test_s3_uri).group(1)
+            
+            # Wait for S3 propagation
+            import time
+            print("⏳ Waiting 10s for S3 propagation...")
+            time.sleep(10)
+            
+            notebooks_valid = self.download_and_validate_notebooks(
+                s3_bucket=s3_bucket,
+                workflow_arn=workflow_arn,
+                run_id=run_id
+            )
+            assert notebooks_valid, "Output notebooks contain errors or were not found"
+            print("✅ All output notebooks validated successfully")
         else:
-            print("⚠️ Skipping notebook validation - S3 bucket not found")
+            print("❌ Could not determine S3 bucket or run_id")
+            assert False, "Could not determine S3 bucket or run_id for notebook validation"
+        
+        # Step 10: Check final workflow status
+        print("\n=== Step 10: Verify Final Workflow Status ===")
+        if run_id:
+            self.verify_workflow_status(workflow_arn, run_id)
+        else:
+            pytest.fail("Could not retrieve run_id for status verification")

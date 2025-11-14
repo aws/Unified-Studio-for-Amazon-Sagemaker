@@ -494,13 +494,70 @@ class IntegrationTestBase:
         if self.created_resources:
             print(f"Would clean up resources: {self.created_resources}")
 
-    def download_and_validate_notebooks(self, s3_bucket: str, run_id: Optional[str] = None, workflow_filter: Optional[str] = None) -> bool:
-        """Download workflow notebook outputs and validate for errors.
+    def get_airflow_client(self):
+        """Get boto3 client for Airflow Serverless."""
+        import boto3
+        region = os.environ.get('DEV_DOMAIN_REGION', 'us-east-2')
+        endpoint = os.environ.get('AIRFLOW_SERVERLESS_ENDPOINT', f'https://airflow-serverless.{region}.api.aws/')
+        return boto3.client('mwaaserverless', region_name=region, endpoint_url=endpoint)
+
+    def get_workflow_arn(self, expected_workflow_name: str) -> str:
+        """Get workflow ARN by name.
+        
+        Args:
+            expected_workflow_name: Expected workflow name
+            
+        Returns:
+            Workflow ARN
+        """
+        client = self.get_airflow_client()
+        response = client.list_workflows()
+        for wf in response.get('Workflows', []):
+            if wf.get('Name') == expected_workflow_name:
+                return wf.get('WorkflowArn')
+        raise AssertionError(f"Could not find workflow: {expected_workflow_name}")
+
+    def check_active_workflow_runs(self, workflow_arn: str) -> list:
+        """Check for active workflow runs.
+        
+        Args:
+            workflow_arn: Workflow ARN
+            
+        Returns:
+            List of active run IDs
+        """
+        client = self.get_airflow_client()
+        runs_response = client.list_workflow_runs(WorkflowArn=workflow_arn, MaxResults=5)
+        active_runs = [r for r in runs_response.get('WorkflowRuns', []) 
+                       if r.get('Status') in ['RUNNING', 'QUEUED']]
+        return [r.get('RunId') for r in active_runs]
+
+    def verify_workflow_status(self, workflow_arn: str, run_id: str, expected_status: str = 'SUCCESS') -> None:
+        """Verify workflow run completed with expected status.
+        
+        Args:
+            workflow_arn: Workflow ARN
+            run_id: Run ID to check
+            expected_status: Expected status (default: SUCCESS)
+            
+        Raises:
+            AssertionError if status doesn't match
+        """
+        client = self.get_airflow_client()
+        run_response = client.get_workflow_run(WorkflowArn=workflow_arn, RunId=run_id)
+        actual_status = run_response.get('Status')
+        print(f"📊 Workflow Run ID: {run_id}")
+        print(f"📊 Final Status: {actual_status}")
+        assert actual_status == expected_status, f"Workflow did not complete successfully. Status: {actual_status}"
+        print(f"✅ Workflow completed with {expected_status} status")
+
+    def download_and_validate_notebooks(self, s3_bucket: str, workflow_arn: str, run_id: str) -> bool:
+        """Download workflow notebook outputs using GetTaskInstance API and validate for errors.
         
         Args:
             s3_bucket: S3 bucket name containing workflow outputs
-            run_id: Optional specific run ID to download (defaults to latest)
-            workflow_filter: Optional workflow name filter (e.g., 'deployment' to match deployment workflows)
+            workflow_arn: Workflow ARN to query task instances
+            run_id: Workflow run ID
             
         Returns:
             True if notebooks downloaded and contain no errors, False otherwise
@@ -508,157 +565,165 @@ class IntegrationTestBase:
         import subprocess
         import tarfile
         import json
+        import boto3
+        import os
         
-        output_dir = Path("tests/test-outputs/notebooks")
+        # Extract workflow name from ARN (format: arn:aws:airflow-serverless:region:account:workflow/workflow-name)
+        workflow_name = workflow_arn.split('/')[-1] if '/' in workflow_arn else run_id
+        
+        output_dir = Path("tests/test-outputs/notebooks") / workflow_name
+        
+        # Clean up old notebooks for this workflow (replace with latest run)
+        if output_dir.exists():
+            import shutil
+            print(f"🧹 Cleaning up old notebooks from {output_dir}")
+            shutil.rmtree(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         
-        s3_prefix = f"s3://{s3_bucket}/shared/workflows/output/"
-        
         print(f"\n=== Downloading Workflow Notebooks ===")
-        print(f"Searching for outputs in {s3_prefix}...")
+        print(f"Workflow ARN: {workflow_arn}")
+        print(f"Run ID: {run_id}")
         
-        result = subprocess.run(
-            ["aws", "s3", "ls", s3_prefix, "--recursive"],
-            capture_output=True,
-            text=True
-        )
+        # Get task instances from workflow run
+        region = os.environ.get('DEV_DOMAIN_REGION', 'us-east-2')
+        endpoint = os.environ.get('AIRFLOW_SERVERLESS_ENDPOINT', f'https://airflow-serverless.{region}.api.aws/')
+        client = boto3.client('mwaaserverless', region_name=region, endpoint_url=endpoint)
         
-        if result.returncode != 0:
-            print(f"❌ Error listing S3: {result.stderr}")
+        # List task instances for this run
+        try:
+            response = client.list_task_instances(WorkflowArn=workflow_arn, RunId=run_id)
+        except Exception as e:
+            print(f"❌ Error listing task instances: {e}")
             return False
         
-        # Parse runs and find latest if no run_id specified
-        runs = {}
-        for line in result.stdout.strip().split("\n"):
-            if not line:
-                continue
-            
-            # Only process OUTPUT notebooks (not input notebooks)
-            if "/output/output.tar.gz" not in line:
-                continue
-            
-            parts = line.split()
-            if len(parts) < 4:
-                continue
-            
-            timestamp = f"{parts[0]} {parts[1]}"
-            s3_key = " ".join(parts[3:])
-            
-            # Extract workflow name and run ID from path
-            # Path format: shared/workflows/output/{workflow_path}/{execution-id}/output/output.tar.gz
-            key_parts = s3_key.split("/")
-            if len(key_parts) < 6 or key_parts[-1] != "output.tar.gz" or key_parts[-2] != "output":
-                continue
-            
-            # Find execution ID (the part before /output/output.tar.gz)
-            execution_id = key_parts[-3]
-            
-            # Workflow name is everything between "output/" and execution ID
-            workflow_path_parts = key_parts[3:-3]  # Skip shared/workflows/output and execution-id/output/output.tar.gz
-            workflow_name = "/".join(workflow_path_parts) if workflow_path_parts else "unknown"
-            
-            if workflow_name not in runs:
-                runs[workflow_name] = {}
-            if execution_id not in runs[workflow_name]:
-                runs[workflow_name][execution_id] = {"timestamp": timestamp, "files": []}
-            runs[workflow_name][execution_id]["files"].append(s3_key)
-        
-        if not runs:
-            print("⚠️ No workflow outputs found")
+        task_instances = response.get('TaskInstances', [])
+        if not task_instances:
+            print("❌ No task instances found")
             return False
         
-        # Apply workflow filter if specified
-        if workflow_filter:
-            runs = {k: v for k, v in runs.items() if workflow_filter.lower() in k.lower()}
-            if not runs:
-                print(f"⚠️ No workflows matching filter '{workflow_filter}' found")
-                return False
-        
-        # Get all runs from the latest workflow execution
-        # For parallel workflows, multiple tasks execute at similar times
-        if not run_id:
-            # Find the latest timestamp across all workflows
-            latest_timestamp = None
-            for workflow_name, workflow_runs in runs.items():
-                for exec_id, run_data in workflow_runs.items():
-                    if latest_timestamp is None or run_data["timestamp"] > latest_timestamp:
-                        latest_timestamp = run_data["timestamp"]
-            
-            # Get all runs within 30 minutes of the latest timestamp (same workflow execution)
-            from datetime import datetime, timedelta
-            latest_dt = datetime.strptime(latest_timestamp, "%Y-%m-%d %H:%M:%S")
-            time_window = timedelta(minutes=30)
-            
-            filtered_runs = {}
-            for workflow_name, workflow_runs in runs.items():
-                for exec_id, run_data in workflow_runs.items():
-                    run_dt = datetime.strptime(run_data["timestamp"], "%Y-%m-%d %H:%M:%S")
-                    if abs(latest_dt - run_dt) <= time_window:
-                        if workflow_name not in filtered_runs:
-                            filtered_runs[workflow_name] = {}
-                        filtered_runs[workflow_name][exec_id] = run_data
-            runs = filtered_runs
+        print(f"Found {len(task_instances)} task instances")
         
         downloaded_notebooks = []
         
-        for workflow_name, workflow_runs in runs.items():
-            for current_run_id, run_data in workflow_runs.items():
-                if run_id and current_run_id != run_id:
-                    continue
+        for task in task_instances:
+            task_id = task.get('TaskInstanceId')
+            task_name = task.get('TaskId') or task_id or 'unknown'
+            
+            # Get task instance details including Xcom
+            try:
+                task_detail = client.get_task_instance(
+                    WorkflowArn=workflow_arn,
+                    RunId=run_id,
+                    TaskInstanceId=task_id
+                )
+            except Exception as e:
+                print(f"⚠️ Skipping task {task_name}: {e}")
+                continue
+            
+            # Check if task has notebook output in Xcom
+            xcom = task_detail.get('Xcom', {})
+            notebook_output = xcom.get('notebook_output') or xcom.get('return_value')
+            
+            if not notebook_output:
+                continue
+            
+            print(f"\n📓 Task: {task_name}")
+            print(f"   Output: {notebook_output}")
+            
+            # Download notebook from S3
+            with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp:
+                tmp_path = tmp.name
+            
+            result = subprocess.run(
+                ["aws", "s3", "cp", notebook_output, tmp_path],
+                capture_output=True,
+                text=True
+            )
+            
+            if result.returncode != 0:
+                print(f"  ❌ Error downloading: {result.stderr}")
+                Path(tmp_path).unlink(missing_ok=True)
+                continue
+            
+            # Extract notebooks
+            task_dir = output_dir / task_name
+            task_dir.mkdir(parents=True, exist_ok=True)
+            
+            try:
+                with tarfile.open(tmp_path, "r:gz") as tar:
+                    for member in tar.getmembers():
+                        if member.name.startswith("_") and member.name.endswith(".ipynb"):
+                            tar.extract(member, task_dir)
+                            notebook_path = task_dir / member.name
+                            downloaded_notebooks.append(notebook_path)
+                            print(f"  ✅ {notebook_path}")
+            except Exception as e:
+                print(f"  ❌ Error extracting: {e}")
+                return False
+            finally:
+                Path(tmp_path).unlink(missing_ok=True)
+        
+        if not downloaded_notebooks:
+            print("⚠️ No notebooks found via GetTaskInstance API, falling back to S3 listing")
+            
+            # Fallback: List S3 for latest notebooks
+            s3_prefix = f"s3://{s3_bucket}/shared/workflows/output/"
+            result = subprocess.run(
+                ["aws", "s3", "ls", s3_prefix, "--recursive"],
+                capture_output=True,
+                text=True
+            )
+            
+            if result.returncode == 0:
+                # Find latest output.tar.gz files
+                latest_files = {}
+                for line in result.stdout.strip().split("\n"):
+                    if "/output/output.tar.gz" in line:
+                        parts = line.split()
+                        if len(parts) >= 4:
+                            timestamp = f"{parts[0]} {parts[1]}"
+                            s3_key = " ".join(parts[3:])
+                            latest_files[s3_key] = timestamp
                 
-                notebook_dir = output_dir / workflow_name
-                notebook_dir.mkdir(parents=True, exist_ok=True)
-                
-                # Convert UTC timestamp to local timezone
-                from datetime import datetime
-                import time
-                utc_timestamp = run_data["timestamp"]
-                utc_dt = datetime.strptime(utc_timestamp, "%Y-%m-%d %H:%M:%S")
-                local_dt = datetime.fromtimestamp(utc_dt.timestamp())
-                local_time_str = local_dt.strftime("%Y-%m-%d %H:%M:%S %Z")
-                
-                print(f"\n📓 Workflow: {workflow_name}")
-                print(f"   Executed: {local_time_str}")
-                
-                for s3_key in run_data["files"]:
-                    s3_path = f"s3://{s3_bucket}/{s3_key}"
+                # Download the most recent file
+                if latest_files:
+                    latest_key = max(latest_files.items(), key=lambda x: x[1])[0]
+                    s3_path = f"s3://{s3_bucket}/{latest_key}"
+                    
+                    print(f"\n📓 Downloading latest notebook from S3")
+                    print(f"   Path: {s3_path}")
                     
                     with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp:
                         tmp_path = tmp.name
                     
-                    print(f"   Downloading...")
                     result = subprocess.run(
                         ["aws", "s3", "cp", s3_path, tmp_path],
                         capture_output=True,
                         text=True
                     )
                     
-                    if result.returncode != 0:
-                        print(f"  ❌ Error: {result.stderr}")
-                        Path(tmp_path).unlink(missing_ok=True)
-                        continue
-                    
-                    try:
-                        with tarfile.open(tmp_path, "r:gz") as tar:
-                            for member in tar.getmembers():
-                                if member.name.startswith("_") and member.name.endswith(".ipynb"):
-                                    tar.extract(member, notebook_dir)
-                                    notebook_path = notebook_dir / member.name
-                                    downloaded_notebooks.append(notebook_path)
-                                    print(f"  ✅ {notebook_path}")
-                    except Exception as e:
-                        print(f"  ❌ Error extracting: {e}")
-                        return False
-                    finally:
-                        Path(tmp_path).unlink(missing_ok=True)
+                    if result.returncode == 0:
+                        task_dir = output_dir / "fallback"
+                        task_dir.mkdir(parents=True, exist_ok=True)
+                        
+                        try:
+                            with tarfile.open(tmp_path, "r:gz") as tar:
+                                for member in tar.getmembers():
+                                    if member.name.startswith("_") and member.name.endswith(".ipynb"):
+                                        tar.extract(member, task_dir)
+                                        notebook_path = task_dir / member.name
+                                        downloaded_notebooks.append(notebook_path)
+                                        print(f"  ✅ {notebook_path}")
+                        except Exception as e:
+                            print(f"  ❌ Error extracting: {e}")
+                        finally:
+                            Path(tmp_path).unlink(missing_ok=True)
         
         if not downloaded_notebooks:
-            print("⚠️ No notebooks downloaded")
+            print("❌ No notebooks downloaded")
             return False
         
         print(f"\n✅ Downloaded {len(downloaded_notebooks)} notebooks")
-        for nb_path in downloaded_notebooks:
-            print(f"  📓 {nb_path}")
         
         # Validate notebooks for errors
         print("\n=== Validating Notebooks ===")

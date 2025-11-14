@@ -37,8 +37,8 @@ This test validates the multi-target pipeline workflow with dev, test, and prod 
 
 ```bash
 # Run multi-target pipeline tests
-python -m pytest tests/integration/multi_target_pipeline/ -v
+python -m pytest tests/integration/multi_target_bundle/ -v
 
 # Run specific test
-python -m pytest tests/integration/multi_target_pipeline/test_multi_target_pipeline.py::TestMultiTargetPipeline::test_multi_target_describe -v
+python -m pytest tests/integration/multi_target_bundle/test_multi_target_pipeline.py::TestMultiTargetPipeline::test_multi_target_describe -v
 ```

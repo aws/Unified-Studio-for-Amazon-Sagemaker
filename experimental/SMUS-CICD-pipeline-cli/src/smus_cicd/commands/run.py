@@ -5,10 +5,10 @@ from typing import Any, Dict, List, Optional
 
 import typer
 
+from ..application import ApplicationManifest
 from ..helpers import airflow_serverless, mwaa
 from ..helpers.airflow_parser import parse_airflow_output
 from ..helpers.utils import get_datazone_project_info, load_config
-from ..pipeline import BundleManifest
 
 # TEMPORARY: Airflow Serverless (Overdrive) configuration
 # TODO: Remove these overrides once service is available in all regions
@@ -50,7 +50,7 @@ def run_command(
     _validate_required_parameters(workflow, output)
 
     try:
-        manifest = BundleManifest.from_file(manifest_file)
+        manifest = ApplicationManifest.from_file(manifest_file)
         targets_to_check = _resolve_targets(targets, manifest)
 
         # Check if any workflow uses serverless Airflow
@@ -74,8 +74,8 @@ def run_command(
             config = load_config()
             mwaa_healthy = False
 
-            for target_name in targets_to_check:
-                target_config = manifest.get_target(target_name)
+            for stage_name in targets_to_check:
+                target_config = manifest.get_stage(stage_name)
                 project_name = target_config.project.name
 
                 # Add domain information from target for proper connection retrieval
@@ -87,7 +87,7 @@ def run_command(
 
                 if output.upper() != "JSON":
                     typer.echo(
-                        f"🔍 Checking MWAA health for target '{target_name}' (project: {project_name})"
+                        f"🔍 Checking MWAA health for target '{stage_name}' (project: {project_name})"
                     )
                 if validate_mwaa_health(project_name, config):
                     mwaa_healthy = True
@@ -150,7 +150,7 @@ def _validate_required_parameters(workflow: str, output: str = "TEXT") -> None:
 
 
 def _resolve_targets(
-    targets: Optional[str], manifest: BundleManifest
+    targets: Optional[str], manifest: ApplicationManifest
 ) -> Dict[str, Any]:
     """
     Resolve target configurations from manifest.
@@ -169,11 +169,11 @@ def _resolve_targets(
         target_list = [t.strip() for t in targets.split(",")]
         return _validate_and_get_targets(target_list, manifest)
     else:
-        return manifest.targets
+        return manifest.stages
 
 
 def _validate_and_get_targets(
-    target_list: List[str], manifest: BundleManifest
+    target_list: List[str], manifest: ApplicationManifest
 ) -> Dict[str, Any]:
     """
     Validate target names and return their configurations.
@@ -191,19 +191,19 @@ def _validate_and_get_targets(
     targets_to_check = {}
 
     for target in target_list:
-        if target not in manifest.targets:
-            available_targets = list(manifest.targets.keys())
+        if target not in manifest.stages:
+            available_targets = list(manifest.stages.keys())
             typer.echo(f"❌ Error: Target '{target}' not found in manifest", err=True)
             typer.echo(f"Available targets: {', '.join(available_targets)}", err=True)
             raise typer.Exit(1)
-        targets_to_check[target] = manifest.targets[target]
+        targets_to_check[target] = manifest.stages[target]
 
     return targets_to_check
 
 
 def _execute_commands_on_targets(
     targets_to_check: Dict[str, Any],
-    manifest: BundleManifest,
+    manifest: ApplicationManifest,
     workflow: str,
     command: str,
     output: str,
@@ -223,27 +223,27 @@ def _execute_commands_on_targets(
     """
     results = []
 
-    for target_name, target_config in targets_to_check.items():
+    for stage_name, target_config in targets_to_check.items():
         if output.upper() != "JSON":
-            typer.echo(f"🎯 Target: {target_name}")
+            typer.echo(f"🎯 Target: {stage_name}")
 
         try:
             target_results = _execute_command_on_target(
-                target_name, target_config, manifest, workflow, command, output
+                stage_name, target_config, manifest, workflow, command, output
             )
             results.extend(target_results)
 
         except Exception as e:
-            error_result = _create_error_result(target_name, str(e), output)
+            error_result = _create_error_result(stage_name, str(e), output)
             results.append(error_result)
 
     return results
 
 
 def _execute_command_on_target(
-    target_name: str,
+    stage_name: str,
     target_config: Any,
-    manifest: BundleManifest,
+    manifest: ApplicationManifest,
     workflow: str,
     command: str,
     output: str,
@@ -252,7 +252,7 @@ def _execute_command_on_target(
     Execute command on a specific target.
 
     Args:
-        target_name: Name of the target
+        stage_name: Name of the target
         target_config: Target configuration object
         manifest: Pipeline manifest object
         workflow: Workflow name
@@ -267,25 +267,25 @@ def _execute_command_on_target(
 
     if isinstance(project_info, str):
         # Handle case where project_info is a string (error message)
-        error_result = _create_error_result(target_name, project_info, output)
+        error_result = _create_error_result(stage_name, project_info, output)
         return [error_result]
 
     if "error" in project_info or not project_info.get("project_id"):
         error_msg = (
             f"Failed to get project info: {project_info.get('error', 'Unknown error')}"
         )
-        error_result = _create_error_result(target_name, error_msg, output)
+        error_result = _create_error_result(stage_name, error_msg, output)
         return [error_result]
 
     workflow_connections = _get_workflow_connections(project_info)
 
     if not workflow_connections:
         error_msg = "No workflow connections found"
-        error_result = _create_error_result(target_name, error_msg, output)
+        error_result = _create_error_result(stage_name, error_msg, output)
         return [error_result]
 
     return _execute_on_workflow_connections(
-        target_name, workflow_connections, command, target_config.domain.region, output
+        stage_name, workflow_connections, command, target_config.domain.region, output
     )
 
 
@@ -348,7 +348,7 @@ def _get_workflow_connections(project_info: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _execute_on_workflow_connections(
-    target_name: str,
+    stage_name: str,
     workflow_connections: Dict[str, Any],
     command: str,
     region: str,
@@ -358,7 +358,7 @@ def _execute_on_workflow_connections(
     Execute command on all workflow connections.
 
     Args:
-        target_name: Name of the target
+        stage_name: Name of the target
         workflow_connections: Dictionary of workflow connections
         command: Command to execute
         region: AWS region
@@ -382,7 +382,7 @@ def _execute_on_workflow_connections(
         result = mwaa.run_airflow_command(env_name, command, region, conn_info)
 
         execution_result = _process_command_result(
-            target_name, conn_name, env_name, command, result, output
+            stage_name, conn_name, env_name, command, result, output
         )
 
         if execution_result:
@@ -392,7 +392,7 @@ def _execute_on_workflow_connections(
 
 
 def _process_command_result(
-    target_name: str,
+    stage_name: str,
     conn_name: str,
     env_name: str,
     command: str,
@@ -403,7 +403,7 @@ def _process_command_result(
     Process the result of a command execution.
 
     Args:
-        target_name: Name of the target
+        stage_name: Name of the target
         conn_name: Connection name
         env_name: Environment name
         command: Command that was executed
@@ -418,7 +418,7 @@ def _process_command_result(
             command, result["stdout"], result["stderr"]
         )
         return {
-            "target": target_name,
+            "target": stage_name,
             "connection": conn_name,
             "environment": env_name,
             "success": result["success"],
@@ -451,13 +451,13 @@ def _display_command_result(result: Dict[str, Any]) -> None:
 
 
 def _create_error_result(
-    target_name: str, error_msg: str, output: str
+    stage_name: str, error_msg: str, output: str
 ) -> Dict[str, Any]:
     """
     Create error result based on output format.
 
     Args:
-        target_name: Name of the target
+        stage_name: Name of the target
         error_msg: Error message
         output: Output format
 
@@ -467,7 +467,7 @@ def _create_error_result(
     if output.upper() != "JSON":
         typer.echo(f"❌ {error_msg}")
 
-    return {"target": target_name, "success": False, "error": error_msg}
+    return {"target": stage_name, "success": False, "error": error_msg}
 
 
 def _output_results(
@@ -524,7 +524,7 @@ def _handle_execution_error(
 
 def _execute_airflow_serverless_workflows(
     targets_to_check: Dict[str, Any],
-    manifest: BundleManifest,
+    manifest: ApplicationManifest,
     workflow: str,
     output: str,
 ) -> List[Dict[str, Any]]:
@@ -542,19 +542,19 @@ def _execute_airflow_serverless_workflows(
     """
     results = []
 
-    for target_name, target_config in targets_to_check.items():
+    for stage_name, target_config in targets_to_check.items():
 
         if output.upper() != "JSON":
-            typer.echo(f"🎯 Target: {target_name} (Serverless Airflow)")
+            typer.echo(f"🎯 Target: {stage_name} (Serverless Airflow)")
 
         try:
             # Generate expected workflow name based on naming pattern from deploy command
-            bundle_name = manifest.bundle_name
+            bundle_name = manifest.application_name
             dag_name = workflow
-            target_name = target_config.project.name.replace("-", "_")
+            stage_name = target_config.project.name.replace("-", "_")
             safe_pipeline = bundle_name.replace("-", "_")
             safe_dag = dag_name.replace("-", "_")
-            expected_workflow_name = f"{safe_pipeline}_{target_name}_{safe_dag}"
+            expected_workflow_name = f"{safe_pipeline}_{stage_name}_{safe_dag}"
 
             # Use target's region instead of hardcoded region
             region = target_config.domain.region
@@ -624,7 +624,7 @@ def _execute_airflow_serverless_workflows(
 
                 results.append(
                     {
-                        "target": target_name,
+                        "target": stage_name,
                         "workflow_arn": workflow_arn,
                         "run_id": run_id,
                         "status": result.get("status"),
@@ -638,7 +638,7 @@ def _execute_airflow_serverless_workflows(
 
                 results.append(
                     {
-                        "target": target_name,
+                        "target": stage_name,
                         "workflow_arn": workflow_arn,
                         "success": False,
                         "error": error_msg,
@@ -650,8 +650,6 @@ def _execute_airflow_serverless_workflows(
             if output.upper() != "JSON":
                 typer.echo(f"❌ {error_msg}")
 
-            results.append(
-                {"target": target_name, "success": False, "error": error_msg}
-            )
+            results.append({"target": stage_name, "success": False, "error": error_msg})
 
     return results

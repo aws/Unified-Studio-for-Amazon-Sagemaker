@@ -14,7 +14,7 @@ class TestDeleteCommand:
         """Set up test fixtures."""
         self.runner = CliRunner()
 
-    @patch("smus_cicd.commands.delete.BundleManifest")
+    @patch("smus_cicd.commands.delete.ApplicationManifest")
     @patch("smus_cicd.commands.delete.get_domain_id_by_name")
     @patch("smus_cicd.commands.delete.delete_project_stack")
     @patch("smus_cicd.commands.delete.Confirm.ask")
@@ -24,13 +24,13 @@ class TestDeleteCommand:
         """Test delete command with user confirmation."""
         # Setup mocks
         mock_manifest = MagicMock()
-        mock_manifest.bundle_name = "TestPipeline"
-        mock_manifest.targets = {"test": MagicMock()}
-        mock_manifest.targets["test"].project = MagicMock()
-        mock_manifest.targets["test"].project.name = "test-project"
-        mock_manifest.targets["test"].domain = MagicMock()
-        mock_manifest.targets["test"].domain.name = "test-domain"
-        mock_manifest.targets["test"].domain.region = "us-east-1"
+        mock_manifest.application_name = "TestPipeline"
+        mock_manifest.stages = {"test": MagicMock()}
+        mock_manifest.stages["test"].project = MagicMock()
+        mock_manifest.stages["test"].project.name = "test-project"
+        mock_manifest.stages["test"].domain = MagicMock()
+        mock_manifest.stages["test"].domain.name = "test-domain"
+        mock_manifest.stages["test"].domain.region = "us-east-1"
 
         mock_manifest_class.from_file.return_value = mock_manifest
         mock_get_domain_id.return_value = "domain-123"
@@ -44,7 +44,7 @@ class TestDeleteCommand:
                 "delete",
                 "--targets",
                 "test",
-                "--bundle",
+                "--manifest",
                 "tests/fixtures/test-bundle.yaml",
             ],
         )
@@ -57,7 +57,7 @@ class TestDeleteCommand:
         )
         assert "Successfully deleted stack for test-project" in result.stdout
 
-    @patch("smus_cicd.commands.delete.BundleManifest")
+    @patch("smus_cicd.commands.delete.ApplicationManifest")
     @patch("smus_cicd.commands.delete.get_domain_id_by_name")
     @patch("smus_cicd.commands.delete.delete_project_stack")
     def test_delete_with_force_flag(
@@ -66,13 +66,13 @@ class TestDeleteCommand:
         """Test delete command with --force flag (skips confirmation)."""
         # Setup mocks
         mock_manifest = MagicMock()
-        mock_manifest.bundle_name = "TestPipeline"
-        mock_manifest.targets = {"test": MagicMock()}
-        mock_manifest.targets["test"].project = MagicMock()
-        mock_manifest.targets["test"].project.name = "test-project"
-        mock_manifest.targets["test"].domain = MagicMock()
-        mock_manifest.targets["test"].domain.name = "test-domain"
-        mock_manifest.targets["test"].domain.region = "us-east-1"
+        mock_manifest.application_name = "TestPipeline"
+        mock_manifest.stages = {"test": MagicMock()}
+        mock_manifest.stages["test"].project = MagicMock()
+        mock_manifest.stages["test"].project.name = "test-project"
+        mock_manifest.stages["test"].domain = MagicMock()
+        mock_manifest.stages["test"].domain.name = "test-domain"
+        mock_manifest.stages["test"].domain.region = "us-east-1"
 
         mock_manifest_class.from_file.return_value = mock_manifest
         mock_get_domain_id.return_value = "domain-123"
@@ -86,7 +86,7 @@ class TestDeleteCommand:
                 "--targets",
                 "test",
                 "--force",
-                "--bundle",
+                "--manifest",
                 "tests/fixtures/test-bundle.yaml",
             ],
         )
@@ -98,7 +98,7 @@ class TestDeleteCommand:
         )
         assert "Successfully deleted stack for test-project" in result.stdout
 
-    @patch("smus_cicd.commands.delete.BundleManifest")
+    @patch("smus_cicd.commands.delete.ApplicationManifest")
     @patch("smus_cicd.commands.delete.get_domain_id_by_name")
     @patch("smus_cicd.commands.delete.delete_project_stack")
     def test_delete_async_mode(
@@ -107,13 +107,13 @@ class TestDeleteCommand:
         """Test delete command with --async flag."""
         # Setup mocks
         mock_manifest = MagicMock()
-        mock_manifest.bundle_name = "TestPipeline"
-        mock_manifest.targets = {"test": MagicMock()}
-        mock_manifest.targets["test"].project = MagicMock()
-        mock_manifest.targets["test"].project.name = "test-project"
-        mock_manifest.targets["test"].domain = MagicMock()
-        mock_manifest.targets["test"].domain.name = "test-domain"
-        mock_manifest.targets["test"].domain.region = "us-east-1"
+        mock_manifest.application_name = "TestPipeline"
+        mock_manifest.stages = {"test": MagicMock()}
+        mock_manifest.stages["test"].project = MagicMock()
+        mock_manifest.stages["test"].project.name = "test-project"
+        mock_manifest.stages["test"].domain = MagicMock()
+        mock_manifest.stages["test"].domain.name = "test-domain"
+        mock_manifest.stages["test"].domain.region = "us-east-1"
 
         mock_manifest_class.from_file.return_value = mock_manifest
         mock_get_domain_id.return_value = "domain-123"
@@ -128,7 +128,7 @@ class TestDeleteCommand:
                 "test",
                 "--force",
                 "--async",
-                "--bundle",
+                "--manifest",
                 "tests/fixtures/test-bundle.yaml",
             ],
         )
@@ -140,7 +140,7 @@ class TestDeleteCommand:
         )
         assert "Stack deletion initiated for test-project" in result.stdout
 
-    @patch("smus_cicd.commands.delete.BundleManifest")
+    @patch("smus_cicd.commands.delete.ApplicationManifest")
     @patch("smus_cicd.commands.delete.get_domain_id_by_name")
     @patch("smus_cicd.commands.delete.delete_project_stack")
     def test_delete_project_not_found(
@@ -149,13 +149,13 @@ class TestDeleteCommand:
         """Test delete command when stack deletion fails."""
         # Setup mocks
         mock_manifest = MagicMock()
-        mock_manifest.bundle_name = "TestPipeline"
-        mock_manifest.targets = {"test": MagicMock()}
-        mock_manifest.targets["test"].project = MagicMock()
-        mock_manifest.targets["test"].project.name = "test-project"
-        mock_manifest.targets["test"].domain = MagicMock()
-        mock_manifest.targets["test"].domain.name = "test-domain"
-        mock_manifest.targets["test"].domain.region = "us-east-1"
+        mock_manifest.application_name = "TestPipeline"
+        mock_manifest.stages = {"test": MagicMock()}
+        mock_manifest.stages["test"].project = MagicMock()
+        mock_manifest.stages["test"].project.name = "test-project"
+        mock_manifest.stages["test"].domain = MagicMock()
+        mock_manifest.stages["test"].domain.name = "test-domain"
+        mock_manifest.stages["test"].domain.region = "us-east-1"
 
         mock_manifest_class.from_file.return_value = mock_manifest
         mock_get_domain_id.return_value = "domain-123"
@@ -169,7 +169,7 @@ class TestDeleteCommand:
                 "--targets",
                 "test",
                 "--force",
-                "--bundle",
+                "--manifest",
                 "tests/fixtures/test-bundle.yaml",
             ],
         )
@@ -179,13 +179,13 @@ class TestDeleteCommand:
         mock_delete_stack.assert_called_once()
         assert "Failed to delete CloudFormation stack" in result.stdout
 
-    @patch("smus_cicd.commands.delete.BundleManifest")
+    @patch("smus_cicd.commands.delete.ApplicationManifest")
     def test_delete_invalid_target(self, mock_manifest_class):
         """Test delete command with invalid target name."""
         # Setup mocks
         mock_manifest = MagicMock()
-        mock_manifest.bundle_name = "TestPipeline"
-        mock_manifest.targets = {"test": MagicMock()}
+        mock_manifest.application_name = "TestPipeline"
+        mock_manifest.stages = {"test": MagicMock()}
 
         mock_manifest_class.from_file.return_value = mock_manifest
 
@@ -197,7 +197,7 @@ class TestDeleteCommand:
                 "--targets",
                 "invalid-target",
                 "--force",
-                "--bundle",
+                "--manifest",
                 "tests/fixtures/test-bundle.yaml",
             ],
         )
@@ -206,7 +206,7 @@ class TestDeleteCommand:
         assert result.exit_code == 1
         assert "not found in manifest" in result.stdout
 
-    @patch("smus_cicd.commands.delete.BundleManifest")
+    @patch("smus_cicd.commands.delete.ApplicationManifest")
     @patch("smus_cicd.commands.delete.get_domain_id_by_name")
     @patch("smus_cicd.commands.delete.delete_project_stack")
     def test_delete_json_output(
@@ -215,13 +215,13 @@ class TestDeleteCommand:
         """Test delete command with JSON output format."""
         # Setup mocks
         mock_manifest = MagicMock()
-        mock_manifest.bundle_name = "TestPipeline"
-        mock_manifest.targets = {"test": MagicMock()}
-        mock_manifest.targets["test"].project = MagicMock()
-        mock_manifest.targets["test"].project.name = "test-project"
-        mock_manifest.targets["test"].domain = MagicMock()
-        mock_manifest.targets["test"].domain.name = "test-domain"
-        mock_manifest.targets["test"].domain.region = "us-east-1"
+        mock_manifest.application_name = "TestPipeline"
+        mock_manifest.stages = {"test": MagicMock()}
+        mock_manifest.stages["test"].project = MagicMock()
+        mock_manifest.stages["test"].project.name = "test-project"
+        mock_manifest.stages["test"].domain = MagicMock()
+        mock_manifest.stages["test"].domain.name = "test-domain"
+        mock_manifest.stages["test"].domain.region = "us-east-1"
 
         mock_manifest_class.from_file.return_value = mock_manifest
         mock_get_domain_id.return_value = "domain-123"
@@ -237,7 +237,7 @@ class TestDeleteCommand:
                 "--force",
                 "--output",
                 "JSON",
-                "--bundle",
+                "--manifest",
                 "tests/fixtures/test-bundle.yaml",
             ],
         )
@@ -255,7 +255,7 @@ class TestDeleteCommand:
         assert output_data["results"][0]["target"] == "test"
         assert output_data["results"][0]["status"] == "deleted"
 
-    @patch("smus_cicd.commands.delete.BundleManifest")
+    @patch("smus_cicd.commands.delete.ApplicationManifest")
     @patch("smus_cicd.commands.delete.get_domain_id_by_name")
     @patch("smus_cicd.commands.delete.delete_project_stack")
     def test_delete_multiple_targets(
@@ -264,18 +264,18 @@ class TestDeleteCommand:
         """Test delete command with multiple targets."""
         # Setup mocks
         mock_manifest = MagicMock()
-        mock_manifest.bundle_name = "TestPipeline"
-        mock_manifest.targets = {"test": MagicMock(), "prod": MagicMock()}
-        mock_manifest.targets["test"].project = MagicMock()
-        mock_manifest.targets["test"].project.name = "test-project"
-        mock_manifest.targets["test"].domain = MagicMock()
-        mock_manifest.targets["test"].domain.name = "test-domain"
-        mock_manifest.targets["test"].domain.region = "us-east-1"
-        mock_manifest.targets["prod"].project = MagicMock()
-        mock_manifest.targets["prod"].project.name = "prod-project"
-        mock_manifest.targets["prod"].domain = MagicMock()
-        mock_manifest.targets["prod"].domain.name = "test-domain"
-        mock_manifest.targets["prod"].domain.region = "us-east-1"
+        mock_manifest.application_name = "TestPipeline"
+        mock_manifest.stages = {"test": MagicMock(), "prod": MagicMock()}
+        mock_manifest.stages["test"].project = MagicMock()
+        mock_manifest.stages["test"].project.name = "test-project"
+        mock_manifest.stages["test"].domain = MagicMock()
+        mock_manifest.stages["test"].domain.name = "test-domain"
+        mock_manifest.stages["test"].domain.region = "us-east-1"
+        mock_manifest.stages["prod"].project = MagicMock()
+        mock_manifest.stages["prod"].project.name = "prod-project"
+        mock_manifest.stages["prod"].domain = MagicMock()
+        mock_manifest.stages["prod"].domain.name = "test-domain"
+        mock_manifest.stages["prod"].domain.region = "us-east-1"
 
         mock_manifest_class.from_file.return_value = mock_manifest
         mock_get_domain_id.return_value = "domain-123"
@@ -289,7 +289,7 @@ class TestDeleteCommand:
                 "--targets",
                 "test,prod",
                 "--force",
-                "--bundle",
+                "--manifest",
                 "tests/fixtures/test-bundle.yaml",
             ],
         )
@@ -304,16 +304,16 @@ class TestDeleteCommand:
             "prod-project", "test-domain", "us-east-1", "TestPipeline", "prod", "TEXT"
         )
 
-    @patch("smus_cicd.commands.delete.BundleManifest")
+    @patch("smus_cicd.commands.delete.ApplicationManifest")
     @patch("smus_cicd.commands.delete.Confirm.ask")
     def test_delete_cancelled_by_user(self, mock_confirm, mock_manifest_class):
         """Test delete command when user cancels confirmation."""
         # Setup mocks
         mock_manifest = MagicMock()
-        mock_manifest.bundle_name = "TestPipeline"
-        mock_manifest.targets = {"test": MagicMock()}
-        mock_manifest.targets["test"].project = MagicMock()
-        mock_manifest.targets["test"].project.name = "test-project"
+        mock_manifest.application_name = "TestPipeline"
+        mock_manifest.stages = {"test": MagicMock()}
+        mock_manifest.stages["test"].project = MagicMock()
+        mock_manifest.stages["test"].project.name = "test-project"
 
         mock_manifest_class.from_file.return_value = mock_manifest
         mock_confirm.return_value = False  # User cancels deletion
@@ -325,7 +325,7 @@ class TestDeleteCommand:
                 "delete",
                 "--targets",
                 "test",
-                "--bundle",
+                "--manifest",
                 "tests/fixtures/test-bundle.yaml",
             ],
         )

@@ -19,9 +19,8 @@ class TestDeployCatalogAssets:
     def create_manifest_with_catalog(self, catalog_config=""):
         """Helper to create manifest file with catalog configuration."""
         manifest_content = f"""
-pipelineName: TestCatalogPipeline
-bundle:
-  bundlesDirectory: /tmp/bundles
+applicationName: TestCatalogPipeline
+content:
   storage:
     - name: workflows
       connectionName: default.s3_shared
@@ -30,7 +29,7 @@ bundle:
       connectionName: default.s3_shared
       include: ['src']
 {catalog_config}
-targets:
+stages:
   test:
     stage: TEST
     domain:
@@ -43,7 +42,7 @@ targets:
         create: true
         profileName: 'All capabilities'
         owners: ['test@example.com']
-    bundle_target_configuration:
+    deployment_configuration:
       storage:
         - name: code
           connectionName: default.s3_shared
@@ -85,7 +84,7 @@ targets:
         try:
             # Run deploy command
             result = self.runner.invoke(
-                app, ["deploy", "--bundle", manifest_file, "--targets", "test"]
+                app, ["deploy", "--manifest", manifest_file, "--targets", "test"]
             )
 
             # Verify success
@@ -129,7 +128,7 @@ targets:
         try:
             # Run deploy command
             result = self.runner.invoke(
-                app, ["deploy", "--bundle", manifest_file, "--targets", "test"]
+                app, ["deploy", "--manifest", manifest_file, "--targets", "test"]
             )
 
             # Verify failure
@@ -164,7 +163,7 @@ targets:
         try:
             # Run deploy command
             result = self.runner.invoke(
-                app, ["deploy", "--bundle", manifest_file, "--targets", "test"]
+                app, ["deploy", "--manifest", manifest_file, "--targets", "test"]
             )
 
             # Verify success
@@ -214,7 +213,7 @@ targets:
         try:
             # Run deploy command
             result = self.runner.invoke(
-                app, ["deploy", "--bundle", manifest_file, "--targets", "test"]
+                app, ["deploy", "--manifest", manifest_file, "--targets", "test"]
             )
 
             # Verify success
@@ -242,16 +241,16 @@ targets:
         manifest_file = self.create_manifest_with_catalog(catalog_config)
 
         try:
-            from smus_cicd.pipeline.bundle_manifest import BundleManifest
+            from smus_cicd.application import ApplicationManifest
 
             # Parse manifest
-            manifest = BundleManifest.from_file(manifest_file)
+            manifest = ApplicationManifest.from_file(manifest_file)
 
             # Verify catalog parsing
-            assert manifest.bundle.catalog is not None
-            assert len(manifest.bundle.catalog.assets) == 1
+            assert manifest.content.catalog is not None
+            assert len(manifest.content.catalog.assets) == 1
 
-            asset = manifest.bundle.catalog.assets[0]
+            asset = manifest.content.catalog.assets[0]
             assert asset.selector.search.assetType == "GlueTable"
             assert asset.selector.search.identifier == "test_db.test_table"
             assert asset.permission == "READ"

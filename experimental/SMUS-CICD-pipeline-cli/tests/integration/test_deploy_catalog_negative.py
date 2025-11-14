@@ -20,9 +20,8 @@ class TestDeployCatalogNegativeScenarios:
     def create_manifest_with_catalog(self, catalog_config=""):
         """Helper to create manifest file with catalog configuration."""
         manifest_content = f"""
-pipelineName: TestCatalogPipeline
-bundle:
-  bundlesDirectory: /tmp/bundles
+applicationName: TestCatalogPipeline
+content:
   storage:
     - name: workflows
       connectionName: default.s3_shared
@@ -31,7 +30,7 @@ bundle:
       connectionName: default.s3_shared
       include: ['src']
 {catalog_config}
-targets:
+stages:
   test:
     stage: TEST
     domain:
@@ -39,7 +38,7 @@ targets:
       region: us-east-1
     project:
       name: test-project
-    bundle_target_configuration:
+    deployment_configuration:
       storage:
         - name: code
           connectionName: default.s3_shared
@@ -61,10 +60,10 @@ targets:
         manifest_file = self.create_manifest_with_catalog(catalog_config)
 
         try:
-            from smus_cicd.pipeline import BundleManifest
+            from smus_cicd.application import ApplicationManifest
             
             with pytest.raises(ValueError, match="Manifest validation failed"):
-                BundleManifest.from_file(manifest_file)
+                ApplicationManifest.from_file(manifest_file)
 
         finally:
             os.unlink(manifest_file)
@@ -83,11 +82,11 @@ targets:
         manifest_file = self.create_manifest_with_catalog(catalog_config)
 
         try:
-            from smus_cicd.pipeline import BundleManifest
-            manifest = BundleManifest.from_file(manifest_file)
+            from smus_cicd.application import ApplicationManifest
+            manifest = ApplicationManifest.from_file(manifest_file)
             
             # Should parse but identifier is empty
-            assert manifest.bundle.catalog.assets[0].selector.search.identifier == ""
+            assert manifest.content.catalog.assets[0].selector.search.identifier == ""
 
         finally:
             os.unlink(manifest_file)
@@ -106,11 +105,11 @@ targets:
         manifest_file = self.create_manifest_with_catalog(catalog_config)
 
         try:
-            from smus_cicd.pipeline import BundleManifest
+            from smus_cicd.application import ApplicationManifest
             
             # Should fail schema validation
             with pytest.raises(ValueError, match="Manifest validation failed"):
-                BundleManifest.from_file(manifest_file)
+                ApplicationManifest.from_file(manifest_file)
 
         finally:
             os.unlink(manifest_file)
@@ -169,7 +168,7 @@ targets:
         try:
             # Run deploy command
             result = self.runner.invoke(
-                app, ["deploy", "--bundle", manifest_file, "--targets", "test"]
+                app, ["deploy", "--manifest", manifest_file, "--targets", "test"]
             )
 
             # Should fail due to asset not found
@@ -227,7 +226,7 @@ targets:
         try:
             # Run deploy command
             result = self.runner.invoke(
-                app, ["deploy", "--bundle", manifest_file, "--targets", "test"]
+                app, ["deploy", "--manifest", manifest_file, "--targets", "test"]
             )
 
             # Should fail due to domain not found
@@ -288,7 +287,7 @@ targets:
         try:
             # Run deploy command
             result = self.runner.invoke(
-                app, ["deploy", "--bundle", manifest_file, "--targets", "test"]
+                app, ["deploy", "--manifest", manifest_file, "--targets", "test"]
             )
 
             # Should fail due to project not found
@@ -362,7 +361,7 @@ targets:
         try:
             # Run deploy command
             result = self.runner.invoke(
-                app, ["deploy", "--bundle", manifest_file, "--targets", "test"]
+                app, ["deploy", "--manifest", manifest_file, "--targets", "test"]
             )
 
             # Should fail due to permission denied
@@ -380,12 +379,12 @@ targets:
         manifest_file = self.create_manifest_with_catalog(catalog_config)
 
         try:
-            from smus_cicd.pipeline import BundleManifest
-            manifest = BundleManifest.from_file(manifest_file)
+            from smus_cicd.application import ApplicationManifest
+            manifest = ApplicationManifest.from_file(manifest_file)
             
             # Should parse successfully with empty array
-            assert manifest.bundle.catalog is not None
-            assert len(manifest.bundle.catalog.assets) == 0
+            assert manifest.content.catalog is not None
+            assert len(manifest.content.catalog.assets) == 0
 
         finally:
             os.unlink(manifest_file)
@@ -410,13 +409,13 @@ targets:
         manifest_file = self.create_manifest_with_catalog(catalog_config)
 
         try:
-            from smus_cicd.pipeline import BundleManifest
-            manifest = BundleManifest.from_file(manifest_file)
+            from smus_cicd.application import ApplicationManifest
+            manifest = ApplicationManifest.from_file(manifest_file)
             
             # Should parse but have mixed valid/invalid assets
-            assert len(manifest.bundle.catalog.assets) == 2
-            assert manifest.bundle.catalog.assets[0].selector.search.identifier == "valid_db.valid_table"
-            assert manifest.bundle.catalog.assets[1].selector.search.identifier == ""
+            assert len(manifest.content.catalog.assets) == 2
+            assert manifest.content.catalog.assets[0].selector.search.identifier == "valid_db.valid_table"
+            assert manifest.content.catalog.assets[1].selector.search.identifier == ""
 
         finally:
             os.unlink(manifest_file)

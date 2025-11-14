@@ -1,6 +1,5 @@
-bundleName: TestBundle
-bundle:
-  bundlesDirectory: ./bundles
+applicationName: TestBundle
+content:
   storage:
   - connectionName: default.s3_shared
     include:
@@ -21,7 +20,7 @@ bundle:
     - .libs.json
     name: workflows
     append: true
-targets:
+stages:
   dev:
     stage: DEV
     domain:
@@ -31,7 +30,7 @@ targets:
     project:
       name: dev-marketing
       create: false
-    bundle_target_configuration:
+    deployment_configuration:
       storage:
       - connectionName: default.s3_shared
         name: code
@@ -55,7 +54,7 @@ targets:
         owners:
         - arn:aws:iam::123456789012:role/GitHubActionsRole-SMUS-CLI-Tests
         contributors: []
-    bundle_target_configuration:
+    deployment_configuration:
       storage:
       - connectionName: default.s3_shared
         name: code
@@ -79,7 +78,7 @@ targets:
         owners:
         - arn:aws:iam::123456789012:role/GitHubActionsRole-SMUS-CLI-Tests
         contributors: []
-    bundle_target_configuration:
+    deployment_configuration:
       storage:
       - connectionName: default.s3_shared
         name: code

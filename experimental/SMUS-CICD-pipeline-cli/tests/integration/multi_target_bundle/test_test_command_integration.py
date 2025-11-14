@@ -14,7 +14,7 @@ class TestTestCommandIntegration(IntegrationTestBase):
     @pytest.fixture
     def manifest_path(self):
         """Get path to test manifest."""
-        return "tests/integration/multi_target_pipeline/multi_target_bundle.yaml"
+        return "tests/integration/multi_target_bundle/multi_target_bundle.yaml"
 
     def test_test_command_basic(self, manifest_path):
         """Test basic test command functionality."""
@@ -25,7 +25,7 @@ class TestTestCommandIntegration(IntegrationTestBase):
                 "-m",
                 "smus_cicd.cli",
                 "test",
-                "--bundle",
+                "--manifest",
                 manifest_path,
                 "--targets",
                 "test",
@@ -50,7 +50,7 @@ class TestTestCommandIntegration(IntegrationTestBase):
                 "-m",
                 "smus_cicd.cli",
                 "test",
-                "--bundle",
+                "--manifest",
                 manifest_path,
                 "--targets",
                 "test",
@@ -63,7 +63,7 @@ class TestTestCommandIntegration(IntegrationTestBase):
         )
 
         # Should produce valid JSON
-        assert '"bundle": "IntegrationTestMultiTarget"' in result.stdout
+        assert '"content": "IntegrationTestMultiTarget"' in result.stdout
         assert '"domain": "cicd-test-domain"' in result.stdout
 
     def test_test_command_verbose(self, manifest_path):
@@ -74,7 +74,7 @@ class TestTestCommandIntegration(IntegrationTestBase):
                 "-m",
                 "smus_cicd.cli",
                 "test",
-                "--bundle",
+                "--manifest",
                 manifest_path,
                 "--targets",
                 "test",
@@ -96,7 +96,7 @@ class TestTestCommandIntegration(IntegrationTestBase):
                 "-m",
                 "smus_cicd.cli",
                 "test",
-                "--bundle",
+                "--manifest",
                 manifest_path,
             ],
             capture_output=True,
@@ -114,7 +114,7 @@ class TestTestCommandIntegration(IntegrationTestBase):
 
     def test_test_files_exist(self):
         """Test that test files exist in the expected location."""
-        test_folder = Path("tests/integration/multi_target_pipeline/pipeline_tests")
+        test_folder = Path("tests/integration/multi_target_bundle/pipeline_tests")
         assert test_folder.exists(), "Test folder should exist"
 
         test_file = test_folder / "test_project_validation.py"
@@ -143,7 +143,7 @@ class TestTestCommandIntegration(IntegrationTestBase):
         )
 
         # Run pytest directly on test folder
-        test_folder = "tests/integration/multi_target_pipeline/pipeline_tests"
+        test_folder = "tests/integration/multi_target_bundle/pipeline_tests"
         result = subprocess.run(
             [sys.executable, "-m", "pytest", test_folder, "-v"],
             capture_output=True,

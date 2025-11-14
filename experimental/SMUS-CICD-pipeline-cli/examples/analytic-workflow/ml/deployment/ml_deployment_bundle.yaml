@@ -1,59 +1,60 @@
-bundleName: IntegrationTestMLDeployment
-
-bundle:
-  bundlesDirectory: /tmp/bundles
+applicationName: IntegrationTestMLDeployment
+content:
   storage:
-    - name: deployment-code
-      connectionName: default.s3_shared
-      include: ['ml/deployment/code']
-    - name: deployment-workflows
-      connectionName: default.s3_shared
-      include: ['ml/deployment/workflows']
-    - name: model-artifacts
-      connectionName: default.s3_shared
-      include: ['ml/output/model-artifacts/latest']
-
-targets:
-  dev: 
+  - name: deployment-code
+    connectionName: default.s3_shared
+    include:
+    - ml/deployment/code
+  - name: deployment-workflows
+    connectionName: default.s3_shared
+    include:
+    - ml/deployment/workflows
+  - name: model-artifacts
+    connectionName: default.s3_shared
+    include:
+    - ml/output/model-artifacts/latest
+stages:
+  dev:
     stage: DEV
     domain:
       tags:
         purpose: smus-cicd-testing
       region: ${DEV_DOMAIN_REGION:us-east-1}
-    project: 
+    project:
       name: dev-marketing
     environment_variables:
       S3_PREFIX: dev
-
-  test: 
+  test:
     stage: TEST
     domain:
       tags:
         purpose: smus-cicd-testing
       region: ${DEV_DOMAIN_REGION:us-east-1}
-    project: 
+    project:
       name: test-marketing
     initialization:
-      project: 
+      project:
         create: true
-        owners: [Eng1, arn:aws:iam::*:role/GitHubActionsRole-SMUS-CLI-Tests]
+        owners:
+        - Eng1
+        - arn:aws:iam::*:role/GitHubActionsRole-SMUS-CLI-Tests
         contributors: []
         role:
           arn: arn:aws:iam::*:role/SMUSCICDTestRole
-    bundle_target_configuration:
-      storage:
-        - name: deployment-code
-          connectionName: default.s3_shared
-          targetDirectory: 'ml/bundle/deployment-code'
-        - name: deployment-workflows
-          connectionName: default.s3_shared
-          targetDirectory: 'ml/bundle/deployment-workflows'
-        - name: model-artifacts
-          connectionName: default.s3_shared
-          targetDirectory: 'ml/bundle/model-artifacts'
     environment_variables:
       S3_PREFIX: test
-
-workflows:
-  - workflowName: ml_deployment_workflow
-    engine: airflow-serverless
+    deployment_configuration:
+      storage:
+      - name: deployment-code
+        connectionName: default.s3_shared
+        targetDirectory: ml/bundle/deployment-code
+      - name: deployment-workflows
+        connectionName: default.s3_shared
+        targetDirectory: ml/bundle/deployment-workflows
+      - name: model-artifacts
+        connectionName: default.s3_shared
+        targetDirectory: ml/bundle/model-artifacts
+initialization:
+- workflowName: ml_deployment_workflow
+  engine: airflow-serverless
+  type: workflow

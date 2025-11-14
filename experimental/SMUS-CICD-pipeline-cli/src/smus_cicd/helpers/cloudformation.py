@@ -41,7 +41,7 @@ def create_project_via_cloudformation(
     domain_name,
     region,
     bundle_name,
-    target_name,
+    stage_name,
     target_stage=None,
     user_parameters=None,
     owners=None,
@@ -126,14 +126,14 @@ def create_project_via_cloudformation(
 
         # Generate stack name: SMUS-{pipeline}-{target}-{project}-{template}
         clean_pipeline = bundle_name.replace("_", "-").replace(" ", "-").lower()
-        clean_target = target_name.replace("_", "-").replace(" ", "-").lower()
+        clean_target = stage_name.replace("_", "-").replace(" ", "-").lower()
         clean_project = project_name.replace("_", "-").replace(" ", "-").lower()
         stack_name = f"SMUS-{clean_pipeline}-{clean_target}-{clean_project}-project"
 
         # Prepare stack tags
         tags = [
-            {"Key": "BundleName", "Value": bundle_name},
-            {"Key": "TargetName", "Value": target_name},
+            {"Key": "Application", "Value": bundle_name},
+            {"Key": "Stage", "Value": stage_name},
             {"Key": "CreatedBy", "Value": "SMUS-CLI"},
         ]
         if target_stage:
@@ -431,13 +431,13 @@ def wait_for_project_deployment(project_name, project_id, domain_id, region):
 
 
 def delete_project_stack(
-    project_name, domain_name, region, bundle_name, target_name, output="TEXT"
+    project_name, domain_name, region, bundle_name, stage_name, output="TEXT"
 ):
     """Delete CloudFormation stack for a project."""
     try:
         # Generate stack name: SMUS-{pipeline}-{target}-{project}-{template}
         clean_pipeline = bundle_name.replace("_", "-").replace(" ", "-").lower()
-        clean_target = target_name.replace("_", "-").replace(" ", "-").lower()
+        clean_target = stage_name.replace("_", "-").replace(" ", "-").lower()
         clean_project = project_name.replace("_", "-").replace(" ", "-").lower()
         stack_name = f"SMUS-{clean_pipeline}-{clean_target}-{clean_project}-project"
 

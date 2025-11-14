@@ -25,13 +25,13 @@ def handle_info(message: str) -> None:
 
 
 def validate_target_exists(
-    target_name: str, manifest, context: str = "operation"
+    stage_name: str, manifest, context: str = "operation"
 ) -> None:
     """Validate that a target exists in the manifest."""
-    if not manifest.get_target(target_name):
-        available_targets = list(manifest.targets.keys())
+    if not manifest.get_stage(stage_name):
+        available_targets = list(manifest.stages.keys())
         handle_error(
-            f"Target '{target_name}' not found in manifest for {context}. "
+            f"Target '{stage_name}' not found in manifest for {context}. "
             f"Available targets: {', '.join(available_targets)}"
         )
 

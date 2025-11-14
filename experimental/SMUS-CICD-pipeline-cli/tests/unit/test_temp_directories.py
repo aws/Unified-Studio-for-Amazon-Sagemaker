@@ -12,15 +12,14 @@ runner = CliRunner()
 @pytest.fixture
 def sample_manifest():
     return """
-bundleName: TestPipeline
-bundlesDirectory: /tmp/bundles
-bundle:
+applicationName: TestPipeline
+content:
   storage:
     - name: workflows
       connectionName: default.s3_shared
       append: true
       include: ['workflows/']
-targets:
+stages:
   dev:
     stage: DEV
     domain:
@@ -39,10 +38,10 @@ def test_bundle_uses_temp_directory(sample_manifest):
 
     with patch("os.path.exists", return_value=True):
         with patch(
-            "smus_cicd.commands.bundle.BundleManifest.from_file"
+            "smus_cicd.commands.bundle.ApplicationManifest.from_file"
         ) as mock_manifest:
-            from smus_cicd.pipeline import BundleManifest
-            mock_manifest.return_value = BundleManifest.from_dict(yaml.safe_load(sample_manifest))
+            from smus_cicd.application import ApplicationManifest
+            mock_manifest.return_value = ApplicationManifest.from_dict(yaml.safe_load(sample_manifest))
             with patch(
                 "smus_cicd.helpers.utils.load_config",
                 return_value={"region": "us-east-1"},

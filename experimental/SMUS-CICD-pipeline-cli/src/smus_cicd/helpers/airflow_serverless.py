@@ -673,6 +673,8 @@ def wait_for_workflow_completion(
     timeout_seconds = timeout_minutes * 60
     start_time = time.time()
     last_status = None
+    queue_start_time = None
+    total_queue_time = 0
 
     while time.time() - start_time < timeout_seconds:
         status_result = get_workflow_run_status(
@@ -684,6 +686,18 @@ def wait_for_workflow_completion(
 
         status = status_result["status"]
         elapsed = int(time.time() - start_time)
+
+        # Track queue time
+        if status == "QUEUED":
+            if queue_start_time is None:
+                queue_start_time = time.time()
+                logger.info(f"Workflow run {run_id} entered QUEUED state")
+        elif queue_start_time is not None:
+            # Exited queue state
+            queue_duration = int(time.time() - queue_start_time)
+            total_queue_time += queue_duration
+            logger.info(f"Workflow run {run_id} was in QUEUED state for {queue_duration}s")
+            queue_start_time = None
 
         # Call status callback if provided
         if status_callback and status != last_status:
@@ -698,6 +712,15 @@ def wait_for_workflow_completion(
             "STOPPED",
             "TIMEOUT",
         ]:
+            # Log final queue time if still in queue when completed
+            if queue_start_time is not None:
+                queue_duration = int(time.time() - queue_start_time)
+                total_queue_time += queue_duration
+                logger.info(f"Workflow run {run_id} was in QUEUED state for {queue_duration}s (final)")
+            
+            if total_queue_time > 0:
+                logger.info(f"Workflow run {run_id} total QUEUED time: {total_queue_time}s")
+            
             logger.info(f"Workflow run {run_id} completed with status: {status}")
             return status_result
 

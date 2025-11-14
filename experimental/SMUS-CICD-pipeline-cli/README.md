@@ -59,7 +59,8 @@ Build and deploy data applications including Spark code, Python scripts, Airflow
 
 ### 🔧 DevOps Teams
 Set up CI/CD pipelines (GitHub Actions) and manage multi-environment infrastructure for data teams.  
-→ **[Admin Guide](docs/getting-started/admin-quickstart.md)** - Configure infrastructure and pipelines in 15 minutes
+→ **[Admin Guide](docs/getting-started/admin-quickstart.md)** - Configure infrastructure and pipelines in 15 minutes  
+→ **[GitHub Workflow Templates](git-templates/)** - Generic, reusable workflow templates for automated deployment
 
 ---
 
@@ -123,7 +124,8 @@ S3 • Lambda • Step Functions • DynamoDB • RDS • SNS/SQS • Batch
 ### Application Deployment Manifest
 A declarative YAML file (`manifest.yaml`) that defines your data application:
 - **Application details** - Name, version, description
-- **Content sources** - Workflows, code from git repositories, data/models from storage
+- **Content sources** - Code from git repositories, data/models from storage
+- **Activation** - How to run the application (workflows, events, CloudFormation)
 - **Deployment stages** - Where to deploy (dev, test, prod environments)
 - **Configuration** - Environment-specific settings and parameters
 

@@ -1,67 +1,67 @@
-bundleName: IntegrationTestMLTraining
-
-bundle:
-  bundlesDirectory: /tmp/bundles
+applicationName: IntegrationTestMLTraining
+content:
   storage:
-    - name: training-code
-      connectionName: default.s3_shared
-      include: ['ml/training/code']
-    - name: training-workflows
-      connectionName: default.s3_shared
-      include: ['ml/training/workflows']
-
-targets:
-  dev: 
+  - name: training-code
+    connectionName: default.s3_shared
+    include:
+    - ml/training/code
+  - name: training-workflows
+    connectionName: default.s3_shared
+    include:
+    - ml/training/workflows
+stages:
+  dev:
     stage: DEV
     domain:
       tags:
         purpose: smus-cicd-testing
       region: ${DEV_DOMAIN_REGION:us-east-1}
-    project: 
+    project:
       name: dev-marketing
     environment_variables:
       S3_PREFIX: dev
-
-  test: 
+  test:
     stage: TEST
     domain:
       tags:
         purpose: smus-cicd-testing
       region: ${DEV_DOMAIN_REGION:us-east-1}
-    project: 
+    project:
       name: test-marketing
-    tests:
-      folder: examples/analytic-workflow/ml/training/pipeline_tests/
     initialization:
-      project: 
+      project:
         create: true
-        owners: [Eng1, arn:aws:iam::*:role/GitHubActionsRole-SMUS-CLI-Tests]
+        owners:
+        - Eng1
+        - arn:aws:iam::*:role/GitHubActionsRole-SMUS-CLI-Tests
         contributors: []
         role:
           arn: arn:aws:iam::*:role/SMUSCICDTestRole
-        userParameters: 
-          - EnvironmentConfigurationName: 'Lakehouse Database'
-            parameters:
-              - name: glueDbName
-                value: analytic_workflow_test_db
+        userParameters:
+        - EnvironmentConfigurationName: Lakehouse Database
+          parameters:
+          - name: glueDbName
+            value: analytic_workflow_test_db
       connections:
-        - name: mlflow-server
-          type: MLFLOW
-          properties:
-            trackingServerArn: "arn:aws:sagemaker:${STS_REGION}:${STS_ACCOUNT_ID}:mlflow-tracking-server/smus-integration-mlflow-use2"
-            trackingServerName: "smus-integration-mlflow-use2"
-    bundle_target_configuration:
-      storage:
-        - name: training-code
-          connectionName: default.s3_shared
-          targetDirectory: 'ml/bundle/training-code'
-          compression: 'gz'
-        - name: training-workflows
-          connectionName: default.s3_shared
-          targetDirectory: 'ml/bundle/training-workflows'
+      - name: mlflow-server
+        type: MLFLOW
+        properties:
+          trackingServerArn: arn:aws:sagemaker:${STS_REGION}:${STS_ACCOUNT_ID}:mlflow-tracking-server/smus-integration-mlflow-use2
+          trackingServerName: smus-integration-mlflow-use2
     environment_variables:
       S3_PREFIX: test
-
-workflows:
-  - workflowName: ml_training_workflow
-    engine: airflow-serverless
+    deployment_configuration:
+      storage:
+      - name: training-code
+        connectionName: default.s3_shared
+        targetDirectory: ml/bundle/training-code
+        compression: gz
+      - name: training-workflows
+        connectionName: default.s3_shared
+        targetDirectory: ml/bundle/training-workflows
+initialization:
+- workflowName: ml_training_workflow
+  engine: airflow-serverless
+  type: workflow
+tests:
+  folder: examples/analytic-workflow/ml/training/pipeline_tests/

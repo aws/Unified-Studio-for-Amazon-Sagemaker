@@ -113,7 +113,7 @@ The SMUS CLI intelligently manages infrastructure creation and updates:
 #### **Domain Management**
 ```bash
 # CLI automatically creates DataZone domain if missing
-smus-cli deploy --bundle bundle.yaml --targets test
+smus-cli deploy --bundle bundle.yaml --stages test
 # Creates domain "my-studio-domain" if it doesn't exist
 # Uses existing domain if already present
 ```
@@ -121,7 +121,7 @@ smus-cli deploy --bundle bundle.yaml --targets test
 #### **Project Creation**
 ```bash
 # CLI creates SageMaker projects as needed
-smus-cli deploy --bundle bundle.yaml --targets test,prod
+smus-cli deploy --bundle bundle.yaml --stages test,prod
 # Creates "my-project-test" and "my-project-prod" projects
 # Skips creation if projects already exist
 ```
@@ -230,7 +230,7 @@ graph TD
 #### **Bundle Creation Process**
 ```bash
 # CLI packages all deployment artifacts
-smus-cli bundle --bundle bundle.yaml --targets test
+smus-cli bundle --bundle bundle.yaml --stages test
 ```
 
 **What gets bundled:**
@@ -254,7 +254,7 @@ The CLI handles infrastructure creation during deployment:
 
 ```bash
 # Single command creates all required infrastructure
-smus-cli deploy --bundle bundle.yaml --targets test
+smus-cli deploy --bundle bundle.yaml --stages test
 
 # CLI automatically:
 # 1. Creates DataZone domain if missing
@@ -317,7 +317,7 @@ deploy-production:
   steps:
     - name: Deploy to Production
       run: |
-        smus-cli deploy --bundle bundle.yaml --targets prod
+        smus-cli deploy --bundle bundle.yaml --stages prod
 ```
 
 **GitLab CI Example:**
@@ -329,7 +329,7 @@ deploy-production:
     action: start
   when: manual  # Requires manual trigger
   script:
-    - smus-cli deploy --bundle bundle.yaml --targets prod
+    - smus-cli deploy --bundle bundle.yaml --stages prod
 ```
 
 #### **Approval Workflow Process**
@@ -354,31 +354,31 @@ smus-cli describe --bundle bundle.yaml --connect
 #### **2. Bundle Creation**
 ```bash
 # Creates deployment bundle from source environment
-smus-cli bundle --bundle bundle.yaml --targets test
+smus-cli bundle --bundle bundle.yaml --stages test
 ```
 
 #### **3. Infrastructure-Aware Deployment**
 ```bash
 # Deploys with automatic infrastructure creation
-smus-cli deploy --bundle bundle.yaml --targets test
+smus-cli deploy --bundle bundle.yaml --stages test
 ```
 
 #### **4. Test Execution**
 ```bash
 # Runs validation tests on deployed environment
-smus-cli test --bundle bundle.yaml --targets test
+smus-cli test --bundle bundle.yaml --stages test
 ```
 
 #### **5. Production Deployment**
 ```bash
 # Deploys to production with approval gates
-smus-cli deploy --bundle bundle.yaml --targets prod
+smus-cli deploy --bundle bundle.yaml --stages prod
 ```
 
 #### **6. Monitoring and Status**
 ```bash
 # Monitors deployment status and health
-smus-cli monitor --bundle bundle.yaml --targets prod
+smus-cli monitor --bundle bundle.yaml --stages prod
 ```
 
 ## Manual Reviewers and Approval Process
@@ -421,7 +421,7 @@ deploy-production:
       when: manual
       allow_failure: false
   script:
-    - smus-cli deploy --bundle bundle.yaml --targets prod
+    - smus-cli deploy --bundle bundle.yaml --stages prod
 ```
 
 ### Approval Workflow Mechanics
@@ -521,7 +521,7 @@ create-bundle:
 ```
 
 **Purpose**: Packages deployment artifacts including DAGs, notebooks, and catalog assets
-**CLI Command**: `smus-cli bundle --bundle bundle.yaml --targets test`
+**CLI Command**: `smus-cli bundle --bundle bundle.yaml --stages test`
 **Infrastructure Impact**: Creates S3 storage for bundles if not present
 
 #### **Job 3: Test Environment Deployment**
@@ -534,7 +534,7 @@ deploy-test:
 ```
 
 **Purpose**: Deploys to test environment with automatic infrastructure provisioning
-**CLI Command**: `smus-cli deploy --bundle bundle.yaml --targets test`
+**CLI Command**: `smus-cli deploy --bundle bundle.yaml --stages test`
 **Infrastructure Created**:
 - SageMaker project (if missing)
 - Lakehouse environment (if missing)
@@ -551,7 +551,7 @@ run-tests:
 ```
 
 **Purpose**: Validates deployment through automated testing
-**CLI Command**: `smus-cli test --bundle bundle.yaml --targets test`
+**CLI Command**: `smus-cli test --bundle bundle.yaml --stages test`
 
 #### **Job 5: Production Deployment (Manual Approval)**
 ```yaml
@@ -563,7 +563,7 @@ deploy-prod:
 ```
 
 **Manual Approval Gate**: Uses GitHub environment `aws-env-amirbo-6778` with protection rules
-**CLI Command**: `smus-cli deploy --bundle bundle.yaml --targets prod`
+**CLI Command**: `smus-cli deploy --bundle bundle.yaml --stages prod`
 **Infrastructure Management**: Creates production infrastructure idempotently
 
 ### Repository-Specific Features
@@ -631,7 +631,7 @@ The workflow demonstrates automatic catalog asset management:
 # CLI automatically handles catalog asset subscriptions
 - name: Deploy with Catalog Assets
   run: |
-    smus-cli deploy --bundle bundle.yaml --targets prod
+    smus-cli deploy --bundle bundle.yaml --stages prod
     # CLI automatically:
     # 1. Identifies catalog assets in bundle
     # 2. Requests subscriptions for production project

@@ -5,9 +5,9 @@ from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.python_operator import PythonOperator
 
-def generated_test_dag_1762523199_2553_task():
+def generated_test_dag_1763146572_9019_task():
     """Generated task function."""
-    print(f"Executing generated task: generated_test_dag_1762523199_2553")
+    print(f"Executing generated task: generated_test_dag_1763146572_9019")
     return "Generated task completed successfully"
 
 default_args = {
@@ -21,7 +21,7 @@ default_args = {
 }
 
 dag = DAG(
-    'generated_test_dag_1762523199_2553',
+    'generated_test_dag_1763146572_9019',
     default_args=default_args,
     description='Generated test DAG for integration testing',
     schedule_interval=None,
@@ -30,7 +30,7 @@ dag = DAG(
 )
 
 task = PythonOperator(
-    task_id='generated_test_dag_1762523199_2553_task',
-    python_callable=generated_test_dag_1762523199_2553_task,
+    task_id='generated_test_dag_1763146572_9019_task',
+    python_callable=generated_test_dag_1763146572_9019_task,
     dag=dag,
 )

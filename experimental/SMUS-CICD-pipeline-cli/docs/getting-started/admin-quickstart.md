@@ -49,7 +49,7 @@ A **target** is a SMUS project where bundles deploy. Data teams typically use:
 Each target in `manifest.yaml` specifies:
 
 ```yaml
-targets:
+stages:
   test:
     domain:
       name: my-domain          # SMUS domain name
@@ -122,7 +122,7 @@ bundle:
       include:
         - 'workflows/'
 
-targets:
+stages:
   test:
     domain:
       name: my-domain
@@ -175,7 +175,7 @@ SMUS projects automatically include these connections:
 The recommended approach is to define connections in the bundle manifest under `initialization.connections`:
 
 ```yaml
-targets:
+stages:
   test:
     domain:
       name: my-domain
@@ -330,31 +330,31 @@ The CLI is used differently at each stage:
 ```bash
 # Data teams work in their dev project
 # They create bundles FROM dev environment
-smus-cli bundle --manifest manifest.yaml --targets dev
+smus-cli bundle --manifest manifest.yaml --stages dev
 ```
 
 ### Testing Stage (CI/CD or Data Teams)
 ```bash
 # Deploy bundle TO test environment
-smus-cli deploy --targets test --manifest manifest.yaml
+smus-cli deploy --stages test --manifest manifest.yaml
 
 # Validate deployment
-smus-cli test --targets test --manifest manifest.yaml
+smus-cli test --stages test --manifest manifest.yaml
 
 # Check logs
-smus-cli logs --targets test --workflow my_workflow --live
+smus-cli logs --stages test --workflow my_workflow --live
 
 # Monitor health
-smus-cli monitor --targets test --manifest manifest.yaml
+smus-cli monitor --stages test --manifest manifest.yaml
 ```
 
 ### Production Stage (CI/CD)
 ```bash
 # Deploy to production after test validation
-smus-cli deploy --targets prod --manifest manifest.yaml
+smus-cli deploy --stages prod --manifest manifest.yaml
 
 # Monitor production deployment
-smus-cli monitor --targets prod --manifest manifest.yaml
+smus-cli monitor --stages prod --manifest manifest.yaml
 ```
 
 **Key insight:** 
@@ -396,13 +396,13 @@ Each bundle deploys independently to the same target:
 ```bash
 # Deploy and promote monthly-metrics bundle
 cd monthly-metrics
-smus-cli deploy --targets test --manifest manifest.yaml
-smus-cli deploy --targets prod --manifest manifest.yaml
+smus-cli deploy --stages test --manifest manifest.yaml
+smus-cli deploy --stages prod --manifest manifest.yaml
 
 # Deploy and promote churn-model bundle separately
 cd ../churn-model
-smus-cli deploy --targets test --manifest manifest.yaml
-smus-cli deploy --targets prod --manifest manifest.yaml
+smus-cli deploy --stages test --manifest manifest.yaml
+smus-cli deploy --stages prod --manifest manifest.yaml
 ```
 
 All workflows from both bundles appear in the same MWAA environment within the project.
@@ -446,16 +446,16 @@ jobs:
           aws-region: us-east-1
       
       - name: Create Bundle
-        run: smus-cli bundle --manifest manifest.yaml --targets dev
+        run: smus-cli bundle --manifest manifest.yaml --stages dev
       
       - name: Deploy to Test
-        run: smus-cli deploy --targets test --manifest manifest.yaml
+        run: smus-cli deploy --stages test --manifest manifest.yaml
       
       - name: Validate Deployment
-        run: smus-cli test --targets test --manifest manifest.yaml
+        run: smus-cli test --stages test --manifest manifest.yaml
       
       - name: Check Deployment Health
-        run: smus-cli monitor --targets test --manifest manifest.yaml
+        run: smus-cli monitor --stages test --manifest manifest.yaml
 
   deploy-prod:
     needs: deploy-test
@@ -466,10 +466,10 @@ jobs:
       - uses: actions/checkout@v3
       
       - name: Deploy to Production
-        run: smus-cli deploy --targets prod --manifest manifest.yaml
+        run: smus-cli deploy --stages prod --manifest manifest.yaml
       
       - name: Monitor Production
-        run: smus-cli monitor --targets prod --manifest manifest.yaml
+        run: smus-cli monitor --stages prod --manifest manifest.yaml
 ```
 
 **See more:** [GitHub Actions Integration Guide](../github-actions-integration.md)
@@ -483,7 +483,7 @@ After deployment, use these commands to verify everything works:
 ### Check Deployment Status
 ```bash
 # View overall bundle health
-smus-cli monitor --targets test --manifest manifest.yaml
+smus-cli monitor --stages test --manifest manifest.yaml
 ```
 
 **Output:**
@@ -507,16 +507,16 @@ Connections:
 ### View Workflow Logs
 ```bash
 # Live logs for specific workflow
-smus-cli logs --targets test --workflow metrics_etl --live
+smus-cli logs --stages test --workflow metrics_etl --live
 
 # Historical logs
-smus-cli logs --targets test --workflow metrics_etl --date 2025-01-13
+smus-cli logs --stages test --workflow metrics_etl --date 2025-01-13
 ```
 
 ### Run Tests
 ```bash
 # Execute validation tests
-smus-cli test --targets test --manifest manifest.yaml
+smus-cli test --stages test --manifest manifest.yaml
 ```
 
 **Output:**
@@ -612,7 +612,7 @@ Create team documentation explaining the setup:
 # Data Application Deployment Guide
 
 ## Overview
-Our SMUS projects are configured as deployment targets:
+Our SMUS projects are configured as deployment stages:
 - **test-data-platform** - Testing and validation
 - **prod-data-platform** - Production deployment
 
@@ -620,14 +620,14 @@ Multiple data applications can deploy to the same project.
 
 ## Deployment Process
 1. Develop in your dev project
-2. Create bundle: `smus-cli bundle --manifest manifest.yaml --targets dev`
+2. Create bundle: `smus-cli bundle --manifest manifest.yaml --stages dev`
 3. Push to GitHub → Automatic deployment to test
 4. After validation → Automatic deployment to prod
 
 ## Monitoring Your Deployment
-- Check status: `smus-cli monitor --targets test --manifest manifest.yaml`
-- View logs: `smus-cli logs --targets test --workflow YOUR_WORKFLOW --live`
-- Run tests: `smus-cli test --targets test --manifest manifest.yaml`
+- Check status: `smus-cli monitor --stages test --manifest manifest.yaml`
+- View logs: `smus-cli logs --stages test --workflow YOUR_WORKFLOW --live`
+- Run tests: `smus-cli test --stages test --manifest manifest.yaml`
 
 ## Support
 - Slack: #data-platform-support
@@ -641,7 +641,7 @@ Multiple data applications can deploy to the same project.
 ### Project Creation Fails
 ```bash
 # Check initialization settings
-smus-cli describe --manifest manifest.yaml --targets test --verbose
+smus-cli describe --manifest manifest.yaml --stages test --verbose
 
 # Verify IAM permissions for project creation
 aws sts get-caller-identity
@@ -650,19 +650,19 @@ aws sts get-caller-identity
 ### Deployment Not Syncing
 ```bash
 # Check bundle contents
-smus-cli bundle --manifest manifest.yaml --targets dev --verbose
+smus-cli bundle --manifest manifest.yaml --stages dev --verbose
 
 # Verify MWAA connection
-smus-cli monitor --targets test --workflows
+smus-cli monitor --stages test --workflows
 ```
 
 ### Multiple Bundles Conflicting
 ```bash
 # List all workflows in target
-smus-cli monitor --targets test --all-workflows
+smus-cli monitor --stages test --all-workflows
 
 # Check for naming conflicts
-smus-cli describe --targets test --manifest manifest.yaml
+smus-cli describe --stages test --manifest manifest.yaml
 ```
 
 ---

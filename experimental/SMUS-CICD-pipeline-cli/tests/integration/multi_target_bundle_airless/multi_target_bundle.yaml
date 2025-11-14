@@ -1,6 +1,5 @@
-bundleName: IntegrationTestMultiTargetAirless
-bundle:
-  bundlesDirectory: /tmp/bundles
+applicationName: IntegrationTestMultiTargetAirless
+content:
   storage:
   - connectionName: default.s3_shared
     append: false
@@ -20,8 +19,7 @@ bundle:
     - __pycache__/
     - '*.pyc'
     name: workflows
-    name: workflows
-targets:
+stages:
   dev:
     stage: DEV
     domain:
@@ -30,7 +28,9 @@ targets:
       region: ${DEV_DOMAIN_REGION:us-east-2}
     project:
       name: dev-marketing
-    bundle_target_configuration:
+    environment_variables:
+      S3_PREFIX: dev
+    deployment_configuration:
       storage:
       - connectionName: default.s3_shared
         name: code
@@ -38,8 +38,6 @@ targets:
       - connectionName: default.s3_shared
         name: workflows
         targetDirectory: workflows
-    environment_variables:
-      S3_PREFIX: dev
   test:
     stage: TEST
     domain:
@@ -48,8 +46,6 @@ targets:
       region: ${DEV_DOMAIN_REGION:us-east-2}
     project:
       name: integration-airless-test
-    tests:
-      folder: tests/integration/multi_target_pipeline/pipeline_tests/
     initialization:
       project:
         create: true
@@ -64,7 +60,9 @@ targets:
           parameters:
           - name: glueDbName
             value: multi_target_airless_test_db
-    bundle_target_configuration:
+    environment_variables:
+      S3_PREFIX: test
+    deployment_configuration:
       storage:
       - connectionName: default.s3_shared
         name: code
@@ -72,8 +70,6 @@ targets:
       - connectionName: default.s3_shared
         name: workflows
         targetDirectory: workflows
-    environment_variables:
-      S3_PREFIX: test
   prod:
     stage: PROD
     domain:
@@ -95,7 +91,9 @@ targets:
           parameters:
           - name: glueDbName
             value: multi_target_airless_prod_db
-    bundle_target_configuration:
+    environment_variables:
+      S3_PREFIX: prod
+    deployment_configuration:
       storage:
       - connectionName: default.s3_shared
         name: code
@@ -103,8 +101,9 @@ targets:
       - connectionName: default.s3_shared
         name: workflows
         targetDirectory: workflows
-    environment_variables:
-      S3_PREFIX: prod
-workflows:
+initialization:
 - workflowName: test_dag
   engine: airflow-serverless
+  type: workflow
+tests:
+  folder: tests/integration/multi_target_bundle/pipeline_tests/

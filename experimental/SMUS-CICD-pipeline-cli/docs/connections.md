@@ -38,7 +38,7 @@ Every SMUS project includes these connections automatically:
 Define connections in your bundle manifest under `initialization.connections`:
 
 ```yaml
-targets:
+stages:
   test:
     domain:
       name: my-domain
@@ -348,10 +348,11 @@ Connect to Amazon Managed Workflows for Apache Airflow (MWAA).
 
 **Example workflow usage:**
 ```yaml
-workflows:
-  - workflowName: data_pipeline
-    connectionName: mwaa-workflows
-    engine: MWAA
+activation:
+  workflows:
+    - workflowName: data_pipeline
+      connectionName: mwaa-workflows
+      engine: MWAA
     triggerPostDeployment: true
 ```
 
@@ -378,10 +379,11 @@ Use serverless Airflow workflows (no MWAA environment required).
 
 **Example workflow usage:**
 ```yaml
-workflows:
-  - workflowName: simple_etl
-    engine: airflow-serverless
-    triggerPostDeployment: true
+activation:
+  workflows:
+    - workflowName: simple_etl
+      engine: airflow-serverless
+      triggerPostDeployment: true
 ```
 
 ---
@@ -393,7 +395,7 @@ Full manifest with multiple connection types:
 ```yaml
 bundleName: CustomerSegmentationModel
 
-targets:
+stages:
   test:
     domain:
       name: my-domain
@@ -590,7 +592,7 @@ connections:
 
 Use different connections per environment:
 ```yaml
-targets:
+stages:
   test:
     initialization:
       connections:
@@ -624,10 +626,10 @@ Document connection requirements in your README:
 Validate connections after creation:
 ```bash
 # Describe project to see connections
-smus-cli describe --bundle bundle.yaml --targets test --connect
+smus-cli describe --bundle bundle.yaml --stages test --connect
 
 # Test workflow that uses connections
-smus-cli run --targets test --workflow test_connections
+smus-cli run --stages test --workflow test_connections
 ```
 
 ---

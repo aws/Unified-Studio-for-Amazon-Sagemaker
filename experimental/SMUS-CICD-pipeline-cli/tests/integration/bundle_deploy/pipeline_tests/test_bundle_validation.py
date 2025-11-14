@@ -29,7 +29,7 @@ class TestBundleValidation:
             if src_dir.exists():
                 for file_path in src_dir.rglob("*"):
                     if file_path.is_file() and not file_path.name.endswith(".pyc"):
-                        arcname = f"storage/src/{file_path.relative_to(src_dir)}"
+                        arcname = f"code/{file_path.relative_to(src_dir)}"
                         zipf.write(file_path, arcname)
 
             # Add workflow files
@@ -75,7 +75,7 @@ class TestBundleValidation:
         result = self.run_smus_command(
             [
                 "describe",
-                "--bundle",
+                "--manifest",
                 str(pipeline_file),
                 "--targets",
                 "test",
@@ -129,7 +129,7 @@ class TestBundleValidation:
         result = self.run_smus_command(
             [
                 "deploy",
-                "--bundle",
+                "--manifest",
                 str(pipeline_file),
                 "--targets",
                 "test",
@@ -166,7 +166,7 @@ class TestBundleValidation:
                 "run",
                 "--workflow",
                 "execute_notebooks_dag",
-                "--bundle",
+                "--manifest",
                 str(pipeline_file),
                 "--targets",
                 "test",
@@ -201,7 +201,7 @@ class TestBundleValidation:
         pipeline_file = self.get_pipeline_file()
 
         result = self.run_smus_command(
-            ["test", "--bundle", str(pipeline_file), "--targets", "test"]
+            ["test", "--manifest", str(pipeline_file), "--targets", "test"]
         )
 
         # Should succeed or fail gracefully
@@ -227,7 +227,7 @@ class TestBundleValidation:
         result = self.run_smus_command(
             [
                 "monitor",
-                "--bundle",
+                "--manifest",
                 str(pipeline_file),
                 "--targets",
                 "test",
@@ -264,7 +264,7 @@ class TestBundleValidation:
         result2 = self.run_smus_command(
             [
                 "monitor",
-                "--bundle",
+                "--manifest",
                 str(pipeline_file),
                 "--targets",
                 "test",
@@ -299,7 +299,7 @@ class TestBundleValidation:
         pipeline_file = self.get_pipeline_file()
 
         result = self.run_smus_command(
-            ["describe", "--bundle", str(pipeline_file), "--output", "JSON"]
+            ["describe", "--manifest", str(pipeline_file), "--output", "JSON"]
         )
 
         # Describe should always succeed for valid pipeline
@@ -315,7 +315,7 @@ class TestBundleValidation:
             file_list = zipf.namelist()
 
             # Check for expected structure
-            assert any("storage/src/" in f for f in file_list), "Missing storage files"
+            assert any("code/" in f for f in file_list), "Missing storage files"
             assert any(
                 "workflows/dags/" in f for f in file_list
             ), "Missing workflow files"
@@ -324,8 +324,8 @@ class TestBundleValidation:
 
             # Check specific files
             expected_files = [
-                "storage/src/test-notebook1.ipynb",
-                "storage/src/covid_analysis.ipynb",
+                "code/test-notebook1.ipynb",
+                "code/covid_analysis.ipynb",
                 "workflows/dags/execute_notebooks_dag.py",
             ]
 

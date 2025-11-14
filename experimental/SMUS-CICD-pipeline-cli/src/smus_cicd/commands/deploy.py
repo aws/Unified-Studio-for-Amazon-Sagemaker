@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import boto3
 import typer
 
+from ..application import ApplicationManifest
 from ..helpers import datazone, deployment
 from ..helpers.error_handler import handle_error, handle_success
 from ..helpers.project_manager import ProjectManager
@@ -17,7 +18,6 @@ from ..helpers.utils import (  # noqa: F401
     get_datazone_project_info,
     load_config,
 )
-from ..pipeline import BundleManifest
 
 # TEMPORARY: Airflow Serverless (Overdrive) configuration
 # TODO: Remove these overrides once service is available in all regions
@@ -110,7 +110,7 @@ def deploy_command(
     event_bus_name: Optional[str] = None,
 ) -> None:
     """
-    Deploy bundle files to target's bundle_target_configuration.
+    Deploy bundle files to target's deployment_configuration.
 
     Automatically resolves environment variables in workflow files using ${VAR_NAME}
     and $VAR_NAME syntax based on target configuration.
@@ -123,12 +123,12 @@ def deploy_command(
         event_bus_name: Optional override for event bus name
     """
     try:
-        manifest = BundleManifest.from_file(manifest_file)
+        manifest = ApplicationManifest.from_file(manifest_file)
 
-        target_name = _get_target_name(targets, manifest)
-        target_config = _get_target_config(target_name, manifest)
+        stage_name = _get_target_name(targets, manifest)
+        target_config = _get_target_config(stage_name, manifest)
 
-        _display_deployment_info(target_name, target_config, manifest)
+        _display_deployment_info(stage_name, target_config, manifest)
 
         # Build config with domain info
         config = build_domain_config(target_config)
@@ -148,7 +148,7 @@ def deploy_command(
             f"🔍 EventEmitter initialized: enabled={emitter.enabled}, bus={emitter.event_bus_name}, region={emitter.region}"
         )
 
-        target_info = build_target_info(target_name, target_config)
+        target_info = build_target_info(stage_name, target_config)
         metadata = collect_metadata(manifest)
         typer.echo(f"🔍 Metadata collected: {bool(metadata)}")
 
@@ -157,7 +157,7 @@ def deploy_command(
         if bundle_path:
             bundle_info = build_bundle_info(bundle_path)
             result = emitter.deploy_started(
-                manifest.bundle_name, target_info, bundle_info, metadata
+                manifest.application_name, target_info, bundle_info, metadata
             )
             typer.echo(f"🔍 Deploy started event emitted: {result}")
 
@@ -170,11 +170,11 @@ def deploy_command(
             "create": target_config.project.create,
         }
         emitter.project_init_started(
-            manifest.bundle_name, target_info, project_config, metadata
+            manifest.application_name, target_info, project_config, metadata
         )
 
         try:
-            project_manager.ensure_project_exists(target_name, target_config)
+            project_manager.ensure_project_exists(stage_name, target_config)
 
             # Emit project init completed
             project_info = {
@@ -182,7 +182,7 @@ def deploy_command(
                 "status": "ACTIVE",
             }
             emitter.project_init_completed(
-                manifest.bundle_name, target_info, project_info, metadata
+                manifest.application_name, target_info, project_info, metadata
             )
 
         except Exception as e:
@@ -193,19 +193,19 @@ def deploy_command(
                 "message": str(e),
             }
             emitter.project_init_failed(
-                manifest.bundle_name, target_info, error, metadata
+                manifest.application_name, target_info, error, metadata
             )
             raise
 
         # Deploy bundle and track errors
         deployment_success = _deploy_bundle_to_target(
-            target_config, manifest, config, bundle, target_name, emitter, metadata
+            target_config, manifest, config, bundle, stage_name, emitter, metadata
         )
 
         if deployment_success:
             # Emit deploy completed
             emitter.deploy_completed(
-                manifest.bundle_name,
+                manifest.application_name,
                 target_info,
                 {"status": "success"},
                 metadata,
@@ -218,7 +218,9 @@ def deploy_command(
                 "code": "DEPLOYMENT_FAILED",
                 "message": "Deployment failed due to errors during bundle deployment",
             }
-            emitter.deploy_failed(manifest.bundle_name, target_info, error, metadata)
+            emitter.deploy_failed(
+                manifest.application_name, target_info, error, metadata
+            )
             handle_error("Deployment failed due to errors during bundle deployment")
 
     except Exception as e:
@@ -230,15 +232,15 @@ def deploy_command(
                 create_event_emitter,
             )
 
-            manifest = BundleManifest.from_file(manifest_file)
-            target_name = _get_target_name(targets, manifest)
-            target_config = _get_target_config(target_name, manifest)
+            manifest = ApplicationManifest.from_file(manifest_file)
+            stage_name = _get_target_name(targets, manifest)
+            target_config = _get_target_config(stage_name, manifest)
             config = build_domain_config(target_config)
 
             emitter = create_event_emitter(
                 manifest, config["region"], emit_events, event_bus_name
             )
-            target_info = build_target_info(target_name, target_config)
+            target_info = build_target_info(stage_name, target_config)
             metadata = collect_metadata(manifest)
 
             error = {
@@ -246,14 +248,16 @@ def deploy_command(
                 "code": "DEPLOYMENT_ERROR",
                 "message": str(e),
             }
-            emitter.deploy_failed(manifest.bundle_name, target_info, error, metadata)
+            emitter.deploy_failed(
+                manifest.application_name, target_info, error, metadata
+            )
         except Exception:
             pass  # Don't fail on event emission errors
 
         handle_error(f"Deployment failed: {e}")
 
 
-def _get_target_name(targets: Optional[str], manifest: BundleManifest) -> str:
+def _get_target_name(targets: Optional[str], manifest: ApplicationManifest) -> str:
     """
     Get target name from input.
 
@@ -276,12 +280,12 @@ def _get_target_name(targets: Optional[str], manifest: BundleManifest) -> str:
     return target_list[0]  # Use first target for deployment
 
 
-def _get_target_config(target_name: str, manifest: BundleManifest):
+def _get_target_config(stage_name: str, manifest: ApplicationManifest):
     """
     Get target configuration from manifest.
 
     Args:
-        target_name: Name of the target
+        stage_name: Name of the target
         manifest: Pipeline manifest object
 
     Returns:
@@ -290,28 +294,28 @@ def _get_target_config(target_name: str, manifest: BundleManifest):
     Raises:
         SystemExit: If target or configuration is not found
     """
-    target_config = manifest.get_target(target_name)
+    target_config = manifest.get_stage(stage_name)
     if not target_config:
-        handle_error(f"Target '{target_name}' not found in manifest")
+        handle_error(f"Target '{stage_name}' not found in manifest")
 
-    if not target_config.bundle_target_configuration:
-        handle_error(f"No bundle_target_configuration found for target '{target_name}'")
+    if not target_config.deployment_configuration:
+        handle_error(f"No deployment_configuration found for target '{stage_name}'")
 
     return target_config
 
 
 def _display_deployment_info(
-    target_name: str, target_config, manifest: BundleManifest
+    stage_name: str, target_config, manifest: ApplicationManifest
 ) -> None:
     """
     Display deployment information.
 
     Args:
-        target_name: Name of the target being deployed to
+        stage_name: Name of the target being deployed to
         target_config: Target configuration object
         manifest: Pipeline manifest object
     """
-    typer.echo(f"Deploying to target: {target_name}")
+    typer.echo(f"Deploying to target: {stage_name}")
     typer.echo(f"Project: {target_config.project.name}")
     typer.echo(f"Domain: {target_config.domain.name}")
     typer.echo(f"Region: {target_config.domain.region}")
@@ -319,10 +323,10 @@ def _display_deployment_info(
 
 def _deploy_bundle_to_target(
     target_config,
-    manifest: BundleManifest,
+    manifest: ApplicationManifest,
     config: Dict[str, Any],
     bundle_file: Optional[str] = None,
-    target_name: Optional[str] = None,
+    stage_name: Optional[str] = None,
     emitter=None,
     metadata: Optional[Dict[str, Any]] = None,
 ) -> bool:
@@ -334,7 +338,7 @@ def _deploy_bundle_to_target(
         manifest: Pipeline manifest object
         config: Configuration dictionary
         bundle_file: Optional path to pre-created bundle file
-        target_name: Optional target name for workflow tagging
+        stage_name: Optional target name for workflow tagging
         emitter: Optional EventEmitter for monitoring
         metadata: Optional metadata for events
 
@@ -343,13 +347,13 @@ def _deploy_bundle_to_target(
     """
     from ..helpers.monitoring import build_target_info
 
-    bundle_target_config = target_config.bundle_target_configuration
+    bundle_target_config = target_config.deployment_configuration
     storage_configs = bundle_target_config.storage or []
     git_configs = bundle_target_config.git or []
 
     if not storage_configs and not git_configs:
         handle_error(
-            "No storage or git configuration found in bundle_target_configuration"
+            "No storage or git configuration found in deployment_configuration"
         )
         return False
 
@@ -362,7 +366,7 @@ def _deploy_bundle_to_target(
     else:
         bundle_path = _find_bundle_file(manifest, config)
         if not bundle_path:
-            handle_error(f"No bundle file found in {manifest.bundle.bundles_directory}")
+            handle_error("No bundle file found in ./bundles directory")
             return False
 
     typer.echo(f"Bundle file: {bundle_path}")
@@ -371,10 +375,10 @@ def _deploy_bundle_to_target(
     if emitter:
         from ..helpers.monitoring import build_bundle_info
 
-        target_info = build_target_info(target_name, target_config)
+        target_info = build_target_info(stage_name, target_config)
         bundle_info = build_bundle_info(bundle_path)
         emitter.bundle_upload_started(
-            manifest.bundle_name, target_info, bundle_info, metadata
+            manifest.application_name, target_info, bundle_info, metadata
         )
 
     # Deploy storage items (includes workflows)
@@ -413,7 +417,7 @@ def _deploy_bundle_to_target(
                 ],
             }
             emitter.bundle_upload_completed(
-                manifest.bundle_name, target_info, deployment_results, metadata
+                manifest.application_name, target_info, deployment_results, metadata
             )
 
     except Exception as e:
@@ -425,12 +429,12 @@ def _deploy_bundle_to_target(
                 "message": str(e),
             }
             emitter.bundle_upload_failed(
-                manifest.bundle_name, target_info, error, metadata
+                manifest.application_name, target_info, error, metadata
             )
         raise
 
     # Create serverless Airflow workflows if configured
-    effective_target_name = target_name or target_config.name
+    effective_target_name = stage_name or target_config.name
 
     # Get S3 location from first successful storage deployment
     s3_bucket = None
@@ -468,7 +472,7 @@ def _deploy_bundle_to_target(
 
 
 def _find_bundle_file(
-    manifest: BundleManifest, config: Dict[str, Any]
+    manifest: ApplicationManifest, config: Dict[str, Any]
 ) -> Optional[str]:
     """
     Find the bundle file for the pipeline.
@@ -482,8 +486,10 @@ def _find_bundle_file(
     """
     from ..helpers.bundle_storage import find_bundle_file
 
+    # Use default bundles directory
+    bundles_directory = "./bundles"
     return find_bundle_file(
-        manifest.bundle.bundles_directory, manifest.bundle_name, config.get("region")
+        bundles_directory, manifest.application_name, config.get("region")
     )
 
 
@@ -533,8 +539,8 @@ def _deploy_storage_item(
     Returns:
         Tuple of (deployed_files_list, s3_uri) or (None, None) if failed
     """
-    name = storage_config.get("name", "unnamed")
-    target_dir = storage_config.get("targetDirectory", "")
+    name = storage_config.name
+    target_dir = storage_config.targetDirectory if hasattr(storage_config, "targetDirectory") else ""
 
     typer.echo(f"Deploying storage item '{name}' to {target_dir}...")
 
@@ -561,7 +567,7 @@ def _deploy_git_item(
     Returns:
         Tuple of (deployed_files_list, s3_uri) or (None, None) if failed
     """
-    target_dir = git_config.get("targetDirectory", "")
+    target_dir = git_config.targetDirectory if hasattr(git_config, "targetDirectory") else ""
 
     typer.echo(f"Deploying git repository to {target_dir}...")
 
@@ -703,7 +709,7 @@ def _deploy_named_item_from_bundle(
                 region = config.get("region", "us-east-1")
 
                 # Check if compression is requested
-                compression = item_config.get("compression")
+                compression = item_config.compression if hasattr(item_config, "compression") else None
                 if compression in ["gz", "tar.gz"]:
                     # Create tar.gz archive
                     archive_name = f"{item_name}.tar.gz"
@@ -841,7 +847,7 @@ def _get_project_connection(
     if "error" in project_info:
         return {}
 
-    connection_name = file_config.get("connectionName", "default.s3_shared")
+    connection_name = file_config.connectionName if hasattr(file_config, "connectionName") else "default.s3_shared"
     connections = project_info.get("connections", {})
     return connections.get(connection_name, {})
 
@@ -936,7 +942,7 @@ def _validate_deployed_workflows(
     typer.echo("🚀 Starting workflow validation...")
 
     try:
-        # workflows_config is from bundle_target_configuration, not a list of workflows
+        # workflows_config is from deployment_configuration, not a list of workflows
         # Skip validation for now as it needs workflow connection info, not bundle target config
         typer.echo("✅ Workflow validation completed")
     except Exception as e:
@@ -946,7 +952,7 @@ def _validate_deployed_workflows(
 
 def _process_catalog_assets(
     target_config,
-    manifest: BundleManifest,
+    manifest: ApplicationManifest,
     config: Dict[str, Any],
     emitter=None,
     metadata: Optional[Dict[str, Any]] = None,
@@ -968,15 +974,15 @@ def _process_catalog_assets(
 
     # Check if catalog processing is disabled in bundle target configuration
     if (
-        target_config.bundle_target_configuration
-        and target_config.bundle_target_configuration.catalog
-        and target_config.bundle_target_configuration.catalog.get("disable", False)
+        target_config.deployment_configuration
+        and target_config.deployment_configuration.catalog
+        and target_config.deployment_configuration.catalog.get("disable", False)
     ):
         typer.echo("📋 Catalog asset processing disabled in target configuration")
         return True
 
     # Check if catalog assets are configured
-    if not manifest.bundle.catalog or not manifest.bundle.catalog.assets:
+    if not manifest.content.catalog or not manifest.content.catalog.assets:
         typer.echo("📋 No catalog assets configured")
         return True
 
@@ -990,10 +996,10 @@ def _process_catalog_assets(
                 "assetId": asset.selector.assetId,
                 "permission": asset.permission,
             }
-            for asset in manifest.bundle.catalog.assets
+            for asset in manifest.content.catalog.assets
         ]
         emitter.catalog_assets_started(
-            manifest.bundle_name, target_info, asset_configs, metadata
+            manifest.application_name, target_info, asset_configs, metadata
         )
 
     # Import datazone helper functions
@@ -1024,7 +1030,7 @@ def _process_catalog_assets(
                 "message": error_msg,
             }
             emitter.catalog_assets_failed(
-                manifest.bundle_name, target_info, error, metadata
+                manifest.application_name, target_info, error, metadata
             )
         handle_error(error_msg)
         return False
@@ -1042,14 +1048,14 @@ def _process_catalog_assets(
                 "message": error_msg,
             }
             emitter.catalog_assets_failed(
-                manifest.bundle_name, target_info, error, metadata
+                manifest.application_name, target_info, error, metadata
             )
         handle_error(error_msg)
         return False
 
     # Convert assets to dictionary format for processing
     assets_data = []
-    for asset in manifest.bundle.catalog.assets:
+    for asset in manifest.content.catalog.assets:
         asset_dict = {
             "selector": {},
             "permission": asset.permission,
@@ -1081,10 +1087,10 @@ def _process_catalog_assets(
                         "assetId": asset.selector.assetId,
                         "status": "processed",
                     }
-                    for asset in manifest.bundle.catalog.assets
+                    for asset in manifest.content.catalog.assets
                 ]
                 emitter.catalog_assets_completed(
-                    manifest.bundle_name, target_info, asset_results, metadata
+                    manifest.application_name, target_info, asset_results, metadata
                 )
         else:
             error_msg = "Failed to process catalog assets"
@@ -1096,7 +1102,7 @@ def _process_catalog_assets(
                     "message": error_msg,
                 }
                 emitter.catalog_assets_failed(
-                    manifest.bundle_name, target_info, error, metadata
+                    manifest.application_name, target_info, error, metadata
                 )
             handle_error(error_msg)
         return success
@@ -1110,7 +1116,7 @@ def _process_catalog_assets(
                 "message": str(e),
             }
             emitter.catalog_assets_failed(
-                manifest.bundle_name, target_info, error, metadata
+                manifest.application_name, target_info, error, metadata
             )
         handle_error(error_msg)
         return False
@@ -1118,10 +1124,10 @@ def _process_catalog_assets(
 
 def _create_airflow_serverless_workflows(
     bundle_path: str,
-    manifest: BundleManifest,
+    manifest: ApplicationManifest,
     target_config,
     config: Dict[str, Any],
-    target_name: str,
+    stage_name: str,
     s3_bucket: Optional[str],
     s3_prefix: Optional[str],
     emitter=None,
@@ -1135,7 +1141,7 @@ def _create_airflow_serverless_workflows(
         manifest: Pipeline manifest object
         target_config: Target configuration object
         config: Configuration dictionary
-        target_name: Name of the target
+        stage_name: Name of the target
         s3_bucket: S3 bucket where files were deployed
         s3_prefix: S3 prefix where files were deployed
         emitter: Optional EventEmitter for monitoring
@@ -1150,9 +1156,10 @@ def _create_airflow_serverless_workflows(
     airflow_serverless_enabled = False
 
     # Check bundle storage configurations for airflow-serverless flag
-    if manifest.bundle.storage:
-        for storage_config in manifest.bundle.storage:
-            if storage_config.get("airflow-serverless", False):
+    if manifest.content.storage:
+        for storage_config in manifest.content.storage:
+            airflow_serverless_flag = getattr(storage_config, "airflow-serverless", False) if hasattr(storage_config, "airflow-serverless") else False
+            if airflow_serverless_flag:
                 airflow_serverless_enabled = True
                 break
 
@@ -1171,7 +1178,7 @@ def _create_airflow_serverless_workflows(
 
     # Emit workflow creation started
     if emitter:
-        target_info = build_target_info(target_name, target_config)
+        target_info = build_target_info(stage_name, target_config)
         workflows_info = [
             {
                 "workflowName": wf.workflow_name,
@@ -1181,7 +1188,7 @@ def _create_airflow_serverless_workflows(
             if wf.engine == "airflow-serverless"
         ]
         emitter.workflow_creation_started(
-            manifest.bundle_name, target_info, workflows_info, metadata
+            manifest.application_name, target_info, workflows_info, metadata
         )
 
     try:
@@ -1208,14 +1215,14 @@ def _create_airflow_serverless_workflows(
             error_msg = "No project user role found"
             typer.echo(f"❌ {error_msg}")
             if emitter:
-                target_info = build_target_info(target_name, target_config)
+                target_info = build_target_info(stage_name, target_config)
                 error = {
                     "stage": "workflow-creation",
                     "code": "ROLE_NOT_FOUND",
                     "message": error_msg,
                 }
                 emitter.workflow_creation_failed(
-                    manifest.bundle_name, target_info, error, metadata
+                    manifest.application_name, target_info, error, metadata
                 )
             return False
 
@@ -1225,14 +1232,14 @@ def _create_airflow_serverless_workflows(
             error_msg = f"Could not find domain ID for domain: {domain_name}"
             typer.echo(f"❌ {error_msg}")
             if emitter:
-                target_info = build_target_info(target_name, target_config)
+                target_info = build_target_info(stage_name, target_config)
                 error = {
                     "stage": "workflow-creation",
                     "code": "DOMAIN_NOT_FOUND",
                     "message": error_msg,
                 }
                 emitter.workflow_creation_failed(
-                    manifest.bundle_name, target_info, error, metadata
+                    manifest.application_name, target_info, error, metadata
                 )
             return False
 
@@ -1241,14 +1248,14 @@ def _create_airflow_serverless_workflows(
             error_msg = f"Could not find project ID for project: {project_name}"
             typer.echo(f"❌ {error_msg}")
             if emitter:
-                target_info = build_target_info(target_name, target_config)
+                target_info = build_target_info(stage_name, target_config)
                 error = {
                     "stage": "workflow-creation",
                     "code": "PROJECT_NOT_FOUND",
                     "message": error_msg,
                 }
                 emitter.workflow_creation_failed(
-                    manifest.bundle_name, target_info, error, metadata
+                    manifest.application_name, target_info, error, metadata
                 )
             return False
 
@@ -1258,14 +1265,14 @@ def _create_airflow_serverless_workflows(
             error_msg = "Could not determine S3 location from storage deployment"
             typer.echo(f"❌ {error_msg}")
             if emitter:
-                target_info = build_target_info(target_name, target_config)
+                target_info = build_target_info(stage_name, target_config)
                 error = {
                     "stage": "workflow-creation",
                     "code": "S3_LOCATION_NOT_FOUND",
                     "message": error_msg,
                 }
                 emitter.workflow_creation_failed(
-                    manifest.bundle_name, target_info, error, metadata
+                    manifest.application_name, target_info, error, metadata
                 )
             return False
 
@@ -1292,7 +1299,7 @@ def _create_airflow_serverless_workflows(
 
         for s3_key, workflow_name_from_yaml in dag_files_in_s3:
             workflow_name = _generate_workflow_name(
-                manifest.bundle_name,
+                manifest.application_name,
                 workflow_name_from_yaml,
                 target_config,
             )
@@ -1355,11 +1362,11 @@ def _create_airflow_serverless_workflows(
                 workflow_name=workflow_name,
                 dag_s3_location=s3_location,
                 role_arn=role_arn,
-                description=f"SMUS CI/CD workflow for {manifest.bundle_name}",
+                description=f"SMUS CI/CD workflow for {manifest.application_name}",
                 tags={
-                    "Pipeline": manifest.bundle_name,
+                    "Pipeline": manifest.application_name,
                     "Target": target_config.project.name,
-                    "STAGE": target_name.upper(),
+                    "STAGE": stage_name.upper(),
                     "CreatedBy": "SMUS-CICD",
                 },
                 datazone_domain_id=domain_id,
@@ -1400,7 +1407,7 @@ def _create_airflow_serverless_workflows(
                         error_msg = f"Workflow {workflow_name} is in FAILED state"
                         typer.echo(f"❌ {error_msg}")
                         if emitter:
-                            target_info = build_target_info(target_name, target_config)
+                            target_info = build_target_info(stage_name, target_config)
                             error = {
                                 "stage": "workflow-creation",
                                 "code": "WORKFLOW_FAILED",
@@ -1408,14 +1415,14 @@ def _create_airflow_serverless_workflows(
                                 "details": {"workflowName": workflow_name},
                             }
                             emitter.workflow_creation_failed(
-                                manifest.bundle_name, target_info, error, metadata
+                                manifest.application_name, target_info, error, metadata
                             )
                         return False
                 else:
                     error_msg = workflow_status.get("error")
                     typer.echo(f"❌ Could not verify workflow status: {error_msg}")
                     if emitter:
-                        target_info = build_target_info(target_name, target_config)
+                        target_info = build_target_info(stage_name, target_config)
                         error = {
                             "stage": "workflow-creation",
                             "code": "WORKFLOW_STATUS_CHECK_FAILED",
@@ -1423,14 +1430,14 @@ def _create_airflow_serverless_workflows(
                             "details": {"workflowName": workflow_name},
                         }
                         emitter.workflow_creation_failed(
-                            manifest.bundle_name, target_info, error, metadata
+                            manifest.application_name, target_info, error, metadata
                         )
                     return False
             else:
                 error_msg = result.get("error")
                 typer.echo(f"❌ Failed to create workflow {workflow_name}: {error_msg}")
                 if emitter:
-                    target_info = build_target_info(target_name, target_config)
+                    target_info = build_target_info(stage_name, target_config)
                     error = {
                         "stage": "workflow-creation",
                         "code": "WORKFLOW_CREATION_FAILED",
@@ -1438,7 +1445,7 @@ def _create_airflow_serverless_workflows(
                         "details": {"workflowName": workflow_name},
                     }
                     emitter.workflow_creation_failed(
-                        manifest.bundle_name, target_info, error, metadata
+                        manifest.application_name, target_info, error, metadata
                     )
                 return False
 
@@ -1449,7 +1456,7 @@ def _create_airflow_serverless_workflows(
 
             # Emit workflow creation completed
             if emitter:
-                target_info = build_target_info(target_name, target_config)
+                target_info = build_target_info(stage_name, target_config)
                 workflow_results = [
                     {
                         "workflowName": wf["name"],
@@ -1460,7 +1467,7 @@ def _create_airflow_serverless_workflows(
                     for wf in workflows_created
                 ]
                 emitter.workflow_creation_completed(
-                    manifest.bundle_name, target_info, workflow_results, metadata
+                    manifest.application_name, target_info, workflow_results, metadata
                 )
 
             return True
@@ -1472,14 +1479,14 @@ def _create_airflow_serverless_workflows(
         error_msg = f"Error creating Overdrive workflows: {e}"
         typer.echo(f"❌ {error_msg}")
         if emitter:
-            target_info = build_target_info(target_name, target_config)
+            target_info = build_target_info(stage_name, target_config)
             error = {
                 "stage": "workflow-creation",
                 "code": "WORKFLOW_CREATION_ERROR",
                 "message": str(e),
             }
             emitter.workflow_creation_failed(
-                manifest.bundle_name, target_info, error, metadata
+                manifest.application_name, target_info, error, metadata
             )
         return False
 
@@ -1514,17 +1521,21 @@ def _get_airflow_serverless_execution_role(config: Dict[str, Any]) -> Optional[s
 
 
 def _find_dag_files_in_s3(
-    s3_client, s3_bucket: str, s3_prefix: str, manifest: BundleManifest, target_config
+    s3_client,
+    s3_bucket: str,
+    s3_prefix: str,
+    manifest: ApplicationManifest,
+    target_config,
 ) -> List[tuple]:
     """
-    Find DAG YAML files in S3 by searching target directories from bundle_target_configuration.
+    Find DAG YAML files in S3 by searching target directories from deployment_configuration.
 
     Args:
         s3_client: Boto3 S3 client
         s3_bucket: S3 bucket name
         s3_prefix: Base S3 prefix (e.g., 'shared/')
         manifest: Pipeline manifest object
-        target_config: Target configuration with bundle_target_configuration
+        target_config: Target configuration with deployment_configuration
 
     Returns:
         List of tuples (s3_key, workflow_name) for workflows found in S3
@@ -1534,12 +1545,12 @@ def _find_dag_files_in_s3(
     if not manifest.workflows:
         return dag_files
 
-    # Get target directories from bundle_target_configuration
+    # Get target directories from deployment_configuration
     search_prefixes = []
-    if hasattr(target_config, "bundle_target_configuration") and hasattr(
-        target_config.bundle_target_configuration, "storage"
+    if hasattr(target_config, "deployment_configuration") and hasattr(
+        target_config.deployment_configuration, "storage"
     ):
-        for storage_item in target_config.bundle_target_configuration.storage:
+        for storage_item in target_config.deployment_configuration.storage:
             if hasattr(storage_item, "target_directory"):
                 target_dir = storage_item.target_directory or "."
                 if target_dir == ".":
@@ -1615,11 +1626,11 @@ def _generate_workflow_name(bundle_name: str, dag_name: str, target_config) -> s
         Generated workflow name
     """
     # Create a unique name combining pipeline, target, and DAG name
-    target_name = target_config.project.name.replace("-", "_")
+    stage_name = target_config.project.name.replace("-", "_")
     safe_pipeline = bundle_name.replace("-", "_")
     safe_dag = dag_name.replace("-", "_")
 
-    return f"{safe_pipeline}_{target_name}_{safe_dag}"
+    return f"{safe_pipeline}_{stage_name}_{safe_dag}"
 
 
 def _resolve_environment_variables(

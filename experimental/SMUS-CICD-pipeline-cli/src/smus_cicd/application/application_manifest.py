@@ -5,6 +5,32 @@ from typing import Any, Dict, List, Optional
 
 
 @dataclass
+class InitializationAction:
+    """Single initialization action (workflow, event, cloudformation)."""
+
+    type: str  # workflow, event, cloudformation
+    # Workflow fields
+    workflowName: Optional[str] = None
+    connectionName: Optional[str] = None
+    engine: Optional[str] = None
+    triggerPostDeployment: bool = False
+    parameters: Dict[str, Any] = field(default_factory=dict)
+    logging: Optional[str] = None
+    # Event fields
+    eventBridgeRule: Optional[str] = None
+    # CloudFormation fields
+    stackName: Optional[str] = None
+    templatePath: Optional[str] = None
+
+
+@dataclass
+class TestConfig:
+    """Test configuration."""
+
+    folder: str
+
+
+@dataclass
 class DomainConfig:
     """Domain configuration."""
 
@@ -47,14 +73,32 @@ class CatalogConfig:
 
 
 @dataclass
-class BundleConfig:
-    """Bundle configuration."""
+class StorageConfig:
+    """Storage configuration."""
 
-    bundles_directory: str = "./bundles"
-    storage: List[Dict[str, Any]] = field(
-        default_factory=list
-    )  # Unified storage (includes workflows)
-    git: List[Dict[str, Any]] = field(default_factory=list)  # Changed from dict to list
+    name: str
+    connectionName: str
+    include: List[str] = field(default_factory=list)
+    exclude: List[str] = field(default_factory=list)
+
+
+@dataclass
+class GitConfig:
+    """Git repository configuration."""
+
+    repository: str
+    url: str
+    branch: str = "main"
+    include: List[str] = field(default_factory=list)
+    exclude: List[str] = field(default_factory=list)
+
+
+@dataclass
+class ContentConfig:
+    """Application content configuration."""
+
+    storage: List[StorageConfig] = field(default_factory=list)
+    git: List[GitConfig] = field(default_factory=list)
     catalog: Optional[CatalogConfig] = None
 
 
@@ -125,31 +169,23 @@ class InitializationConfig:
 
 
 @dataclass
-class BundleTargetConfig:
-    """Bundle target configuration."""
+class DeploymentConfiguration:
+    """Deployment configuration for a stage."""
 
-    storage: List[Dict[str, str]] = field(default_factory=list)  # Changed to list
-    git: List[Dict[str, str]] = field(default_factory=list)  # Changed to list
+    storage: List[StorageConfig] = field(default_factory=list)
+    git: List[GitConfig] = field(default_factory=list)
     catalog: Optional[Dict[str, Any]] = None
 
 
 @dataclass
-class TestConfig:
-    """Test configuration."""
-
-    folder: str
-
-
-@dataclass
-class TargetConfig:
-    """Target configuration."""
+class StageConfig:
+    """Stage configuration."""
 
     project: ProjectConfig
     domain: DomainConfig
     stage: str
     initialization: Optional[InitializationConfig] = None
-    bundle_target_configuration: Optional[BundleTargetConfig] = None
-    tests: Optional[TestConfig] = None
+    deployment_configuration: Optional[DeploymentConfiguration] = None
     environment_variables: Optional[Dict[str, Any]] = None
 
 
@@ -180,18 +216,20 @@ class MonitoringConfig:
 
 
 @dataclass
-class BundleManifest:
-    """Complete bundle manifest data model."""
+class ApplicationManifest:
+    """Complete application manifest data model."""
 
-    bundle_name: str
-    bundle: BundleConfig
-    targets: Dict[str, TargetConfig]
+    application_name: str
+    content: ContentConfig
+    stages: Dict[str, StageConfig]
+    initialization: List[InitializationAction] = field(default_factory=list)
+    tests: Optional[TestConfig] = None
     workflows: List[WorkflowConfig] = field(default_factory=list)
     monitoring: Optional[MonitoringConfig] = None
     _file_path: Optional[str] = field(default=None, init=False)
 
     @classmethod
-    def from_file(cls, manifest_file: str) -> "BundleManifest":
+    def from_file(cls, manifest_file: str) -> "ApplicationManifest":
         """Load bundle manifest from YAML file with validation."""
         from .validation import validate_manifest_file
 
@@ -209,25 +247,25 @@ class BundleManifest:
         return manifest
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "BundleManifest":
-        """Create bundle manifest from dictionary."""
+    def from_dict(cls, data: Dict[str, Any]) -> "ApplicationManifest":
+        """Create application manifest from dictionary."""
         # Validate required top-level fields
-        if not data.get("bundleName"):
-            raise ValueError("bundleName is required and cannot be empty")
+        if not data.get("applicationName"):
+            raise ValueError("applicationName is required and cannot be empty")
 
-        if "targets" not in data:
-            raise ValueError("targets configuration is required")
+        if "stages" not in data:
+            raise ValueError("stages configuration is required")
 
-        targets_data = data.get("targets", {})
-        if not targets_data:
-            raise ValueError("at least one target must be defined")
+        stages_data = data.get("stages", {})
+        if not stages_data:
+            raise ValueError("at least one stage must be defined")
 
-        # Parse bundle configuration
-        bundle_data = data.get("bundle", {})
+        # Parse content configuration
+        content_data = data.get("content", {})
 
         # Parse catalog configuration
         catalog = None
-        catalog_data = bundle_data.get("catalog")
+        catalog_data = content_data.get("catalog")
         if catalog_data:
             assets = []
             for asset_data in catalog_data.get("assets", []):
@@ -259,26 +297,59 @@ class BundleManifest:
                 connectionName=catalog_data.get("connectionName"), assets=assets
             )
 
-        bundle = BundleConfig(
-            bundles_directory=bundle_data.get("bundlesDirectory", "./bundles"),
-            storage=bundle_data.get("storage", []),
-            git=bundle_data.get("git", []),
+        # Parse storage configs
+        storage_configs = []
+        for storage_data in content_data.get("storage", []):
+            storage_configs.append(
+                StorageConfig(
+                    name=storage_data.get("name", ""),
+                    connectionName=storage_data.get("connectionName", ""),
+                    include=storage_data.get("include", []),
+                    exclude=storage_data.get("exclude", []),
+                )
+            )
+
+        # Parse git configs
+        git_configs = []
+        for git_data in content_data.get("git", []):
+            git_configs.append(
+                GitConfig(
+                    repository=git_data.get("repository", ""),
+                    url=git_data.get("url", ""),
+                    branch=git_data.get("branch", "main"),
+                    include=git_data.get("include", []),
+                    exclude=git_data.get("exclude", []),
+                )
+            )
+
+        content = ContentConfig(
+            storage=storage_configs,
+            git=git_configs,
             catalog=catalog,
         )
 
-        # Parse targets
-        targets = {}
-        for target_name, target_data in targets_data.items():
-            if not target_data:
-                raise ValueError(
-                    f"target '{target_name}' configuration cannot be empty"
-                )
+        # Parse initialization actions
+        initialization = []
+        for action_data in data.get("initialization", []):
+            initialization.append(InitializationAction(**action_data))
+
+        # Parse tests
+        tests = None
+        tests_data = data.get("tests")
+        if tests_data:
+            tests = TestConfig(folder=tests_data.get("folder"))
+
+        # Parse stages
+        stages = {}
+        for stage_name, stage_data in stages_data.items():
+            if not stage_data:
+                raise ValueError(f"stage '{stage_name}' configuration cannot be empty")
 
             # Parse domain config
-            domain_data = target_data.get("domain")
+            domain_data = stage_data.get("domain")
             if not domain_data:
                 raise ValueError(
-                    f"target '{target_name}' must have a domain configuration"
+                    f"stage '{stage_name}' must have a domain configuration"
                 )
 
             domain = DomainConfig(
@@ -289,21 +360,21 @@ class BundleManifest:
 
             if not domain.region.strip():
                 raise ValueError(
-                    f"target '{target_name}' domain.region is required and cannot be empty"
+                    f"stage '{stage_name}' domain.region is required and cannot be empty"
                 )
 
             # Parse project config
-            project_data = target_data.get("project")
+            project_data = stage_data.get("project")
             if not project_data:
                 raise ValueError(
-                    f"target '{target_name}' must have a project configuration"
+                    f"stage '{stage_name}' must have a project configuration"
                 )
 
             if isinstance(project_data, str):
                 # Handle simple string format: project: "project-name"
                 if not project_data.strip():
                     raise ValueError(
-                        f"target '{target_name}' project name cannot be empty"
+                        f"stage '{stage_name}' project name cannot be empty"
                     )
                 project = ProjectConfig(name=project_data)
             else:
@@ -311,7 +382,7 @@ class BundleManifest:
                 project_name = project_data.get("name", "")
                 if not project_name.strip():
                     raise ValueError(
-                        f"target '{target_name}' project.name is required and cannot be empty"
+                        f"stage '{stage_name}' project.name is required and cannot be empty"
                     )
 
                 project = ProjectConfig(
@@ -323,8 +394,8 @@ class BundleManifest:
                 )
 
             # Parse initialization config
-            initialization = None
-            init_data = target_data.get("initialization")
+            stage_initialization = None
+            init_data = stage_data.get("initialization")
             if init_data:
                 init_project = None
                 init_domain = None
@@ -358,43 +429,79 @@ class BundleManifest:
                     )
                     connections.append(connection)
 
-                initialization = InitializationConfig(
+                # Parse environments
+                environments = []
+                for env_data in init_data.get("environments", []):
+                    user_params = []
+                    for param_data in env_data.get("user_parameters", []):
+                        user_params.append(
+                            UserParameter(
+                                name=param_data.get("name", ""),
+                                value=param_data.get("value", ""),
+                            )
+                        )
+                    environments.append(
+                        EnvironmentConfig(
+                            environment_configuration_name=env_data.get("environment_configuration_name", ""),
+                            user_parameters=user_params,
+                        )
+                    )
+
+                stage_initialization = InitializationConfig(
                     project=init_project,
                     domain=init_domain,
-                    environments=init_data.get("environments", []),
+                    environments=environments,
                     connections=connections,
                 )
 
             # Parse bundle target configuration
-            bundle_target_config = None
-            btc_data = target_data.get("bundle_target_configuration")
+            deployment_config = None
+            btc_data = stage_data.get("deployment_configuration")
             if btc_data:
-                bundle_target_config = BundleTargetConfig(
-                    storage=btc_data.get("storage", []),
-                    git=btc_data.get("git", []),
+                # Parse storage configs
+                storage_configs = []
+                for storage_data in btc_data.get("storage", []):
+                    storage_configs.append(
+                        StorageConfig(
+                            name=storage_data.get("name", ""),
+                            connectionName=storage_data.get("connectionName", ""),
+                            include=storage_data.get("include", []),
+                            exclude=storage_data.get("exclude", []),
+                        )
+                    )
+                
+                # Parse git configs
+                git_configs = []
+                for git_data in btc_data.get("git", []):
+                    git_configs.append(
+                        GitConfig(
+                            repository=git_data.get("repository", ""),
+                            url=git_data.get("url", ""),
+                            branch=git_data.get("branch", "main"),
+                            include=git_data.get("include", []),
+                            exclude=git_data.get("exclude", []),
+                        )
+                    )
+                
+                deployment_config = DeploymentConfiguration(
+                    storage=storage_configs,
+                    git=git_configs,
                     catalog=btc_data.get("catalog"),
                 )
 
             # Parse stage - derive from target name if not provided
-            stage = target_data.get("stage")
+            stage = stage_data.get("stage")
             if not stage:
                 # Derive stage from target name
-                stage = target_name.upper()
+                stage = stage_name.upper()
 
-            # Parse tests configuration
-            tests = None
-            tests_data = target_data.get("tests")
-            if tests_data:
-                tests = TestConfig(folder=tests_data.get("folder"))
-
-            targets[target_name] = TargetConfig(
+            stages[stage_name] = StageConfig(
                 project=project,
                 domain=domain,
                 stage=stage,
-                initialization=initialization,
-                bundle_target_configuration=bundle_target_config,
-                tests=tests,
-                environment_variables=target_data.get("environment_variables"),
+                initialization=stage_initialization,
+                deployment_configuration=deployment_config,
+                environment_variables=stage_data.get("environment_variables"),
             )
 
         # Parse workflows
@@ -424,6 +531,17 @@ class BundleManifest:
             )
             workflows.append(workflow)
 
+        # Also extract workflows from initialization actions
+        for action in initialization:
+            if action.type == "workflow":
+                workflow = WorkflowConfig(
+                    workflow_name=action.workflowName,
+                    connection_name=action.connectionName or "",
+                    engine=action.engine or "MWAA",
+                    parameters={},
+                )
+                workflows.append(workflow)
+
         # Parse monitoring configuration
         monitoring = None
         monitoring_data = data.get("monitoring")
@@ -439,18 +557,29 @@ class BundleManifest:
             monitoring = MonitoringConfig(eventbridge=eventbridge)
 
         return cls(
-            bundle_name=data.get("bundleName", ""),
-            bundle=bundle,
-            targets=targets,
+            application_name=data.get("applicationName", ""),
+            content=content,
+            stages=stages,
+            initialization=initialization,
+            tests=tests,
             workflows=workflows,
             monitoring=monitoring,
         )
 
-    def get_target(self, target_name: str) -> Optional[TargetConfig]:
-        """Get target configuration by name."""
-        return self.targets.get(target_name)
+    def get_stage(self, stage_name: str) -> Optional[StageConfig]:
+        """Get stage configuration by name."""
+        return self.stages.get(stage_name)
 
-    def get_workflows_for_target(self, target_name: str) -> List[WorkflowConfig]:
-        """Get workflows that should be triggered for a target."""
-        # For now, return all workflows. Could be enhanced to filter by target
-        return self.workflows
+    def get_workflows_for_stage(self, stage_name: str) -> List[WorkflowConfig]:
+        """Get workflows that should be triggered for a stage."""
+        # Return workflow-type initialization actions
+        return [
+            WorkflowConfig(
+                workflow_name=action.workflowName,
+                connection_name=action.connectionName or "",
+                engine=action.engine or "MWAA",
+                parameters=action.parameters,
+            )
+            for action in self.initialization
+            if action.type == "workflow" and action.workflowName
+        ]

@@ -1,6 +1,5 @@
-bundleName: DemoMarketingBundle-MWAA
-bundle:
-  bundlesDirectory: ./bundles
+applicationName: DemoMarketingBundle-MWAA
+content:
   storage:
   - connectionName: default.s3_shared
     include:
@@ -35,7 +34,7 @@ bundle:
           identifier: covid19_db.worldwide_aggregate
       permission: READ
       requestReason: Global data access for marketing insights
-targets:
+stages:
   dev:
     domain:
       name: cicd-test-domain
@@ -44,7 +43,7 @@ targets:
     project:
       name: dev-marketing
       create: false
-    bundle_target_configuration:
+    deployment_configuration:
       storage:
       - connectionName: default.s3_shared
         name: code
@@ -52,8 +51,6 @@ targets:
       - connectionName: default.s3_shared
         name: workflows
         targetDirectory: workflows
-    tests:
-      folder: ./tests
   test:
     domain:
       name: cicd-test-domain
@@ -72,7 +69,7 @@ targets:
         contributors: []
       environments:
       - EnvironmentConfigurationName: OnDemand Workflows
-    bundle_target_configuration:
+    deployment_configuration:
       storage:
       - connectionName: default.s3_shared
         name: code
@@ -80,8 +77,6 @@ targets:
       - connectionName: default.s3_shared
         name: workflows
         targetDirectory: workflows
-    tests:
-      folder: ./tests
   prod:
     domain:
       name: cicd-test-domain
@@ -100,7 +95,7 @@ targets:
         contributors: []
       environments:
       - EnvironmentConfigurationName: OnDemand Workflows
-    bundle_target_configuration:
+    deployment_configuration:
       catalog:
         disable: true
       storage:
@@ -110,10 +105,11 @@ targets:
       - connectionName: default.s3_shared
         name: workflows
         targetDirectory: workflows
-    tests:
-      folder: ./tests
-workflows:
+initialization:
 - workflowName: sample_dag
   connectionName: project.workflow_mwaa
   engine: MWAA
   logging: console
+  type: workflow
+tests:
+  folder: ./tests

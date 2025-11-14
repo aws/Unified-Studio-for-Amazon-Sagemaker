@@ -95,8 +95,8 @@ def load_yaml(file_path: str) -> Dict[str, Any]:
     """
     if not os.path.exists(file_path):
         raise FileNotFoundError(
-            f"Bundle manifest file not found: {file_path}\n"
-            f"Please create a bundle manifest file or specify the correct path using --bundle/-b option."
+            f"Application manifest file not found: {file_path}\n"
+            f"Please create an application manifest file or specify the correct path using --manifest/-m option."
         )
 
     try:

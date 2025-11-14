@@ -1,7 +1,6 @@
-bundleName: DemoMarketingBundle
-bundle:
-  bundlesDirectory: ./bundles
-targets:
+applicationName: DemoMarketingBundle
+content: {}
+stages:
   dev:
     stage: DEV
     domain:

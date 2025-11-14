@@ -128,7 +128,7 @@ class TestDeletePipeline(IntegrationTestBase):
         os.makedirs(bundles_dir, exist_ok=True)
 
         # Create bundle zip file
-        bundle_path = os.path.join(bundles_dir, "DeleteTestPipeline.zip")
+        bundle_path = os.path.join(bundles_dir, "DeleteTestBundle.zip")
 
         with zipfile.ZipFile(bundle_path, "w", zipfile.ZIP_DEFLATED) as zipf:
             # Add storage files - directly under src/
@@ -176,7 +176,7 @@ class TestDeletePipeline(IntegrationTestBase):
 
         # Step 2: Describe pipeline configuration
         print("\n=== Step 2: Describe Pipeline ===")
-        result = self.run_cli_command(["describe", "--bundle", pipeline_file])
+        result = self.run_cli_command(["describe", "--manifest", pipeline_file])
         results.append(result)
 
         if result["success"]:
@@ -185,7 +185,7 @@ class TestDeletePipeline(IntegrationTestBase):
                 "Pipeline:" in result["output"]
             ), f"Describe output missing 'Pipeline:': {result['output']}"
             assert (
-                "DeleteTestPipeline" in result["output"]
+                "DeleteTestBundle" in result["output"]
             ), f"Describe output missing pipeline name: {result['output']}"
         else:
             print(f"❌ Describe command failed: {result['output']}")
@@ -194,7 +194,7 @@ class TestDeletePipeline(IntegrationTestBase):
         # Step 3: Deploy the project (initialize)
         print("\n=== Step 3: Deploy Project ===")
         result = self.run_cli_command(
-            ["deploy", "--targets", "delete-test", "--bundle", pipeline_file, "--bundle", bundle_path]
+            ["deploy", "--targets", "delete-test", "--manifest", pipeline_file, "--manifest", bundle_path]
         )
         results.append(result)
 
@@ -212,7 +212,7 @@ class TestDeletePipeline(IntegrationTestBase):
                 "delete",
                 "--targets",
                 "delete-test",
-                "--bundle",
+                "--manifest",
                 pipeline_file,
                 "--force",
             ]
@@ -249,7 +249,7 @@ class TestDeletePipeline(IntegrationTestBase):
                 "delete",
                 "--targets",
                 "delete-test",
-                "--bundle",
+                "--manifest",
                 pipeline_file,
                 "--force",
             ]
@@ -287,7 +287,7 @@ class TestDeletePipeline(IntegrationTestBase):
                 "delete",
                 "--targets",
                 "delete-test",
-                "--bundle",
+                "--manifest",
                 pipeline_file,
                 "--force",
                 "--async",
@@ -314,7 +314,7 @@ class TestDeletePipeline(IntegrationTestBase):
                 "delete",
                 "--targets",
                 "delete-test",
-                "--bundle",
+                "--manifest",
                 pipeline_file,
                 "--force",
                 "--output",
@@ -351,7 +351,7 @@ class TestDeletePipeline(IntegrationTestBase):
                 "delete",
                 "--targets",
                 "nonexistent-target",
-                "--bundle",
+                "--manifest",
                 pipeline_file,
                 "--force",
             ],

@@ -7,9 +7,9 @@ This guide covers development workflows, testing, and contribution guidelines fo
 ### Local Development
 1. **Update code** in dev environment S3 location
 2. **Create bundle**: `smus-cli bundle` (downloads latest from dev)
-3. **Deploy to test**: `smus-cli deploy --targets test` (deploys and triggers workflows)
+3. **Deploy to test**: `smus-cli deploy --stages test` (deploys and triggers workflows)
 4. **Verify execution**: Check workflow runs in SageMaker Unified Studio console
-5. **Deploy to prod**: `smus-cli deploy --targets prod` (when ready)
+5. **Deploy to prod**: `smus-cli deploy --stages prod` (when ready)
 
 ### GitHub Actions Integration
 The repository includes automated workflows for development:

@@ -29,7 +29,7 @@ monitoring:
 ### 2. Deploy with Monitoring
 
 ```bash
-smus-cli deploy --targets prod --bundle bundle.yaml
+smus-cli deploy --stages prod --bundle bundle.yaml
 ```
 
 ### 3. Create EventBridge Rule
@@ -49,7 +49,7 @@ aws events put-rule \
 
 aws events put-targets \
   --rule smus-prod-failures \
-  --targets "Id"="1","Arn"="arn:aws:sns:us-east-1:123456789012:prod-alerts"
+  --stages "Id"="1","Arn"="arn:aws:sns:us-east-1:123456789012:prod-alerts"
 ```
 
 **Example: Lambda on Success**
@@ -68,7 +68,7 @@ aws events put-rule \
 
 aws events put-targets \
   --rule smus-prod-success \
-  --targets "Id"="1","Arn"="arn:aws:lambda:us-east-1:123456789012:function:post-deploy"
+  --stages "Id"="1","Arn"="arn:aws:lambda:us-east-1:123456789012:function:post-deploy"
 ```
 
 ---
@@ -97,7 +97,7 @@ monitoring:
     eventBusName: default        # Event bus name or ARN
     includeMetadata: true        # Include git, CI/CD, user metadata
 
-targets:
+stages:
   prod:
     # ... target configuration
 ```
@@ -108,13 +108,13 @@ Override manifest configuration with CLI flags:
 
 ```bash
 # Enable events
-smus-cli deploy --targets prod --emit-events
+smus-cli deploy --stages prod --emit-events
 
 # Disable events
-smus-cli deploy --targets prod --no-events
+smus-cli deploy --stages prod --no-events
 
 # Use custom event bus
-smus-cli deploy --targets prod --event-bus-name my-custom-bus
+smus-cli deploy --stages prod --event-bus-name my-custom-bus
 ```
 
 ## Event Types
@@ -417,7 +417,7 @@ aws events put-rule \
 # Add target
 aws events put-targets \
   --rule smus-all-events \
-  --targets "Id"="1","Arn"="arn:aws:logs:us-east-1:123456789012:log-group:/aws/events/smus-deploy"
+  --stages "Id"="1","Arn"="arn:aws:logs:us-east-1:123456789012:log-group:/aws/events/smus-deploy"
 ```
 
 ## IAM Permissions

@@ -15,7 +15,7 @@ class TestDeployFailures:
         """Test deploy fails with nonexistent manifest file."""
         runner = CliRunner()
         result = runner.invoke(
-            app, ["deploy", "--bundle", "nonexistent.yaml", "--targets", "test"]
+            app, ["deploy", "--manifest", "nonexistent.yaml", "--targets", "test"]
         )
 
         assert result.exit_code != 0
@@ -31,7 +31,7 @@ class TestDeployFailures:
 
         try:
             result = runner.invoke(
-                app, ["deploy", "--bundle", invalid_manifest, "--targets", "test"]
+                app, ["deploy", "--manifest", invalid_manifest, "--targets", "test"]
             )
             assert result.exit_code != 0
             assert (
@@ -47,8 +47,8 @@ class TestDeployFailures:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(
                 """
-pipelineName: TestPipeline
-targets:
+applicationName: TestPipeline
+stages:
   dev:
     domain:
       name: test-domain
@@ -61,7 +61,7 @@ targets:
 
         try:
             result = runner.invoke(
-                app, ["deploy", "--bundle", manifest_file, "--targets", "nonexistent"]
+                app, ["deploy", "--manifest", manifest_file, "--targets", "nonexistent"]
             )
             assert result.exit_code != 0
             assert (
@@ -77,14 +77,13 @@ targets:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             f.write(
                 """
-pipelineName: TestPipeline
-bundle:
-  bundlesDirectory: /tmp/bundles
+applicationName: TestPipeline
+content:
   storage:
     - name: code
       connectionName: default.s3_shared
       include: ['src']
-targets:
+stages:
   test:
     domain:
       name: test-domain
@@ -93,7 +92,7 @@ targets:
     project:
       name: nonexistent-project-12345
       create: false
-    bundle_target_configuration:
+    deployment_configuration:
       storage:
         - name: code
           connectionName: default.s3_shared
@@ -104,7 +103,7 @@ targets:
 
         try:
             result = runner.invoke(
-                app, ["deploy", "--bundle", manifest_file, "--targets", "test"]
+                app, ["deploy", "--manifest", manifest_file, "--targets", "test"]
             )
             assert result.exit_code != 0
             assert (

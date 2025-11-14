@@ -35,9 +35,9 @@ class TestCreateCommand:
             # Verify file content
             with open(output_file, "r") as f:
                 content = f.read()
-                assert "bundleName: YourPipelineName" in content
+                assert "applicationName: YourPipelineName" in content
                 assert "domain:" in content
-                assert "targets:" in content
+                assert "stages:" in content
                 assert "dev:" in content
                 assert "test:" in content
                 assert "prod:" in content
@@ -61,7 +61,7 @@ class TestCreateCommand:
             # Verify custom name in file
             with open(output_file, "r") as f:
                 content = f.read()
-                assert f"bundleName: {bundle_name}" in content
+                assert f"applicationName: {bundle_name}" in content
 
     def test_create_with_custom_stages(self):
         """Test creating manifest with custom stages."""
@@ -204,13 +204,13 @@ class TestCreateCommand:
             # Verify file content has target-level domain configuration
             with open(output_file, "r") as f:
                 content = f.read()
-                assert "targets:" in content
+                assert "stages:" in content
                 # Check no top-level domain configuration
                 lines = content.split("\n")
                 in_targets = False
                 for line in lines:
                     stripped = line.strip()
-                    if stripped == "targets:":
+                    if stripped == "stages:":
                         in_targets = True
                     elif not line.startswith(" ") and stripped and stripped != "---":  # New top-level key
                         in_targets = False
@@ -334,7 +334,7 @@ class TestCreateCommand:
 
             # Verify it can be described
             describe_result = runner.invoke(
-                app, ["describe", "--bundle", output_file]
+                app, ["describe", "--manifest", output_file]
             )
             assert describe_result.exit_code == 0
             assert "Pipeline:" in describe_result.stdout
@@ -352,15 +352,15 @@ class TestCreateCommand:
             with open(output_file, "r") as f:
                 content = f.read()
                 # Required fields
-                assert "bundleName:" in content
+                assert "applicationName:" in content
                 assert "domain:" in content
                 assert "name:" in content  # domain name
                 assert "${DEV_DOMAIN_REGION:" in content  # parameterized region
-                assert "targets:" in content
+                assert "stages:" in content
 
                 # Optional fields (commented)
-                assert "# Bundle configuration" in content
-                assert "# workflows:" in content
+                assert "# Application content configuration" in content
+                assert "# initialization:" in content
 
                 # Placeholder indicators
                 assert "PLACEHOLDER" in content

@@ -325,8 +325,6 @@ def _live_log_monitoring(
                                 )
                             elif status == "FAILED":
                                 typer.echo(f"\n❌ Workflow run {run_id} failed")
-                                typer.echo("\n✅ Logs streaming complete.")
-                                raise typer.Exit(1)
                             elif status == "STOPPED":
                                 typer.echo(f"\n⚠️  Workflow run {run_id} stopped")
                             else:

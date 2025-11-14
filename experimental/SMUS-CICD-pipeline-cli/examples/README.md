@@ -110,7 +110,7 @@ Tests complete ETL pipeline with AWS Glue jobs processing COVID-19 data.
 
 **Pipeline components:**
 - `etl_bundle.yaml` - Pipeline manifest with git bundle
-- `covid_etl_bundle.yaml` - Airflow DAG definition
+- `covid_etl_workflow.yaml` - Airflow DAG definition
 - `glue_setup_covid_db.py` - Database/table setup
 - `glue_s3_list_job.py` - Data discovery
 - `glue_covid_summary_job.py` - Data aggregation

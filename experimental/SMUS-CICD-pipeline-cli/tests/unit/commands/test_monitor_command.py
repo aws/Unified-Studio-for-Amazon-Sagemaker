@@ -18,7 +18,7 @@ class TestMonitorCommandExitCodes:
     @pytest.mark.xfail(reason="Expected failure: invalid manifest file")
     def test_invalid_manifest_returns_exit_code_1(self):
         """Test that monitor command returns exit code 1 when manifest file is invalid."""
-        result = self.runner.invoke(app, ["monitor", "--bundle", "nonexistent.yaml"])
+        result = self.runner.invoke(app, ["monitor", "--manifest", "nonexistent.yaml"])
 
         # Verify exit code 1
         assert result.exit_code == 1
@@ -33,7 +33,7 @@ class TestMonitorCommandExitCodes:
         manifest_content = """
 pipelineName: test-pipeline
 
-targets:
+stages:
   dev:
     domain:
       name: test-domain
@@ -49,7 +49,7 @@ targets:
 
         try:
             result = self.runner.invoke(
-                app, ["monitor", "--bundle", temp_file, "--targets", "nonexistent"]
+                app, ["monitor", "--manifest", temp_file, "--targets", "nonexistent"]
             )
 
             # Verify exit code 1

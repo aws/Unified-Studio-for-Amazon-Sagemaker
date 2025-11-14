@@ -277,9 +277,9 @@ class TestDataZoneConnectionsE2E(IntegrationTestBase):
         project_name = project_detail.get('name')
         
         # Create test manifest with purpose tag to find domain and actual project name
-        test_manifest_content = f"""pipelineName: TestConnectionsE2E
+        test_manifest_content = f"""applicationName: TestConnectionsE2E
 
-targets:
+stages:
   test:
     stage: TEST 
     domain:
@@ -296,7 +296,7 @@ targets:
         
         # Execute CLI command
         result = self.run_cli_command([
-            "describe", "--bundle", test_manifest_path, "--connect"
+            "describe", "--manifest", test_manifest_path, "--connect"
         ])
         
         if result["success"]:

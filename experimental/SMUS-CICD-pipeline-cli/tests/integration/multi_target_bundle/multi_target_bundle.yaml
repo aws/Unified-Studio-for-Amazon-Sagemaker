@@ -1,6 +1,5 @@
-bundleName: IntegrationTestMultiTarget
-bundle:
-  bundlesDirectory: /tmp/bundles
+applicationName: IntegrationTestMultiTarget
+content:
   storage:
   - connectionName: default.s3_shared
     append: false
@@ -34,7 +33,7 @@ bundle:
           identifier: covid19_db.worldwide_aggregate
       permission: READ
       requestReason: Second table access for multi-asset testing
-targets:
+stages:
   dev:
     stage: DEV
     domain:
@@ -43,7 +42,7 @@ targets:
       region: ${DEV_DOMAIN_REGION:us-east-2}
     project:
       name: dev-marketing
-    bundle_target_configuration:
+    deployment_configuration:
       storage:
       - connectionName: default.s3_shared
         name: code
@@ -59,8 +58,6 @@ targets:
       region: ${DEV_DOMAIN_REGION:us-east-2}
     project:
       name: integration-test-test
-    tests:
-      folder: tests/integration/multi_target_pipeline/pipeline_tests/
     initialization:
       project:
         create: true
@@ -77,7 +74,7 @@ targets:
             value: multi_target_test_db
       environments:
       - EnvironmentConfigurationName: OnDemand Workflows
-    bundle_target_configuration:
+    deployment_configuration:
       storage:
       - connectionName: default.s3_shared
         name: code
@@ -108,7 +105,7 @@ targets:
             value: multi_target_prod_db
       environments:
       - EnvironmentConfigurationName: OnDemand Workflows
-    bundle_target_configuration:
+    deployment_configuration:
       storage:
       - connectionName: default.s3_shared
         name: code
@@ -116,13 +113,18 @@ targets:
       - connectionName: default.s3_shared
         name: workflows
         targetDirectory: workflows
-workflows:
+initialization:
 - workflowName: test_dag
   connectionName: project.workflow_mwaa
   engine: MWAA
+  type: workflow
 - workflowName: test_dag_not_mentioned
   connectionName: project.workflow_mwaa
   engine: MWAA
+  type: workflow
 - workflowName: runGettingStartedNotebook
   connectionName: project.workflow_mwaa
   engine: MWAA
+  type: workflow
+tests:
+  folder: tests/integration/multi_target_bundle/pipeline_tests/

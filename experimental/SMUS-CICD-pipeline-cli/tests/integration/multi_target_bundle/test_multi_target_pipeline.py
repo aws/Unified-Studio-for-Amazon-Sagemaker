@@ -242,7 +242,7 @@ task = PythonOperator(
 
         # Deploy test target (should be idempotent)
         deploy_result = self.run_cli_command(
-            ["deploy", "--bundle", pipeline_file, "--targets", "test"]
+            ["deploy", "--manifest", pipeline_file, "--targets", "test"]
         )
 
         # Deploy should succeed (idempotent behavior)
@@ -252,7 +252,7 @@ task = PythonOperator(
 
         # Test describe --connect after successful deployment
         result = self.run_cli_command(
-            ["describe", "--bundle", pipeline_file, "--workflows", "--connect"]
+            ["describe", "--manifest", pipeline_file, "--workflows", "--connect"]
         )
 
         assert result["success"], f"Describe --connect failed: {result['output']}"
@@ -302,10 +302,9 @@ task = PythonOperator(
 
         # Create a manifest with a nonexistent project
         manifest_content = """
-pipelineName: NonexistentProjectTest
-bundle:
-  bundlesDirectory: /tmp/bundles
-targets:
+applicationName: NonexistentProjectTest
+content:
+stages:
   test:
     stage: test
     domain:
@@ -329,7 +328,7 @@ workflows:
 
         try:
             result = self.run_cli_command(
-                ["describe", "--bundle", temp_manifest, "--connect"]
+                ["describe", "--manifest", temp_manifest, "--connect"]
             )
 
             # Should succeed but show error for the nonexistent project
@@ -354,10 +353,9 @@ workflows:
 
         # Create a manifest with wrong domain
         manifest_content = """
-pipelineName: WrongDomainTest
-bundle:
-  bundlesDirectory: /tmp/bundles
-targets:
+applicationName: WrongDomainTest
+content:
+stages:
   test:
     stage: test
     domain:
@@ -381,7 +379,7 @@ workflows:
 
         try:
             result = self.run_cli_command(
-                ["describe", "--bundle", temp_manifest, "--connect"]
+                ["describe", "--manifest", temp_manifest, "--connect"]
             )
 
             # Should succeed - domain validation might not be strict or domain might exist
@@ -404,10 +402,9 @@ workflows:
 
         # Create a manifest with parameterized region that defaults to wrong region
         manifest_content = """
-pipelineName: WrongRegionTest
-bundle:
-  bundlesDirectory: /tmp/bundles
-targets:
+applicationName: WrongRegionTest
+content:
+stages:
   test:
     stage: test
     domain:
@@ -431,7 +428,7 @@ workflows:
 
         try:
             result = self.run_cli_command(
-                ["describe", "--bundle", temp_manifest, "--connect"]
+                ["describe", "--manifest", temp_manifest, "--connect"]
             )
 
             # Should succeed because DEV_DOMAIN_REGION environment variable overrides manifest region
@@ -455,14 +452,14 @@ workflows:
         pipeline_file = self.get_pipeline_file()
 
         # Test without --connect
-        result_without = self.run_cli_command(["describe", "--bundle", pipeline_file])
+        result_without = self.run_cli_command(["describe", "--manifest", pipeline_file])
         assert result_without[
             "success"
         ], f"Describe without --connect failed: {result_without['output']}"
 
         # Test with --connect
         result_with = self.run_cli_command(
-            ["describe", "--bundle", pipeline_file, "--connect"]
+            ["describe", "--manifest", pipeline_file, "--connect"]
         )
         assert result_with[
             "success"
@@ -493,7 +490,7 @@ workflows:
 
         # Test with --connect to get project details
         result = self.run_cli_command(
-            ["describe", "--bundle", pipeline_file, "--connect"]
+            ["describe", "--manifest", pipeline_file, "--connect"]
         )
         assert result["success"], f"Describe --connect failed: {result['output']}"
 
@@ -554,10 +551,9 @@ workflows:
             pytest.skip("AWS connectivity not available")
 
         manifest_content = """
-pipelineName: MixedTargetsTest
-bundle:
-  bundlesDirectory: /tmp/bundles
-targets:
+applicationName: MixedTargetsTest
+content:
+stages:
   existing:
     stage: test
     domain:
@@ -587,7 +583,7 @@ workflows:
 
         try:
             result = self.run_cli_command(
-                ["describe", "--bundle", temp_manifest, "--connect"]
+                ["describe", "--manifest", temp_manifest, "--connect"]
             )
 
             # Should succeed and show mixed results
@@ -618,10 +614,9 @@ workflows:
             pytest.skip("AWS connectivity not available")
 
         manifest_content = """
-pipelineName: InvalidConnectionTest
-bundle:
-  bundlesDirectory: /tmp/bundles
-targets:
+applicationName: InvalidConnectionTest
+content:
+stages:
   test:
     stage: test
     domain:
@@ -644,7 +639,7 @@ workflows:
 
         try:
             result = self.run_cli_command(
-                ["describe", "--bundle", temp_manifest, "--connect"]
+                ["describe", "--manifest", temp_manifest, "--connect"]
             )
 
             # Should succeed but may show warnings about nonexistent connections
@@ -685,7 +680,7 @@ workflows:
         try:
             # Step 1: Describe pipeline configuration
             print("\n=== Step 1: Describe Pipeline ===")
-            result = self.run_cli_command(["describe", "--bundle", pipeline_file])
+            result = self.run_cli_command(["describe", "--manifest", pipeline_file])
             results.append(result)
 
             if result["success"]:
@@ -700,7 +695,7 @@ workflows:
             # Step 2: Describe with targets and connect
             print("\n=== Step 2: Describe with Targets ===")
             result = self.run_cli_command(
-                ["describe", "--bundle", pipeline_file, "--connect"]
+                ["describe", "--manifest", pipeline_file, "--connect"]
             )
             results.append(result)
 
@@ -733,7 +728,7 @@ workflows:
         try:
             # Get S3 URI from dev project using describe command
             describe_result = self.run_cli_command(
-                ["describe", "--bundle", pipeline_file, "--connect"]
+                ["describe", "--manifest", pipeline_file, "--connect"]
             )
             if describe_result["success"]:
                 describe_output = describe_result["output"]
@@ -818,7 +813,7 @@ workflows:
 
         # Step 4: Bundle command for dev target
         print("\n=== Step 4: Bundle Command (dev) ===")
-        result = self.run_cli_command(["bundle", "--bundle", pipeline_file, "dev"])
+        result = self.run_cli_command(["bundle", "--manifest", pipeline_file, "dev"])
         results.append(result)
 
         if result["success"]:
@@ -851,8 +846,8 @@ workflows:
                             "workflows/dags/test_dag.py" in f for f in file_list
                         ), f"workflows/dags/test_dag.py not found in bundle: {file_list}"
                         assert any(
-                            "storage/src/test-notebook1.ipynb" in f for f in file_list
-                        ), f"storage/src/test-notebook1.ipynb not found in bundle: {file_list}"
+                            "code/test-notebook1.ipynb" in f for f in file_list
+                        ), f"code/test-notebook1.ipynb not found in bundle: {file_list}"
 
                         # Check for generated DAG file
                         generated_dag_file = f"workflows/dags/{generated_dag_name}.py"
@@ -867,7 +862,7 @@ workflows:
                             print(f"Bundle contents: {file_list}")
 
                         print(
-                            "✅ Bundle contains uploaded files: workflows/dags/test_dag.py and storage/src/test-notebook1.ipynb"
+                            "✅ Bundle contains uploaded files: workflows/dags/test_dag.py and code/test-notebook1.ipynb"
                         )
 
                     print("✅ Bundle file exists and is not empty")
@@ -886,7 +881,7 @@ workflows:
         # Step 5: Deploy to test target (auto-initializes if needed)
         print("\n=== Step 5: Deploy to Test Target ===")
         result = self.run_cli_command(
-            ["deploy", "--bundle", pipeline_file, "--targets", "test"]
+            ["deploy", "--manifest", pipeline_file, "--targets", "test"]
         )
         results.append(result)
 
@@ -899,7 +894,7 @@ workflows:
 
         # Step 6: Deploy command (test target)
         print("\n=== Step 6: Deploy Command (test) ===")
-        result = self.run_cli_command(["deploy", "--bundle", pipeline_file, "test"])
+        result = self.run_cli_command(["deploy", "--manifest", pipeline_file, "test"])
         results.append(result)
 
         if result["success"]:
@@ -970,7 +965,7 @@ workflows:
 
         # Step 7: Deploy command (prod target)
         print("\n=== Step 7: Deploy Command (prod) ===")
-        result = self.run_cli_command(["deploy", "--bundle", pipeline_file, "prod"])
+        result = self.run_cli_command(["deploy", "--manifest", pipeline_file, "prod"])
         results.append(result)
 
         if result["success"]:
@@ -993,7 +988,7 @@ workflows:
         # Step 8: Describe with Connect (after deployment)
         print("\n=== Step 8: Describe with Connect ===")
         result = self.run_cli_command(
-            ["describe", "--bundle", pipeline_file, "--connect"]
+            ["describe", "--manifest", pipeline_file, "--connect"]
         )
         results.append(result)
 
@@ -1037,7 +1032,7 @@ workflows:
         run_result = self.run_cli_command(
             [
                 "run",
-                "--bundle",
+                "--manifest",
                 pipeline_file,
                 "--workflow",
                 generated_dag_name,
@@ -1059,7 +1054,7 @@ workflows:
 
         # Step 8.6: Monitor command to check actual DAG detection
         print("\n=== Step 8.6: Monitor Command (DAG Detection) ===")
-        result = self.run_cli_command(["monitor", "--bundle", pipeline_file])
+        result = self.run_cli_command(["monitor", "--manifest", pipeline_file])
         results.append(result)
 
         if result["success"]:
@@ -1157,15 +1152,15 @@ workflows:
         try:
             # Step 1: Verify manifest has catalog assets configured
             print("\n--- Step 1: Verify Catalog Configuration ---")
-            from smus_cicd.pipeline import BundleManifest
+            from smus_cicd.application import ApplicationManifest
             
-            manifest = BundleManifest.from_file(pipeline_file)
+            manifest = ApplicationManifest.from_file(pipeline_file)
             
-            if not manifest.bundle.catalog or not manifest.bundle.catalog.assets:
+            if not manifest.content.catalog or not manifest.content.catalog.assets:
                 pytest.skip("No catalog assets configured in manifest")
             
-            print(f"✅ Found {len(manifest.bundle.catalog.assets)} catalog assets")
-            for i, asset in enumerate(manifest.bundle.catalog.assets):
+            print(f"✅ Found {len(manifest.content.catalog.assets)} catalog assets")
+            for i, asset in enumerate(manifest.content.catalog.assets):
                 identifier = asset.selector.search.identifier if asset.selector.search else asset.selector.assetId
                 print(f"   Asset {i+1}: {identifier} (permission: {asset.permission})")
             
@@ -1175,7 +1170,7 @@ workflows:
                 from smus_cicd.helpers.datazone import get_domain_id_by_name, get_project_id_by_name
                 import boto3
                 
-                target_config = manifest.get_target('test')
+                target_config = manifest.get_stage('test')
                 domain_name = target_config.domain.name
                 project_name = target_config.project.name
                 region = target_config.domain.region
@@ -1187,7 +1182,7 @@ workflows:
                     datazone_client = boto3.client('datazone', region_name=region)
                     
                     # Cancel existing subscriptions for test assets
-                    for asset in manifest.bundle.catalog.assets:
+                    for asset in manifest.content.catalog.assets:
                         if asset.selector.search:
                             identifier = asset.selector.search.identifier
                             print(f"  Checking subscriptions for: {identifier}")
@@ -1230,7 +1225,7 @@ workflows:
             # Step 3: First deploy - should create new subscriptions
             print("\n--- Step 3: First Deploy (Create Subscriptions) ---")
             result = self.run_cli_command(
-                ["deploy", "--bundle", pipeline_file, "--targets", "test"]
+                ["deploy", "--manifest", pipeline_file, "--targets", "test"]
             )
             results.append(result)
             
@@ -1252,7 +1247,7 @@ workflows:
             # Step 4: Second deploy - should be idempotent
             print("\n--- Step 4: Second Deploy (Idempotency Test) ---")
             result = self.run_cli_command(
-                ["deploy", "--bundle", pipeline_file, "--targets", "test"]
+                ["deploy", "--manifest", pipeline_file, "--targets", "test"]
             )
             results.append(result)
             
@@ -1294,7 +1289,7 @@ workflows:
                         print(f"✅ Project ID resolved: {project_id}")
                         
                         # Test asset search functionality
-                        for asset in manifest.bundle.catalog.assets:
+                        for asset in manifest.content.catalog.assets:
                             if asset.selector.search:
                                 identifier = asset.selector.search.identifier
                                 print(f"  Testing asset search: {identifier}")
@@ -1365,7 +1360,7 @@ workflows:
                 # Test deploy without catalog assets
                 print("\n--- Testing Deploy Without Catalog Assets ---")
                 result = self.run_cli_command(
-                    ["deploy", "--bundle", temp_manifest, "--targets", "test"]
+                    ["deploy", "--manifest", temp_manifest, "--targets", "test"]
                 )
                 
                 if result["success"]:
@@ -1437,7 +1432,7 @@ workflows:
             try:
                 # Deploy should fail gracefully
                 result = self.run_cli_command(
-                    ["deploy", "--bundle", temp_manifest, "--targets", "test"]
+                    ["deploy", "--manifest", temp_manifest, "--targets", "test"]
                 )
                 
                 # Should fail but with proper error message
@@ -1472,10 +1467,10 @@ workflows:
             
             try:
                 # Should fail during manifest parsing
-                from smus_cicd.pipeline import BundleManifest
+                from smus_cicd.application import ApplicationManifest
                 
                 try:
-                    manifest = BundleManifest.from_file(temp_manifest)
+                    manifest = ApplicationManifest.from_file(temp_manifest)
                     print("⚠️ Malformed config was accepted (unexpected)")
                 except Exception as e:
                     print(f"✅ Malformed config rejected: {type(e).__name__}")
@@ -1509,10 +1504,10 @@ workflows:
             
             try:
                 # Should be handled by schema validation
-                from smus_cicd.pipeline import BundleManifest
+                from smus_cicd.application import ApplicationManifest
                 
                 try:
-                    manifest = BundleManifest.from_file(temp_manifest)
+                    manifest = ApplicationManifest.from_file(temp_manifest)
                     print("⚠️ Invalid permission was accepted (check schema)")
                 except Exception as e:
                     print(f"✅ Invalid permission rejected: {type(e).__name__}")
@@ -1538,7 +1533,7 @@ workflows:
             try:
                 # Should succeed but skip catalog processing
                 result = self.run_cli_command(
-                    ["deploy", "--bundle", temp_manifest, "--targets", "test"]
+                    ["deploy", "--manifest", temp_manifest, "--targets", "test"]
                 )
                 
                 if result["success"]:
@@ -1603,7 +1598,7 @@ workflows:
             try:
                 # Deploy should fail on first invalid asset
                 result = self.run_cli_command(
-                    ["deploy", "--bundle", temp_manifest, "--targets", "test"]
+                    ["deploy", "--manifest", temp_manifest, "--targets", "test"]
                 )
                 
                 # Should fail because of invalid asset

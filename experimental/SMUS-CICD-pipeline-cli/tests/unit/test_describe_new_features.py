@@ -14,8 +14,10 @@ class TestDescribeNewFeatures:
     def create_test_manifest(self):
         """Create a test manifest file."""
         manifest_content = """
-bundleName: TestPipeline
-targets:
+applicationName: TestPipeline
+content:
+  storage: []
+stages:
   dev:
     domain:
       name: test-domain
@@ -40,9 +42,6 @@ targets:
     project:
       name: prod-project
       create: false
-workflows:
-  - workflowName: test_workflow
-    connectionName: project.workflow_mwaa
 """
         f = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False)
         f.write(manifest_content)
@@ -56,7 +55,7 @@ workflows:
 
         try:
             result = runner.invoke(
-                app, ["describe", "--bundle", manifest_file, "--output", "JSON"]
+                app, ["describe", "--manifest", manifest_file, "--output", "JSON"]
             )
 
             assert result.exit_code == 0
@@ -84,7 +83,7 @@ workflows:
 
         try:
             result = runner.invoke(
-                app, ["describe", "--bundle", manifest_file, "--output", "TEXT"]
+                app, ["describe", "--manifest", manifest_file, "--output", "TEXT"]
             )
 
             assert result.exit_code == 0
@@ -106,7 +105,7 @@ workflows:
 
         try:
             result = runner.invoke(
-                app, ["describe", "--bundle", manifest_file, "--targets", "dev"]
+                app, ["describe", "--manifest", manifest_file, "--targets", "dev"]
             )
 
             assert result.exit_code == 0
@@ -130,7 +129,7 @@ workflows:
                 app,
                 [
                     "describe",
-                    "--bundle",
+                    "--manifest",
                     manifest_file,
                     "--targets",
                     "dev",
@@ -159,7 +158,7 @@ workflows:
 
         try:
             result = runner.invoke(
-                app, ["describe", "--bundle", manifest_file, "--targets", "invalid"]
+                app, ["describe", "--manifest", manifest_file, "--targets", "invalid"]
             )
 
             assert result.exit_code == 1
@@ -187,7 +186,7 @@ workflows:
                 app,
                 [
                     "describe",
-                    "--bundle",
+                    "--manifest",
                     manifest_file,
                     "--targets",
                     "invalid",
@@ -229,7 +228,7 @@ workflows:
                     mock_project.return_value = {"connections": {}, "status": "ACTIVE", "project_id": "test-id"}
                     mock_config.return_value = {"region": "us-east-1"}
                     result = runner.invoke(
-                        app, ["describe", "--bundle", manifest_file, "--connections"]
+                        app, ["describe", "--manifest", manifest_file, "--connections"]
                     )
 
             assert result.exit_code == 0
@@ -252,7 +251,7 @@ workflows:
                     mock_project.return_value = {"connections": {}, "status": "ACTIVE", "project_id": "test-id"}
                     mock_config.return_value = {"region": "us-east-1"}
                     result = runner.invoke(
-                        app, ["describe", "--bundle", manifest_file, "--connections"]
+                        app, ["describe", "--manifest", manifest_file, "--connections"]
                     )
 
             assert result.exit_code == 0
@@ -274,7 +273,7 @@ workflows:
                 app,
                 [
                     "describe",
-                    "--bundle",
+                    "--manifest",
                     manifest_file,
                     "--targets",
                     "dev",
@@ -287,7 +286,20 @@ workflows:
             # The command should return JSON output regardless of exit code
             assert result.stdout.strip(), "Expected JSON output but got empty stdout"
 
-            output_data = json.loads(result.stdout)
+            # Extract JSON from output (may have log messages before it)
+            stdout_lines = result.stdout.strip().split('\n')
+            json_start = -1
+            for i, line in enumerate(stdout_lines):
+                if line.strip().startswith('{'):
+                    json_start = i
+                    break
+            
+            if json_start >= 0:
+                json_output = '\n'.join(stdout_lines[json_start:])
+                output_data = json.loads(json_output)
+            else:
+                # No JSON found, might be an error
+                pytest.fail(f"No JSON output found in: {result.stdout}")
 
             # If successful, check for expected structure
             if result.exit_code == 0:

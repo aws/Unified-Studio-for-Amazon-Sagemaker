@@ -10,7 +10,7 @@ from smus_cicd.helpers.monitoring import (
     collect_metadata,
     create_event_emitter,
 )
-from smus_cicd.pipeline import BundleManifest
+from smus_cicd.application import ApplicationManifest
 
 
 class TestMonitoringHelpers:
@@ -19,11 +19,11 @@ class TestMonitoringHelpers:
     def test_create_event_emitter_default(self):
         """Test creating event emitter with defaults."""
         manifest_data = {
-            "bundleName": "TestPipeline",
-            "bundle": {"bundlesDirectory": "./bundles"},
-            "targets": {"test": {"domain": {"region": "us-east-1"}, "project": "test-project"}},
+            "applicationName": "TestPipeline",
+            "content": {"bundlesDirectory": "./bundles"},
+            "stages": {"test": {"domain": {"region": "us-east-1"}, "project": "test-project"}},
         }
-        manifest = BundleManifest.from_dict(manifest_data)
+        manifest = ApplicationManifest.from_dict(manifest_data)
         
         emitter = create_event_emitter(manifest, "us-east-1")
         
@@ -34,9 +34,9 @@ class TestMonitoringHelpers:
     def test_create_event_emitter_from_manifest(self):
         """Test creating event emitter from manifest config."""
         manifest_data = {
-            "bundleName": "TestPipeline",
-            "bundle": {"bundlesDirectory": "./bundles"},
-            "targets": {"test": {"domain": {"region": "us-east-1"}, "project": "test-project"}},
+            "applicationName": "TestPipeline",
+            "content": {"bundlesDirectory": "./bundles"},
+            "stages": {"test": {"domain": {"region": "us-east-1"}, "project": "test-project"}},
             "monitoring": {
                 "eventbridge": {
                     "enabled": False,
@@ -45,7 +45,7 @@ class TestMonitoringHelpers:
                 }
             },
         }
-        manifest = BundleManifest.from_dict(manifest_data)
+        manifest = ApplicationManifest.from_dict(manifest_data)
         
         emitter = create_event_emitter(manifest, "us-east-1")
         
@@ -55,12 +55,12 @@ class TestMonitoringHelpers:
     def test_create_event_emitter_cli_override(self):
         """Test CLI overrides for event emitter."""
         manifest_data = {
-            "bundleName": "TestPipeline",
-            "bundle": {"bundlesDirectory": "./bundles"},
-            "targets": {"test": {"domain": {"region": "us-east-1"}, "project": "test-project"}},
+            "applicationName": "TestPipeline",
+            "content": {"bundlesDirectory": "./bundles"},
+            "stages": {"test": {"domain": {"region": "us-east-1"}, "project": "test-project"}},
             "monitoring": {"eventbridge": {"enabled": False}},
         }
-        manifest = BundleManifest.from_dict(manifest_data)
+        manifest = ApplicationManifest.from_dict(manifest_data)
         
         emitter = create_event_emitter(manifest, "us-east-1", emit_events=True, event_bus_name="override-bus")
         
@@ -107,12 +107,12 @@ class TestMonitoringHelpers:
     def test_collect_metadata_enabled(self):
         """Test metadata collection when enabled."""
         manifest_data = {
-            "bundleName": "TestPipeline",
-            "bundle": {"bundlesDirectory": "./bundles"},
-            "targets": {"test": {"domain": {"region": "us-east-1"}, "project": "test-project"}},
+            "applicationName": "TestPipeline",
+            "content": {"bundlesDirectory": "./bundles"},
+            "stages": {"test": {"domain": {"region": "us-east-1"}, "project": "test-project"}},
             "monitoring": {"eventbridge": {"includeMetadata": True}},
         }
-        manifest = BundleManifest.from_dict(manifest_data)
+        manifest = ApplicationManifest.from_dict(manifest_data)
         
         metadata = collect_metadata(manifest)
         
@@ -122,12 +122,12 @@ class TestMonitoringHelpers:
     def test_collect_metadata_disabled(self):
         """Test metadata collection when disabled."""
         manifest_data = {
-            "bundleName": "TestPipeline",
-            "bundle": {"bundlesDirectory": "./bundles"},
-            "targets": {"test": {"domain": {"region": "us-east-1"}, "project": "test-project"}},
+            "applicationName": "TestPipeline",
+            "content": {"bundlesDirectory": "./bundles"},
+            "stages": {"test": {"domain": {"region": "us-east-1"}, "project": "test-project"}},
             "monitoring": {"eventbridge": {"includeMetadata": False}},
         }
-        manifest = BundleManifest.from_dict(manifest_data)
+        manifest = ApplicationManifest.from_dict(manifest_data)
         
         metadata = collect_metadata(manifest)
         
@@ -136,11 +136,11 @@ class TestMonitoringHelpers:
     def test_collect_metadata_no_monitoring(self):
         """Test metadata collection when monitoring not configured."""
         manifest_data = {
-            "bundleName": "TestPipeline",
-            "bundle": {"bundlesDirectory": "./bundles"},
-            "targets": {"test": {"domain": {"region": "us-east-1"}, "project": "test-project"}},
+            "applicationName": "TestPipeline",
+            "content": {"bundlesDirectory": "./bundles"},
+            "stages": {"test": {"domain": {"region": "us-east-1"}, "project": "test-project"}},
         }
-        manifest = BundleManifest.from_dict(manifest_data)
+        manifest = ApplicationManifest.from_dict(manifest_data)
         
         metadata = collect_metadata(manifest)
         

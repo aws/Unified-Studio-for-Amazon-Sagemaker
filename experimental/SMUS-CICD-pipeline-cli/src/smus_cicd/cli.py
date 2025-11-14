@@ -48,7 +48,7 @@ def show_help_suggestion():
     console.print("   [cyan]smus-cli deploy -p my-pipeline.yaml -t prod[/cyan]")
 
     console.print("\n[yellow]🔧 Universal switches (work on all commands):[/yellow]")
-    console.print("   [green]--bundle/-b[/green]  - Path to bundle manifest")
+    console.print("   [green]--manifest/-m[/green]  - Path to bundle manifest")
     console.print("   [green]--target/-t[/green]    - Target environment")
     console.print("   [green]--output[/green]       - Output format (TEXT/JSON)")
 
@@ -95,7 +95,7 @@ def describe(
         help="Show workflow information (for backward compatibility)",
     ),
     file_path: str = typer.Option(
-        "bundle.yaml", "--bundle", "-b", help="Path to bundle manifest file"
+        "application.yaml", "--manifest", "-m", help="Path to application manifest file"
     ),
 ):
     """Describe and validate pipeline manifest file."""
@@ -109,7 +109,7 @@ def describe(
 )
 def bundle(
     manifest_file: str = typer.Option(
-        "bundle.yaml", "--bundle", "-b", help="Path to bundle manifest file"
+        "application.yaml", "--manifest", "-m", help="Path to application manifest file"
     ),
     output_dir: str = typer.Option(
         "./bundles", "--output-dir", "-d", help="Output directory for bundle files"
@@ -155,7 +155,7 @@ def bundle(
 )
 def deploy(
     manifest_file: str = typer.Option(
-        "bundle.yaml", "--bundle", "-b", help="Path to bundle manifest file"
+        "application.yaml", "--manifest", "-m", help="Path to application manifest file"
     ),
     targets: str = typer.Option(
         None,
@@ -182,7 +182,7 @@ def deploy(
         None, help="Target name (positional argument for backward compatibility)"
     ),
 ):
-    """Deploy bundle files to target's bundle_target_configuration (auto-initializes infrastructure if needed)."""
+    """Deploy bundle files to target's deployment_configuration (auto-initializes infrastructure if needed)."""
     # Use positional argument if provided, otherwise use --targets flag
     final_targets = target_positional if target_positional else targets
     deploy_command(final_targets, manifest_file, bundle, emit_events, event_bus_name)
@@ -195,7 +195,7 @@ def deploy(
 )
 def monitor(
     manifest_file: str = typer.Option(
-        "bundle.yaml", "--bundle", "-b", help="Path to bundle manifest file"
+        "application.yaml", "--manifest", "-m", help="Path to application manifest file"
     ),
     output: str = typer.Option(
         "TEXT", "--output", "-o", help="Output format: TEXT (default) or JSON"
@@ -303,7 +303,7 @@ def run(
         help="Target name(s) - single target or comma-separated list (optional, defaults to first available)",
     ),
     manifest_file: str = typer.Option(
-        "bundle.yaml", "--bundle", "-b", help="Path to bundle manifest file"
+        "application.yaml", "--manifest", "-m", help="Path to application manifest file"
     ),
     output: str = typer.Option(
         "TEXT", "--output", "-o", help="Output format: TEXT (default) or JSON"
@@ -337,7 +337,7 @@ def test(
         help="Test output mode: console (stream test output directly)",
     ),
     file_path: str = typer.Option(
-        "bundle.yaml", "--bundle", "-b", help="Path to bundle manifest file"
+        "application.yaml", "--manifest", "-m", help="Path to application manifest file"
     ),
 ):
     """Run tests for pipeline targets."""
@@ -351,7 +351,7 @@ def test(
 )
 def delete(
     pipeline: str = typer.Option(
-        "bundle.yaml", "--bundle", "-b", help="Path to bundle manifest file"
+        "application.yaml", "--manifest", "-m", help="Path to application manifest file"
     ),
     targets: str = typer.Option(
         None,

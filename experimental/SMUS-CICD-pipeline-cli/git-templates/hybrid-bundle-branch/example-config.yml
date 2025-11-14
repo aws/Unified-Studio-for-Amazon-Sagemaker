@@ -1,0 +1,111 @@
+name: Deploy My ML Application (Hybrid)
+
+# Example configuration for hybrid bundle-branch deployment
+# Copy this to .github/workflows/deploy.yml and customize
+
+on:
+  push:
+    branches:
+      - ml-app-test-branch     # Your test branch name
+      - ml-app-prod-branch     # Your prod branch name
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: 'Stage to deploy'
+        required: true
+        type: choice
+        options:
+          - test
+          - prod
+      model_version:
+        description: 'Model version to deploy (optional)'
+        required: false
+        type: string
+
+jobs:
+  deploy:
+    uses: your-org/workflows/.github/workflows/smus-hybrid.yml@v1
+    
+    with:
+      # ========================================================================
+      # REQUIRED PARAMETERS
+      # ========================================================================
+      
+      manifest_path: 'manifest.yaml'
+      test_branch: 'ml-app-test-branch'
+      prod_branch: 'ml-app-prod-branch'
+      artifact_repository: 's3://your-org-ml-models'
+      
+      # ========================================================================
+      # OPTIONAL PARAMETERS (with defaults)
+      # ========================================================================
+      
+      model_version: ${{ inputs.model_version || 'latest' }}  # model version
+      smus_cli_path: 'experimental/SMUS-CICD-pipeline-cli'    # default
+      python_version: '3.12'                                   # default
+      aws_region: 'us-east-1'                                  # default
+      test_environment: 'aws-test'                             # default
+      prod_environment: 'aws-prod'                             # default
+      stage: ${{ inputs.stage || '' }}                         # for manual dispatch
+    
+    secrets:
+      # ========================================================================
+      # REQUIRED SECRETS (configure in GitHub repository settings)
+      # ========================================================================
+      
+      AWS_ROLE_ARN_TEST: ${{ secrets.AWS_ROLE_ARN_TEST }}
+      # Example: arn:aws:iam::123456789012:role/GitHubActions-SMUS-Test
+      
+      AWS_ROLE_ARN_PROD: ${{ secrets.AWS_ROLE_ARN_PROD }}
+      # Example: arn:aws:iam::123456789012:role/GitHubActions-SMUS-Prod
+      
+      # ========================================================================
+      # OPTIONAL SECRETS (can use environment variables instead)
+      # ========================================================================
+      
+      TEST_DOMAIN_REGION: ${{ vars.TEST_DOMAIN_REGION }}
+      # Example: us-east-1
+      
+      PROD_DOMAIN_REGION: ${{ vars.PROD_DOMAIN_REGION }}
+      # Example: us-east-1
+
+# ============================================================================
+# HYBRID DEPLOYMENT EXPLANATION
+# ============================================================================
+#
+# Code (from git):
+#   - Deployed directly from branches (fast)
+#   - Updated frequently
+#   - No bundle creation
+#
+# Models (from S3):
+#   - Deployed as versioned bundles
+#   - Updated less frequently
+#   - Version pinning per environment
+#
+# Example manifest.yaml:
+#
+# applicationName: ML-Training-Pipeline
+#
+# content:
+#   git:
+#     - repository: training-code
+#       url: https://github.com/myorg/ml-training.git
+#       include: [src/, scripts/]
+#
+# bundles:
+#   - name: trained-models
+#     type: s3
+#     source: s3://ml-models/production/
+#     include: [model-v1.pkl, model-v2.pkl]
+#     versioning: true
+#
+# stages:
+#   test:
+#     bundles:
+#       trained-models:
+#         version: latest        # Use latest for testing
+#   prod:
+#     bundles:
+#       trained-models:
+#         version: v1.2.0        # Pin specific version for prod

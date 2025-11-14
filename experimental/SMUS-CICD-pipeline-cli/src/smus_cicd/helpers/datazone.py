@@ -144,6 +144,23 @@ def get_domain_id_by_name(domain_name, region):
     return domain_id
 
 
+def get_default_project_profile(domain_id, region):
+    """Get the default project profile for a domain. Returns first available profile."""
+    try:
+        datazone_client = _get_datazone_client(region)
+        response = datazone_client.list_project_profiles(domainIdentifier=domain_id)
+        profiles = response.get("items", [])
+        
+        if not profiles:
+            return None
+        
+        # Return first profile as default
+        return profiles[0]["name"]
+    except Exception as e:
+        typer.echo(f"⚠️ Could not get project profiles: {e}", err=True)
+        return None
+
+
 def list_all_projects(domain_id, region):
     """List all projects in a domain with proper pagination handling."""
     datazone_client = _get_datazone_client(region)

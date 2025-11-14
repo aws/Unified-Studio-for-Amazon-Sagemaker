@@ -25,7 +25,7 @@ class TestBundleDeployPipeline(IntegrationTestBase):
             # Create project if it doesn't exist
             pipeline_file = self.get_pipeline_file()
             result = self.run_cli_command(
-                ["create", "--bundle", pipeline_file, "--targets", "test"]
+                ["create", "--manifest", pipeline_file, "--targets", "test"]
             )
 
             if not result["success"]:
@@ -38,7 +38,7 @@ class TestBundleDeployPipeline(IntegrationTestBase):
 
             for _ in range(30):  # 5 minutes timeout
                 result = self.run_cli_command(
-                    ["describe", "--bundle", pipeline_file, "--targets", "test"]
+                    ["describe", "--manifest", pipeline_file, "--targets", "test"]
                 )
                 if "Status: ACTIVE" in result["output"]:
                     print("✅ Project is active")
@@ -152,16 +152,16 @@ class TestBundleDeployPipeline(IntegrationTestBase):
         bundle_path = os.path.join(bundles_dir, "BundleDeployPipeline.zip")
 
         with zipfile.ZipFile(bundle_path, "w", zipfile.ZIP_DEFLATED) as zipf:
-            # Add storage files - directly under src/
+            # Add storage files - directly under code/
             src_dir = os.path.join(code_dir, "src")
             if os.path.exists(src_dir):
                 for root, dirs, files in os.walk(src_dir):
                     for file in files:
                         if not file.endswith((".pyc", ".DS_Store")):
                             file_path = os.path.join(root, file)
-                            # Remove the src/ prefix from the path to avoid src/src
+                            # Use code/ prefix instead of storage/src/
                             arcname = os.path.join(
-                                "storage", "src", os.path.relpath(file_path, src_dir)
+                                "code", os.path.relpath(file_path, src_dir)
                             )
                             zipf.write(file_path, arcname)
 
@@ -188,7 +188,7 @@ class TestBundleDeployPipeline(IntegrationTestBase):
 
         pipeline_file = self.get_pipeline_file()
 
-        result = self.run_cli_command(["describe", "--bundle", pipeline_file])
+        result = self.run_cli_command(["describe", "--manifest", pipeline_file])
 
         assert result["success"], f"Describe failed: {result['output']}"
         assert "Pipeline: IntegrationTestMultiTarget" in result["output"]
@@ -222,11 +222,11 @@ class TestBundleDeployPipeline(IntegrationTestBase):
                     "workflows/dags/" in f for f in file_list
                 ), "No workflow files in bundle"
                 assert any(
-                    "storage/src/" in f for f in file_list
+                    "code/" in f for f in file_list
                 ), "No storage files in bundle"
                 # Verify no src/src in paths
                 assert not any(
-                    "storage/src/src/" in f for f in file_list
+                    "code/src/" in f for f in file_list
                 ), "Found src/src in bundle paths"
 
             print("✅ Bundle created successfully")
@@ -236,7 +236,7 @@ class TestBundleDeployPipeline(IntegrationTestBase):
             result = self.run_cli_command(
                 [
                     "deploy",
-                    "--bundle",
+                    "--manifest",
                     pipeline_file,
                     "--targets",
                     "test",
@@ -266,7 +266,7 @@ class TestBundleDeployPipeline(IntegrationTestBase):
             result = self.run_cli_command(
                 [
                     "monitor",
-                    "--bundle",
+                    "--manifest",
                     pipeline_file,
                     "--targets",
                     "test",
@@ -296,7 +296,7 @@ class TestBundleDeployPipeline(IntegrationTestBase):
             result = self.run_cli_command(
                 [
                     "run",
-                    "--bundle",
+                    "--manifest",
                     pipeline_file,
                     "--targets",
                     "test",
@@ -356,8 +356,8 @@ class TestBundleDeployPipeline(IntegrationTestBase):
 
             # Check for expected files
             expected_files = [
-                "storage/src/test-notebook1.ipynb",
-                "storage/src/covid_analysis.ipynb",
+                "code/test-notebook1.ipynb",
+                "code/covid_analysis.ipynb",
                 "workflows/dags/execute_notebooks_dag.py",
             ]
 
@@ -368,7 +368,7 @@ class TestBundleDeployPipeline(IntegrationTestBase):
 
             # Verify no src/src in paths
             assert not any(
-                "storage/src/src/" in f for f in file_list
+                "code/src/" in f for f in file_list
             ), "Found src/src in bundle paths"
 
             print(f"✅ Bundle structure validated - contains {len(file_list)} files")

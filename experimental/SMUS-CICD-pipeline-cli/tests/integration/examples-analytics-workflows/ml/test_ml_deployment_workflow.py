@@ -53,7 +53,7 @@ class TestMLDeploymentWorkflow(IntegrationTestBase):
 
         # Step 1: Describe --connect
         print("\n=== Step 1: Describe with Connections ===")
-        result = self.run_cli_command(["describe", "--bundle", pipeline_file, "--connect"])
+        result = self.run_cli_command(["describe", "--manifest", pipeline_file, "--connect"])
         assert result["success"], f"Describe --connect failed: {result['output']}"
         print("✅ Describe --connect successful")
 
@@ -77,20 +77,20 @@ class TestMLDeploymentWorkflow(IntegrationTestBase):
 
         # Step 3: Bundle from dev
         print("\n=== Step 3: Bundle from dev ===")
-        result = self.run_cli_command(["bundle", "--bundle", pipeline_file, "--target", "dev"])
+        result = self.run_cli_command(["bundle", "--manifest", pipeline_file, "--target", "dev"])
         assert result["success"], f"Bundle failed: {result['output']}"
         print("✅ Bundle successful")
 
         # Step 4: Deploy to test
         print("\n=== Step 4: Deploy to test ===")
-        result = self.run_cli_command(["deploy", "test", "--bundle", pipeline_file])
+        result = self.run_cli_command(["deploy", "test", "--manifest", pipeline_file])
         assert result["success"], f"Deploy failed: {result['output']}"
         print("✅ Deploy successful")
 
         # Step 5: Run workflow
         print("\n=== Step 5: Run Workflow ===")
         result = self.run_cli_command(
-            ["run", "--workflow", workflow_name, "--targets", "test", "--bundle", pipeline_file]
+            ["run", "--workflow", workflow_name, "--targets", "test", "--manifest", pipeline_file]
         )
         assert result["success"], f"Run workflow failed: {result['output']}"
         print("✅ Workflow started")
@@ -116,6 +116,11 @@ class TestMLDeploymentWorkflow(IntegrationTestBase):
             ["logs", "--live", "--workflow", workflow_arn]
         )
         workflow_succeeded = result["success"]
+        
+        # Extract run_id from logs output - match pattern like "Run: dyo4EXeWXjVP4nd"
+        run_id_match = re.search(r"Run:\s+([a-zA-Z0-9]+)", result["output"])
+        run_id = run_id_match.group(1) if run_id_match else None
+        
         if workflow_succeeded:
             print("✅ Deployment workflow completed successfully")
         else:
@@ -132,7 +137,7 @@ class TestMLDeploymentWorkflow(IntegrationTestBase):
         )
         # Fallback to describe output from Step 1
         if not test_s3_uri_match:
-            describe_result = self.run_cli_command(["describe", "--bundle", pipeline_file, "--connect"])
+            describe_result = self.run_cli_command(["describe", "--manifest", pipeline_file, "--connect"])
             test_s3_uri_match = re.search(
                 r"test: test-marketing.*?default\.s3_shared:.*?s3Uri: (s3://[^\s]+)",
                 describe_result["output"],
@@ -140,7 +145,7 @@ class TestMLDeploymentWorkflow(IntegrationTestBase):
             )
         
         s3_bucket_match = test_s3_uri_match
-        if s3_bucket_match:
+        if s3_bucket_match and run_id:
             test_s3_uri = s3_bucket_match.group(1)
             s3_bucket = re.search(r"s3://([^/]+)", test_s3_uri).group(1)
             
@@ -149,22 +154,17 @@ class TestMLDeploymentWorkflow(IntegrationTestBase):
             print("⏳ Waiting 10s for S3 propagation...")
             time.sleep(10)
             
-            # Download latest notebook output (don't pass run_id as workflow run ID != task execution ID)
             notebooks_valid = self.download_and_validate_notebooks(
                 s3_bucket=s3_bucket,
-                workflow_filter="deployment"
+                workflow_arn=workflow_arn,
+                run_id=run_id
             )
             
-            # Only assert if workflow succeeded
-            if workflow_succeeded:
-                if not notebooks_valid:
-                    print("❌ Notebook validation failed - check logs above for details")
-                assert notebooks_valid, "Output notebooks contain errors or were not found"
-                print("✅ All output notebooks validated successfully")
-            else:
-                print(f"⚠️ Notebooks downloaded for inspection (workflow failed)")
+            assert notebooks_valid, "Output notebooks contain errors or were not found"
+            print("✅ All output notebooks validated successfully")
         else:
-            print("⚠️ Could not determine S3 bucket, skipping notebook validation")
+            print("❌ Could not determine S3 bucket or run_id")
+            assert False, "Could not determine S3 bucket or run_id for notebook validation"
         
         # Final assertion - workflow must succeed
         assert workflow_succeeded, "Workflow execution failed"

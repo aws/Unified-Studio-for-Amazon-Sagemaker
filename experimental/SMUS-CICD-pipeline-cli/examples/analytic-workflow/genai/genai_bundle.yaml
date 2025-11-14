@@ -1,55 +1,55 @@
-bundleName: IntegrationTestGenAIWorkflow
-
-bundle:
-  bundlesDirectory: /tmp/bundles
+applicationName: IntegrationTestGenAIWorkflow
+content:
   storage:
-    - name: agent-code
-      connectionName: default.s3_shared
-      include: ['genai/job-code']
-    - name: genai-workflows
-      connectionName: default.s3_shared
-      include: ['genai/workflows']
-
-targets:
-  dev: 
+  - name: agent-code
+    connectionName: default.s3_shared
+    include:
+    - genai/job-code
+  - name: genai-workflows
+    connectionName: default.s3_shared
+    include:
+    - genai/workflows
+stages:
+  dev:
     stage: DEV
     domain:
       tags:
         purpose: smus-cicd-testing
       region: ${DEV_DOMAIN_REGION:us-east-1}
-    project: 
+    project:
       name: dev-marketing
     environment_variables:
       S3_PREFIX: dev
-
-  test: 
+  test:
     stage: TEST
     domain:
       tags:
         purpose: smus-cicd-testing
       region: ${DEV_DOMAIN_REGION:us-east-1}
-    project: 
+    project:
       name: test-marketing
-    tests:
-      folder: examples/analytic-workflow/genai/pipeline_tests/
     initialization:
-      project: 
+      project:
         create: true
-        owners: [Eng1, arn:aws:iam::*:role/GitHubActionsRole-SMUS-CLI-Tests]
+        owners:
+        - Eng1
+        - arn:aws:iam::*:role/GitHubActionsRole-SMUS-CLI-Tests
         contributors: []
         role:
           arn: arn:aws:iam::*:role/SMUSCICDTestRole
-    bundle_target_configuration:
-      storage:
-        - name: agent-code
-          connectionName: default.s3_shared
-          targetDirectory: 'genai/bundle/agent-code'
-        - name: genai-workflows
-          connectionName: default.s3_shared
-          targetDirectory: 'genai/bundle/workflows'
     environment_variables:
       S3_PREFIX: test
-
-workflows:
-  - workflowName: genai_dev_workflow
-    engine: airflow-serverless
+    deployment_configuration:
+      storage:
+      - name: agent-code
+        connectionName: default.s3_shared
+        targetDirectory: genai/bundle/agent-code
+      - name: genai-workflows
+        connectionName: default.s3_shared
+        targetDirectory: genai/bundle/workflows
+initialization:
+- workflowName: genai_dev_workflow
+  engine: airflow-serverless
+  type: workflow
+tests:
+  folder: examples/analytic-workflow/genai/pipeline_tests/

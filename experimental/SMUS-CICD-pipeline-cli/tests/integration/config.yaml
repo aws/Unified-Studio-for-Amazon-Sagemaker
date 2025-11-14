@@ -10,6 +10,7 @@ aws:
 
 # Test environment settings
 test_environment:
+  domain_name: ${DOMAIN_NAME:}  # DataZone domain name (optional, can use tags)
   domain_tags:
           purpose: smus-cicd-testing  # DataZone domain for tests
   project_prefix: integration-test      # Prefix for test projects

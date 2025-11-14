@@ -11,9 +11,9 @@ from typing import Optional
 import boto3
 import typer
 
+from ..application import ApplicationManifest
 from ..helpers import deployment
 from ..helpers.utils import get_datazone_project_info, load_config
-from ..pipeline import BundleManifest
 
 
 def display_bundle_tree(zip_path: str, output: str):
@@ -81,7 +81,7 @@ def bundle_command(
     """Create bundle zip files by downloading from S3 connection locations."""
     try:
         config = load_config()
-        manifest = BundleManifest.from_file(manifest_file)
+        manifest = ApplicationManifest.from_file(manifest_file)
 
         # Parse targets - handle single target or comma-separated list
         target_list = []
@@ -89,32 +89,32 @@ def bundle_command(
             target_list = [t.strip() for t in targets.split(",")]
 
         # Use first target for now (bundle command typically works with single target)
-        target_name = target_list[0] if target_list else None
+        stage_name = target_list[0] if target_list else None
 
         # If no target specified, default to target with STAGE=DEV
-        if not target_name:
-            for name in manifest.targets.keys():
-                target_config = manifest.get_target(name)
+        if not stage_name:
+            for name in manifest.stages.keys():
+                target_config = manifest.get_stage(name)
                 if target_config.stage and target_config.stage.upper() == "DEV":
-                    target_name = name
+                    stage_name = name
                     typer.echo(
-                        f"No target specified, defaulting to DEV target: {target_name}"
+                        f"No target specified, defaulting to DEV target: {stage_name}"
                     )
                     break
 
         # Require target to be specified or found
-        if not target_name:
+        if not stage_name:
             typer.echo(
                 "Error: No target specified and no DEV stage target found. Use --targets to specify a target (e.g., --targets dev)",
                 err=True,
             )
             raise typer.Exit(1)
 
-        if target_name not in manifest.targets:
-            typer.echo(f"Error: Target '{target_name}' not found in manifest", err=True)
+        if stage_name not in manifest.stages:
+            typer.echo(f"Error: Target '{stage_name}' not found in manifest", err=True)
             raise typer.Exit(1)
 
-        target_config = manifest.get_target(target_name)
+        target_config = manifest.get_stage(stage_name)
         project_name = target_config.project.name
 
         # Get region and domain name from target's domain configuration
@@ -135,17 +135,15 @@ def bundle_command(
                 "Region must be specified in target domain configuration or AWS config"
             )
 
-        typer.echo(f"Creating bundle for target: {target_name}")
+        typer.echo(f"Creating bundle for target: {stage_name}")
         typer.echo(f"Project: {project_name}")
 
         # Get project connections to find S3 locations
         project_info = get_datazone_project_info(project_name, config)
         connections = project_info.get("connections", {})
 
-        # Get bundles directory from manifest or use default
-        bundles_directory = (
-            manifest.bundle.bundles_directory if manifest.bundle else "./bundles"
-        )
+        # Use output_dir parameter as bundles directory
+        bundles_directory = output_dir
 
         # Import bundle storage helper
         from ..helpers.bundle_storage import (
@@ -158,7 +156,7 @@ def bundle_command(
         ensure_bundle_directory_exists(bundles_directory, region)
 
         # Create zip file path (always create locally first, then upload if S3)
-        bundle_name = manifest.bundle_name
+        bundle_name = manifest.application_name
         zip_filename = f"{bundle_name}.zip"
 
         if is_s3_url(bundles_directory):
@@ -179,32 +177,16 @@ def bundle_command(
 
             # Process storage bundles (unified - includes workflows)
             storage_bundles = (
-                manifest.bundle.storage
-                if manifest.bundle and manifest.bundle.storage
+                manifest.content.storage
+                if manifest.content and manifest.content.storage
                 else []
             )
 
             for bundle_def in storage_bundles:
-                name = (
-                    bundle_def.get("name")
-                    if isinstance(bundle_def, dict)
-                    else bundle_def.name
-                )
-                connection_name = (
-                    bundle_def.get("connectionName")
-                    if isinstance(bundle_def, dict)
-                    else bundle_def.connection_name
-                )
-                include_patterns = (
-                    bundle_def.get("include", [])
-                    if isinstance(bundle_def, dict)
-                    else (bundle_def.include if bundle_def.include else [])
-                )
-                append_flag = (
-                    bundle_def.get("append", False)
-                    if isinstance(bundle_def, dict)
-                    else (bundle_def.append if hasattr(bundle_def, "append") else False)
-                )
+                name = bundle_def.name
+                connection_name = bundle_def.connectionName
+                include_patterns = bundle_def.include if bundle_def.include else []
+                append_flag = bundle_def.append if hasattr(bundle_def, "append") else False
 
                 if not connection_name or connection_name not in connections:
                     continue
@@ -230,7 +212,9 @@ def bundle_command(
 
             # Process Git repositories (supports both dict and list formats)
             git_repos = (
-                manifest.bundle.git if manifest.bundle and manifest.bundle.git else []
+                manifest.content.git
+                if manifest.content and manifest.content.git
+                else []
             )
 
             for repo_config in git_repos:
@@ -356,14 +340,14 @@ def bundle_command(
                 typer.echo("❌ No files found", err=True)
                 raise typer.Exit(1)
 
-        typer.echo(f"Bundle creation complete for target: {target_name}")
+        typer.echo(f"Bundle creation complete for target: {stage_name}")
 
     except Exception as e:
         if output.upper() == "JSON":
             error_result = {
                 "success": False,
                 "error": str(e),
-                "target": target_name,
+                "target": stage_name,
                 "manifest_file": manifest_file,
             }
             typer.echo(json.dumps(error_result, indent=2))

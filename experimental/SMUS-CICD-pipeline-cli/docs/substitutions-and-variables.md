@@ -158,7 +158,7 @@ script_location: '{proj.connection.my-redshift.host}'
 Define environment variables in your bundle manifest:
 
 ```yaml
-targets:
+stages:
   test:
     project:
       name: test-marketing

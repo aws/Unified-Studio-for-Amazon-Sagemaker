@@ -30,7 +30,7 @@ Would you like me to generate a bundle manifest for you?
 ```yaml
 bundleName: ETLBundle
 
-targets:
+stages:
   dev:
     stage: DEV
     default: true
@@ -39,7 +39,7 @@ targets:
       region: ${AWS_REGION}
     project:
       name: dev-project
-    bundle_target_configuration:
+    deployment_configuration:
       storage:
         - name: glue-scripts
           connectionName: default.s3_shared
@@ -71,10 +71,11 @@ bundle:
       include: ['glue/**/*.py']
       exclude: ['**/__pycache__/', '**/*.pyc']
 
-workflows:
-  - workflowName: deploy_glue_jobs
-    connectionName: project.workflow_serverless
-    engine: airflow-serverless
+activation:
+  workflows:
+    - workflowName: deploy_glue_jobs
+      connectionName: project.workflow_serverless
+      engine: airflow-serverless
     triggerPostDeployment: true
 ```
 
@@ -155,7 +156,7 @@ This workflow will:
 ```yaml
 bundleName: NotebookBundle
 
-targets:
+stages:
   dev:
     stage: DEV
     default: true
@@ -164,7 +165,7 @@ targets:
       region: ${AWS_REGION}
     project:
       name: dev-notebooks
-    bundle_target_configuration:
+    deployment_configuration:
       storage:
         - name: notebooks
           connectionName: default.s3_shared
@@ -196,7 +197,7 @@ The `bundle.storage` section defines what gets bundled:
 - `include`: Patterns for files to include (e.g., `notebooks/*.ipynb`)
 - `exclude`: Patterns to exclude (e.g., `.ipynb_checkpoints/`)
 
-The `bundle_target_configuration.storage` section defines where files are deployed:
+The `deployment_configuration.storage` section defines where files are deployed:
 - `connectionName`: S3 connection (e.g., `default.s3_shared`)
 - `targetDirectory`: Destination path in S3
 
@@ -255,7 +256,7 @@ Your pipeline looks good! All required fields are present and properly formatted
 Here's the correct format:
 
 ```yaml
-targets:
+stages:
   dev:
     stage: DEV  # Required!
     domain:
@@ -281,7 +282,7 @@ Make sure all your targets have the `stage` field set.
 **Q:** You can add monitoring to your pipeline using the `monitoring` section:
 
 ```yaml
-targets:
+stages:
   prod:
     stage: PROD
     monitoring:

@@ -2,13 +2,13 @@
 
 from typing import Any, Dict, Optional
 
-from ..pipeline import BundleManifest
+from ..application import ApplicationManifest
 from .event_emitter import EventEmitter
 from .metadata_collector import MetadataCollector
 
 
 def create_event_emitter(
-    manifest: BundleManifest,
+    manifest: ApplicationManifest,
     region: str,
     emit_events: Optional[bool] = None,
     event_bus_name: Optional[str] = None,
@@ -44,19 +44,19 @@ def create_event_emitter(
     return EventEmitter(enabled=enabled, event_bus_name=bus_name, region=region)
 
 
-def build_target_info(target_name: str, target_config) -> Dict[str, Any]:
+def build_target_info(stage_name: str, target_config) -> Dict[str, Any]:
     """
     Build target information dictionary for events.
 
     Args:
-        target_name: Name of the target
+        stage_name: Name of the target
         target_config: Target configuration object
 
     Returns:
         Dictionary with target information
     """
     return {
-        "name": target_name,
+        "name": stage_name,
         "stage": target_config.stage,
         "domain": {
             "name": target_config.domain.name,
@@ -90,7 +90,7 @@ def build_bundle_info(bundle_path: str) -> Dict[str, Any]:
     return bundle_info
 
 
-def collect_metadata(manifest: BundleManifest) -> Optional[Dict[str, Any]]:
+def collect_metadata(manifest: ApplicationManifest) -> Optional[Dict[str, Any]]:
     """
     Collect metadata if enabled in manifest.
 

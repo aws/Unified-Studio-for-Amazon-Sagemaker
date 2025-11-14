@@ -1,14 +1,15 @@
-bundleName: IntegrationTestNotebooks
-
-bundle:
-  bundlesDirectory: /tmp/bundles
+applicationName: IntegrationTestNotebooks
+content:
   storage:
-    - name: notebooks
-      connectionName: default.s3_shared
-      include: ['notebooks/', 'workflows/']
-      exclude: ['.ipynb_checkpoints/', '__pycache__/']
-
-targets:
+  - name: notebooks
+    connectionName: default.s3_shared
+    include:
+    - notebooks/
+    - workflows/
+    exclude:
+    - .ipynb_checkpoints/
+    - __pycache__/
+stages:
   dev:
     stage: DEV
     domain:
@@ -19,7 +20,6 @@ targets:
       name: dev-marketing
     environment_variables:
       S3_PREFIX: dev
-
   test:
     stage: TEST
     domain:
@@ -28,35 +28,31 @@ targets:
       region: ${DEV_DOMAIN_REGION:us-east-1}
     project:
       name: test-notebooks
-    tests:
-      folder: examples/analytic-workflow/data-notebooks/pipeline_tests/
     initialization:
       project:
         create: true
-        owners: [Eng1, arn:aws:iam::*:role/GitHubActionsRole-SMUS-CLI-Tests]
+        owners:
+        - Eng1
+        - arn:aws:iam::*:role/GitHubActionsRole-SMUS-CLI-Tests
         contributors: []
         role:
           arn: arn:aws:iam::*:role/SMUSCICDTestRole
       connections:
-        - name: mlflow-server
-          type: MLFLOW
-          properties:
-            trackingServerArn: "arn:aws:sagemaker:${STS_REGION}:${STS_ACCOUNT_ID}:mlflow-tracking-server/smus-integration-mlflow-use2"
-            trackingServerName: "smus-integration-mlflow-use2"
-      connections:
-        - name: mlflow-server
-          type: MLFLOW
-          properties:
-            trackingServerArn: "arn:aws:sagemaker:${STS_REGION}:${STS_ACCOUNT_ID}:mlflow-tracking-server/smus-integration-mlflow-use2"
-            trackingServerName: "smus-integration-mlflow-use2"
-    bundle_target_configuration:
-      storage:
-        - name: notebooks
-          connectionName: default.s3_shared
-          targetDirectory: 'notebooks/bundle/notebooks'
+      - name: mlflow-server
+        type: MLFLOW
+        properties:
+          trackingServerArn: arn:aws:sagemaker:${STS_REGION}:${STS_ACCOUNT_ID}:mlflow-tracking-server/smus-integration-mlflow-use2
+          trackingServerName: smus-integration-mlflow-use2
     environment_variables:
       S3_PREFIX: test
-
-workflows:
-  - workflowName: parallel_notebooks_workflow
-    engine: airflow-serverless
+    deployment_configuration:
+      storage:
+      - name: notebooks
+        connectionName: default.s3_shared
+        targetDirectory: notebooks/bundle/notebooks
+initialization:
+- workflowName: parallel_notebooks_workflow
+  engine: airflow-serverless
+  type: workflow
+tests:
+  folder: examples/analytic-workflow/data-notebooks/pipeline_tests/
