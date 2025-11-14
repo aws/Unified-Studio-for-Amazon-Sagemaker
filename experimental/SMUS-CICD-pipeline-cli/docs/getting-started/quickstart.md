@@ -1,6 +1,6 @@
 # Data Team Quick Start
 
-****Goal:** Deploy your first data application bundle in 10-15 minutes
+**Goal:** Deploy your first data application in 10-15 minutes
 
 **Audience:** DevOps teams building automated deployment pipelines for data engineering, ML, and GenAI workflows
 
@@ -26,38 +26,51 @@ pip install -e .
 
 ---
 
-## Step 2: Create Bundle Manifest
+## Step 2: Create Application Deployment Manifest
 
-Create a `bundle.yaml` file defining your deployment:
+Create a `manifest.yaml` file defining your application and deployment targets:
 
 ```yaml
-bundleName: MonthlyReportAnalysis
+applicationName: CustomerAnalyticsPipeline
 
-bundle:
+content:
+  workflows:
+    - workflowName: customer_analytics
+      engine: airflow-serverless
+  
+  # Application code from git
+  git:
+    - repository: customer-analytics
+      url: https://github.com/myorg/customer-analytics.git
+  
+  # Reference data from storage
   storage:
-    - name: monthly-report-metrics
+    - name: reference-data
       connectionName: default.s3_shared
       include:
-        - 'workflows/'
+        - 'data/reference/'
       exclude:
         - '__pycache__/'
         - '*.pyc'
 
-targets:
+stages:
   dev:
+    stage: DEV
     domain:
       name: my-domain
       region: us-east-1
     project:
-      name: dev-data-project
+      name: dev-analytics-project
       create: false
-    
+  
   test:
+    stage: TEST
+    branch: release_test
     domain:
       name: my-domain
       region: us-east-1
     project:
-      name: test-data-project
+      name: test-analytics-project
       create: true
     initialization:
       project:
@@ -66,11 +79,13 @@ targets:
         owners: [admin@example.com]
     
   prod:
+    stage: PROD
+    branch: release_prod
     domain:
       name: my-domain
       region: us-east-1
     project:
-      name: prod-data-project
+      name: prod-analytics-project
       create: true
     initialization:
       project:
@@ -80,9 +95,9 @@ targets:
 ```
 
 **Key sections:**
-- `bundleName`: Name of your data application bundle
-- `bundle`: Specify what files to deploy
-- `targets`: Define dev/test/prod environments
+- `applicationName`: Name of your data application
+- `content`: Application code from git, data from storage
+- `stages`: Define dev/test/prod environments (dev for local work, test/prod with branch mapping)
 - `initialization`: Auto-create projects with settings
 
 **See more:** [Bundle Manifest Reference](../bundle-manifest.md)
@@ -275,7 +290,7 @@ data_processing:
 ## Step 5: Validate Configuration
 
 ```bash
-smus-cli describe --bundle bundle.yaml --connect
+smus-cli describe --manifest manifest.yaml --connect
 ```
 
 **Expected output:**
@@ -304,25 +319,42 @@ Bundle includes:
 
 ---
 
-## Step 6: Create Bundle and Deploy to Test
+## Step 6: Create Bundle (Optional - for Bundle-Based Approach)
+
+If using bundle-based deployment, create a versioned artifact:
 
 ```bash
 # Create bundle from dev environment
-smus-cli bundle --bundle bundle.yaml --targets dev
-
-# Deploy to test environment
-smus-cli deploy --targets test --bundle bundle.yaml
+smus-cli bundle --manifest manifest.yaml --stages dev
 ```
 
-**See more:** [CLI Commands - bundle & deploy](../cli-commands.md#bundle)
+This creates a versioned archive containing your application content. Skip this step if using direct git-based deployment.
+
+**See more:** [CLI Commands - bundle](../cli-commands.md#bundle)
 
 ---
 
-## Step 7: Validate in Test Environment
+## Step 7: Deploy to Test
+
+Deploy your application to the test environment:
+
+```bash
+# Option 1: Direct deployment (git-based)
+smus-cli deploy --stages test --manifest manifest.yaml
+
+# Option 2: Bundle-based deployment (if you created a bundle in Step 6)
+smus-cli deploy --stages test --manifest manifest.yaml --bundle path/to/bundle.tar.gz
+```
+
+**See more:** [CLI Commands - deploy](../cli-commands.md#deploy)
+
+---
+
+## Step 8: Validate in Test Environment
 
 ```bash
 # Run validation tests
-smus-cli test --targets test --bundle bundle.yaml
+smus-cli test --stages test --manifest manifest.yaml
 
 # Trigger workflow manually
 smus-cli run --targets test --workflow data_processing_dag
@@ -332,13 +364,13 @@ smus-cli run --targets test --workflow data_processing_dag
 
 ---
 
-## Step 8: Deploy to Production
+## Step 9: Deploy to Production
 
 After validating in test, deploy to production:
 
 ```bash
 # Deploy to production
-smus-cli deploy --targets prod --bundle bundle.yaml
+smus-cli deploy --stages prod --manifest manifest.yaml
 ```
 
 **See more:** [CLI Commands - deploy](../cli-commands.md#deploy)
@@ -349,7 +381,7 @@ smus-cli deploy --targets prod --bundle bundle.yaml
 
 If your workflows need DataZone catalog assets:
 
-**Update `bundle.yaml`:**
+**Update `manifest.yaml`:**
 ```yaml
 bundle:
   catalog:
@@ -364,7 +396,7 @@ bundle:
 
 **Deploy with catalog integration:**
 ```bash
-smus-cli deploy --targets test --bundle bundle.yaml
+smus-cli deploy --targets test --manifest manifest.yaml
 ```
 
 The CLI will automatically request subscriptions to catalog assets for your project.
@@ -377,13 +409,13 @@ The CLI will automatically request subscriptions to catalog assets for your proj
 
 ```bash
 # Monitor workflow status
-smus-cli monitor --targets test --bundle bundle.yaml
+smus-cli monitor --targets test --manifest manifest.yaml
 
 # View workflow logs
 smus-cli logs --workflow data_processing_dag --targets test --live
 
 # Check deployment history
-smus-cli describe --targets test --bundle bundle.yaml
+smus-cli describe --targets test --manifest manifest.yaml
 ```
 
 **See more:** [CLI Commands - monitor & logs](../cli-commands.md#monitor)
@@ -395,7 +427,7 @@ smus-cli describe --targets test --bundle bundle.yaml
 ### Multi-Stage Deployment
 
 ```yaml
-# bundle.yaml
+# manifest.yaml
 targets:
   test:
     domain:
@@ -459,7 +491,7 @@ A single project can contain multiple data applications, each with its own bundl
 ```
 my-smus-project/
 ├── monthly-metrics/           # Data application 1
-│   ├── bundle.yaml
+│   ├── manifest.yaml
 │   ├── workflows/
 │   │   ├── metrics_etl.yaml
 │   │   └── metrics_report.yaml
@@ -467,7 +499,7 @@ my-smus-project/
 │       └── metrics_analysis.ipynb
 │
 ├── churn-model/               # Data application 2
-│   ├── bundle.yaml
+│   ├── manifest.yaml
 │   ├── workflows/
 │   │   ├── feature_engineering.yaml
 │   │   └── model_training.yaml
@@ -505,13 +537,13 @@ Each data application is self-contained with its own bundle manifest and can be 
 ### Variable Substitution Not Working
 ```bash
 # Debug variable resolution
-smus-cli describe --bundle bundle.yaml --targets test --verbose
+smus-cli describe --manifest manifest.yaml --targets test --verbose
 ```
 
 ### Workflow Not Syncing to MWAA
 ```bash
 # Check bundle contents
-smus-cli bundle --bundle bundle.yaml --targets dev --verbose
+smus-cli bundle --manifest manifest.yaml --targets dev --verbose
 
 # Verify deployment
 smus-cli monitor --targets test --workflows
@@ -520,7 +552,7 @@ smus-cli monitor --targets test --workflows
 ### Tests Failing
 ```bash
 # Run tests with verbose output
-smus-cli test --targets test --bundle bundle.yaml --verbose
+smus-cli test --targets test --manifest manifest.yaml --verbose
 
 # Check individual workflow execution
 smus-cli run --targets test --workflow my_dag

@@ -4,14 +4,16 @@
 
 Deploy Airflow DAGs, Jupyter notebooks, and ML workflows from development to production with confidence. Built for data scientists, data engineers, ML engineers, and GenAI app developers working with DevOps teams.
 
+**Works with your deployment strategy:** Whether you use git branches (branch-based), versioned artifacts (bundle-based), git tags (tag-based), or direct deployment - this CLI supports your workflow. Define your application once, deploy it your way.
+
 ---
 
 ## Why SMUS CI/CD CLI?
 
 ✅ **Deploy with Confidence** - Automated testing and validation before production  
-✅ **Multi-Environment Management** - Dev → Test → Prod with environment-specific configuration  
+✅ **Multi-Environment Management** - Test → Prod with environment-specific configuration  
 ✅ **DataZone Integration** - Automatic catalog asset subscription and approval workflows  
-✅ **Infrastructure as Code** - Version-controlled bundle definitions and reproducible deployments  
+✅ **Infrastructure as Code** - Version-controlled application manifests and reproducible deployments  
 ✅ **GitHub Actions Ready** - Native CI/CD pipeline integration for automated deployments  
 
 ---
@@ -25,19 +27,19 @@ cd Unified-Studio-for-Amazon-Sagemaker/experimental/SMUS-CICD-pipeline-cli
 pip install -e .
 ```
 
-**Deploy your first bundle:**
+**Deploy your first application:**
 ```bash
 # Validate configuration
-smus-cli describe --bundle bundle.yaml --connect
+smus-cli describe --manifest manifest.yaml --connect
 
-# Create deployment bundle
-smus-cli bundle --bundle bundle.yaml --targets dev
+# Create deployment bundle (optional)
+smus-cli bundle --manifest manifest.yaml
 
 # Deploy to test environment
-smus-cli deploy --targets test --bundle bundle.yaml
+smus-cli deploy --targets test --manifest manifest.yaml
 
 # Run validation tests
-smus-cli test --bundle bundle.yaml --targets test
+smus-cli test --manifest manifest.yaml --targets test
 ```
 
 **See it in action:** [Live GitHub Actions Example](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/actions/runs/17631303500)
@@ -48,7 +50,7 @@ smus-cli test --bundle bundle.yaml --targets test
 
 ### 👨‍💻 Data Teams (Data Scientists, Data Engineers, GenAI App Developers)
 Build and deploy data applications including Spark code, Python scripts, Airflow workflows, and notebooks.  
-→ **[Quick Start Guide](docs/getting-started/quickstart.md)** - Deploy your first bundle in 10 minutes  
+→ **[Quick Start Guide](docs/getting-started/quickstart.md)** - Deploy your first application in 10 minutes  
 
 **Includes examples for:**
 - Data Engineering (Glue, Notebooks, Athena)
@@ -64,10 +66,11 @@ Set up CI/CD pipelines (GitHub Actions) and manage multi-environment infrastruct
 ## Key Features
 
 ### 🚀 Automated Deployment
-- **Bundle Creation** - Package workflows, notebooks, and data assets into deployable artifacts
-- **Multi-Target Deployment** - Deploy to dev, test, and prod with a single command
+- **Application Manifest** - Define your application content, workflows, and deployment targets in YAML
+- **Flexible Deployment** - Bundle-based (artifact) or direct (git-based) deployment modes
+- **Multi-Target Deployment** - Deploy to test and prod with a single command
 - **Environment Variables** - Dynamic configuration using `${VAR}` substitution
-- **Version Control** - Track bundle versions in S3 for deployment history
+- **Version Control** - Track deployments in S3 or git for deployment history
 
 ### 🔍 Testing & Validation
 - **Automated Tests** - Run validation tests before promoting to production
@@ -117,57 +120,80 @@ S3 • Lambda • Step Functions • DynamoDB • RDS • SNS/SQS • Batch
 
 ## Core Concepts
 
-### Bundle
-A deployable data application package created by data teams containing:
+### Application Deployment Manifest
+A declarative YAML file (`manifest.yaml`) that defines your data application:
+- **Application details** - Name, version, description
+- **Content sources** - Workflows, code from git repositories, data/models from storage
+- **Deployment stages** - Where to deploy (dev, test, prod environments)
+- **Configuration** - Environment-specific settings and parameters
+
+Created and owned by data teams. Defines **what** to deploy and **where**.
+
+### Application
+Your data/analytics workload being deployed:
 - Airflow DAGs and Python scripts
 - Jupyter notebooks and data files
-- ML models and configuration
-- Git repository dependencies
+- ML models and training code
+- ETL pipelines and transformations
+- GenAI agents and MCP servers
+- Foundation model configurations
 
 ### Workflow
-Orchestration logic that defines task execution and dependencies:
-- Typically Airflow DAGs (Directed Acyclic Graphs)
+Orchestration logic that executes your application:
+- Airflow DAGs (Directed Acyclic Graphs) defining task dependencies
 - Supports MWAA (Managed Workflows for Apache Airflow) and Airflow Serverless
-- Extensible architecture allows additional orchestration engines to be added
 - Defined in YAML format for easy configuration
 
-### Pipeline
-The CI/CD automation (e.g., GitHub Actions workflows) created by DevOps teams that:
-- Automates bundle deployment across environments
+### Stage
+A deployment environment (dev, test, prod) mapped to a SageMaker Unified Studio project:
+- Domain and region configuration
+- Project name and settings
+- Resource connections (S3, Airflow, Athena, Glue)
+- Environment-specific parameters
+- Optional branch mapping for git-based deployments
+
+### CI/CD Automation
+GitHub Actions workflows (or other CI/CD systems) that automate deployment:
+- Created and owned by DevOps teams
+- Defines **how** and **when** to deploy
 - Runs tests and quality gates
-- Manages promotion from dev → test → prod
-- Example: `.github/workflows/mwaa-pipeline-lifecycle.yml`
-- Reference: [GitHub Actions Workflows](https://docs.github.com/en/actions/how-tos/write-workflows)
+- Manages promotion across targets
+- Example: `.github/workflows/deploy.yml`
 
-### Target
-A deployment environment mapping to a SageMaker Unified Studio project:
-- Environment configuration (domain, region, project)
-- Resource definitions (S3, Airflow, Athena, Glue)
-- Deployment settings and parameters
-- Access control and permissions
+### Deployment Modes
 
-**How it works:** Data teams create bundles → DevOps teams create CI/CD pipelines → Bundles deploy to targets → Workflows execute → Monitor results
+**Bundle-based (Artifact):** Create versioned archive → deploy archive to stages
+- Good for: audit trails, rollback capability, compliance
+- Command: `smus-cli bundle` then `smus-cli deploy --bundle app.tar.gz`
+
+**Direct (Git-based):** Deploy directly from sources without intermediate artifacts
+- Good for: simpler workflows, rapid iteration, git as source of truth
+- Command: `smus-cli deploy --manifest manifest.yaml --stage test`
+
+Both modes work with any combination of storage and git content sources.
+
+**How it works:** Data teams define application in manifest → DevOps teams create CI/CD automation → CLI deploys to stages → Workflows execute → Monitor results
 ## Documentation
 
 ### Getting Started
-- **[Quick Start Guide](docs/getting-started/quickstart.md)** - Deploy your first bundle (10 min)
+- **[Quick Start Guide](docs/getting-started/quickstart.md)** - Deploy your first application (10 min)
 - **[Admin Guide](docs/getting-started/admin-quickstart.md)** - Set up infrastructure (15 min)
 
 ### Guides
-- **[Bundle Manifest Reference](docs/bundle-manifest.md)** - Complete YAML configuration guide
+- **[Application Deployment Manifest](docs/manifest.md)** - Complete YAML configuration guide
 - **[Connections Guide](docs/connections.md)** - Configure AWS service integrations
 - **[CLI Commands](docs/cli-commands.md)** - Detailed command documentation
 - **[Substitutions & Variables](docs/substitutions-and-variables.md)** - Dynamic configuration
 - **[GitHub Actions Integration](docs/github-actions-integration.md)** - CI/CD pipeline automation
-- **[Bundle Deployment Metrics](docs/pipeline-deployment-metrics.md)** - Monitoring and operational metrics with EventBridge
+- **[Deployment Metrics](docs/pipeline-deployment-metrics.md)** - Monitoring and operational metrics with EventBridge
 
 ### Reference
-- **[Bundle Manifest Schema](docs/pipeline-manifest-schema.md)** - YAML schema reference
+- **[Manifest Schema](docs/manifest-schema.md)** - YAML schema reference
 - **[Airflow AWS Operators](docs/airflow-aws-operators.md)** - Custom operators
 
 ### Examples
-- **[ETL Bundle](examples/analytic-workflow/etl/)** - Glue jobs with Airflow orchestration
-- **[ML Bundle](examples/analytic-workflow/ml/)** - SageMaker training with MLflow tracking
+- **[ETL Application](examples/analytic-workflow/etl/)** - Glue jobs with Airflow orchestration
+- **[ML Application](examples/analytic-workflow/ml/)** - SageMaker training with MLflow tracking
 - **[Serverless Example](examples/serverless-example/)** - Airflow Serverless workflows
 - **[MWAA Example](examples/mwaa-example/)** - Managed Airflow workflows
 
@@ -176,7 +202,7 @@ A deployment environment mapping to a SageMaker Unified Studio project:
 
 ---
 
-## Example Pipeline Flow
+## Example Deployment Flow
 
 ```mermaid
 graph LR
@@ -184,8 +210,8 @@ graph LR
         A[Write Code] --> B[Test Locally]
     end
     
-    subgraph "CI/CD Pipeline"
-        B --> C[Bundle]
+    subgraph "CI/CD Automation"
+        B --> C[Create Archive<br/>optional]
         C --> D[Deploy to Test]
         D --> E[Run Tests]
         E --> F{Tests Pass?}
@@ -200,20 +226,20 @@ graph LR
 
 ---
 
-## Example Bundles
+## Example Applications
 
-### ETL Bundle (`examples/analytic-workflow/etl/`)
+### ETL Application (`examples/analytic-workflow/etl/`)
 
 **What it deploys:**
 - **2 AWS Glue jobs** running on Glue 4.0
   - `data_discovery_task` - Lists and discovers S3 data files
   - `data_summary_task` - Processes COVID-19 data from Athena tables
 - **Airflow Serverless workflow** orchestrating job dependencies
-- **Python scripts** bundled and uploaded to S3 shared storage
+- **Python scripts** deployed to S3 shared storage
 
-**Bundle manifest (`etl_bundle.yaml`):**
-- Bundles `etl/` directory to S3 connection `default.s3_shared`
-- Deploys to `dev` (DEV stage) and `test` (TEST stage with auto-created project)
+**Application manifest (`manifest.yaml`):**
+- Defines application content from `etl/` directory
+- Deploys to `test` (TEST stage with auto-created project)
 - Injects environment variables (`S3_PREFIX`, `AWS_REGION`)
 - Runs integration tests from `pipeline_tests/` folder
 
@@ -372,7 +398,7 @@ pip install smus-cicd-cli  # May contain malicious code
 
 ### 📚 Documentation
 - **[Getting Started Hub](docs/getting-started/README.md)** - Role-based navigation for DevOps teams and admins
-- **[Quick Start Guide](docs/getting-started/quickstart.md)** - Deploy your first bundle in 10 minutes
+- **[Quick Start Guide](docs/getting-started/quickstart.md)** - Deploy your first application in 10 minutes
 - **[Admin Quick Start](docs/getting-started/admin-quickstart.md)** - Infrastructure setup in 15 minutes
 
 ### 📖 Reference Guides

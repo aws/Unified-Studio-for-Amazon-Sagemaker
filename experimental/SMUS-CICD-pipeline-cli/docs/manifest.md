@@ -1,12 +1,102 @@
-# Bundle Manifest Reference
+# Application Deployment Manifest
 
 ← [Back to Main README](../README.md)
 
-The bundle manifest is a YAML file that defines your CI/CD pipeline configuration for Amazon SageMaker Unified Studio, including bundle content, target environments, workflows, and deployment settings.
+The Application Deployment Manifest is a YAML file that defines **what** your application is and **where** it should be deployed in Amazon SageMaker Unified Studio.
+
+> **Note on Terminology:** This was previously called a "bundle manifest." We've renamed it to "Application Deployment Manifest" because "bundle" implied only artifact-based deployment. The new name supports multiple CI/CD strategies: artifact-based (bundling), git-based (direct), branch-based, and tag-based deployments.
+
+## What is an Application Deployment Manifest?
+
+The manifest is a **declarative configuration** that separates concerns between what you're deploying and how you deploy it:
+
+**The manifest declares:**
+- **WHAT to deploy**: Application identity, workflows, code, dependencies, and configurations
+- **WHERE to deploy**: Target environments (dev, test, prod) with their specific settings
+
+**The manifest does NOT define:**
+- **HOW to deploy**: Defined by your CI/CD system (GitHub Actions, GitLab CI, etc.)
+- **WHEN to deploy**: Defined by your CI/CD triggers (on push, on schedule, manual, etc.)
+
+### Separation of Concerns
+
+This separation enables different teams to own different aspects:
+
+- **Data/Science Teams** own the manifest
+  - Define application content (workflows, code, data)
+  - Specify deployment targets (dev, test, prod)
+  - Configure environment-specific settings
+  
+- **CI/CD/Platform Teams** own the automation
+  - Design deployment workflows (GitHub Actions, etc.)
+  - Set up triggers and schedules
+  - Implement deployment strategies (bundle-based, git-based, etc.)
+
+This means data scientists can focus on their application logic while DevOps teams handle the deployment mechanics.
+
+## Content Sources
+
+Your application content can come from:
+- **Storage** (S3, local files) - for artifacts, configs, large files
+- **Git repositories** - for source code, version-controlled content
+- **Both together** - storage for some content, git for other content
+
+## Deployment Approaches
+
+You can deploy your application in two ways:
+
+### 1. Bundle-Based Deployment (Artifact-Based)
+Create a versioned archive containing your application content, then deploy that archive to targets.
+
+**Workflow:**
+```bash
+# Step 1: Create bundle archive
+smus-cli bundle --manifest manifest.yaml --output ./bundles/
+
+# Step 2: Deploy the same bundle to multiple targets
+smus-cli deploy --manifest manifest.yaml --target test --bundle myapp-v1.0.0.tar.gz
+smus-cli deploy --manifest manifest.yaml --target prod --bundle myapp-v1.0.0.tar.gz
+```
+
+**What happens:**
+1. `bundle` command packages all content (storage files + git repos) into a `.tar.gz` archive
+2. `deploy` command extracts the archive and syncs content to the target project
+3. Same archive can be deployed to multiple targets for consistency
+
+**Best for:**
+- Need versioned artifacts for audit trail
+- Want to deploy the exact same artifact to multiple targets
+- Require rollback capability
+- Compliance and governance requirements
+- CI/CD pipelines that create artifacts once, deploy many times
+
+### 2. Direct Deployment (Git-Based)
+Deploy directly from sources without creating intermediate archives.
+
+**Workflow:**
+```bash
+# Single step: Deploy directly from sources
+smus-cli deploy --manifest manifest.yaml --target test
+```
+
+**What happens:**
+1. CLI clones git repositories (if specified in `content.git`)
+2. CLI collects storage items (if specified in `content.storage`)
+3. Content is synced directly to the target project
+4. No intermediate archive is created
+
+**Best for:**
+- Simpler CI/CD pipelines
+- Branch-based or tag-based workflows
+- Don't need intermediate artifacts
+- Prefer git as source of truth
+- Rapid development iterations
+
+**Key Point:** Both deployment modes work with any combination of storage and git sources. The choice is about workflow preference, not content sources.
 
 ## Quick Links
 
-- **[Bundle Manifest Schema Documentation](pipeline-manifest-schema.md)** - Complete schema reference with validation rules
+- **[Manifest Schema Documentation](manifest-schema.md)** - Complete schema reference with validation rules
 - **[Substitutions and Variables](substitutions-and-variables.md)** - Dynamic variable resolution in workflows
 - **[CLI Commands Reference](cli-commands.md)** - Detailed command documentation
 
@@ -15,15 +105,24 @@ The bundle manifest is a YAML file that defines your CI/CD pipeline configuratio
 For simple use cases, the manifest can be very straightforward:
 
 ```yaml
-bundleName: SimpleDataBundle
+applicationName: SimpleETLPipeline
 
-# Bundle what to deploy
-bundle:
-  bundlesDirectory: ./bundles
+# Application content to deploy
+content:
+  workflows:
+    - workflowName: etl_workflow
+      engine: airflow-serverless
+  
+  # Code from git repository
+  git:
+    - repository: etl-pipeline
+      url: https://github.com/myorg/etl-pipeline.git
+  
+  # Data files from storage
   storage:
-    - name: code
+    - name: reference-data
       connectionName: default.s3_shared
-      include: ['src/']
+      include: ['data/reference/']
 
 # Where to deploy
 targets:
@@ -36,56 +135,55 @@ targets:
       name: test-project
     bundle_target_configuration:
       storage:
-        - name: code
+        - name: reference-data
           connectionName: default.s3_shared
-          targetDirectory: 'src'
-
-# Workflows to create after deployment
-workflows:
-  - workflowName: my_dag
-    engine: airflow-serverless
+          targetDirectory: 'data'
 ```
 
 This minimal example:
-- Bundles source files from the `src/` directory with name "code"
-- Deploys to a single `test` target
+- Defines application code from git repository
+- Includes reference data from S3 storage
 - Creates a serverless Airflow workflow after deployment
 - Uses an existing project (no initialization needed)
-- No connections creation, no catalog assets, no tests
-- Perfect for serverless Airflow pipelines
-
-**Note:** For workflows (DAGs), add them as storage items with `append: true`. The `workflows` section at the root tells the CLI which workflows to create after deployment.
+- Perfect for git-based workflows with data dependencies
 
 ## Comprehensive Example
 
-This example demonstrates most features of the bundle manifest:
+This example demonstrates most features of the manifest:
 
 ```yaml
-bundleName: MarketingDataBundle
+applicationName: MLTrainingPipeline
 
-# Bundle storage location (local or S3)
+# Optional: Directory for storing bundle archives (local path or S3)
+# Only used when creating bundles with `smus-cli bundle` command
 bundlesDirectory: s3://sagemaker-unified-studio-123456789012-us-east-1-domain/bundles
 
-# Bundle configuration - what to include in deployments
-bundle:
-  # Storage files (unified - includes workflows and source code)
+# Application content - what to include in deployments
+content:
+  workflows:
+    - workflowName: ml_training_workflow
+      engine: airflow-serverless
+  
+  # Application code from git
+  git:
+    - repository: MLTrainingPipeline
+      url: https://github.com/myorg/ml-training.git
+    - repository: SharedUtilities
+      url: https://github.com/myorg/shared-utils.git
+  
+  # Models and data from storage
   storage:
-    - name: code
+    - name: pretrained-models
       connectionName: default.s3_shared
       append: false
-      include: ['src/', 'data/']
-      exclude: ['.ipynb_checkpoints/', '__pycache__/', '*.pyc', '.DS_Store']
+      include: ['models/pretrained/']
+      exclude: ['*.tmp', '.DS_Store']
     
-    - name: workflows
+    - name: training-data
       connectionName: default.s3_shared
-      append: true
-      include: ['workflows/']
-      exclude: ['.ipynb_checkpoints/', '__pycache__/', '*.pyc']
-  
-  # Git repositories
-  git:
-    - repository: MarketingDataPipeline
-      url: https://github.com/myorg/marketing-pipeline.git
+      append: false
+      include: ['data/training/']
+      exclude: ['.ipynb_checkpoints/']
   
   # DataZone catalog assets
   catalog:
@@ -93,13 +191,13 @@ bundle:
       - selector:
           search:
             assetType: GlueTable
-            identifier: covid19_db.countries_aggregated
+            identifier: ml_features_db.customer_features
         permission: READ
-        requestReason: Required for marketing analytics pipeline
+        requestReason: Required for model training
 
 # Target environments
 targets:
-  dev:
+  test:
     stage: DEV
     domain:
       name: ${DOMAIN_NAME:my-studio-domain}
@@ -107,7 +205,8 @@ targets:
     project:
       name: dev-marketing
     
-    # Target-specific bundle destinations
+    # Deployment configuration: where content gets deployed in the target project
+    # Maps content items to target locations and connections
     bundle_target_configuration:
       storage:
         - name: code
@@ -264,12 +363,12 @@ bundlesDirectory: s3://my-bucket/bundles  # S3 location
   - Cross-region access
   - Integration with DataZone domain S3 buckets
 
-### Storage Bundles
+### Storage Items
 
-Package source code, libraries, data files, and workflows (unified configuration):
+Package source code, libraries, data files, and workflows:
 
 ```yaml
-bundle:
+content:
   storage:
     - name: code
       connectionName: default.s3_shared
@@ -285,7 +384,7 @@ bundle:
 ```
 
 **Properties:**
-- `name` (required): Unique identifier for this bundle item
+- `name` (required): Unique identifier for this content item
 - `connectionName` (required): S3 connection name in source project
 - `append` (optional): Append to existing files (default: `false`)
 - `include` (optional): Paths/patterns to include
@@ -297,14 +396,12 @@ bundle:
 - Always exclude temporary files: `.ipynb_checkpoints/`, `__pycache__/`, `*.pyc`
 - Use descriptive names: `code`, `workflows`, `data`, `models`
 
-**Note:** Workflows are now part of the unified storage configuration. Use `append: true` for workflow items to enable incremental updates.
-
 ### Git Repositories
 
-Include Git repositories in bundles:
+Include Git repositories in your application content:
 
 ```yaml
-bundle:
+content:
   git:
     - repository: MyDataPipeline
       url: https://github.com/myorg/data-pipeline.git
@@ -313,7 +410,7 @@ bundle:
 ```
 
 **Properties:**
-- `repository` (required): Repository name (used in bundle path: `repositories/{repository-name}/`)
+- `repository` (required): Repository name (used in deployment path: `repositories/{repository-name}/`)
 - `url` (required): Git repository URL
 
 **Note:** Git repositories are always cloned to `repositories/{repository-name}/` in the bundle. No `targetDir` configuration needed.
@@ -942,13 +1039,16 @@ etl_dag:
 ## Validation Rules
 
 ### Required Fields
-- `bundleName`
+- `applicationName`
+- `content` with at least `workflows` defined
 - `targets` (at least one target)
 - Each target must have: `stage`, `domain.name`, `domain.region`, `project.name`
 
 ### Optional Sections
-- `bundle` - If omitted, no bundling operations
-- `workflows` - If omitted, no workflow operations
+- `content.storage` - If omitted, no storage items to deploy
+- `content.git` - If omitted, no git repositories to include
+- `content.catalog` - If omitted, no catalog assets to subscribe
+- `bundlesDirectory` - If omitted, defaults to `./bundles/` for bundle operations
 - `initialization` - If omitted, assumes projects exist
 
 ### Connection Names
@@ -958,17 +1058,23 @@ etl_dag:
 ### File Patterns
 - Support glob patterns: `*.py`, `**/*.yaml`
 - Exclude patterns take precedence over include patterns
-- Paths are relative to bundle source directories
+- Paths are relative to content source directories
 
 ---
 
 ## Best Practices
 
-### Bundle Configuration
+### Application Content
 - Always exclude temporary files: `.ipynb_checkpoints/`, `__pycache__/`, `*.pyc`
 - Use `append: true` for workflows (incremental updates)
 - Use `append: false` for storage (clean deployments)
 - Use S3 storage for production and CI/CD systems
+- Consider using git repositories for version-controlled source code
+
+### Deployment Strategy
+- **Bundle-based**: Use when you need versioned artifacts, audit trails, or rollback capability
+- **Direct**: Use for simpler workflows, rapid iterations, or git-based deployments
+- Both modes work with any combination of storage and git sources
 
 ### Target Organization
 - Use initialization only for non-production environments
@@ -993,3 +1099,42 @@ etl_dag:
 - Use descriptive connection names
 - Document connection requirements in project README
 - Test connections after creation
+
+---
+
+## Terminology Glossary
+
+### Application Deployment Manifest
+YAML file that declares:
+- **WHAT**: Application identity, dependencies, and configuration
+- **WHERE**: Targets where the application should run (dev, test, prod)
+
+### Application
+The data/analytics workload being deployed (ETL workflows, ML models, APIs, etc.)
+
+### Target
+Environment where application runs (dev, test, prod). Each target specifies a domain, region, and project.
+
+### Content
+The application content to deploy, which can include:
+- **Workflows**: Airflow DAGs or other workflow definitions
+- **Storage**: Files and directories from S3 or local paths
+- **Git**: Source code from git repositories
+- **Catalog**: DataZone catalog assets
+
+### GitHub Workflows
+CI/CD automation that defines:
+- **HOW**: Deployment mechanism (bundle-based, branch-based, etc.)
+- **WHEN**: Deployment triggers (on push, on schedule, manual, etc.)
+
+### Deployment
+Process of promoting application to a target (executed by GitHub workflows)
+
+### Separation of Concerns
+- **Data/science teams** own: Application Deployment Manifest (what & where)
+- **CI/CD/platform teams** own: GitHub workflows (how & when)
+
+### Why "manifest"?
+- Standard term in infrastructure-as-code (Kubernetes, Docker, Terraform)
+- Implies declarative configuration
+- Short and familiar in CLI usage (`--manifest`)
