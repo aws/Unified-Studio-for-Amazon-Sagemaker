@@ -139,10 +139,20 @@ Your data/analytics workload being deployed:
 - Foundation model configurations
 
 ### Workflow
-Orchestration logic that executes your application:
-- Airflow DAGs (Directed Acyclic Graphs) defining task dependencies
-- Supports MWAA (Managed Workflows for Apache Airflow) and Airflow Serverless
-- Defined in YAML format for easy configuration
+Orchestration logic that executes your application. Workflows serve two purposes:
+
+**1. Deployment-time:** Create required AWS resources during deployment
+- Provision infrastructure (S3 buckets, databases, IAM roles)
+- Configure connections and permissions
+- Set up monitoring and logging
+
+**2. Runtime:** Execute ongoing data and ML pipelines
+- Scheduled execution (daily, hourly, etc.)
+- Event-driven triggers (S3 uploads, API calls)
+- Data processing and transformations
+- Model training and inference
+
+Workflows are defined as Airflow DAGs (Directed Acyclic Graphs) in YAML format. Supports MWAA (Managed Workflows for Apache Airflow) and Airflow Serverless.
 
 ### Stage
 A deployment environment (dev, test, prod) mapped to a SageMaker Unified Studio project:
