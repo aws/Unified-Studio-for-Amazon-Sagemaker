@@ -45,11 +45,11 @@ from smus_cicd.application import ApplicationManifest
 
 **Failed Tests:**
 - `test_datazone_connections_e2e.py::TestDataZoneConnectionsE2E::test_datazone_connections_end_to_end`
-- `test_multi_target_pipeline.py::TestMultiTargetPipeline::test_describe_connect_nonexistent_project`
-- `test_multi_target_pipeline.py::TestMultiTargetPipeline::test_describe_connect_wrong_domain`
-- `test_multi_target_pipeline.py::TestMultiTargetPipeline::test_describe_connect_wrong_region`
-- `test_multi_target_pipeline.py::TestMultiTargetPipeline::test_describe_connect_multiple_targets_mixed_results`
-- `test_multi_target_pipeline.py::TestMultiTargetPipeline::test_describe_connect_invalid_connection_name`
+- `test_multi_target_app.py::TestMultiTargetApp::test_describe_connect_nonexistent_project`
+- `test_multi_target_app.py::TestMultiTargetApp::test_describe_connect_wrong_domain`
+- `test_multi_target_app.py::TestMultiTargetApp::test_describe_connect_wrong_region`
+- `test_multi_target_app.py::TestMultiTargetApp::test_describe_connect_multiple_targets_mixed_results`
+- `test_multi_target_app.py::TestMultiTargetApp::test_describe_connect_invalid_connection_name`
 - Multiple airless bundle tests with same issue
 
 **Error Message:**
@@ -78,7 +78,7 @@ applicationName: MyPipeline
 - `test_notebooks_workflow.py::TestNotebooksWorkflow::test_notebooks_workflow_deployment`
 - `test_ml_deployment_workflow.py::TestMLDeploymentWorkflow::test_ml_deployment_workflow`
 - `test_ml_training_workflow.py::TestMLTrainingWorkflow::test_ml_training_workflow`
-- `test_basic_pipeline.py::TestBasicPipeline::test_basic_pipeline_workflow` (partially - notebooks not found)
+- `test_basic_app.py::TestBasicApp::test_basic_pipeline_workflow` (partially - notebooks not found)
 
 **Error Message:**
 ```
@@ -102,8 +102,8 @@ self.download_and_validate_notebooks(s3_bucket, workflow_arn, run_id)
 **Root Cause:** Tests expecting old `storage/src/` path but bundles now use `code/` path
 
 **Failed Tests:**
-- `test_multi_target_pipeline.py::TestMultiTargetPipeline::test_multi_target_comprehensive_workflow`
-- `test_multi_target_pipeline_airless.py::TestMultiTargetPipeline::test_multi_target_comprehensive_workflow`
+- `test_multi_target_app.py::TestMultiTargetApp::test_multi_target_comprehensive_workflow`
+- `test_multi_target_pipeline_airless.py::TestMultiTargetApp::test_multi_target_comprehensive_workflow`
 
 **Error Message:**
 ```
@@ -166,8 +166,8 @@ Update test environment configuration or fix tests to use correct config structu
 **Root Cause:** Tests trying to create projects with 'All capabilities' profile which doesn't exist
 
 **Failed Tests:**
-- `test_multi_target_pipeline.py::TestMultiTargetPipeline::test_describe_connect_after_deploy`
-- `test_multi_target_pipeline_airless.py::TestMultiTargetPipeline::test_describe_connect_after_deploy`
+- `test_multi_target_app.py::TestMultiTargetApp::test_describe_connect_after_deploy`
+- `test_multi_target_pipeline_airless.py::TestMultiTargetApp::test_describe_connect_after_deploy`
 
 **Error Message:**
 ```
@@ -220,9 +220,9 @@ Update test file paths from `multi_target_pipeline` to `multi_target_bundle`.
 **Root Cause:** Tests asserting old pipeline names instead of new application names
 
 **Failed Tests:**
-- `test_create_pipeline.py::TestCreatePipeline::test_create_pipeline_workflow`
-- `test_create_pipeline.py::TestCreatePipeline::test_describe_only`
-- `test_delete_pipeline.py::TestDeletePipeline::test_delete_pipeline_workflow`
+- `test_create_app.py::TestCreateApp::test_create_pipeline_workflow`
+- `test_create_app.py::TestCreateApp::test_describe_only`
+- `test_delete_app.py::TestDeleteApp::test_delete_pipeline_workflow`
 
 **Error Message:**
 ```
@@ -239,8 +239,8 @@ Tests need to check for correct application/bundle names in output.
 **Root Cause:** Describe command not showing expected AWS account and owner information
 
 **Failed Tests:**
-- `test_multi_target_pipeline.py::TestMultiTargetPipeline::test_describe_without_connect_vs_with_connect`
-- `test_multi_target_pipeline.py::TestMultiTargetPipeline::test_describe_connect_project_details`
+- `test_multi_target_app.py::TestMultiTargetApp::test_describe_without_connect_vs_with_connect`
+- `test_multi_target_app.py::TestMultiTargetApp::test_describe_connect_project_details`
 
 **Error Message:**
 ```
@@ -293,7 +293,7 @@ Enhance describe command to include AWS account ID and owner information.
 
 ## Tests Passing (29)
 
-- `test_multi_target_bundle_airless.py::TestMultiTargetPipeline::test_basic_bundle_workflow` ✅
+- `test_multi_target_bundle_airless.py::TestMultiTargetApp::test_basic_bundle_workflow` ✅
 - Connection validation tests ✅
 - API validation tests ✅
 - Permission tests ✅

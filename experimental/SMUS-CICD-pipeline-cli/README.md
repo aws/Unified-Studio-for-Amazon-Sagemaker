@@ -232,7 +232,7 @@ GitHub Actions workflows (or other CI/CD systems) that automate deployment:
 
 **Bundle-based (Artifact):** Create versioned archive → deploy archive to stages
 - Good for: audit trails, rollback capability, compliance
-- Command: `smus-cli bundle` then `smus-cli deploy --bundle app.tar.gz`
+- Command: `smus-cli bundle` then `smus-cli deploy --manifest app.tar.gz`
 
 **Direct (Git-based):** Deploy directly from sources without intermediate artifacts
 - Good for: simpler workflows, rapid iteration, git as source of truth
@@ -359,8 +359,8 @@ workflow_combined:
 **Deploy:**
 ```bash
 cd examples/analytic-workflow/etl
-smus-cli bundle --bundle etl_bundle.yaml --targets dev
-smus-cli deploy --targets test --bundle etl_bundle.yaml
+smus-cli bundle --manifest manifest.yaml --targets dev
+smus-cli deploy --targets test --manifest manifest.yaml
 ```
 
 ### ML Training Bundle (`examples/analytic-workflow/ml/`)
@@ -371,7 +371,7 @@ smus-cli deploy --targets test --bundle etl_bundle.yaml
 - **Workflow definition** with MLflow connection injection
 - **MLflow tracking server** connection for experiment tracking
 
-**Bundle manifest (`ml_bundle.yaml`):**
+**Bundle manifest (`manifest.yaml`):**
 - Bundles 2 storage locations:
   - `training-code` → compressed tarball with training script + inference code
   - `ml-workflows` → notebook and workflow definitions
@@ -408,8 +408,8 @@ ml_dev_workflow:
 **Deploy:**
 ```bash
 cd examples/analytic-workflow/ml
-smus-cli bundle --bundle ml_bundle.yaml --targets dev
-smus-cli deploy --targets test --bundle ml_bundle.yaml
+smus-cli bundle --manifest manifest.yaml --targets dev
+smus-cli deploy --targets test --manifest manifest.yaml
 ```
 
 **Key features:**
@@ -451,14 +451,14 @@ smus-cli monitor --targets test  # Track approval status
 ```yaml
 # .github/workflows/deploy.yml
 - name: Deploy to Test
-  run: smus-cli deploy --targets test --bundle bundle.yaml
+  run: smus-cli deploy --targets test --manifest manifest.yaml
   
 - name: Run Tests
-  run: smus-cli test --targets test --bundle bundle.yaml
+  run: smus-cli test --targets test --manifest manifest.yaml
   
 - name: Deploy to Prod
   if: success()
-  run: smus-cli deploy --targets prod --bundle bundle.yaml
+  run: smus-cli deploy --targets prod --manifest manifest.yaml
 ```
 
 ---

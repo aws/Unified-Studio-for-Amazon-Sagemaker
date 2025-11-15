@@ -1,0 +1,81 @@
+monitoring:
+  eventbridge:
+    enabled: true
+    eventBusName: default
+    includeMetadata: true
+applicationName: BasicTestBundle
+content:
+  storage:
+  - name: code
+    connectionName: default.s3_shared
+    include:
+    - code/src/
+    exclude:
+    - .ipynb_checkpoints/
+    - __pycache__/
+    - '*.pyc'
+    - .libs.json
+  git:
+  - repository: covid-19-dateset
+    url: https://github.com/datasets/covid-19.git
+stages:
+  dev:
+    stage: DEV
+    domain:
+      tags:
+        purpose: smus-cicd-testing
+      region: ${DEV_DOMAIN_REGION:us-east-2}
+    project:
+      name: dev-marketing
+    initialization:
+      project:
+        create: true
+        owners:
+        - Eng1
+        - arn:aws:iam::*:role/GitHubActionsRole-SMUS-CLI-Tests
+        contributors: []
+        role:
+          arn: arn:aws:iam::*:role/SMUSCICDTestRole
+  test:
+    stage: TEST
+    domain:
+      tags:
+        purpose: smus-cicd-testing
+      region: ${DEV_DOMAIN_REGION:us-east-2}
+    project:
+      name: test-project-basic
+    initialization:
+      project:
+        create: true
+        owners:
+        - Eng1
+        - arn:aws:iam::*:role/GitHubActionsRole-SMUS-CLI-Tests
+        contributors: []
+        role:
+          policies:
+            - arn:aws:iam::aws:policy/SageMakerStudioUserIAMPermissiveExecutionPolicy
+      connections:
+      - name: mlflow-server
+        type: MLFLOW
+        properties:
+          trackingServerName: smus-integration-mlflow-use2
+          trackingServerArn: arn:aws:sagemaker:us-east-2:058264284947:mlflow-tracking-server/smus-integration-mlflow-use2
+    deployment_configuration:
+      storage:
+      - name: code
+        connectionName: default.s3_shared
+        targetDirectory: .
+      git:
+      - name: covid-19-dateset
+        connectionName: default.s3_shared
+        targetDirectory: repos
+
+initialization:
+- workflowName: basic_test_workflow
+  connectionName: project.workflow_serverless
+  engine: airflow-serverless
+  type: workflow
+- workflowName: expected_failure_workflow
+  connectionName: project.workflow_serverless
+  engine: airflow-serverless
+  type: workflow

@@ -50,8 +50,8 @@ coverage.xml
 *.py,cover
 
 # SMUS test auto-generated files
-**/pipeline_tests/.smus_test_config.json
-**/pipeline_tests/conftest.py
+**/app_tests/.smus_test_config.json
+**/app_tests/conftest.py
 **/tests/reports/
 .hypothesis/
 .pytest_cache/
@@ -147,8 +147,8 @@ Thumbs.db
 config.local.yaml
 *.local.yaml
 
-# Bundle files
-tests/integration/bundles/*.zip
+# Artifact files
+tests/integration/artifacts/*.zip
 *.zip
 
 # Temporary files and scripts

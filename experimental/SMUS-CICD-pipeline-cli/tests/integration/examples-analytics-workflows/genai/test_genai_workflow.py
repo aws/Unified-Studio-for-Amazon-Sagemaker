@@ -24,7 +24,7 @@ class TestGenAIWorkflow(IntegrationTestBase):
     def get_pipeline_file(self):
         return os.path.join(
             os.path.dirname(__file__),
-            "../../../../examples/analytic-workflow/genai/genai_bundle.yaml"
+            "../../../../examples/analytic-workflow/genai/manifest.yaml"
         )
 
     @pytest.mark.integration

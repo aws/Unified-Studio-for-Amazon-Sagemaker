@@ -1,22 +1,22 @@
-bundleName: YourBundleName
+bundleName: TestBundle
 bundle:
   bundlesDirectory: /tmp/bundles
 targets:
   dev:
+    stage: DEV
     domain:
-      name: your-domain-name
       region: us-east-1
     project:
       name: dev-project-name
   test:
+    stage: TEST
     domain:
-      name: your-domain-name
       region: us-east-1
     project:
       name: test-project-name
   prod:
+    stage: PROD
     domain:
-      name: your-domain-name
       region: us-east-1
     project:
       name: prod-project-name

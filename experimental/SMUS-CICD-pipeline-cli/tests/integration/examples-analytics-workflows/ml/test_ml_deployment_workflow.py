@@ -19,7 +19,7 @@ class TestMLDeploymentWorkflow(IntegrationTestBase):
     def get_pipeline_file(self):
         return os.path.join(
             os.path.dirname(__file__),
-            "../../../../examples/analytic-workflow/ml/deployment/ml_deployment_bundle.yaml"
+            "../../../../examples/analytic-workflow/ml/deployment/manifest.yaml"
         )
 
     def get_latest_training_job(self):

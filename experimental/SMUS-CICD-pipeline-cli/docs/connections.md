@@ -15,7 +15,7 @@ Connections enable your workflows to interact with:
 - **Orchestration** - MWAA, Serverless Airflow
 
 **Two ways to create connections:**
-1. **Manifest-based** (recommended) - Define in `bundle.yaml` for automated creation
+1. **Manifest-based** (recommended) - Define in `manifest.yaml` for automated creation
 2. **Console-based** - Create manually in SMUS console
 
 ---
@@ -626,7 +626,7 @@ Document connection requirements in your README:
 Validate connections after creation:
 ```bash
 # Describe project to see connections
-smus-cli describe --bundle bundle.yaml --stages test --connect
+smus-cli describe --manifest manifest.yaml --stages test --connect
 
 # Test workflow that uses connections
 smus-cli run --stages test --workflow test_connections

@@ -231,12 +231,12 @@ pytest tests/integration/examples-analytics-workflows/etl/test_etl_workflow.py -
 
 #### Basic Pipeline Test
 **Purpose**: Tests parameter passing from workflow to notebook via Papermill
-**Location**: `tests/integration/basic_pipeline/test_basic_pipeline.py`
+**Location**: `tests/integration/basic_pipeline/test_basic_app.py`
 **Duration**: ~15 minutes
 
 ```bash
 cd experimental/SMUS-CICD-pipeline-cli
-pytest tests/integration/basic_pipeline/test_basic_pipeline.py -v -s
+pytest tests/integration/basic_pipeline/test_basic_app.py -v -s
 ```
 
 **What it validates**:

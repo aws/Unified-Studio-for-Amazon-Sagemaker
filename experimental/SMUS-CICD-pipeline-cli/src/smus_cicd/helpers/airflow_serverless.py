@@ -247,10 +247,14 @@ def create_workflow(
 
                     # Add DataZone endpoint from environment variable if set
                     if os.getenv("AWS_ENDPOINT_URL_DATAZONE"):
-                        env_vars["DataZoneEndpoint"] = os.getenv("AWS_ENDPOINT_URL_DATAZONE")
+                        env_vars["DataZoneEndpoint"] = os.getenv(
+                            "AWS_ENDPOINT_URL_DATAZONE"
+                        )
 
                     update_params["EnvironmentVariables"] = env_vars
-                    logger.info(f"🔍 DEBUG: Updating with environment variables: {env_vars}")
+                    logger.info(
+                        f"🔍 DEBUG: Updating with environment variables: {env_vars}"
+                    )
 
                 logger.info(f"Updating workflow with params: {update_params}")
                 update_response = client.update_workflow(**update_params)

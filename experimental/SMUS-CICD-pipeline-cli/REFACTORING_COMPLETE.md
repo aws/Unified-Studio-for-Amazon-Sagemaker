@@ -8,7 +8,7 @@ Successfully completed refactoring from bundle/target terminology to application
 ## Files Modified
 
 ### 1. Test Files (1 file)
-- `tests/integration/basic_bundle/test_basic_pipeline.py`
+- `tests/integration/basic_bundle/test_basic_app.py`
   - Line 92: `manifest['targets']` → `manifest['stages']`
 
 ### 2. Command Files (3 files)

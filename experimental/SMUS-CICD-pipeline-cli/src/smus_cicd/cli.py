@@ -95,7 +95,7 @@ def describe(
         help="Show workflow information (for backward compatibility)",
     ),
     file_path: str = typer.Option(
-        "application.yaml", "--manifest", "-m", help="Path to application manifest file"
+        "manifest.yaml", "--manifest", "-m", help="Path to application manifest file"
     ),
 ):
     """Describe and validate pipeline manifest file."""
@@ -109,10 +109,10 @@ def describe(
 )
 def bundle(
     manifest_file: str = typer.Option(
-        "application.yaml", "--manifest", "-m", help="Path to application manifest file"
+        "manifest.yaml", "--manifest", "-m", help="Path to application manifest file"
     ),
     output_dir: str = typer.Option(
-        "./bundles", "--output-dir", "-d", help="Output directory for bundle files"
+        "./artifacts", "--output-dir", "-d", help="Output directory for bundle files"
     ),
     output: str = typer.Option(
         "TEXT", "--output", "-o", help="Output format: TEXT (default) or JSON"
@@ -155,7 +155,7 @@ def bundle(
 )
 def deploy(
     manifest_file: str = typer.Option(
-        "application.yaml", "--manifest", "-m", help="Path to application manifest file"
+        "manifest.yaml", "--manifest", "-m", help="Path to application manifest file"
     ),
     targets: str = typer.Option(
         None,
@@ -195,7 +195,7 @@ def deploy(
 )
 def monitor(
     manifest_file: str = typer.Option(
-        "application.yaml", "--manifest", "-m", help="Path to application manifest file"
+        "manifest.yaml", "--manifest", "-m", help="Path to application manifest file"
     ),
     output: str = typer.Option(
         "TEXT", "--output", "-o", help="Output format: TEXT (default) or JSON"
@@ -303,7 +303,7 @@ def run(
         help="Target name(s) - single target or comma-separated list (optional, defaults to first available)",
     ),
     manifest_file: str = typer.Option(
-        "application.yaml", "--manifest", "-m", help="Path to application manifest file"
+        "manifest.yaml", "--manifest", "-m", help="Path to application manifest file"
     ),
     output: str = typer.Option(
         "TEXT", "--output", "-o", help="Output format: TEXT (default) or JSON"
@@ -337,7 +337,7 @@ def test(
         help="Test output mode: console (stream test output directly)",
     ),
     file_path: str = typer.Option(
-        "application.yaml", "--manifest", "-m", help="Path to application manifest file"
+        "manifest.yaml", "--manifest", "-m", help="Path to application manifest file"
     ),
 ):
     """Run tests for pipeline targets."""
@@ -351,7 +351,7 @@ def test(
 )
 def delete(
     pipeline: str = typer.Option(
-        "application.yaml", "--manifest", "-m", help="Path to application manifest file"
+        "manifest.yaml", "--manifest", "-m", help="Path to application manifest file"
     ),
     targets: str = typer.Option(
         None,

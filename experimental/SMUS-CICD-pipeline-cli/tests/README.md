@@ -68,11 +68,11 @@ tests/
 │   ├── base.py           # Base class for integration tests
 │   ├── basic_pipeline/   # Basic pipeline test suite
 │   │   ├── basic_pipeline.yaml        # Basic bundle configuration
-│   │   ├── test_basic_pipeline.py     # Basic pipeline tests
+│   │   ├── test_basic_app.py     # Basic pipeline tests
 │   │   └── README.md                  # Test documentation
 │   └── multi_target_pipeline/         # Multi-target pipeline test suite
 │       ├── multi_target_pipeline.yaml # Multi-target bundle configuration
-│       ├── test_multi_target_pipeline.py # Multi-target tests
+│       ├── test_multi_target_app.py # Multi-target tests
 │       └── README.md                  # Test documentation
 └── requirements.txt      # Test dependencies
 ```
@@ -272,7 +272,7 @@ python scripts/validate.py --all            # Full validation pipeline
 # Alternative pytest commands
 pytest tests/unit/ -v                       # Unit tests only
 pytest tests/integration/ -m "not slow" -v  # Integration tests excluding slow ones
-pytest tests/integration/test_basic_pipeline.py -v  # Specific test file
+pytest tests/integration/test_basic_app.py -v  # Specific test file
 
 # Legacy commands (still supported)
 python run_tests.py --type unit

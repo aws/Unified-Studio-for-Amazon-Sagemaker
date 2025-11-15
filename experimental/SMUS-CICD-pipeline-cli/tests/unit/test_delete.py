@@ -45,7 +45,7 @@ class TestDeleteCommand:
                 "--targets",
                 "test",
                 "--manifest",
-                "tests/fixtures/test-bundle.yaml",
+                "tests/fixtures/test-manifest.yaml",
             ],
         )
 
@@ -87,7 +87,7 @@ class TestDeleteCommand:
                 "test",
                 "--force",
                 "--manifest",
-                "tests/fixtures/test-bundle.yaml",
+                "tests/fixtures/test-manifest.yaml",
             ],
         )
 
@@ -129,7 +129,7 @@ class TestDeleteCommand:
                 "--force",
                 "--async",
                 "--manifest",
-                "tests/fixtures/test-bundle.yaml",
+                "tests/fixtures/test-manifest.yaml",
             ],
         )
 
@@ -170,7 +170,7 @@ class TestDeleteCommand:
                 "test",
                 "--force",
                 "--manifest",
-                "tests/fixtures/test-bundle.yaml",
+                "tests/fixtures/test-manifest.yaml",
             ],
         )
 
@@ -198,7 +198,7 @@ class TestDeleteCommand:
                 "invalid-target",
                 "--force",
                 "--manifest",
-                "tests/fixtures/test-bundle.yaml",
+                "tests/fixtures/test-manifest.yaml",
             ],
         )
 
@@ -238,7 +238,7 @@ class TestDeleteCommand:
                 "--output",
                 "JSON",
                 "--manifest",
-                "tests/fixtures/test-bundle.yaml",
+                "tests/fixtures/test-manifest.yaml",
             ],
         )
 
@@ -290,7 +290,7 @@ class TestDeleteCommand:
                 "test,prod",
                 "--force",
                 "--manifest",
-                "tests/fixtures/test-bundle.yaml",
+                "tests/fixtures/test-manifest.yaml",
             ],
         )
 
@@ -326,7 +326,7 @@ class TestDeleteCommand:
                 "--targets",
                 "test",
                 "--manifest",
-                "tests/fixtures/test-bundle.yaml",
+                "tests/fixtures/test-manifest.yaml",
             ],
         )
 

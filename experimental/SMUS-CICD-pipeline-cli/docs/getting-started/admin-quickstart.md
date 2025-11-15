@@ -417,10 +417,10 @@ smus-cli deploy --stages prod --manifest manifest.yaml
 smus-cli bundle --manifest manifest.yaml --stages dev
 
 # Deploy bundle to test
-smus-cli deploy --stages test --manifest manifest.yaml --bundle path/to/bundle.tar.gz
+smus-cli deploy --stages test --manifest manifest.yaml --manifest path/to/bundle.tar.gz
 
 # Deploy same bundle to production
-smus-cli deploy --stages prod --manifest manifest.yaml --bundle path/to/bundle.tar.gz
+smus-cli deploy --stages prod --manifest manifest.yaml --manifest path/to/bundle.tar.gz
 ```
 
 ### Hybrid Deployment
@@ -429,10 +429,10 @@ smus-cli deploy --stages prod --manifest manifest.yaml --bundle path/to/bundle.t
 smus-cli bundle --manifest manifest.yaml --stages dev
 
 # Deploy to test: pulls workflows from release_test branch + data from bundle
-smus-cli deploy --stages test --manifest manifest.yaml --bundle path/to/bundle.tar.gz
+smus-cli deploy --stages test --manifest manifest.yaml --manifest path/to/bundle.tar.gz
 
 # Deploy to prod: pulls workflows from release_prod branch + data from bundle
-smus-cli deploy --stages prod --manifest manifest.yaml --bundle path/to/bundle.tar.gz
+smus-cli deploy --stages prod --manifest manifest.yaml --manifest path/to/bundle.tar.gz
 ```
 
 ### Validation Commands (All Approaches)
@@ -691,7 +691,7 @@ jobs:
           path: "*.tar.gz"
       
       - name: Deploy to Test
-        run: smus-cli deploy --stages test --manifest manifest.yaml --bundle *.tar.gz
+        run: smus-cli deploy --stages test --manifest manifest.yaml --manifest *.tar.gz
       
       - name: Validate Deployment
         run: smus-cli test --stages test --manifest manifest.yaml
@@ -710,7 +710,7 @@ jobs:
           name: application-bundle
       
       - name: Deploy to Production
-        run: smus-cli deploy --stages prod --manifest manifest.yaml --bundle *.tar.gz
+        run: smus-cli deploy --stages prod --manifest manifest.yaml --manifest *.tar.gz
       
       - name: Monitor Production
         run: smus-cli monitor --stages prod --manifest manifest.yaml

@@ -59,7 +59,7 @@ class TestETLWorkflow(IntegrationTestBase):
     def get_pipeline_file(self):
         return os.path.join(
             os.path.dirname(__file__),
-            "../../../../examples/analytic-workflow/etl/etl_bundle.yaml"
+            "../../../../examples/analytic-workflow/etl/manifest.yaml"
         )
 
     @pytest.mark.integration

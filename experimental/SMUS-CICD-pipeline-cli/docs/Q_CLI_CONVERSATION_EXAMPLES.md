@@ -25,7 +25,7 @@ Would you like me to generate a bundle manifest for you?
 
 *[Q calls: get_pipeline_example("etl")]*
 
-**Q:** Here's your `bundle.yaml`:
+**Q:** Here's your `manifest.yaml`:
 
 ```yaml
 bundleName: ETLBundle
@@ -118,18 +118,18 @@ jobs:
       
       - name: Deploy to Dev
         if: github.ref == 'refs/heads/main'
-        run: smus-cli deploy -p bundle.yaml -t dev
+        run: smus-cli deploy -p manifest.yaml -t dev
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       
       - name: Deploy to Test
         if: github.ref == 'refs/heads/main'
-        run: smus-cli deploy -p bundle.yaml -t test
+        run: smus-cli deploy -p manifest.yaml -t test
       
       - name: Deploy to Prod (Manual Approval)
         if: github.event_name == 'workflow_dispatch'
-        run: smus-cli deploy -p bundle.yaml -t prod
+        run: smus-cli deploy -p manifest.yaml -t prod
 ```
 
 This workflow will:
@@ -214,11 +214,11 @@ Your notebooks will be:
 
 ### Conversation Flow
 
-**User:** Can you validate my bundle.yaml file?
+**User:** Can you validate my manifest.yaml file?
 
-**Q:** I can validate your pipeline against the official schema. Please share your bundle.yaml content.
+**Q:** I can validate your pipeline against the official schema. Please share your manifest.yaml content.
 
-**User:** [Pastes bundle.yaml content]
+**User:** [Pastes manifest.yaml content]
 
 **Q:** Let me validate that for you.
 

@@ -346,7 +346,7 @@ Deploy your application to the test environment:
 smus-cli deploy --stages test --manifest manifest.yaml
 
 # Option 2: Bundle-based deployment (if you created a bundle in Step 6)
-smus-cli deploy --stages test --manifest manifest.yaml --bundle path/to/bundle.tar.gz
+smus-cli deploy --stages test --manifest manifest.yaml --manifest path/to/bundle.tar.gz
 ```
 
 **See more:** [CLI Commands - deploy](../cli-commands.md#deploy)

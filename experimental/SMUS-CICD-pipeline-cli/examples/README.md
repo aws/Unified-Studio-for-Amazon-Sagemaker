@@ -58,8 +58,8 @@ Tests fundamental pipeline operations with simple workflows.
 - Connection creation (S3, Athena)
 
 **Key files:**
-- `basic_bundle.yaml` - Simple pipeline with one workflow
-- `test_basic_pipeline.py` - Test suite
+- `manifest.yaml` - Simple pipeline with one workflow
+- `test_basic_app.py` - Test suite
 
 ---
 
@@ -75,8 +75,8 @@ Tests deployment across multiple environments (dev → test → prod).
 
 **Key files:**
 - Pipeline manifest with dev/test/prod targets
-- `test_multi_target_pipeline.py` - Multi-stage deployment tests
-- `pipeline_tests/test_project_validation.py` - Per-target validation
+- `test_multi_target_app.py` - Multi-stage deployment tests
+- `app_tests/test_project_validation.py` - Per-target validation
 
 ---
 
@@ -91,7 +91,7 @@ Tests bundle creation and deployment workflow.
 
 **Key files:**
 - `test_bundle_deploy_pipeline.py` - Bundle workflow tests
-- `pipeline_tests/test_bundle_validation.py` - Bundle content validation
+- `app_tests/test_bundle_validation.py` - Bundle content validation
 
 ---
 
@@ -109,12 +109,12 @@ Tests complete ETL pipeline with AWS Glue jobs processing COVID-19 data.
 - Athena query validation
 
 **Pipeline components:**
-- `etl_bundle.yaml` - Pipeline manifest with git bundle
+- `manifest.yaml` - Pipeline manifest with git bundle
 - `covid_etl_workflow.yaml` - Airflow DAG definition
 - `glue_setup_covid_db.py` - Database/table setup
 - `glue_s3_list_job.py` - Data discovery
 - `glue_covid_summary_job.py` - Data aggregation
-- `pipeline_tests/test_covid_data.py` - Data validation tests
+- `app_tests/test_covid_data.py` - Data validation tests
 
 **Data flow:**
 1. Clone COVID-19 dataset from GitHub
@@ -136,7 +136,7 @@ Tests machine learning pipeline with SageMaker training and MLflow tracking.
 - Workflow orchestration with dependencies
 
 **Key files:**
-- `ml_bundle.yaml` - ML bundle manifest
+- `manifest.yaml` - ML bundle manifest
 - `test_ml_workflow.py` - ML workflow tests
 - `job-code/` - Training scripts
 
@@ -152,10 +152,10 @@ Tests parallel execution of multiple example notebooks.
 - Validation that all notebooks complete successfully
 
 **Pipeline components:**
-- `notebooks_bundle.yaml` - Pipeline manifest
+- `manifest.yaml` - Pipeline manifest
 - `parallel_notebooks_workflow.yaml` - Airflow DAG with 9 parallel tasks
 - `notebooks/` - 9 example notebooks (Pandas, Spark, DuckDB, MLflow, etc.)
-- `pipeline_tests/test_notebooks_execution.py` - Success validation
+- `app_tests/test_notebooks_execution.py` - Success validation
 
 **Notebooks included:**
 1. Basic Python with Pandas
@@ -420,15 +420,15 @@ Minimal pipeline for testing basic functionality:
 - S3 storage bundle
 
 ```bash
-smus-cli describe --bundle examples/TestPipeline.yaml
-smus-cli deploy dev --bundle examples/TestPipeline.yaml
+smus-cli describe --manifest examples/TestPipeline.yaml
+smus-cli deploy dev --manifest examples/TestPipeline.yaml
 ```
 
 ---
 
 ### Demo Pipeline
 
-**File:** `demo-bundle.yaml`
+**File:** `demo-manifest.yaml`
 
 Comprehensive demo showing all features:
 - Multi-target deployment (dev/test/prod)
@@ -437,8 +437,8 @@ Comprehensive demo showing all features:
 - Environment-specific parameters
 
 ```bash
-smus-cli describe --bundle examples/demo-bundle.yaml --connect
-smus-cli deploy test --bundle examples/demo-bundle.yaml
+smus-cli describe --manifest examples/demo-manifest.yaml --connect
+smus-cli deploy test --manifest examples/demo-manifest.yaml
 ```
 
 ---
@@ -456,9 +456,9 @@ Complete ETL workflow with:
 
 ```bash
 cd examples/analytic-workflow/etl
-smus-cli deploy test --bundle etl_bundle.yaml
-smus-cli run --workflow covid_etl_pipeline --targets test --bundle etl_bundle.yaml
-smus-cli test --targets test --bundle etl_bundle.yaml
+smus-cli deploy test --manifest manifest.yaml
+smus-cli run --workflow covid_etl_pipeline --targets test --manifest manifest.yaml
+smus-cli test --targets test --manifest manifest.yaml
 ```
 
 #### ML Pipeline
@@ -471,7 +471,7 @@ Machine learning workflow with:
 
 ```bash
 cd examples/analytic-workflow/ml
-smus-cli deploy test --bundle ml_bundle.yaml
+smus-cli deploy test --manifest manifest.yaml
 ```
 
 ---

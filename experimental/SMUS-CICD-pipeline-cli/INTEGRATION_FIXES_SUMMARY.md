@@ -4,7 +4,7 @@
 
 ## Fixes Applied
 
-### 1. Test File (test_basic_pipeline.py)
+### 1. Test File (test_basic_app.py)
 - Line 92: `manifest['targets']` → `manifest['stages']`
 
 ### 2. Bundle Command (bundle.py)

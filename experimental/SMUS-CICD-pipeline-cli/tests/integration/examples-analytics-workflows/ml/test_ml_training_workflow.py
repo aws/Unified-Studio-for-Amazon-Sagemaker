@@ -18,7 +18,7 @@ class TestMLTrainingWorkflow(IntegrationTestBase):
     def get_pipeline_file(self):
         return os.path.join(
             os.path.dirname(__file__),
-            "../../../../examples/analytic-workflow/ml/training/ml_training_bundle.yaml"
+            "../../../../examples/analytic-workflow/ml/training/manifest.yaml"
         )
 
     @pytest.mark.integration

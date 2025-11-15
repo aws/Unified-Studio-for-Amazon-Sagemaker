@@ -14,7 +14,7 @@ class TestNotebooksWorkflow(IntegrationTestBase):
     def get_pipeline_file(self):
         return os.path.join(
             os.path.dirname(__file__),
-            "../../../../examples/analytic-workflow/data-notebooks/notebooks_bundle.yaml"
+            "../../../../examples/analytic-workflow/data-notebooks/manifest.yaml"
         )
     
     def test_notebooks_workflow_deployment(self):

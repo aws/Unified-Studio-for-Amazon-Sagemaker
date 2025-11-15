@@ -12,7 +12,7 @@ The SMUS CICD CLI emits deployment lifecycle events to Amazon EventBridge, enabl
 
 ### 1. Enable Monitoring in Your Bundle
 
-Add to `bundle.yaml`:
+Add to `manifest.yaml`:
 
 ```yaml
 bundleName: MyBundle
@@ -29,7 +29,7 @@ monitoring:
 ### 2. Deploy with Monitoring
 
 ```bash
-smus-cli deploy --stages prod --bundle bundle.yaml
+smus-cli deploy --stages prod --manifest manifest.yaml
 ```
 
 ### 3. Create EventBridge Rule
@@ -86,7 +86,7 @@ During deployment, the CLI emits events at key stages:
 
 ### Bundle Manifest
 
-Add monitoring configuration to your `bundle.yaml`:
+Add monitoring configuration to your `manifest.yaml`:
 
 ```yaml
 bundleName: MyBundle

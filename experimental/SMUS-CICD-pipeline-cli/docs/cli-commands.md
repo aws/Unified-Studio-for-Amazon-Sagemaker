@@ -8,13 +8,13 @@ The SMUS CLI provides eight main commands for managing CI/CD pipelines in SageMa
 
 | Command | Purpose | Example |
 |---------|---------|---------|
-| `create` | Create new bundle manifest | `smus-cli create --output bundle.yaml` |
-| `describe` | Validate and show bundle configuration | `smus-cli describe --bundle bundle.yaml --connect` |
+| `create` | Create new bundle manifest | `smus-cli create --output manifest.yaml` |
+| `describe` | Validate and show bundle configuration | `smus-cli describe --manifest manifest.yaml --connect` |
 | `bundle` | Package files from source environment | `smus-cli bundle --stages dev` |
-| `deploy` | Deploy bundle to target environment | `smus-cli deploy --stages test --bundle bundle.zip` |
+| `deploy` | Deploy bundle to target environment | `smus-cli deploy --stages test --manifest bundle.zip` |
 | `run` | Execute workflow commands or trigger workflows | `smus-cli run --workflow my_dag` |
 | `logs` | Fetch workflow logs from CloudWatch | `smus-cli logs --workflow arn:aws:airflow-serverless:region:account:workflow/name` |
-| `monitor` | Monitor workflow status | `smus-cli monitor --bundle bundle.yaml` |
+| `monitor` | Monitor workflow status | `smus-cli monitor --manifest manifest.yaml` |
 | `test` | Run tests for pipeline targets | `smus-cli test --stages marketing-test-stage` |
 | `integrate` | Integrate with external tools (Q CLI) | `smus-cli integrate qcli` |
 | `delete` | Remove target environments | `smus-cli delete --stages marketing-test-stage --force` |
@@ -24,10 +24,10 @@ The SMUS CLI provides eight main commands for managing CI/CD pipelines in SageMa
 ### 1. Describe Pipeline Configuration
 ```bash
 # Basic describe
-smus-cli describe --bundle bundle.yaml
+smus-cli describe --manifest manifest.yaml
 
 # Describe with connection details and AWS connectivity
-smus-cli describe --bundle bundle.yaml --connect
+smus-cli describe --manifest manifest.yaml --connect
 ```
 **Example Output:**
 ```
@@ -87,10 +87,10 @@ smus-cli bundle --stages dev,test --output-dir /tmp/bundles
 smus-cli deploy --stages test
 
 # Deploy using pre-created bundle file
-smus-cli deploy --stages test --bundle /path/to/bundle.zip
+smus-cli deploy --stages test --manifest /path/to/bundle.zip
 
 # Deploy with JSON output
-smus-cli deploy --stages test --bundle bundle.zip --output JSON
+smus-cli deploy --stages test --manifest bundle.zip --output JSON
 ```
 
 ### 4. Run Commands and Workflows
@@ -197,7 +197,7 @@ smus-cli logs --workflow arn:aws:airflow-serverless:us-east-2:123456789012:workf
 ### 6. Monitor Workflows
 ```bash
 # Monitor all targets
-smus-cli monitor --bundle bundle.yaml
+smus-cli monitor --manifest manifest.yaml
 
 # Monitor specific targets with JSON output
 smus-cli monitor --stages test --output JSON
@@ -206,7 +206,7 @@ smus-cli monitor --stages test --output JSON
 ### 6. Test Pipeline
 ```bash
 # Run tests for all targets
-smus-cli test --bundle bundle.yaml
+smus-cli test --manifest manifest.yaml
 
 # Run tests for specific targets with verbose output
 smus-cli test --stages test --verbose
@@ -235,7 +235,7 @@ smus-cli integrate qcli --uninstall
 **Available MCP Tools:**
 - `get_pipeline_example` - Generate bundle manifests from templates
 - `query_smus_kb` - Search SMUS documentation and examples
-- `validate_pipeline` - Validate bundle.yaml against schema
+- `validate_pipeline` - Validate manifest.yaml against schema
 
 **Example Q CLI Usage:**
 ```bash
@@ -243,9 +243,9 @@ smus-cli integrate qcli --uninstall
 q chat
 
 You: Show me a notebooks pipeline example
-Q: [Returns complete notebooks_bundle.yaml with explanations]
+Q: [Returns complete notebooks_manifest.yaml with explanations]
 
-You: Validate my bundle.yaml
+You: Validate my manifest.yaml
 Q: [Validates and reports any schema errors]
 ```
 
@@ -269,7 +269,7 @@ All commands support these universal options:
 
 | Option | Short | Description | Example |
 |--------|-------|-------------|---------|
-| `--bundle` | `-p` | Path to bundle manifest file | `--bundle my-bundle.yaml` |
+| `--manifest` | `-p` | Path to bundle manifest file | `--manifest my-manifest.yaml` |
 | `--stages` | `-t` | Target environment(s) | `--stages dev,test` |
 | `--output` | `-o` | Output format (TEXT/JSON) | `--output JSON` |
 
@@ -332,7 +332,7 @@ Manifest Workflows:
 
 ### 2. Create Bundle from Dev Environment
 ```bash
-smus-cli bundle --bundle bundle.yaml --stages dev
+smus-cli bundle --manifest manifest.yaml --stages dev
 ```
 **Example Output:**
 ```
@@ -372,7 +372,7 @@ Bundle creation complete for target: dev
 
 ### 3. Deploy to Test Environment
 ```bash
-smus-cli deploy --stages test --bundle bundle.yaml
+smus-cli deploy --stages test --manifest manifest.yaml
 ```
 **Example Output:**
 ```
@@ -417,7 +417,7 @@ Deploying workflows to: default.s3_shared/workflows (append: True)
 
 ### 4. Monitor Workflow Status
 ```bash
-smus-cli monitor --bundle bundle.yaml
+smus-cli monitor --manifest manifest.yaml
 ```
 **Example Output:**
 ```
@@ -449,7 +449,7 @@ Domain: cicd-test-domain (us-east-1)
 
 ### 5. Trigger Workflow Execution
 ```bash
-smus-cli run --bundle bundle.yaml --stages test --workflow test_dag --command trigger
+smus-cli run --manifest manifest.yaml --stages test --workflow test_dag --command trigger
 ```
 **Example Output:**
 ```
@@ -464,7 +464,7 @@ smus-cli run --bundle bundle.yaml --stages test --workflow test_dag --command tr
 
 ### 7. Run Tests
 ```bash
-smus-cli test --bundle bundle.yaml --stages marketing-test-stage
+smus-cli test --manifest manifest.yaml --stages marketing-test-stage
 ```
 **Example Output:**
 ```
@@ -488,7 +488,7 @@ Domain: cicd-test-domain (us-east-1)
 
 ### 8. Clean Up Resources
 ```bash
-smus-cli delete --stages test --bundle bundle.yaml --force
+smus-cli delete --stages test --manifest manifest.yaml --force
 ```
 **Example Output:**
 ```
@@ -533,7 +533,7 @@ smus-cli create [OPTIONS]
 ```
 
 #### Options
-- **`-o, --output`**: Output file path for the bundle manifest (default: `bundle.yaml`)
+- **`-o, --output`**: Output file path for the bundle manifest (default: `manifest.yaml`)
 - **`-n, --name`**: Pipeline name (optional, defaults to 'YourPipelineName')
 - **`--domain-id`**: SageMaker Unified Studio domain ID (optional)
 - **`--dev-project-id`**: Development project ID to base other targets on (optional)
@@ -548,10 +548,10 @@ smus-cli create [OPTIONS]
 smus-cli create
 
 # Create with custom output file and name
-smus-cli create --output my-bundle.yaml --name MyPipeline
+smus-cli create --output my-manifest.yaml --name MyPipeline
 
 # Create with specific stages and region
-smus-cli create --output bundle.yaml --stages dev,test,prod --region us-west-2
+smus-cli create --output manifest.yaml --stages dev,test,prod --region us-west-2
 ```
 
 ### 1. describe - Describe Pipeline Configuration
@@ -563,7 +563,7 @@ smus-cli describe [OPTIONS]
 ```
 
 #### Options
-- **`-p, --bundle`**: Path to bundle manifest file (default: `bundle.yaml`)
+- **`-p, --manifest`**: Path to bundle manifest file (default: `manifest.yaml`)
 - **`-t, --stages`**: Target name(s) - single target or comma-separated list (optional, defaults to all targets)
 - **`-o, --output`**: Output format: TEXT (default) or JSON
 - **`-w, --workflows`**: Show workflow information
@@ -584,7 +584,7 @@ smus-cli describe -t dev,test -w
 smus-cli describe --connect -o JSON
 
 # Describe specific pipeline file
-smus-cli describe -p my-bundle.yaml
+smus-cli describe -p my-manifest.yaml
 ```
 
 ### 2. bundle - Create Deployment Packages
@@ -596,7 +596,7 @@ smus-cli bundle [OPTIONS] [TARGET_POSITIONAL]
 ```
 
 #### Options
-- **`-p, --bundle`**: Path to bundle manifest file (default: `bundle.yaml`)
+- **`-p, --manifest`**: Path to bundle manifest file (default: `manifest.yaml`)
 - **`-t, --stages`**: Target name(s) - single target or comma-separated list (uses default target if not specified)
 - **`-d, --output-dir`**: Output directory for bundle files (default: `./bundles`)
 - **`-o, --output`**: Output format: TEXT (default) or JSON
@@ -663,9 +663,9 @@ smus-cli deploy [OPTIONS] [TARGET_POSITIONAL]
 ```
 
 #### Options
-- **`-p, --bundle`**: Path to bundle manifest file (default: `bundle.yaml`)
+- **`-p, --manifest`**: Path to bundle manifest file (default: `manifest.yaml`)
 - **`-t, --stages`**: Target name(s) - single target or comma-separated list (uses default target if not specified)
-- **`-b, --bundle`**: Path to pre-created bundle file (optional)
+- **`-b, --manifest`**: Path to pre-created bundle file (optional)
 - **`--emit-events`**: Enable EventBridge event emission for deployment tracking
 - **`--no-events`**: Disable EventBridge event emission
 - **`--event-bus-name`**: Custom EventBridge event bus name
@@ -676,7 +676,7 @@ smus-cli deploy [OPTIONS] [TARGET_POSITIONAL]
 
 #### Deployment Monitoring
 
-Enable deployment metrics and operational monitoring by adding to your `bundle.yaml`:
+Enable deployment metrics and operational monitoring by adding to your `manifest.yaml`:
 
 ```yaml
 monitoring:
@@ -704,7 +704,7 @@ smus-cli deploy
 smus-cli deploy --stages test,prod
 
 # Deploy with pre-created bundle
-smus-cli deploy --stages test --bundle /path/to/bundle.zip
+smus-cli deploy --stages test --manifest /path/to/bundle.zip
 
 # Deploy with EventBridge monitoring enabled
 smus-cli deploy --stages prod --emit-events
@@ -722,7 +722,7 @@ smus-cli monitor [OPTIONS]
 ```
 
 #### Options
-- **`-p, --bundle`**: Path to bundle manifest file (default: `bundle.yaml`)
+- **`-p, --manifest`**: Path to bundle manifest file (default: `manifest.yaml`)
 - **`-t, --stages`**: Target name(s) - single target or comma-separated list (shows all targets if not specified)
 - **`-l, --live`**: Keep monitoring until all workflows complete
 - **`-o, --output`**: Output format: TEXT (default) or JSON
@@ -825,7 +825,7 @@ smus-cli run [OPTIONS]
 - **`-w, --workflow`**: Workflow name to run (optional)
 - **`-c, --command`**: Airflow CLI command to execute (optional)
 - **`-t, --stages`**: Target name(s) - single target or comma-separated list (optional, defaults to first available)
-- **`-p, --bundle`**: Path to bundle manifest file (default: `bundle.yaml`)
+- **`-p, --manifest`**: Path to bundle manifest file (default: `manifest.yaml`)
 - **`-o, --output`**: Output format: TEXT (default) or JSON
 - **`--help`**: Show command help
 
@@ -879,7 +879,7 @@ smus-cli delete [OPTIONS]
 ```
 
 #### Options
-- **`-p, --bundle`**: Path to bundle manifest file (default: `bundle.yaml`)
+- **`-p, --manifest`**: Path to bundle manifest file (default: `manifest.yaml`)
 - **`-t, --stages`**: Target name(s) - single target or comma-separated list (required)
 - **`-f, --force`**: Skip confirmation prompt
 - **`--async`**: Don't wait for deletion to complete
@@ -927,8 +927,8 @@ All commands support:
 ## Configuration Files
 
 ### Bundle Manifest
-- Default location: `bundle.yaml` (current directory)
-- Override with `--bundle` option
+- Default location: `manifest.yaml` (current directory)
+- Override with `--manifest` option
 - See [Bundle Manifest Reference](bundle-manifest.md) for format
 - **Error handling**: CLI will error if the default file doesn't exist and no alternative is specified
 
@@ -942,19 +942,19 @@ All commands support:
 ### Development Workflow
 ```bash
 # 1. Create new pipeline
-smus-cli create -o my-bundle.yaml
+smus-cli create -o my-manifest.yaml
 
 # 2. Validate configuration
-smus-cli describe -p my-bundle.yaml
+smus-cli describe -p my-manifest.yaml
 
 # 3. Create bundle from dev
-smus-cli bundle -p my-bundle.yaml -t dev
+smus-cli bundle -p my-manifest.yaml -t dev
 
 # 4. Deploy to test
-smus-cli deploy -p my-bundle.yaml -t test
+smus-cli deploy -p my-manifest.yaml -t test
 
 # 5. Monitor deployment
-smus-cli monitor -p my-bundle.yaml -t test
+smus-cli monitor -p my-manifest.yaml -t test
 
 # 6. Run workflow commands
 smus-cli run -w my_dag -c "dags list" -t test

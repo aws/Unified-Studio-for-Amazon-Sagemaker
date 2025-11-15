@@ -32,8 +32,8 @@ Your application content can come from:
 smus-cli bundle --manifest manifest.yaml --output ./bundles/
 
 # Step 2: Deploy the same bundle to multiple targets
-smus-cli deploy --manifest manifest.yaml --stage test --bundle myapp-v1.0.0.tar.gz
-smus-cli deploy --manifest manifest.yaml --stage prod --bundle myapp-v1.0.0.tar.gz
+smus-cli deploy --manifest manifest.yaml --stage test --manifest myapp-v1.0.0.tar.gz
+smus-cli deploy --manifest manifest.yaml --stage prod --manifest myapp-v1.0.0.tar.gz
 ```
 
 **What happens:**
@@ -831,7 +831,7 @@ export AWS_REGION=us-west-2
 export PROJECT_PREFIX=analytics
 export TEAM_NAME=datascience
 
-smus-cli deploy --bundle bundle.yaml --stage dev
+smus-cli deploy --manifest manifest.yaml --stage dev
 ```
 
 **Resolution Rules:**

@@ -49,10 +49,10 @@ class TestS3BundleStorage:
     def test_get_bundle_path_s3(self):
         """Test bundle path generation for S3 storage."""
         path = get_bundle_path("s3://my-bucket/bundles", "TestPipeline")
-        assert path == "s3://my-bucket/bundles/TestPipeline.zip"
+        assert path == "s3://my-bucket/artifacts/TestPipeline.zip"
 
-        path = get_bundle_path("s3://my-bucket/bundles/", "TestPipeline")
-        assert path == "s3://my-bucket/bundles/TestPipeline.zip"
+        path = get_bundle_path("s3://my-bucket/artifacts/", "TestPipeline")
+        assert path == "s3://my-bucket/artifacts/TestPipeline.zip"
 
     def test_ensure_bundle_directory_exists_local(self):
         """Test local directory creation."""
@@ -111,9 +111,9 @@ class TestS3BundleStorage:
                 temp_file.name, "s3://test-bucket/bundles", "TestPipeline", "us-east-1"
             )
 
-            assert result_path == "s3://test-bucket/bundles/TestPipeline.zip"
+            assert result_path == "s3://test-bucket/artifacts/TestPipeline.zip"
             mock_s3.upload_file.assert_called_once_with(
-                temp_file.name, "test-bucket", "bundles/TestPipeline.zip"
+                temp_file.name, "test-bucket", "artifacts/TestPipeline.zip"
             )
 
     def test_download_bundle_local(self):
@@ -142,13 +142,13 @@ class TestS3BundleStorage:
 
         with patch("os.close") as mock_close:
             result_path = download_bundle(
-                "s3://test-bucket/bundles/TestPipeline.zip", "us-east-1"
+                "s3://test-bucket/artifacts/TestPipeline.zip", "us-east-1"
             )
 
             assert result_path == temp_path
             mock_close.assert_called_once_with(temp_fd)
             mock_s3.download_file.assert_called_once_with(
-                "test-bucket", "bundles/TestPipeline.zip", temp_path
+                "test-bucket", "artifacts/TestPipeline.zip", temp_path
             )
 
     def test_find_bundle_file_local(self):
@@ -183,19 +183,19 @@ class TestS3BundleStorage:
         # Mock S3 response
         mock_s3.list_objects_v2.return_value = {
             "Contents": [
-                {"Key": "bundles/TestPipeline.zip"},
-                {"Key": "bundles/other.zip"},
-                {"Key": "bundles/readme.txt"},
+                {"Key": "artifacts/TestPipeline.zip"},
+                {"Key": "artifacts/other.zip"},
+                {"Key": "artifacts/readme.txt"},
             ]
         }
 
         result = find_bundle_file(
             "s3://test-bucket/bundles", "TestPipeline", "us-east-1"
         )
-        assert result == "s3://test-bucket/bundles/TestPipeline.zip"
+        assert result == "s3://test-bucket/artifacts/TestPipeline.zip"
 
         mock_s3.list_objects_v2.assert_called_once_with(
-            Bucket="test-bucket", Prefix="bundles/", MaxKeys=100
+            Bucket="test-bucket", Prefix="artifacts/", MaxKeys=100
         )
 
     @patch("src.smus_cicd.helpers.bundle_storage.create_s3_client")
@@ -206,13 +206,13 @@ class TestS3BundleStorage:
 
         # Mock S3 response with no exact match
         mock_s3.list_objects_v2.return_value = {
-            "Contents": [{"Key": "bundles/other.zip"}, {"Key": "bundles/readme.txt"}]
+            "Contents": [{"Key": "artifacts/other.zip"}, {"Key": "artifacts/readme.txt"}]
         }
 
         result = find_bundle_file(
             "s3://test-bucket/bundles", "NonExistent", "us-east-1"
         )
-        assert result == "s3://test-bucket/bundles/other.zip"
+        assert result == "s3://test-bucket/artifacts/other.zip"
 
 
 class TestS3BundleIntegration:
@@ -260,4 +260,4 @@ class TestS3BundleIntegration:
                     args[1]
                     == "sagemaker-unified-studio-<aws-account-id>-us-east-1-test-domain"
                 )  # bucket
-                assert args[2] == "bundles/TestPipeline.zip"  # key
+                assert args[2] == "artifacts/TestPipeline.zip"  # key

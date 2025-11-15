@@ -1,0 +1,46 @@
+applicationName: my-data-pipeline
+version: 1.0.0
+
+targets:
+  dev:
+    domain:
+      name: my-dev-domain
+      region: us-east-1
+    
+    project:
+      name: dev-project
+      profileName: DataAnalyticsProfile
+      
+      # Option 1: Create new role with policies
+      role:
+        policies:
+          - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+          - arn:aws:iam::aws:policy/AmazonAthenaFullAccess
+          - arn:aws:iam::123456789012:policy/MyCustomPolicy
+    
+    initialization:
+      createIfNotExists: true
+
+  prod:
+    domain:
+      name: my-prod-domain
+      region: us-east-1
+    
+    project:
+      name: prod-project
+      profileName: DataAnalyticsProfile
+      
+      # Option 2: Use existing role and attach additional policies
+      role:
+        arn: arn:aws:iam::123456789012:role/existing-project-role
+        policies:
+          - arn:aws:iam::aws:policy/AmazonS3FullAccess
+          - arn:aws:iam::123456789012:policy/ProdAccessPolicy
+    
+    initialization:
+      createIfNotExists: true
+
+workflows:
+  - name: etl-workflow
+    type: airflow
+    path: ./dags/etl_dag.py

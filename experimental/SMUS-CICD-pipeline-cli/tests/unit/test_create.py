@@ -23,7 +23,7 @@ class TestCreateCommand:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as temp_dir:
             os.chdir(temp_dir)
-            output_file = "tests/fixtures/test-bundle.yaml"
+            output_file = "tests/fixtures/test-manifest.yaml"
 
             result = runner.invoke(app, ["create", "--output", output_file])
 
@@ -176,7 +176,7 @@ class TestCreateCommand:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as temp_dir:
             os.chdir(temp_dir)
-            output_file = "test-bundle.yaml"
+            output_file = "test-manifest.yaml"
 
             result = runner.invoke(
                 app,

@@ -90,7 +90,7 @@
   - Workflow completion polling
 
 #### 2. Basic Pipeline Test
-- **File**: `basic_pipeline/test_basic_pipeline.py`
+- **File**: `basic_pipeline/test_basic_app.py`
 - **Duration**: ~15 minutes
 - **What it tests**: Parameter passing from workflow to notebook
 - **Key validations**:

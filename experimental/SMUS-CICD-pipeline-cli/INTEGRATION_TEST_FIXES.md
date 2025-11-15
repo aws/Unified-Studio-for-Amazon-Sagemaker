@@ -7,7 +7,7 @@ Fixed the `basic_bundle` integration test to work with the new application/stage
 
 ## Issues Fixed
 
-### 1. Test File: Manifest Field Name (test_basic_pipeline.py)
+### 1. Test File: Manifest Field Name (test_basic_app.py)
 **Location**: Line 92
 **Issue**: Using old `targets` field instead of `stages`
 **Fix**: Changed `manifest['targets']['dev']` to `manifest['stages']['dev']`
@@ -87,7 +87,7 @@ value = (
 This pattern ensures backward compatibility while supporting the new dataclass-based configuration objects.
 
 ## Files Modified
-1. `tests/integration/basic_bundle/test_basic_pipeline.py` - 1 change
+1. `tests/integration/basic_bundle/test_basic_app.py` - 1 change
 2. `src/smus_cicd/commands/bundle.py` - 1 change
 3. `src/smus_cicd/commands/deploy.py` - 5 changes
 

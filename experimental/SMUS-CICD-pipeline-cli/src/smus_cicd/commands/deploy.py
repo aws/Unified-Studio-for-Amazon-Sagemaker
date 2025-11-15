@@ -366,7 +366,7 @@ def _deploy_bundle_to_target(
     else:
         bundle_path = _find_bundle_file(manifest, config)
         if not bundle_path:
-            handle_error("No bundle file found in ./bundles directory")
+            handle_error("No bundle file found in ./artifacts directory")
             return False
 
     typer.echo(f"Bundle file: {bundle_path}")
@@ -486,8 +486,8 @@ def _find_bundle_file(
     """
     from ..helpers.bundle_storage import find_bundle_file
 
-    # Use default bundles directory
-    bundles_directory = "./bundles"
+    # Use default artifacts directory
+    bundles_directory = "./artifacts"
     return find_bundle_file(
         bundles_directory, manifest.application_name, config.get("region")
     )

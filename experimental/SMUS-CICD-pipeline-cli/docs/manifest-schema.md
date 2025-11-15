@@ -43,7 +43,7 @@ with open('schema/pipeline-manifest-schema.yaml', 'r') as f:
     schema = yaml.safe_load(f)
 
 # Load manifest
-with open('bundle.yaml', 'r') as f:
+with open('manifest.yaml', 'r') as f:
     manifest = yaml.safe_load(f)
 
 # Validate

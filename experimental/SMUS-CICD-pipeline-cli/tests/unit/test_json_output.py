@@ -208,7 +208,7 @@ stages:
             import os
 
             os.chdir(temp_dir)
-            output_file = "tests/fixtures/test-bundle.yaml"
+            output_file = "tests/fixtures/test-manifest.yaml"
 
             result = runner.invoke(
                 app,
