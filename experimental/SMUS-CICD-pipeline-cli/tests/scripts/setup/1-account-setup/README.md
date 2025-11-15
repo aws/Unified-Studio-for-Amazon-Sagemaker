@@ -2,6 +2,8 @@
 
 Deploys minimal account-level resources required for SMUS integration testing.
 
+**📚 User documentation:** [Admin Quick Start - CI/CD Authentication](../../../../docs/getting-started/admin-quickstart.md#step-8-set-up-cicd-authentication-optional)
+
 ## What Gets Deployed
 
 1. **GitHub OIDC Integration** - IAM role for GitHub Actions workflows

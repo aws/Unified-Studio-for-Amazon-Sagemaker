@@ -634,46 +634,6 @@ smus-cli run --stages test --workflow test_connections
 
 ---
 
-## Troubleshooting
-
-### Connection Not Found
-
-**Error:** `Connection 'my-connection' not found in project`
-
-**Solution:**
-1. Verify connection name in manifest matches exactly
-2. Check connection was created: `smus-cli describe --bundle bundle.yaml --connect`
-3. Ensure project initialization completed successfully
-
-### Connection Properties Invalid
-
-**Error:** `Invalid properties for connection type SPARK_GLUE`
-
-**Solution:**
-1. Check required properties are provided
-2. Verify property values match expected types
-3. Review [Bundle Manifest Reference](bundle-manifest.md#connections) for correct schema
-
-### Connection Permission Denied
-
-**Error:** `Access denied to connection resource`
-
-**Solution:**
-1. Verify IAM role has required permissions
-2. Check project role includes connection access
-3. Ensure connection resource (S3 bucket, Redshift cluster) exists
-
-### Variable Substitution Not Working
-
-**Error:** `${proj.connection.my_connection.property}` appears literally in workflow
-
-**Solution:**
-1. Verify connection name matches manifest
-2. Check property name is correct for connection type
-3. Ensure variable substitution is enabled in workflow files
-
----
-
 ## Next Steps
 
 - **[Bundle Manifest Reference](bundle-manifest.md)** - Complete connection schema

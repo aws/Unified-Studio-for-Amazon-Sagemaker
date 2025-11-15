@@ -462,21 +462,6 @@ Supported CI/CD platforms:
 4. **Test integrations** - Use test deployments to verify event rules work correctly
 5. **Secure event buses** - Use IAM policies to control who can put events
 
-## Troubleshooting
-
-### Events not appearing
-
-1. Check IAM permissions for `events:PutEvents`
-2. Verify event bus name is correct
-3. Check EventBridge rule patterns match event structure
-4. Enable CLI debug logging: `export SMUS_LOG_LEVEL=DEBUG`
-
-### Missing metadata
-
-1. Ensure `includeMetadata: true` in manifest
-2. Check git repository is initialized
-3. Verify CI/CD environment variables are set
-
 ## Example Workflows
 
 ### Slack Notifications

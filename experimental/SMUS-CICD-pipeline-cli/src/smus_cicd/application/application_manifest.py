@@ -442,7 +442,9 @@ class ApplicationManifest:
                         )
                     environments.append(
                         EnvironmentConfig(
-                            environment_configuration_name=env_data.get("environment_configuration_name", ""),
+                            environment_configuration_name=env_data.get(
+                                "environment_configuration_name", ""
+                            ),
                             user_parameters=user_params,
                         )
                     )
@@ -469,7 +471,7 @@ class ApplicationManifest:
                             exclude=storage_data.get("exclude", []),
                         )
                     )
-                
+
                 # Parse git configs
                 git_configs = []
                 for git_data in btc_data.get("git", []):
@@ -482,7 +484,7 @@ class ApplicationManifest:
                             exclude=git_data.get("exclude", []),
                         )
                     )
-                
+
                 deployment_config = DeploymentConfiguration(
                     storage=storage_configs,
                     git=git_configs,

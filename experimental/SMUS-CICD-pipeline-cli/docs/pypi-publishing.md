@@ -87,9 +87,4 @@ The GitHub workflow (`.github/workflows/publish-pypi.yml`):
 - Publishes with trusted publishing
 - Requires `PYPI_API_TOKEN` secret
 
-## Troubleshooting
 
-**Build fails**: Check `pyproject.toml` and `setup.py` syntax
-**Upload fails**: Verify PyPI token is correct
-**Import fails**: Check package structure in `src/smus_cicd/`
-**CLI not found**: Verify entry point in `project.scripts`

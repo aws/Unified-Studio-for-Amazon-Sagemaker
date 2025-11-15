@@ -59,21 +59,15 @@ class TestMLDeploymentWorkflow(IntegrationTestBase):
 
         # Step 2: Upload ML code to S3
         print("\n=== Step 2: Upload ML Code to S3 ===")
-        s3_uri_match = re.search(
-            r"dev: dev-marketing.*?default\.s3_shared:.*?s3Uri: (s3://[^\s]+)",
-            result["output"],
-            re.DOTALL
+        ml_dir = os.path.abspath(os.path.join(
+            os.path.dirname(__file__),
+            "../../../../examples/analytic-workflow/ml"
+        ))
+        self.upload_code_to_dev_project(
+            pipeline_file=pipeline_file,
+            source_dir=ml_dir,
+            target_prefix="ml/"
         )
-        
-        if s3_uri_match:
-            s3_uri = s3_uri_match.group(1)
-            ml_dir = os.path.join(
-                os.path.dirname(__file__),
-                "../../../../examples/analytic-workflow/ml"
-            )
-            
-            if os.path.exists(ml_dir):
-                self.sync_to_s3(ml_dir, s3_uri + "ml/", exclude_patterns=["*.pyc", "__pycache__/*", ".ipynb_checkpoints/*"])
 
         # Step 3: Bundle from dev
         print("\n=== Step 3: Bundle from dev ===")
@@ -99,7 +93,7 @@ class TestMLDeploymentWorkflow(IntegrationTestBase):
         print("\n=== Step 6: Get Workflow ARN ===")
         region = os.environ.get('DEV_DOMAIN_REGION', 'us-east-2')
         endpoint = os.environ.get('AIRFLOW_SERVERLESS_ENDPOINT', f'https://airflow-serverless.{region}.api.aws/')
-        client = boto3.client('mwaaserverless', region_name=region, endpoint_url=endpoint)
+        client = boto3.client('mwaaserverless-internal', region_name=region, endpoint_url=endpoint)
         response = client.list_workflows()
         workflow_arn = None
         expected_name = 'IntegrationTestMLDeployment_test_marketing_ml_deployment_workflow'
@@ -155,7 +149,7 @@ class TestMLDeploymentWorkflow(IntegrationTestBase):
             time.sleep(10)
             
             notebooks_valid = self.download_and_validate_notebooks(
-                s3_bucket=s3_bucket,
+                
                 workflow_arn=workflow_arn,
                 run_id=run_id
             )

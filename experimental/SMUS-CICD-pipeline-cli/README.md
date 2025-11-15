@@ -10,11 +10,12 @@ Deploy Airflow DAGs, Jupyter notebooks, and ML workflows from development to pro
 
 ## Why SMUS CI/CD CLI?
 
+✅ **AWS Abstraction Layer** - CLI encapsulates all AWS analytics, ML, and SMUS complexity - DevOps teams never call AWS APIs directly  
+✅ **Separation of Concerns** - Data teams define WHAT to deploy (manifest.yaml), DevOps teams define HOW and WHEN (CI/CD workflows)  
+✅ **Generic CI/CD Workflows** - Same workflow works for Glue, SageMaker, Bedrock, or any AWS service combination  
 ✅ **Deploy with Confidence** - Automated testing and validation before production  
 ✅ **Multi-Environment Management** - Test → Prod with environment-specific configuration  
-✅ **DataZone Integration** - Automatic catalog asset subscription and approval workflows  
 ✅ **Infrastructure as Code** - Version-controlled application manifests and reproducible deployments  
-✅ **GitHub Actions Ready** - Native CI/CD pipeline integration for automated deployments  
 
 ---
 
@@ -49,7 +50,10 @@ smus-cli test --manifest manifest.yaml --targets test
 ## Who Is This For?
 
 ### 👨‍💻 Data Teams (Data Scientists, Data Engineers, GenAI App Developers)
-Build and deploy data applications including Spark code, Python scripts, Airflow workflows, and notebooks.  
+**You focus on:** Your application - what to deploy, where to deploy, and how it runs  
+**You define:** Application manifest (`manifest.yaml`) with your code, workflows, and configurations  
+**You don't need to know:** CI/CD pipelines, GitHub Actions, deployment automation  
+
 → **[Quick Start Guide](docs/getting-started/quickstart.md)** - Deploy your first application in 10 minutes  
 
 **Includes examples for:**
@@ -58,9 +62,14 @@ Build and deploy data applications including Spark code, Python scripts, Airflow
 - GenAI Applications (Bedrock, Notebooks)
 
 ### 🔧 DevOps Teams
-Set up CI/CD pipelines (GitHub Actions) and manage multi-environment infrastructure for data teams.  
+**You focus on:** CI/CD best practices, security, compliance, and deployment automation  
+**You define:** Workflow templates that enforce testing, approvals, and promotion policies  
+**You don't need to know:** Application-specific details, AWS services used, DataZone APIs, SMUS project structures, or business logic  
+
 → **[Admin Guide](docs/getting-started/admin-quickstart.md)** - Configure infrastructure and pipelines in 15 minutes  
 → **[GitHub Workflow Templates](git-templates/)** - Generic, reusable workflow templates for automated deployment
+
+**The CLI is your abstraction layer:** You just call `smus-cli deploy` - the CLI handles all AWS service interactions (DataZone, Glue, Athena, SageMaker, MWAA, S3, IAM, etc.). Your workflows stay simple and generic.
 
 ---
 
@@ -121,6 +130,50 @@ S3 • Lambda • Step Functions • DynamoDB • RDS • SNS/SQS • Batch
 
 ## Core Concepts
 
+### Separation of Concerns: The Key Design Principle
+
+**The Problem:** Traditional deployment approaches force DevOps teams to learn AWS analytics services (Glue, Athena, DataZone, SageMaker, MWAA, etc.) and understand SMUS project structures, or force data teams to become CI/CD experts.
+
+**The Solution:** SMUS CLI is the abstraction layer that encapsulates all AWS and SMUS complexity:
+
+```
+Data Teams                    SMUS CLI                         DevOps Teams
+    ↓                            ↓                                  ↓
+manifest.yaml          smus-cli deploy                    GitHub Actions
+(WHAT & WHERE)         (AWS ABSTRACTION)                  (HOW & WHEN)
+```
+
+**Data teams focus on:**
+- Application code and workflows
+- Which AWS services to use (Glue, Athena, SageMaker, etc.)
+- Environment configurations
+- Business logic
+
+**SMUS CLI handles ALL AWS complexity:**
+- DataZone domain and project management
+- AWS Glue, Athena, SageMaker, MWAA APIs
+- S3 storage and artifact management
+- IAM roles and permissions
+- Connection configurations
+- Catalog asset subscriptions
+- Workflow deployment to Airflow
+- Infrastructure provisioning
+- Testing and validation
+
+**DevOps teams focus on:**
+- CI/CD best practices (testing, approvals, notifications)
+- Security and compliance gates
+- Deployment orchestration
+- Monitoring and alerting
+
+**Result:** 
+- Data teams never touch CI/CD configs
+- **DevOps teams never call AWS APIs directly** - they just call `smus-cli deploy`
+- **CI/CD workflows are generic** - same workflow works for Glue apps, SageMaker apps, or Bedrock apps
+- Both teams work independently using their expertise
+
+---
+
 ### Application Deployment Manifest
 A declarative YAML file (`manifest.yaml`) that defines your data application:
 - **Application details** - Name, version, description
@@ -129,7 +182,7 @@ A declarative YAML file (`manifest.yaml`) that defines your data application:
 - **Deployment stages** - Where to deploy (dev, test, prod environments)
 - **Configuration** - Environment-specific settings and parameters
 
-Created and owned by data teams. Defines **what** to deploy and **where**.
+**Created and owned by data teams.** Defines **what** to deploy and **where**. No CI/CD knowledge required.
 
 ### Application
 Your data/analytics workload being deployed:
@@ -166,11 +219,14 @@ A deployment environment (dev, test, prod) mapped to a SageMaker Unified Studio 
 
 ### CI/CD Automation
 GitHub Actions workflows (or other CI/CD systems) that automate deployment:
-- Created and owned by DevOps teams
+- **Created and owned by DevOps teams**
 - Defines **how** and **when** to deploy
 - Runs tests and quality gates
 - Manages promotion across targets
+- Enforces security and compliance policies
 - Example: `.github/workflows/deploy.yml`
+
+**Key insight:** DevOps teams create generic, reusable workflows that work for ANY application. They don't need to know if the app uses Glue, SageMaker, or Bedrock - the CLI handles all AWS service interactions. The workflow just calls `smus-cli deploy` and the CLI does the rest.
 
 ### Deployment Modes
 
@@ -184,7 +240,32 @@ GitHub Actions workflows (or other CI/CD systems) that automate deployment:
 
 Both modes work with any combination of storage and git content sources.
 
-**How it works:** Data teams define application in manifest → DevOps teams create CI/CD automation → CLI deploys to stages → Workflows execute → Monitor results
+---
+
+### How It All Works Together
+
+```
+1. Data Team                    2. DevOps Team                 3. SMUS CLI (The Abstraction)
+   ↓                               ↓                              ↓
+Creates manifest.yaml          Creates generic workflow       Workflow calls:
+- Glue jobs                    - Test on merge                smus-cli deploy --manifest manifest.yaml
+- SageMaker training           - Approval for prod              ↓
+- Athena queries               - Security scans               CLI handles ALL AWS complexity:
+- S3 locations                 - Notification rules           - DataZone APIs
+                                                              - Glue/Athena/SageMaker APIs
+                               Works for ANY app!             - MWAA deployment
+                               No AWS knowledge needed!       - S3 management
+                                                              - IAM configuration
+                                                              - Infrastructure provisioning
+                                                                ↓
+                                                              Success!
+```
+
+**The beauty:** 
+- Data teams never learn GitHub Actions
+- **DevOps teams never call AWS APIs** - the CLI encapsulates all AWS analytics, ML, and SMUS complexity
+- CI/CD workflows are simple: just call `smus-cli deploy`
+- Same workflow works for ANY application, regardless of AWS services used
 ## Documentation
 
 ### Getting Started
@@ -197,6 +278,7 @@ Both modes work with any combination of storage and git content sources.
 - **[CLI Commands](docs/cli-commands.md)** - Detailed command documentation
 - **[Substitutions & Variables](docs/substitutions-and-variables.md)** - Dynamic configuration
 - **[GitHub Actions Integration](docs/github-actions-integration.md)** - CI/CD pipeline automation
+- **[Workflow Templates](git-templates/)** - Pre-built GitHub Actions workflows (optional)
 - **[Deployment Metrics](docs/pipeline-deployment-metrics.md)** - Monitoring and operational metrics with EventBridge
 
 ### Reference

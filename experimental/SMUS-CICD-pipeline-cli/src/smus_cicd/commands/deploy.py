@@ -540,7 +540,11 @@ def _deploy_storage_item(
         Tuple of (deployed_files_list, s3_uri) or (None, None) if failed
     """
     name = storage_config.name
-    target_dir = storage_config.targetDirectory if hasattr(storage_config, "targetDirectory") else ""
+    target_dir = (
+        storage_config.targetDirectory
+        if hasattr(storage_config, "targetDirectory")
+        else ""
+    )
 
     typer.echo(f"Deploying storage item '{name}' to {target_dir}...")
 
@@ -567,7 +571,9 @@ def _deploy_git_item(
     Returns:
         Tuple of (deployed_files_list, s3_uri) or (None, None) if failed
     """
-    target_dir = git_config.targetDirectory if hasattr(git_config, "targetDirectory") else ""
+    target_dir = (
+        git_config.targetDirectory if hasattr(git_config, "targetDirectory") else ""
+    )
 
     typer.echo(f"Deploying git repository to {target_dir}...")
 
@@ -709,7 +715,11 @@ def _deploy_named_item_from_bundle(
                 region = config.get("region", "us-east-1")
 
                 # Check if compression is requested
-                compression = item_config.compression if hasattr(item_config, "compression") else None
+                compression = (
+                    item_config.compression
+                    if hasattr(item_config, "compression")
+                    else None
+                )
                 if compression in ["gz", "tar.gz"]:
                     # Create tar.gz archive
                     archive_name = f"{item_name}.tar.gz"
@@ -847,7 +857,11 @@ def _get_project_connection(
     if "error" in project_info:
         return {}
 
-    connection_name = file_config.connectionName if hasattr(file_config, "connectionName") else "default.s3_shared"
+    connection_name = (
+        file_config.connectionName
+        if hasattr(file_config, "connectionName")
+        else "default.s3_shared"
+    )
     connections = project_info.get("connections", {})
     return connections.get(connection_name, {})
 
@@ -1158,7 +1172,11 @@ def _create_airflow_serverless_workflows(
     # Check bundle storage configurations for airflow-serverless flag
     if manifest.content.storage:
         for storage_config in manifest.content.storage:
-            airflow_serverless_flag = getattr(storage_config, "airflow-serverless", False) if hasattr(storage_config, "airflow-serverless") else False
+            airflow_serverless_flag = (
+                getattr(storage_config, "airflow-serverless", False)
+                if hasattr(storage_config, "airflow-serverless")
+                else False
+            )
             if airflow_serverless_flag:
                 airflow_serverless_enabled = True
                 break

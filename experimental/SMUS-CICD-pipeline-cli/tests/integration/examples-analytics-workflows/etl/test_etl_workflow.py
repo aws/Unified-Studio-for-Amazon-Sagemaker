@@ -91,23 +91,15 @@ class TestETLWorkflow(IntegrationTestBase):
 
         # Step 2: Upload ETL code to S3 (dev project)
         print("\n=== Step 2: Upload ETL Code to S3 (dev project) ===")
-        s3_uri_match = re.search(
-            r"dev: dev-marketing.*?default\.s3_shared:.*?s3Uri: (s3://[^\s]+)",
-            result["output"],
-            re.DOTALL
+        etl_dir = os.path.abspath(os.path.join(
+            os.path.dirname(__file__),
+            "../../../../examples/analytic-workflow/etl"
+        ))
+        self.upload_code_to_dev_project(
+            pipeline_file=pipeline_file,
+            source_dir=etl_dir,
+            target_prefix="etl/"
         )
-        
-        if s3_uri_match:
-            s3_uri = s3_uri_match.group(1)
-            etl_dir = os.path.join(
-                os.path.dirname(__file__),
-                "../../../../examples/analytic-workflow/etl"
-            )
-            
-            if os.path.exists(etl_dir):
-                self.sync_to_s3(etl_dir, s3_uri + "etl/", exclude_patterns=["*.pyc", "__pycache__/*", "test_*.sh"])
-        else:
-            print("⚠️ Could not extract S3 URI from describe output")
 
         # Step 3: Bundle from dev
         print("\n=== Step 3: Bundle from dev ===")

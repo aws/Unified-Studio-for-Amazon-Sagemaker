@@ -150,10 +150,10 @@ def get_default_project_profile(domain_id, region):
         datazone_client = _get_datazone_client(region)
         response = datazone_client.list_project_profiles(domainIdentifier=domain_id)
         profiles = response.get("items", [])
-        
+
         if not profiles:
             return None
-        
+
         # Return first profile as default
         return profiles[0]["name"]
     except Exception as e:

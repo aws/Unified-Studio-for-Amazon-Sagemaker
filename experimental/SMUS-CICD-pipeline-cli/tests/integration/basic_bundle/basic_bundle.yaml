@@ -43,7 +43,7 @@ stages:
         purpose: smus-cicd-testing
       region: ${DEV_DOMAIN_REGION:us-east-2}
     project:
-      name: test-marketing
+      name: test-project-basic
     initialization:
       project:
         create: true
@@ -52,7 +52,8 @@ stages:
         - arn:aws:iam::*:role/GitHubActionsRole-SMUS-CLI-Tests
         contributors: []
         role:
-          arn: arn:aws:iam::*:role/SMUSCICDTestRole
+          policies:
+            - arn:aws:iam::aws:policy/SageMakerStudioUserIAMPermissiveExecutionPolicy
       connections:
       - name: mlflow-server
         type: MLFLOW

@@ -369,10 +369,19 @@ definitions:
                 type: object
                 description: "IAM role configuration for project"
                 properties:
+                  name:
+                    type: string
+                    description: "Custom role name (default: smus-{project-name}-role)"
                   arn:
                     type: string
-                    description: "IAM role ARN"
+                    description: "Existing IAM role ARN"
                     pattern: "^arn:aws:iam::[0-9*]+:role/.+$"
+                  policies:
+                    type: array
+                    description: "Policy ARNs to attach (AWS managed or customer managed)"
+                    items:
+                      type: string
+                      pattern: "^arn:aws:iam::(aws|[0-9]+):policy/.+$"
                 additionalProperties: false
               userParameters:
                 type: array

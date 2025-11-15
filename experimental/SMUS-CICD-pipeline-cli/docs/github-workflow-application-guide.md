@@ -1,5 +1,7 @@
 # Application Admin Guide - SMUS Direct Branch Deployment
 
+← [Workflow Templates](../git-templates/) | [DevOps Guide](github-workflow-devops-guide.md) | [Main README](../README.md)
+
 **Audience:** Application Team Leads, Data Engineers, ML Engineers  
 **Purpose:** Set up automated deployment for your SMUS application
 
@@ -227,56 +229,6 @@ gh pr create --base myapp-test-branch --head feature/add-new-workflow
 
 ---
 
-## Troubleshooting
-
-### "Workflow not found"
-
-**Cause:** Incorrect workflow reference
-
-**Solution:** Check the `uses:` line matches your org's template:
-```yaml
-uses: your-org/workflows/.github/workflows/smus-direct-branch.yml@v1
-```
-
-### "Required secret not provided"
-
-**Cause:** Missing GitHub secrets
-
-**Solution:** Add secrets in repository settings:
-- Settings → Secrets and variables → Actions
-- Add `AWS_ROLE_ARN_TEST` and `AWS_ROLE_ARN_PROD`
-
-### "Permission denied"
-
-**Cause:** IAM role doesn't have permissions
-
-**Solution:** Contact DevOps team to verify:
-- Role ARN is correct
-- Role has required permissions
-- OIDC trust policy includes your repository
-
-### "Tests failing"
-
-**Cause:** Application tests are failing
-
-**Solution:**
-1. Check workflow logs for test failures
-2. Run tests locally: `smus-cli test --manifest manifest.yaml`
-3. Fix failing tests
-4. Push fixes to feature branch
-5. Create new PR
-
-### "Deployment skipped"
-
-**Cause:** Tests didn't pass or wrong branch
-
-**Solution:**
-- Ensure tests pass in test environment
-- Verify you're pushing to the correct branch
-- Check workflow logs for details
-
----
-
 ## Rollback Procedure
 
 If you need to rollback production:
@@ -443,7 +395,7 @@ This guide focuses on **direct branch-based deployment**, but SMUS supports thre
 
 ### Bundle-Based Deployment
 
-**Location:** [`bundle-based/`](bundle-based/)
+**Location:** [`bundle-based/`](../git-templates/bundle-based/)
 
 **What it is:**
 Creates a versioned bundle (artifact) that is deployed to all environments. The same bundle goes to test and prod.
@@ -475,7 +427,7 @@ Bundle-Based:
 
 ### Hybrid Bundle-Branch Deployment
 
-**Location:** [`hybrid-bundle-branch/`](hybrid-bundle-branch/)
+**Location:** [`hybrid-bundle-branch/`](../git-templates/hybrid-bundle-branch/)
 
 **What it is:**
 Combines direct deployment for code with bundle deployment for large artifacts (ML models, data files).

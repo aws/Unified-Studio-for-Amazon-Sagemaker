@@ -161,110 +161,7 @@ def create_workflow(
         logger.error(f"🔍 DEBUG: Full exception details: {str(e)}")
         # Handle ConflictException when workflow already exists (idempotent behavior)
         if "ConflictException" in str(e):
-            logger.info(f"Workflow {workflow_name} already exists")
-
-            # If EnvironmentVariables are needed, delete and recreate (update doesn't support them yet)
-            if datazone_domain_id or datazone_project_id:
-                logger.info(
-                    f"EnvironmentVariables needed - deleting and recreating workflow {workflow_name}"
-                )
-
-                try:
-                    client = create_airflow_serverless_client(connection_info, region)
-
-                    # Get existing workflow ARN
-                    workflow_arn = None
-                    next_token = None
-                    max_pages = 10
-                    page_count = 0
-
-                    while page_count < max_pages:
-                        if next_token:
-                            workflows_response = client.list_workflows(
-                                MaxResults=50, NextToken=next_token
-                            )
-                        else:
-                            workflows_response = client.list_workflows(MaxResults=50)
-
-                        for wf in workflows_response.get("Workflows", []):
-                            if wf["Name"] == workflow_name:
-                                workflow_arn = wf["WorkflowArn"]
-                                break
-
-                        if workflow_arn:
-                            break
-
-                        next_token = workflows_response.get("NextToken")
-                        if not next_token:
-                            break
-
-                        page_count += 1
-
-                    if not workflow_arn:
-                        raise Exception(
-                            f"Workflow {workflow_name} exists but could not be found in list"
-                        )
-
-                    # Check for active runs before deleting
-                    logger.info(f"Checking for active runs on workflow: {workflow_arn}")
-                    runs = list_workflow_runs(
-                        workflow_arn, connection_info, region, max_results=5
-                    )
-                    active_runs = [
-                        r
-                        for r in runs
-                        if r.get("status")
-                        not in ["SUCCESS", "FAILED", "STOPPED", "COMPLETED"]
-                    ]
-
-                    if active_runs:
-                        error_msg = f"Cannot update workflow {workflow_name}: {len(active_runs)} active run(s) in progress. Wait for runs to complete or stop them first."
-                        logger.error(error_msg)
-                        raise Exception(error_msg)
-
-                    logger.info(
-                        f"No active runs found, deleting workflow: {workflow_arn}"
-                    )
-                    client.delete_workflow(WorkflowArn=workflow_arn)
-                    logger.info(
-                        "Deleted workflow, recreating with EnvironmentVariables"
-                    )
-
-                    # Wait for deletion to complete with exponential backoff
-                    max_retries = 5
-                    for attempt in range(max_retries):
-                        try:
-                            time.sleep(2**attempt)
-                            response = client.create_workflow(**params)
-                            break
-                        except Exception as retry_error:
-                            if (
-                                "ConflictException" in str(retry_error)
-                                and attempt < max_retries - 1
-                            ):
-                                logger.info(
-                                    f"Workflow still exists, retrying in {2 ** (attempt + 1)}s (attempt {attempt + 1}/{max_retries})"
-                                )
-                                continue
-                            raise
-
-                    workflow_arn = response["WorkflowArn"]
-                    logger.info(f"Successfully recreated workflow: {workflow_arn}")
-
-                    return {
-                        "workflow_arn": workflow_arn,
-                        "workflow_version": response["WorkflowVersion"],
-                        "created_at": response["CreatedAt"],
-                        "revision_id": response["RevisionId"],
-                        "success": True,
-                        "recreated": True,
-                    }
-                except Exception as delete_error:
-                    logger.error(f"Failed to delete/recreate workflow: {delete_error}")
-                    raise
-
-            # No EnvironmentVariables needed, just update
-            logger.info(f"Updating existing workflow {workflow_name}")
+            logger.info(f"Workflow {workflow_name} already exists, updating it")
 
             try:
                 client = create_airflow_serverless_client(connection_info, region)
@@ -315,6 +212,45 @@ def create_workflow(
 
                 if description:
                     update_params["Description"] = description
+
+                # Add EnvironmentVariables if provided
+                if datazone_domain_id and datazone_project_id:
+                    from . import datazone
+
+                    env_vars = {}
+                    env_vars["DataZoneDomainRegion"] = datazone_domain_region or region
+                    env_vars["DataZoneDomainId"] = datazone_domain_id
+                    env_vars["DataZoneProjectId"] = datazone_project_id
+
+                    # Get environment_id from IAM connection
+                    try:
+                        project_connections = datazone.get_project_connections(
+                            project_id=datazone_project_id,
+                            domain_id=datazone_domain_id,
+                            region=datazone_domain_region or region,
+                        )
+
+                        # Find IAM connection and extract environment_id
+                        for conn_name, conn_info in project_connections.items():
+                            if conn_info.get("type") == "IAM":
+                                env_id = conn_info.get("environmentId")
+                                if env_id:
+                                    env_vars["DataZoneEnvironmentId"] = env_id
+                                    logger.info(
+                                        f"Found DataZone environment ID from IAM connection: {env_id}"
+                                    )
+                                    break
+                    except Exception as e:
+                        logger.warning(
+                            f"Could not get DataZone environment ID from connections: {e}"
+                        )
+
+                    # Add DataZone endpoint from environment variable if set
+                    if os.getenv("AWS_ENDPOINT_URL_DATAZONE"):
+                        env_vars["DataZoneEndpoint"] = os.getenv("AWS_ENDPOINT_URL_DATAZONE")
+
+                    update_params["EnvironmentVariables"] = env_vars
+                    logger.info(f"🔍 DEBUG: Updating with environment variables: {env_vars}")
 
                 logger.info(f"Updating workflow with params: {update_params}")
                 update_response = client.update_workflow(**update_params)
@@ -696,7 +632,9 @@ def wait_for_workflow_completion(
             # Exited queue state
             queue_duration = int(time.time() - queue_start_time)
             total_queue_time += queue_duration
-            logger.info(f"Workflow run {run_id} was in QUEUED state for {queue_duration}s")
+            logger.info(
+                f"Workflow run {run_id} was in QUEUED state for {queue_duration}s"
+            )
             queue_start_time = None
 
         # Call status callback if provided
@@ -716,11 +654,15 @@ def wait_for_workflow_completion(
             if queue_start_time is not None:
                 queue_duration = int(time.time() - queue_start_time)
                 total_queue_time += queue_duration
-                logger.info(f"Workflow run {run_id} was in QUEUED state for {queue_duration}s (final)")
-            
+                logger.info(
+                    f"Workflow run {run_id} was in QUEUED state for {queue_duration}s (final)"
+                )
+
             if total_queue_time > 0:
-                logger.info(f"Workflow run {run_id} total QUEUED time: {total_queue_time}s")
-            
+                logger.info(
+                    f"Workflow run {run_id} total QUEUED time: {total_queue_time}s"
+                )
+
             logger.info(f"Workflow run {run_id} completed with status: {status}")
             return status_result
 

@@ -44,23 +44,15 @@ class TestGenAIWorkflow(IntegrationTestBase):
 
         # Step 2: Upload GenAI code to S3 (dev project)
         print("\n=== Step 2: Upload GenAI Code to S3 (dev project) ===")
-        s3_uri_match = re.search(
-            r"dev: dev-marketing.*?default\.s3_shared:.*?s3Uri: (s3://[^\s]+)",
-            result["output"],
-            re.DOTALL
+        genai_dir = os.path.abspath(os.path.join(
+            os.path.dirname(__file__),
+            "../../../../examples/analytic-workflow/genai"
+        ))
+        self.upload_code_to_dev_project(
+            pipeline_file=pipeline_file,
+            source_dir=genai_dir,
+            target_prefix="genai/"
         )
-        
-        if s3_uri_match:
-            s3_uri = s3_uri_match.group(1)
-            genai_dir = os.path.join(
-                os.path.dirname(__file__),
-                "../../../../examples/analytic-workflow/genai"
-            )
-            
-            if os.path.exists(genai_dir):
-                self.sync_to_s3(genai_dir, s3_uri + "genai/", exclude_patterns=["*.pyc", "__pycache__/*", ".ipynb_checkpoints/*"])
-        else:
-            print("⚠️ Could not extract S3 URI from describe output")
 
         # Step 3: Bundle from dev
         print("\n=== Step 3: Bundle from dev ===")
@@ -145,7 +137,7 @@ class TestGenAIWorkflow(IntegrationTestBase):
             time.sleep(10)
             
             notebooks_valid = self.download_and_validate_notebooks(
-                s3_bucket=s3_bucket,
+                
                 workflow_arn=workflow_arn,
                 run_id=run_id
             )

@@ -1,5 +1,7 @@
 # DevOps Guide - SMUS Direct Branch Deployment
 
+← [Workflow Templates](../git-templates/) | [Application Guide](github-workflow-application-guide.md) | [Main README](../README.md)
+
 **Audience:** DevOps, Platform Engineers, Infrastructure Teams  
 **Purpose:** Set up and maintain the organization's deployment workflow template
 
@@ -90,84 +92,40 @@ git push origin v1.0.0
 
 ## Step 2: Set Up AWS Infrastructure
 
-### 2.1 Create OIDC Provider (One-time per AWS Account)
+### Configure GitHub Actions Authentication
+
+Use the provided CloudFormation template:
 
 ```bash
-aws iam create-open-id-connect-provider \
-  --url https://token.actions.githubusercontent.com \
-  --client-id-list sts.amazonaws.com \
-  --thumbprint-list 6938fd4d98bab03faadb97b34396831e3780aea1
+aws cloudformation deploy \
+  --template-file path/to/github-oidc-role.yaml \
+  --stack-name smus-cli-github-integration \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --parameter-overrides \
+    GitHubOrg=your-org \
+    GitHubRepo='*' \
+    GitHubEnvironment=aws-env
 ```
 
-### 2.2 Create IAM Roles
-
-Create separate roles for test and production:
-
-**Test Role Trust Policy:**
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": {
-        "Federated": "arn:aws:iam::ACCOUNT_ID:oidc-provider/token.actions.githubusercontent.com"
-      },
-      "Action": "sts:AssumeRoleWithWebIdentity",
-      "Condition": {
-        "StringEquals": {
-          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
-        },
-        "StringLike": {
-          "token.actions.githubusercontent.com:sub": "repo:your-org/*:*"
-        }
-      }
-    }
-  ]
-}
-```
-
-**Permissions Policy:**
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "datazone:*",
-        "s3:*",
-        "airflow:*",
-        "iam:PassRole"
-      ],
-      "Resource": "*"
-    }
-  ]
-}
-```
-
-Create the roles:
+**Get the role ARN:**
 ```bash
-# Test role
-aws iam create-role \
-  --role-name GitHubActions-SMUS-Test \
-  --assume-role-policy-document file://trust-policy.json
-
-aws iam put-role-policy \
-  --role-name GitHubActions-SMUS-Test \
-  --policy-name SMUS-Permissions \
-  --policy-document file://permissions-policy.json
-
-# Production role (repeat with different name)
-aws iam create-role \
-  --role-name GitHubActions-SMUS-Prod \
-  --assume-role-policy-document file://trust-policy.json
-
-aws iam put-role-policy \
-  --role-name GitHubActions-SMUS-Prod \
-  --policy-name SMUS-Permissions \
-  --policy-document file://permissions-policy.json
+aws cloudformation describe-stacks \
+  --stack-name smus-cli-github-integration \
+  --query 'Stacks[0].Outputs[?OutputKey==`RoleArn`].OutputValue' \
+  --output text
 ```
+
+**Template location:** `tests/scripts/setup/1-account-setup/github-oidc-role.yaml`
+
+### Required Permissions
+
+> **⚠️ TODO:** Document minimum required IAM permissions.
+> 
+> **Current reference:** See CloudFormation template for example permissions.
+
+### Separate Test and Production Roles (Recommended)
+
+Create separate roles for better security isolation. See [Admin Guide](getting-started/admin-quickstart.md#step-8-set-up-cicd-authentication-optional) for details.
 
 ---
 
@@ -279,26 +237,6 @@ If you need to make breaking changes:
 
 ---
 
-## Troubleshooting
-
-### Workflow Fails for All Teams
-
-**Check:**
-1. Workflow syntax is valid
-2. No breaking changes in dependencies
-3. AWS services are operational
-4. OIDC provider is configured correctly
-
-### Workflow Fails for One Team
-
-**Direct them to check:**
-1. Their GitHub secrets are configured
-2. Their manifest.yaml is valid
-3. Their AWS resources exist
-4. Their IAM role has permissions
-
----
-
 ## Support Channels
 
 Set up support channels for application teams:
@@ -335,7 +273,7 @@ This guide focuses on **direct branch-based deployment**, but SMUS supports thre
 
 ### Bundle-Based Deployment
 
-**Location:** [`bundle-based/`](bundle-based/)
+**Location:** [`bundle-based/`](../git-templates/bundle-based/)
 
 **How it works:**
 1. Create versioned bundle artifact (tar.gz)
@@ -362,7 +300,7 @@ This guide focuses on **direct branch-based deployment**, but SMUS supports thre
 
 ### Hybrid Bundle-Branch Deployment
 
-**Location:** [`hybrid-bundle-branch/`](hybrid-bundle-branch/)
+**Location:** [`hybrid-bundle-branch/`](../git-templates/hybrid-bundle-branch/)
 
 **How it works:**
 1. Code: Direct deployment from git (fast)

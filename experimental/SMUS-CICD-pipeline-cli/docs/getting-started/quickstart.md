@@ -535,32 +535,4 @@ Each data application is self-contained with its own bundle manifest and can be 
 
 ---
 
-## Troubleshooting
-
-### Variable Substitution Not Working
-```bash
-# Debug variable resolution
-smus-cli describe --manifest manifest.yaml --stages test --verbose
-```
-
-### Workflow Not Syncing to MWAA
-```bash
-# Check bundle contents
-smus-cli bundle --manifest manifest.yaml --stages dev --verbose
-
-# Verify deployment
-smus-cli monitor --stages test --workflows
-```
-
-### Tests Failing
-```bash
-# Run tests with verbose output
-smus-cli test --stages test --manifest manifest.yaml --verbose
-
-# Check individual workflow execution
-smus-cli run --stages test --workflow my_dag
-```
-
----
-
 **Ready for production?** See [Admin Quick Start](admin-quickstart.md) to set up complete infrastructure.

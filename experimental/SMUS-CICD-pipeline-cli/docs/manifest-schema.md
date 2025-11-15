@@ -113,8 +113,15 @@ stages:
         profileName: 'All capabilities'
         owners: [Eng1]         # Optional: Project owners
         contributors: []       # Optional: Project contributors
-        role:                  # Optional: Customer-provided IAM role
-          arn: arn:aws:iam::123456789012:role/MyProjectRole
+        role:                  # Optional: IAM role configuration
+          # Common Scenario 1: Create new role with policies
+          name: my-custom-role-name  # Optional: Custom role name (default: smus-{project-name}-role)
+          policies:            # Policy ARNs to attach (AWS managed or customer managed)
+            - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+            - arn:aws:iam::aws:policy/AmazonAthenaFullAccess
+            - arn:aws:iam::123456789012:policy/MyCustomPolicy
+          # Common Scenario 2: Use existing role (no policies)
+          # arn: arn:aws:iam::123456789012:role/MyProjectRole
       environments:            # Optional: Environment configs
         - EnvironmentConfigurationName: 'OnDemand Workflows'
     deployment_configuration: # Optional: Target-specific bundle config

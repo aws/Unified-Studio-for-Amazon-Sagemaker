@@ -38,21 +38,15 @@ class TestMLTrainingWorkflow(IntegrationTestBase):
 
         # Step 2: Upload ML code to S3
         print("\n=== Step 2: Upload ML Code to S3 ===")
-        s3_uri_match = re.search(
-            r"dev: dev-marketing.*?default\.s3_shared:.*?s3Uri: (s3://[^\s]+)",
-            result["output"],
-            re.DOTALL
+        ml_dir = os.path.abspath(os.path.join(
+            os.path.dirname(__file__),
+            "../../../../examples/analytic-workflow/ml"
+        ))
+        self.upload_code_to_dev_project(
+            pipeline_file=pipeline_file,
+            source_dir=ml_dir,
+            target_prefix="ml/"
         )
-        
-        if s3_uri_match:
-            s3_uri = s3_uri_match.group(1)
-            ml_dir = os.path.join(
-                os.path.dirname(__file__),
-                "../../../../examples/analytic-workflow/ml"
-            )
-            
-            if os.path.exists(ml_dir):
-                self.sync_to_s3(ml_dir, s3_uri + "ml/", exclude_patterns=["*.pyc", "__pycache__/*", ".ipynb_checkpoints/*"])
 
         # Step 3: Bundle
         print("\n=== Step 3: Bundle ===")
@@ -100,10 +94,17 @@ class TestMLTrainingWorkflow(IntegrationTestBase):
         # Step 8: Download and validate output notebooks (always run, even if workflow failed)
         print("\n=== Step 8: Download and Validate Output Notebooks ===")
         
-        # Extract S3 bucket from earlier describe output
-        s3_bucket_match = re.search(r"s3://([^/]+)", s3_uri if 's3_uri' in locals() else "")
-        if s3_bucket_match and run_id:
-            s3_bucket = s3_bucket_match.group(1)
+        # Extract S3 bucket from test project (not dev)
+        describe_result = self.run_cli_command(["describe", "--manifest", pipeline_file, "--connect"])
+        test_s3_uri_match = re.search(
+            r"test: test-marketing.*?default\.s3_shared:.*?s3Uri: (s3://[^\s]+)",
+            describe_result["output"],
+            re.DOTALL
+        )
+        
+        if test_s3_uri_match and run_id:
+            test_s3_uri = test_s3_uri_match.group(1)
+            s3_bucket = re.search(r"s3://([^/]+)", test_s3_uri).group(1)
             
             # Wait for S3 propagation
             import time
@@ -111,7 +112,6 @@ class TestMLTrainingWorkflow(IntegrationTestBase):
             time.sleep(10)
             
             notebooks_valid = self.download_and_validate_notebooks(
-                s3_bucket=s3_bucket,
                 workflow_arn=workflow_arn,
                 run_id=run_id
             )
@@ -119,8 +119,8 @@ class TestMLTrainingWorkflow(IntegrationTestBase):
             assert notebooks_valid, "Output notebooks contain errors or were not found"
             print("✅ All output notebooks validated successfully")
         else:
-            print("❌ Could not determine S3 bucket or run_id")
-            assert False, "Could not determine S3 bucket or run_id for notebook validation"
+            print("❌ Could not determine run_id")
+            assert False, "Could not determine run_id for notebook validation"
         
         # Final assertion - workflow must succeed
         assert workflow_succeeded, "Workflow execution failed"

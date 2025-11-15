@@ -337,25 +337,4 @@ Potential additions:
 4. **Validation mode**: Pre-deployment check for missing variables
 5. **Custom functions**: `{upper(proj.name)}`, `{concat(proj.s3.root, '/data')}`
 
-## Troubleshooting
 
-### Variable Not Resolving
-
-1. Check variable syntax matches exactly: `{namespace.property}`
-2. Verify connection exists in project: `smus describe --bundle manifest.yaml --connect`
-3. Check environment variable is defined in bundle manifest
-4. Review deploy logs for resolution errors
-
-### Connection Property Not Found
-
-1. List all connections: `smus describe --bundle manifest.yaml --connect`
-2. Check connection type matches expected properties
-3. Verify connection is in READY status
-4. Check property name spelling (case-sensitive)
-
-### Wrong Value After Resolution
-
-1. Verify you're deploying to correct target
-2. Check target configuration in bundle manifest
-3. Confirm project has correct connections configured
-4. Review resolved YAML in S3 after deployment

@@ -2,6 +2,13 @@
 
 ← [Back to Main README](../README.md)
 
+> **Looking for GitHub Actions workflows?**
+> - **Application teams:** [Setup Guide](github-workflow-application-guide.md) (~30 min)
+> - **DevOps teams:** [Template Setup](github-workflow-devops-guide.md) (~15 min)
+> - **Workflow templates:** [git-templates/](../git-templates/)
+> 
+> **This document** covers general CI/CD concepts and implementation details.
+
 This guide explains how to integrate the SMUS CLI with CI/CD platforms like GitHub Actions and GitLab CI for automated pipeline management across multiple environments with proper security boundaries and approval workflows.
 
 ## Overview: CI/CD with SMUS CLI
@@ -71,12 +78,11 @@ Create IAM roles for CI/CD with these minimum permissions:
 
 #### 3. OIDC Provider Setup (GitHub Actions)
 
-For GitHub Actions, create an OIDC identity provider:
+Use the provided CloudFormation template:
 
 ```bash
-# Deploy OIDC integration stack
 aws cloudformation deploy \
-  --template-file github-oidc-role.yaml \
+  --template-file tests/scripts/setup/1-account-setup/github-oidc-role.yaml \
   --stack-name smus-cli-github-integration \
   --capabilities CAPABILITY_NAMED_IAM \
   --parameter-overrides \
@@ -84,6 +90,10 @@ aws cloudformation deploy \
     GitHubRepo=your-repo \
     GitHubEnvironment=aws-env
 ```
+
+**For detailed setup:** See [Admin Quick Start](getting-started/admin-quickstart.md#step-8-set-up-cicd-authentication-optional)
+
+> **⚠️ TODO:** Document minimum required IAM permissions.
 
 ### Environment Separation
 

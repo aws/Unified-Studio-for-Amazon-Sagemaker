@@ -144,6 +144,37 @@ class ProjectManager:
         )  # Reserved for future use
         owners, contributors = self._extract_memberships(target_config)
         role_arn = self._get_role_arn(target_config)
+        policy_arns = self._get_policy_arns(target_config)
+
+        # Handle role creation or policy attachment
+        if policy_arns:
+            import boto3
+
+            from . import iam
+
+            sts = boto3.client("sts")
+            account_id = sts.get_caller_identity()["Account"]
+
+            if not role_arn:
+                # Create new role with policies
+                role_name = self._get_role_name(target_config, project_name)
+                typer.echo(f"🔧 Creating IAM role: {role_name}")
+                role_arn = iam.create_or_update_project_role(
+                    role_name=role_name,
+                    policy_arns=policy_arns,
+                    account_id=account_id,
+                    region=region,
+                )
+            else:
+                # Attach policies to existing role
+                typer.echo("🔧 Attaching policies to existing role")
+                role_arn = iam.create_or_update_project_role(
+                    role_name="",  # Not used when role_arn provided
+                    policy_arns=policy_arns,
+                    account_id=account_id,
+                    region=region,
+                    role_arn=role_arn,
+                )
 
         # Extract environments for environment creation
         _ = None  # Reserved for future use
@@ -346,16 +377,22 @@ class ProjectManager:
             # Try to use first available profile as default
             if available_profiles:
                 default_profile = available_profiles[0]
-                typer.echo(f"⚠️ Profile '{profile_name}' not found. Using default profile: '{default_profile}'")
+                typer.echo(
+                    f"⚠️ Profile '{profile_name}' not found. Using default profile: '{default_profile}'"
+                )
                 for profile in response.get("items", []):
                     if profile["name"] == default_profile:
                         profile_id = profile["id"]
                         profile_name = default_profile
                         break
-            
+
             if not profile_id:
-                profiles_list = ", ".join(available_profiles) if available_profiles else "none"
-                handle_error(f"Project profile '{profile_name}' not found. Available profiles: {profiles_list}")
+                profiles_list = (
+                    ", ".join(available_profiles) if available_profiles else "none"
+                )
+                handle_error(
+                    f"Project profile '{profile_name}' not found. Available profiles: {profiles_list}"
+                )
                 return False
 
         # Prepare create project parameters
@@ -422,6 +459,73 @@ class ProjectManager:
             role_arn = role_arn.replace(":*:", f":{account_id}:")
 
         return role_arn
+
+    def _get_role_name(self, target_config, project_name: str) -> str:
+        """Extract role name from target configuration or generate default."""
+        role_name = None
+
+        # Check initialization.project.role.name first
+        if target_config.initialization and target_config.initialization.project:
+            init_project = target_config.initialization.project
+            if hasattr(init_project, "role") and init_project.role:
+                if isinstance(init_project.role, dict):
+                    role_name = init_project.role.get("name")
+                elif hasattr(init_project.role, "name"):
+                    role_name = init_project.role.name
+
+        # Fallback to target_config.project.role.name
+        if (
+            not role_name
+            and hasattr(target_config.project, "role")
+            and target_config.project.role
+        ):
+            if isinstance(target_config.project.role, dict):
+                role_name = target_config.project.role.get("name")
+            elif hasattr(target_config.project.role, "name"):
+                role_name = target_config.project.role.name
+
+        # Default to smus-{project_name}-role
+        return role_name or f"smus-{project_name}-role"
+
+    def _get_policy_arns(self, target_config) -> List[str]:
+        """Extract policy ARNs from target configuration."""
+        policy_arns = []
+
+        # Check initialization.project.role.policies first
+        if target_config.initialization and target_config.initialization.project:
+            init_project = target_config.initialization.project
+            if hasattr(init_project, "role") and init_project.role:
+                if isinstance(init_project.role, dict):
+                    policies = init_project.role.get("policies", [])
+                elif hasattr(init_project.role, "policies"):
+                    policies = init_project.role.policies
+                else:
+                    policies = []
+
+                if policies:
+                    policy_arns.extend(
+                        policies if isinstance(policies, list) else [policies]
+                    )
+
+        # Fallback to target_config.project.role.policies
+        if (
+            not policy_arns
+            and hasattr(target_config.project, "role")
+            and target_config.project.role
+        ):
+            if isinstance(target_config.project.role, dict):
+                policies = target_config.project.role.get("policies", [])
+            elif hasattr(target_config.project.role, "policies"):
+                policies = target_config.project.role.policies
+            else:
+                policies = []
+
+            if policies:
+                policy_arns.extend(
+                    policies if isinstance(policies, list) else [policies]
+                )
+
+        return policy_arns
 
     def _wait_for_environments(
         self, project_id, domain_id, region, max_wait_seconds=300

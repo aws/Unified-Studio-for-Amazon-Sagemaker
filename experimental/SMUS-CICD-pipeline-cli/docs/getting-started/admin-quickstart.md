@@ -18,12 +18,12 @@
 ## Overview
 
 As an admin, you'll configure:
-- **Bundle targets** - Test and Prod environments where data applications deploy
+- **Deployment stages** - Test and Prod environments where data applications deploy
 - **Project initialization** - Automated project creation with proper settings
 - **CI/CD pipelines** - GitHub Actions or similar automation
 - **Monitoring** - Deployment validation and health checks
 
-**Key concept:** A SMUS project is a deployment target. Multiple data application bundles can deploy to the same target.
+**Key concept:** A SMUS project is a deployment target. Multiple data applications can deploy to the same target using different deployment approaches (direct git-based, bundle-based, or hybrid).
 
 ---
 
@@ -37,16 +37,26 @@ pip install -e .
 
 ---
 
-## Step 2: Understand Bundle Targets
+## Step 2: Understand Deployment Stages
 
-A **target** is a SMUS project where bundles deploy. Data teams typically use:
-- **Dev** - Local development (not a deployment target, used for bundling only)
+A **stage** is a SMUS project where data applications deploy. Data teams typically use:
+- **Dev** - Local development (optional deployment target, used for testing)
 - **Test** - Integration testing and validation
 - **Prod** - Production deployment
 
-### Target Configuration
+### Deployment Approaches
 
-Each target in `manifest.yaml` specifies:
+The CLI supports three deployment approaches:
+
+1. **Direct Git-Based** - Deploy directly from git branches to stages (no bundle creation)
+2. **Bundle-Based** - Create versioned bundles, then deploy them to stages (all content from bundle)
+3. **Hybrid** - Create bundle for static content (data, configs), pull workflows from git branches per stage
+
+**See more:** [Deployment Approaches Guide](../deployment-approaches.md)
+
+### Stage Configuration
+
+Each stage in `manifest.yaml` specifies:
 
 ```yaml
 stages:
@@ -67,9 +77,77 @@ stages:
 ```
 
 **Key points:**
-- `create: false` - Project already exists (typical for dev)
+- `create: false` - Project already exists, CLI will deploy to it
 - `create: true` - CLI will create project on first deployment
 - `initialization` - Only used when `create: true`
+
+### Project Isolation Models
+
+The `create` flag enables two organizational models:
+
+**Shared Projects (create: false)** - Multiple applications deploy to the same test/prod projects:
+```yaml
+# Application 1: monthly-metrics/manifest.yaml
+stages:
+  test:
+    project:
+      name: shared-data-platform-test
+      create: false  # Use existing shared project
+  prod:
+    project:
+      name: shared-data-platform-prod
+      create: false
+
+# Application 2: churn-model/manifest.yaml
+stages:
+  test:
+    project:
+      name: shared-data-platform-test
+      create: false  # Same shared project
+  prod:
+    project:
+      name: shared-data-platform-prod
+      create: false
+```
+
+**Isolated Projects (create: true)** - Each application gets its own dedicated projects:
+```yaml
+# Application 1: monthly-metrics/manifest.yaml
+stages:
+  test:
+    project:
+      name: monthly-metrics-test
+      create: true  # Create dedicated project
+    initialization:
+      project:
+        create: true
+        profileName: 'Analytics'
+        owners: [metrics-team@example.com]
+  prod:
+    project:
+      name: monthly-metrics-prod
+      create: true
+
+# Application 2: churn-model/manifest.yaml
+stages:
+  test:
+    project:
+      name: churn-model-test
+      create: true  # Create separate dedicated project
+    initialization:
+      project:
+        create: true
+        profileName: 'ML and AI'
+        owners: [ml-team@example.com]
+  prod:
+    project:
+      name: churn-model-prod
+      create: true
+```
+
+**When to use each model:**
+- **Shared projects** - Teams collaborating, shared resources, centralized governance
+- **Isolated projects** - Team autonomy, different profiles/permissions, cost isolation
 
 ---
 
@@ -101,21 +179,19 @@ initialization:
     - EnvironmentConfigurationName: 'OnDemand Workflows'  # Enables MWAA
 ```
 
-**Available profiles:**
-- `All capabilities` - Full analytics, ML, and GenAI
-- `Analytics` - Data engineering only
-- `ML and AI` - Machine learning only
-
 ---
 
-## Step 4: Set Up Multi-Target Configuration
+## Step 4: Set Up Multi-Stage Configuration
 
 Create a reference `manifest.yaml` for your organization:
 
 ```yaml
 applicationName: CustomerChurnModel
 
-bundle:
+content:
+  git:
+    - repository: customer-churn-model
+      url: https://github.com/myorg/customer-churn-model.git
   storage:
     - name: data-platform-workflows
       connectionName: default.s3_shared
@@ -324,20 +400,43 @@ tasks:
 
 ## Step 6: Understand CLI Usage Across Stages
 
-The CLI is used differently at each stage:
+The CLI is used differently depending on your deployment approach:
 
-### Development Stage (Data Teams)
+### Direct Git-Based Deployment
 ```bash
-# Data teams work in their dev project
-# They create bundles FROM dev environment
-smus-cli bundle --manifest manifest.yaml --stages dev
-```
-
-### Testing Stage (CI/CD or Data Teams)
-```bash
-# Deploy bundle TO test environment
+# Deploy directly from git to test
 smus-cli deploy --stages test --manifest manifest.yaml
 
+# Deploy to production
+smus-cli deploy --stages prod --manifest manifest.yaml
+```
+
+### Bundle-Based Deployment
+```bash
+# Create bundle (typically from dev)
+smus-cli bundle --manifest manifest.yaml --stages dev
+
+# Deploy bundle to test
+smus-cli deploy --stages test --manifest manifest.yaml --bundle path/to/bundle.tar.gz
+
+# Deploy same bundle to production
+smus-cli deploy --stages prod --manifest manifest.yaml --bundle path/to/bundle.tar.gz
+```
+
+### Hybrid Deployment
+```bash
+# Create bundle once (contains some content like data files, configs)
+smus-cli bundle --manifest manifest.yaml --stages dev
+
+# Deploy to test: pulls workflows from release_test branch + data from bundle
+smus-cli deploy --stages test --manifest manifest.yaml --bundle path/to/bundle.tar.gz
+
+# Deploy to prod: pulls workflows from release_prod branch + data from bundle
+smus-cli deploy --stages prod --manifest manifest.yaml --bundle path/to/bundle.tar.gz
+```
+
+### Validation Commands (All Approaches)
+```bash
 # Validate deployment
 smus-cli test --stages test --manifest manifest.yaml
 
@@ -348,30 +447,25 @@ smus-cli logs --stages test --workflow my_workflow --live
 smus-cli monitor --stages test --manifest manifest.yaml
 ```
 
-### Production Stage (CI/CD)
-```bash
-# Deploy to production after test validation
-smus-cli deploy --stages prod --manifest manifest.yaml
-
-# Monitor production deployment
-smus-cli monitor --stages prod --manifest manifest.yaml
-```
-
 **Key insight:** 
-- `bundle` creates from dev
-- `deploy` deploys to test/prod
-- `test`, `logs`, `monitor` validate deployments
+- Direct git-based: Fast iteration, everything from git branches
+- Bundle-based: Versioned artifacts, everything from bundle
+- Hybrid: Bundle for static content (data, configs), git branches for workflows
 
 ---
 
-## Step 7: Understand Multiple Bundles per Target
+## Step 7: Choose Your Project Organization Model
 
-A single SMUS project (target) can host multiple data application bundles. Each bundle is self-contained and can be deployed and promoted to production independently:
+Organizations can choose between shared or isolated project models using the `create` flag.
+
+### Shared Projects Model (create: false)
+
+Multiple applications deploy to the same test/prod projects. Best for teams that collaborate and share resources.
 
 ```
-my-smus-project/
+my-organization/
 ├── monthly-metrics/           # Data application 1
-│   ├── manifest.yaml
+│   ├── manifest.yaml          # Points to shared-data-platform-test/prod
 │   ├── workflows/
 │   │   ├── metrics_etl.yaml
 │   │   └── metrics_report.yaml
@@ -379,51 +473,154 @@ my-smus-project/
 │       └── metrics_analysis.ipynb
 │
 ├── churn-model/               # Data application 2
-│   ├── manifest.yaml
+│   ├── manifest.yaml          # Points to shared-data-platform-test/prod
 │   ├── workflows/
 │   │   ├── feature_engineering.yaml
 │   │   └── model_training.yaml
-│   ├── notebooks/
-│   │   ├── prepare_features.ipynb
-│   │   └── train_model.ipynb
-│   └── tests/
-│       └── test_model.py
+│   └── notebooks/
+│       └── train_model.ipynb
 │
 └── README.md
 ```
 
-Each bundle deploys independently to the same target:
+**Deployment:**
 ```bash
-# Deploy and promote monthly-metrics bundle
+# Both applications deploy to the same shared projects
 cd monthly-metrics
-smus-cli deploy --stages test --manifest manifest.yaml
-smus-cli deploy --stages prod --manifest manifest.yaml
+smus-cli deploy --stages test --manifest manifest.yaml  # → shared-data-platform-test
 
-# Deploy and promote churn-model bundle separately
 cd ../churn-model
-smus-cli deploy --stages test --manifest manifest.yaml
-smus-cli deploy --stages prod --manifest manifest.yaml
+smus-cli deploy --stages test --manifest manifest.yaml  # → shared-data-platform-test
 ```
 
-All workflows from both bundles appear in the same MWAA environment within the project.
+All workflows from both applications appear in the same MWAA environment.
+
+**Benefits:**
+- Shared resources and connections
+- Centralized governance
+- Lower infrastructure costs
+- Easier cross-application workflows
+
+### Isolated Projects Model (create: true)
+
+Each application gets its own dedicated projects. Best for team autonomy and cost isolation.
+
+```
+my-organization/
+├── monthly-metrics/           # Data application 1
+│   ├── manifest.yaml          # Creates monthly-metrics-test/prod
+│   └── workflows/
+│
+├── churn-model/               # Data application 2
+│   ├── manifest.yaml          # Creates churn-model-test/prod
+│   └── workflows/
+│
+└── README.md
+```
+
+**Deployment:**
+```bash
+# Each application creates and deploys to its own projects
+cd monthly-metrics
+smus-cli deploy --stages test --manifest manifest.yaml  # → monthly-metrics-test (created)
+
+cd ../churn-model
+smus-cli deploy --stages test --manifest manifest.yaml  # → churn-model-test (created)
+```
+
+Each application has its own isolated MWAA environment and resources.
+
+**Benefits:**
+- Team autonomy and ownership
+- Different profiles/permissions per application
+- Cost tracking per application
+- No naming conflicts between applications
+
+### Hybrid Model
+
+You can also mix both approaches - shared test, isolated prod:
+
+```yaml
+# manifest.yaml
+stages:
+  test:
+    project:
+      name: shared-test-platform
+      create: false  # Shared test environment
+  
+  prod:
+    project:
+      name: my-app-prod
+      create: true   # Isolated production
+    initialization:
+      project:
+        create: true
+        profileName: 'All capabilities'
+        owners: [my-team@example.com]
+```
 
 ---
 
-## Step 8: Set Up GitHub Actions CI/CD
+## Step 8: Set Up CI/CD Authentication (Optional)
 
-Create `.github/workflows/deploy.yml` for automated deployments:
+If you want to automate deployments via CI/CD, configure authentication between your CI/CD platform and AWS.
+
+### Quick Setup for GitHub Actions
+
+```bash
+# Deploy OIDC integration using CloudFormation
+aws cloudformation deploy \
+  --template-file tests/scripts/setup/1-account-setup/github-oidc-role.yaml \
+  --stack-name smus-cli-github-integration \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --parameter-overrides \
+    GitHubOrg=your-org \
+    GitHubRepo=your-repo \
+    GitHubEnvironment=aws-env
+```
+
+**Get the role ARN:**
+```bash
+aws cloudformation describe-stacks \
+  --stack-name smus-cli-github-integration \
+  --query 'Stacks[0].Outputs[?OutputKey==`RoleArn`].OutputValue' \
+  --output text
+```
+
+### Other CI/CD Platforms
+
+- **GitLab CI:** [GitLab AWS OIDC](https://docs.gitlab.com/ee/ci/cloud_services/aws/)
+- **Azure DevOps:** [Azure AWS Connection](https://learn.microsoft.com/en-us/azure/devops/pipelines/library/connect-to-azure)
+- **Jenkins:** Use AWS credentials plugin
+
+### Required Permissions
+
+> **⚠️ TODO:** Document minimum required IAM permissions.
+> 
+> **Current reference:** See `tests/scripts/setup/1-account-setup/github-oidc-role.yaml`
+
+**For detailed CI/CD setup:**
+- [GitHub Actions Workflows](../../git-templates/) - Pre-built templates
+- [Application Guide](../github-workflow-application-guide.md) - For data teams
+- [DevOps Guide](../github-workflow-devops-guide.md) - For platform teams
+
+---
+
+## Step 9: Set Up CI/CD Workflows (Optional)
+
+Automate deployments using your CI/CD platform. The SMUS CLI commands are the same across all platforms.
+
+### GitHub Actions - Direct Git-Based Deployment
 
 ```yaml
-name: Deploy Data Application
+name: Deploy Data Application (Direct)
 
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    branches: [main, release_test, release_prod]
 
 jobs:
-  deploy-test:
+  deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -445,17 +642,59 @@ jobs:
           role-to-assume: arn:aws:iam::123456789:role/GitHubActionsRole
           aws-region: us-east-1
       
-      - name: Create Bundle
-        run: smus-cli bundle --manifest manifest.yaml --stages dev
-      
       - name: Deploy to Test
+        if: github.ref == 'refs/heads/release_test'
         run: smus-cli deploy --stages test --manifest manifest.yaml
+      
+      - name: Deploy to Production
+        if: github.ref == 'refs/heads/release_prod'
+        run: smus-cli deploy --stages prod --manifest manifest.yaml
       
       - name: Validate Deployment
         run: smus-cli test --stages test --manifest manifest.yaml
+```
+
+### GitHub Actions - Bundle-Based Deployment
+
+```yaml
+name: Deploy Data Application (Bundle)
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
       
-      - name: Check Deployment Health
-        run: smus-cli monitor --stages test --manifest manifest.yaml
+      - name: Install SMUS CLI
+        run: |
+          git clone https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker.git
+          cd Unified-Studio-for-Amazon-Sagemaker/experimental/SMUS-CICD-pipeline-cli
+          pip install -e .
+      
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          role-to-assume: arn:aws:iam::123456789:role/GitHubActionsRole
+          aws-region: us-east-1
+      
+      - name: Create Bundle
+        run: smus-cli bundle --manifest manifest.yaml --stages dev
+      
+      - name: Upload Bundle
+        uses: actions/upload-artifact@v3
+        with:
+          name: application-bundle
+          path: "*.tar.gz"
+      
+      - name: Deploy to Test
+        run: smus-cli deploy --stages test --manifest manifest.yaml --bundle *.tar.gz
+      
+      - name: Validate Deployment
+        run: smus-cli test --stages test --manifest manifest.yaml
 
   deploy-prod:
     needs: deploy-test
@@ -465,18 +704,32 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       
+      - name: Download Bundle
+        uses: actions/download-artifact@v3
+        with:
+          name: application-bundle
+      
       - name: Deploy to Production
-        run: smus-cli deploy --stages prod --manifest manifest.yaml
+        run: smus-cli deploy --stages prod --manifest manifest.yaml --bundle *.tar.gz
       
       - name: Monitor Production
         run: smus-cli monitor --stages prod --manifest manifest.yaml
 ```
 
+**For complete CI/CD setup:**
+- **GitHub Actions:** See [git-templates/](../../git-templates/) for pre-built workflows
+  - `direct-branch/` - Direct git-based deployment
+  - `bundle-based/` - Bundle-based deployment
+  - `hybrid-bundle-branch/` - Hybrid approach
+- **Other platforms:** Adapt the CLI commands to your platform's syntax
+
+**Key insight:** CI/CD just automates the CLI commands you'd run manually.
+
 **See more:** [GitHub Actions Integration Guide](../github-actions-integration.md)
 
 ---
 
-## Step 9: Validate Deployment with Monitoring
+## Step 10: Validate Deployment with Monitoring
 
 After deployment, use these commands to verify everything works:
 
@@ -533,7 +786,7 @@ All tests passed
 
 ---
 
-## Step 10: Set Up Monitoring and Metrics Integration
+## Step 11: Set Up Monitoring and Metrics Integration
 
 ### CloudWatch Integration
 
@@ -603,7 +856,7 @@ aws cloudwatch put-metric-alarm \
 
 ---
 
-## Step 11: Document for Data Teams
+## Step 12: Document for Data Teams
 
 Create team documentation explaining the setup:
 
@@ -636,41 +889,10 @@ Multiple data applications can deploy to the same project.
 
 ---
 
-## Troubleshooting
-
-### Project Creation Fails
-```bash
-# Check initialization settings
-smus-cli describe --manifest manifest.yaml --stages test --verbose
-
-# Verify IAM permissions for project creation
-aws sts get-caller-identity
-```
-
-### Deployment Not Syncing
-```bash
-# Check bundle contents
-smus-cli bundle --manifest manifest.yaml --stages dev --verbose
-
-# Verify MWAA connection
-smus-cli monitor --stages test --workflows
-```
-
-### Multiple Bundles Conflicting
-```bash
-# List all workflows in target
-smus-cli monitor --stages test --all-workflows
-
-# Check for naming conflicts
-smus-cli describe --stages test --manifest manifest.yaml
-```
-
----
-
 ## Next Steps
 
 ### For Data Teams
-- **[Data Team Quick Start](quickstart.md)** - Guide for building and deploying bundles
+- **[Data Team Quick Start](quickstart.md)** - Guide for building and deploying applications
 
 ### Advanced Configuration
 - **[Bundle Manifest Reference](../bundle-manifest.md)** - Complete YAML specification
@@ -684,10 +906,10 @@ smus-cli describe --stages test --manifest manifest.yaml
 
 ## Key Takeaways
 
-1. **Projects are targets** - One SMUS project can host multiple data application bundles
-2. **Dev is for bundling** - Data teams create bundles FROM dev, deploy TO test/prod
+1. **Projects are deployment stages** - One SMUS project can host multiple data applications
+2. **Three deployment approaches** - Direct git-based, bundle-based, or hybrid
 3. **Initialization is automatic** - CLI creates projects with proper settings on first deployment
 4. **Monitoring is essential** - Use `monitor`, `logs`, and `test` commands to validate deployments
-5. **CI/CD automates flow** - GitHub Actions handles bundle → test → prod progression
+5. **CI/CD automates flow** - GitHub Actions handles test → prod progression
 
 **Questions?** Contact the platform team for support.

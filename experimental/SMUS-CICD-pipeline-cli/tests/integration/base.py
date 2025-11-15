@@ -1,6 +1,7 @@
 """Base class for integration tests."""
 
 import os
+import re
 import yaml
 import boto3
 import tempfile
@@ -57,6 +58,8 @@ class IntegrationTestBase:
 
         self.logger.info(f"=== Integration Test Debug Log Started ===")
         self.logger.info(f"Debug log file: {self.debug_log_file}")
+        
+        return self.logger
 
     def setup_method(self, method):
         """Setup for each test method."""
@@ -276,6 +279,68 @@ class IntegrationTestBase:
         """Get full path to pipeline file."""
         return str(Path(__file__).parent / pipeline_file)
 
+    def upload_code_to_dev_project(
+        self,
+        pipeline_file: str,
+        source_dir: str,
+        target_prefix: str,
+        exclude_patterns: list = None
+    ) -> bool:
+        """Upload code to dev project S3 bucket.
+        
+        Args:
+            pipeline_file: Path to pipeline manifest file
+            source_dir: Local directory to upload (relative to test file)
+            target_prefix: S3 prefix to upload to (e.g., "ml/", "genai/")
+            exclude_patterns: Optional list of patterns to exclude
+            
+        Returns:
+            True if upload succeeded, False otherwise
+        """
+        # Get S3 URI from dev project
+        result = self.run_cli_command(["describe", "--manifest", pipeline_file, "--connect"])
+        if not result["success"]:
+            print(f"❌ Failed to describe pipeline: {result['output']}")
+            return False
+        
+        s3_uri_match = re.search(
+            r"dev: dev-marketing.*?default\.s3_shared:.*?s3Uri: (s3://[^\s]+)",
+            result["output"],
+            re.DOTALL
+        )
+        
+        if not s3_uri_match:
+            print("❌ Could not extract S3 URI from describe output")
+            return False
+        
+        s3_uri = s3_uri_match.group(1)
+        print(f"📍 Dev S3 URI: {s3_uri}")
+        
+        # Resolve source directory
+        if not os.path.isabs(source_dir):
+            print(f"❌ Source directory must be absolute path: {source_dir}")
+            return False
+        
+        if not os.path.exists(source_dir):
+            print(f"❌ Source directory not found: {source_dir}")
+            return False
+        
+        # Default exclude patterns
+        if exclude_patterns is None:
+            exclude_patterns = ["*.pyc", "__pycache__/*", ".ipynb_checkpoints/*"]
+        
+        # Sync to S3
+        target_uri = s3_uri + target_prefix
+        print(f"🔄 Uploading {source_dir} to {target_uri}")
+        
+        try:
+            self.sync_to_s3(source_dir, target_uri, exclude_patterns=exclude_patterns)
+            print("✅ Upload completed")
+            return True
+        except Exception as e:
+            print(f"❌ Upload failed: {e}")
+            return False
+
     def sync_to_s3(
         self,
         source_dir: str,
@@ -303,23 +368,29 @@ class IntegrationTestBase:
                 "*.md"
             ]
         
-        cmd = ["aws", "s3", "sync", source_dir, s3_uri, "--delete"]
+        cmd = ["aws", "s3", "sync", source_dir, s3_uri]
         for pattern in exclude_patterns:
             cmd.extend(["--exclude", pattern])
         
+        print(f"🔄 Syncing {source_dir} to {s3_uri}")
+        print(f"   Exclude patterns: {exclude_patterns}")
         self.logger.info(f"Syncing {source_dir} to {s3_uri}")
         
         result = subprocess.run(cmd, capture_output=True, text=True)
         
         if result.stdout:
+            print(f"   Output: {result.stdout[:200]}")
             self.logger.info(f"S3 sync output: {result.stdout}")
         if result.stderr:
+            print(f"   Stderr: {result.stderr[:200]}")
             self.logger.warning(f"S3 sync stderr: {result.stderr}")
         
         if result.returncode != 0:
+            print(f"❌ S3 sync failed with code {result.returncode}")
             self.logger.error(f"S3 sync failed with code {result.returncode}")
             assert False, f"S3 sync failed: {result.stderr}"
         
+        print(f"✅ Successfully synced to {s3_uri}")
         self.logger.info(f"✅ Successfully synced to {s3_uri}")
 
     def run_cli_command(
@@ -499,7 +570,7 @@ class IntegrationTestBase:
         import boto3
         region = os.environ.get('DEV_DOMAIN_REGION', 'us-east-2')
         endpoint = os.environ.get('AIRFLOW_SERVERLESS_ENDPOINT', f'https://airflow-serverless.{region}.api.aws/')
-        return boto3.client('mwaaserverless', region_name=region, endpoint_url=endpoint)
+        return boto3.client('mwaaserverless-internal', region_name=region, endpoint_url=endpoint)
 
     def get_workflow_arn(self, expected_workflow_name: str) -> str:
         """Get workflow ARN by name.
@@ -545,17 +616,16 @@ class IntegrationTestBase:
         """
         client = self.get_airflow_client()
         run_response = client.get_workflow_run(WorkflowArn=workflow_arn, RunId=run_id)
-        actual_status = run_response.get('Status')
+        actual_status = run_response.get('RunDetail', {}).get('RunState')
         print(f"📊 Workflow Run ID: {run_id}")
         print(f"📊 Final Status: {actual_status}")
         assert actual_status == expected_status, f"Workflow did not complete successfully. Status: {actual_status}"
         print(f"✅ Workflow completed with {expected_status} status")
 
-    def download_and_validate_notebooks(self, s3_bucket: str, workflow_arn: str, run_id: str) -> bool:
+    def download_and_validate_notebooks(self, workflow_arn: str, run_id: str) -> bool:
         """Download workflow notebook outputs using GetTaskInstance API and validate for errors.
         
         Args:
-            s3_bucket: S3 bucket name containing workflow outputs
             workflow_arn: Workflow ARN to query task instances
             run_id: Workflow run ID
             
@@ -587,7 +657,7 @@ class IntegrationTestBase:
         # Get task instances from workflow run
         region = os.environ.get('DEV_DOMAIN_REGION', 'us-east-2')
         endpoint = os.environ.get('AIRFLOW_SERVERLESS_ENDPOINT', f'https://airflow-serverless.{region}.api.aws/')
-        client = boto3.client('mwaaserverless', region_name=region, endpoint_url=endpoint)
+        client = boto3.client('mwaaserverless-internal', region_name=region, endpoint_url=endpoint)
         
         # List task instances for this run
         try:
@@ -609,6 +679,8 @@ class IntegrationTestBase:
             task_id = task.get('TaskInstanceId')
             task_name = task.get('TaskId') or task_id or 'unknown'
             
+            print(f"\n🔍 Checking task: {task_name} (ID: {task_id})")
+            
             # Get task instance details including Xcom
             try:
                 task_detail = client.get_task_instance(
@@ -617,14 +689,31 @@ class IntegrationTestBase:
                     TaskInstanceId=task_id
                 )
             except Exception as e:
-                print(f"⚠️ Skipping task {task_name}: {e}")
+                print(f"⚠️ Error getting task details: {e}")
                 continue
             
             # Check if task has notebook output in Xcom
             xcom = task_detail.get('Xcom', {})
-            notebook_output = xcom.get('notebook_output') or xcom.get('return_value')
+            print(f"   XCom keys: {list(xcom.keys())}")
+            
+            # Try different XCom keys
+            notebook_output = (
+                xcom.get('notebook_output') or 
+                xcom.get('return_value') or 
+                xcom.get('sagemaker_unified_studio') or
+                xcom.get('s3_path')
+            )
+            
+            # Remove quotes if present (some XCom values are JSON-encoded strings)
+            if notebook_output and isinstance(notebook_output, str):
+                notebook_output = notebook_output.strip('"')
+                # Fix path if it points to model.tar.gz instead of output.tar.gz
+                if notebook_output.endswith('/output/model.tar.gz'):
+                    notebook_output = notebook_output.replace('/output/model.tar.gz', '/output/output.tar.gz')
+                    print(f"   🔧 Corrected path to output.tar.gz")
             
             if not notebook_output:
+                print(f"   ⚠️ No notebook output found in XCom")
                 continue
             
             print(f"\n📓 Task: {task_name}")
@@ -664,63 +753,7 @@ class IntegrationTestBase:
                 Path(tmp_path).unlink(missing_ok=True)
         
         if not downloaded_notebooks:
-            print("⚠️ No notebooks found via GetTaskInstance API, falling back to S3 listing")
-            
-            # Fallback: List S3 for latest notebooks
-            s3_prefix = f"s3://{s3_bucket}/shared/workflows/output/"
-            result = subprocess.run(
-                ["aws", "s3", "ls", s3_prefix, "--recursive"],
-                capture_output=True,
-                text=True
-            )
-            
-            if result.returncode == 0:
-                # Find latest output.tar.gz files
-                latest_files = {}
-                for line in result.stdout.strip().split("\n"):
-                    if "/output/output.tar.gz" in line:
-                        parts = line.split()
-                        if len(parts) >= 4:
-                            timestamp = f"{parts[0]} {parts[1]}"
-                            s3_key = " ".join(parts[3:])
-                            latest_files[s3_key] = timestamp
-                
-                # Download the most recent file
-                if latest_files:
-                    latest_key = max(latest_files.items(), key=lambda x: x[1])[0]
-                    s3_path = f"s3://{s3_bucket}/{latest_key}"
-                    
-                    print(f"\n📓 Downloading latest notebook from S3")
-                    print(f"   Path: {s3_path}")
-                    
-                    with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp:
-                        tmp_path = tmp.name
-                    
-                    result = subprocess.run(
-                        ["aws", "s3", "cp", s3_path, tmp_path],
-                        capture_output=True,
-                        text=True
-                    )
-                    
-                    if result.returncode == 0:
-                        task_dir = output_dir / "fallback"
-                        task_dir.mkdir(parents=True, exist_ok=True)
-                        
-                        try:
-                            with tarfile.open(tmp_path, "r:gz") as tar:
-                                for member in tar.getmembers():
-                                    if member.name.startswith("_") and member.name.endswith(".ipynb"):
-                                        tar.extract(member, task_dir)
-                                        notebook_path = task_dir / member.name
-                                        downloaded_notebooks.append(notebook_path)
-                                        print(f"  ✅ {notebook_path}")
-                        except Exception as e:
-                            print(f"  ❌ Error extracting: {e}")
-                        finally:
-                            Path(tmp_path).unlink(missing_ok=True)
-        
-        if not downloaded_notebooks:
-            print("❌ No notebooks downloaded")
+            print("❌ No notebooks downloaded from task instances")
             return False
         
         print(f"\n✅ Downloaded {len(downloaded_notebooks)} notebooks")

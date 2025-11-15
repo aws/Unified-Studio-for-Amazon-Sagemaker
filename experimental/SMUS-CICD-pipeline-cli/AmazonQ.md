@@ -444,6 +444,50 @@ Note: Replace `<PR-NUMBER>` with the actual PR number and `<RUN-ID>` with the ac
 
 When working with airflow-serverless workflows, always determine the current environment configuration dynamically:
 
+### AWS Service Name (Pre-GA)
+**IMPORTANT**: Until the service is fully GA, use the internal service name:
+- **Service Name**: `mwaaserverless-internal` (NOT `airflow-serverless`)
+- **Endpoint**: `https://airflow-serverless.{region}.api.aws/`
+- This is already configured in `src/smus_cicd/helpers/airflow_serverless.py`
+
+### AWS CLI Commands
+```bash
+# List available commands
+aws mwaaserverless-internal help
+
+# Get workflow run status
+aws mwaaserverless-internal get-workflow-run \
+  --workflow-arn "arn:aws:airflow-serverless:REGION:ACCOUNT:workflow/NAME" \
+  --run-id "RUN_ID" \
+  --region REGION \
+  --endpoint-url "https://airflow-serverless.REGION.api.aws/"
+
+# List workflows
+aws mwaaserverless-internal list-workflows \
+  --region REGION \
+  --endpoint-url "https://airflow-serverless.REGION.api.aws/"
+
+# List workflow runs
+aws mwaaserverless-internal list-workflow-runs \
+  --workflow-arn "ARN" \
+  --region REGION \
+  --endpoint-url "https://airflow-serverless.REGION.api.aws/"
+```
+
+### API Response Structure
+The `get-workflow-run` API returns status in `RunDetail.RunState`, not `Status`:
+```json
+{
+  "Status": null,
+  "RunDetail": {
+    "RunState": "SUCCESS",  // Actual status field
+    "StartedOn": "...",
+    "CompletedOn": "...",
+    "Duration": 751
+  }
+}
+```
+
 ### Environment Variables Check
 ```bash
 # Check current airflow-serverless endpoint
@@ -461,7 +505,8 @@ env | grep -E "(AWS_REGION|AWS_DEFAULT_REGION|AWS_ACCOUNT|AIRFLOW_SERVERLESS|OVE
 
 ### Dynamic Configuration Pattern
 When updating documentation or code, use this approach to get current values:
-- **Endpoint**: Read from `$AIRFLOW_SERVERLESS_ENDPOINT` environment variable
+- **Service Name**: `mwaaserverless-internal` (hardcoded until GA)
+- **Endpoint**: Read from `$AIRFLOW_SERVERLESS_ENDPOINT` or default to `https://airflow-serverless.{region}.api.aws/`
 - **Region**: Read from `$AWS_DEFAULT_REGION` or `$AWS_REGION` environment variable  
 - **Account**: Get from `aws sts get-caller-identity --query Account --output text`
 - **IAM Role Pattern**: `arn:aws:iam::{account}:role/datazone_usr_role_{project_id}_{environment_id}`
@@ -471,3 +516,4 @@ When updating documentation or code, use this approach to get current values:
 - Always reference environment variables or provide commands to determine current values
 - The airflow-serverless service may use different endpoints/regions across environments
 - Use `aws sts get-caller-identity` to verify you're working with the correct AWS account
+- **Pre-GA**: Service name is `mwaaserverless-internal` - this will change to `airflow-serverless` at GA

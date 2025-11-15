@@ -186,7 +186,9 @@ def bundle_command(
                 name = bundle_def.name
                 connection_name = bundle_def.connectionName
                 include_patterns = bundle_def.include if bundle_def.include else []
-                append_flag = bundle_def.append if hasattr(bundle_def, "append") else False
+                append_flag = (
+                    bundle_def.append if hasattr(bundle_def, "append") else False
+                )
 
                 if not connection_name or connection_name not in connections:
                     continue

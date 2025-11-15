@@ -214,27 +214,4 @@ smus_cicd/
 - **AWS Integrations**: DataZone, MWAA, S3, CloudFormation
 - **Bundle Management**: S3-based artifact storage and deployment
 
-## Troubleshooting
 
-### Common Issues
-- **AWS Credentials**: Ensure proper IAM permissions for DataZone and MWAA
-- **Domain/Project IDs**: Use `aws datazone list-domains` and `list-projects`
-- **S3 Permissions**: Verify access to bundle storage locations
-- **MWAA Connectivity**: Check VPC and security group configurations
-
-### Debug Mode
-```bash
-# Enable verbose logging
-export SMUS_CLI_DEBUG=1
-smus-cli <command> --verbose
-```
-
-### Integration Test Setup
-```bash
-# Deploy GitHub OIDC integration
-cd tests/integration/github
-./deploy-github-integration.sh
-
-# Run integration tests locally
-python scripts/validate.py --integration
-```
