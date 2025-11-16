@@ -540,11 +540,17 @@ def _deploy_storage_item(
         Tuple of (deployed_files_list, s3_uri) or (None, None) if failed
     """
     name = storage_config.name
+    has_target_dir = hasattr(storage_config, "targetDirectory")
     target_dir = (
         storage_config.targetDirectory
-        if hasattr(storage_config, "targetDirectory")
+        if has_target_dir
         else ""
     )
+    
+    typer.echo(f"🔍 DEBUG _deploy_storage_item: name='{name}', has_targetDirectory={has_target_dir}")
+    if has_target_dir:
+        typer.echo(f"🔍 DEBUG _deploy_storage_item: targetDirectory='{storage_config.targetDirectory}'")
+    typer.echo(f"🔍 DEBUG _deploy_storage_item: target_dir='{target_dir}'")
 
     typer.echo(f"Deploying storage item '{name}' to {target_dir}...")
 

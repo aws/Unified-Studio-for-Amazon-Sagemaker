@@ -34,16 +34,23 @@ class IntegrationTestBase:
             else:
                 test_name = f"integration_test_{int(time.time())}"
             
+            # Add worker ID for parallel execution to ensure unique log files
+            worker_id = os.environ.get('PYTEST_XDIST_WORKER', '')
+            if worker_id:
+                test_name = f"{test_name}_{worker_id}"
+            
             self.debug_log_file = os.path.join(log_dir, f"{test_name}.log")
 
-        self.logger = logging.getLogger("integration_test_debug")
+        # Use unique logger name per test to avoid conflicts
+        logger_name = f"integration_test_{self.current_test_name}"
+        self.logger = logging.getLogger(logger_name)
         self.logger.setLevel(logging.DEBUG)
 
         # Clear existing handlers
         self.logger.handlers.clear()
 
-        # File handler (mode='w' to overwrite, not append)
-        file_handler = logging.FileHandler(self.debug_log_file, mode='w')
+        # File handler with append mode for parallel safety
+        file_handler = logging.FileHandler(self.debug_log_file, mode='a')
         file_handler.setLevel(logging.DEBUG)
         formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
         file_handler.setFormatter(formatter)
@@ -70,6 +77,9 @@ class IntegrationTestBase:
         test_name = f"{self.__class__.__name__}__{method.__name__}"
         self.current_test_name = test_name
         
+        # Record test start time for this specific test
+        self.test_start_time = time.time()
+        
         self.setup_debug_logging()
         self.config = self._load_config()
         self.runner = CliRunner()
@@ -79,6 +89,7 @@ class IntegrationTestBase:
 
         self.test_commands = []
         self.logger.info(f"=== Starting test: {method.__name__} ===")
+        self.logger.info(f"Test start time: {self.test_start_time}")
         
         # Pre-register test result so pytest hooks can update it
         self.test_result = {
@@ -88,6 +99,44 @@ class IntegrationTestBase:
             "duration": 0,
         }
         IntegrationTestBase._test_results.append(self.test_result)
+    
+    def assert_workflow_run_after_test_start(self, run_id: str, workflow_arn: str):
+        """Assert that workflow run started after this test began.
+        
+        Args:
+            run_id: Workflow run ID
+            workflow_arn: Workflow ARN
+        """
+        import boto3
+        from datetime import datetime
+        
+        client = boto3.client('mwaaserverless-internal', region_name=self.config['region'])
+        
+        try:
+            response = client.get_workflow_run(
+                WorkflowArn=workflow_arn,
+                RunId=run_id
+            )
+            
+            # Get run start time (Unix timestamp)
+            run_start_time = response.get('StartTime')
+            if run_start_time:
+                # Convert to Unix timestamp if it's a datetime object
+                if isinstance(run_start_time, datetime):
+                    run_start_time = run_start_time.timestamp()
+                
+                self.logger.info(f"Workflow run start time: {run_start_time}")
+                self.logger.info(f"Test start time: {self.test_start_time}")
+                
+                assert run_start_time >= self.test_start_time, (
+                    f"Workflow run started at {run_start_time} before test started at {self.test_start_time}. "
+                    f"This is likely an old run from a previous test."
+                )
+                self.logger.info("✅ Confirmed: Workflow run started after test began")
+            else:
+                self.logger.warning("⚠️ Could not determine workflow run start time")
+        except Exception as e:
+            self.logger.warning(f"⚠️ Could not verify workflow run time: {e}")
 
     def teardown_method(self, method):
         """Teardown for each test method."""

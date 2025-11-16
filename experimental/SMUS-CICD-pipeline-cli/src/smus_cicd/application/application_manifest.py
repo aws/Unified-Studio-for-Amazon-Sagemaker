@@ -80,6 +80,7 @@ class StorageConfig:
     connectionName: str
     include: List[str] = field(default_factory=list)
     exclude: List[str] = field(default_factory=list)
+    targetDirectory: Optional[str] = None
 
 
 @dataclass
@@ -306,6 +307,7 @@ class ApplicationManifest:
                     connectionName=storage_data.get("connectionName", ""),
                     include=storage_data.get("include", []),
                     exclude=storage_data.get("exclude", []),
+                    targetDirectory=storage_data.get("targetDirectory"),
                 )
             )
 
@@ -469,6 +471,7 @@ class ApplicationManifest:
                             connectionName=storage_data.get("connectionName", ""),
                             include=storage_data.get("include", []),
                             exclude=storage_data.get("exclude", []),
+                            targetDirectory=storage_data.get("targetDirectory"),
                         )
                     )
 

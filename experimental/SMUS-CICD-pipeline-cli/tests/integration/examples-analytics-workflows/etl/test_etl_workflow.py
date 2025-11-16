@@ -146,6 +146,15 @@ class TestETLWorkflow(IntegrationTestBase):
         if workflow_arn:
             print(f"📋 Monitoring workflow: {workflow_arn}")
             result = self.run_cli_command(["logs", "--live", "--workflow", workflow_arn])
+            
+            # Extract run_id from logs output
+            run_id_match = re.search(r"Run:\s+([a-zA-Z0-9]+)", result["output"])
+            run_id = run_id_match.group(1) if run_id_match else None
+            
+            # Assert workflow run started after test began
+            if run_id:
+                self.assert_workflow_run_after_test_start(run_id, workflow_arn)
+            
             # logs --live waits for completion and returns success/failure
             if result["success"]:
                 print("✅ Workflow completed successfully")

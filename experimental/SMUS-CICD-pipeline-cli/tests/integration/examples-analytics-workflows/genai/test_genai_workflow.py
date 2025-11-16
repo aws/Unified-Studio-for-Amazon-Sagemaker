@@ -111,6 +111,10 @@ class TestGenAIWorkflow(IntegrationTestBase):
         run_id_match = re.search(r"Run:\s+([a-zA-Z0-9]+)", result["output"])
         run_id = run_id_match.group(1) if run_id_match else None
         
+        # Assert workflow run started after test began
+        if run_id and workflow_arn:
+            self.assert_workflow_run_after_test_start(run_id, workflow_arn)
+        
         if workflow_succeeded:
             print("✅ Workflow completed successfully")
         else:

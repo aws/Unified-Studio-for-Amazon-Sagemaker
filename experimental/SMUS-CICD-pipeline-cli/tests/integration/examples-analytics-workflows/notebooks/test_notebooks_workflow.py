@@ -79,6 +79,10 @@ class TestNotebooksWorkflow(IntegrationTestBase):
         run_id = run_id_match.group(1)
         print(f"📋 Run ID: {run_id}")
         
+        # Assert workflow run started after test began
+        if run_id and workflow_arn:
+            self.assert_workflow_run_after_test_start(run_id, workflow_arn)
+        
         # Step 6: Stream logs and wait for completion
         print("\n=== Step 6: Stream Logs ===")
         result = self.run_cli_command(["logs", "--live", "--workflow", workflow_arn])
