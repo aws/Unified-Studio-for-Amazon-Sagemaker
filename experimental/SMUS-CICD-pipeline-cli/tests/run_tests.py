@@ -68,9 +68,16 @@ def run_unit_tests(coverage=True, html_report=False):
     return subprocess.run(cmd).returncode
 
 
-def run_integration_tests(coverage=True, html_report=False, skip_slow=False):
+def run_integration_tests(coverage=True, html_report=False, skip_slow=False, parallel=False, workers=None):
     """Run integration tests with coverage."""
     cmd = ["python", "-m", "pytest", "tests/integration/", "-v"]
+
+    if parallel:
+        if workers:
+            cmd.extend(["-n", str(workers)])
+        else:
+            cmd.extend(["-n", "auto"])
+        cmd.extend(["--dist", "loadgroup"])  # Group tests by class for better isolation
 
     if coverage:
         cmd.extend(["--cov=src/smus_cicd", "--cov-append", "--cov-report=term-missing"])
@@ -89,15 +96,24 @@ def run_integration_tests(coverage=True, html_report=False, skip_slow=False):
         )
 
     print("🔗 Running integration tests...")
+    if parallel:
+        print(f"⚡ Parallel execution enabled with {workers or 'auto'} workers")
     if not check_aws_setup():
         print("⚠️  Warning: AWS credentials not configured. Some tests may fail.")
 
     return subprocess.run(cmd).returncode
 
 
-def run_all_tests(coverage=True, html_report=False, skip_slow=False):
+def run_all_tests(coverage=True, html_report=False, skip_slow=False, parallel=False, workers=None):
     """Run all tests with coverage."""
     cmd = ["python", "-m", "pytest", "tests/", "-v"]
+
+    if parallel:
+        if workers:
+            cmd.extend(["-n", str(workers)])
+        else:
+            cmd.extend(["-n", "auto"])
+        cmd.extend(["--dist", "loadgroup"])  # Group tests by class for better isolation
 
     if coverage:
         cmd.extend(["--cov=src/smus_cicd", "--cov-report=term-missing"])
@@ -113,6 +129,8 @@ def run_all_tests(coverage=True, html_report=False, skip_slow=False):
         )
 
     print("🚀 Running all tests...")
+    if parallel:
+        print(f"⚡ Parallel execution enabled with {workers or 'auto'} workers")
     if not check_aws_setup():
         print(
             "⚠️  Warning: AWS credentials not configured. Some integration tests may fail."
@@ -173,6 +191,16 @@ def main():
         action="store_true",
         help="Only generate coverage report from existing data",
     )
+    parser.add_argument(
+        "--parallel",
+        action="store_true",
+        help="Run tests in parallel using pytest-xdist",
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        help="Number of parallel workers (default: auto-detect CPU cores)",
+    )
 
     args = parser.parse_args()
 
@@ -197,11 +225,13 @@ def main():
         exit_code = run_unit_tests(coverage=coverage, html_report=html_report)
     elif args.type == "integration":
         exit_code = run_integration_tests(
-            coverage=coverage, html_report=html_report, skip_slow=args.skip_slow
+            coverage=coverage, html_report=html_report, skip_slow=args.skip_slow,
+            parallel=args.parallel, workers=args.workers
         )
     else:  # all
         exit_code = run_all_tests(
-            coverage=coverage, html_report=html_report, skip_slow=args.skip_slow
+            coverage=coverage, html_report=html_report, skip_slow=args.skip_slow,
+            parallel=args.parallel, workers=args.workers
         )
 
     # Generate coverage report if requested
@@ -210,6 +240,8 @@ def main():
 
     if exit_code == 0:
         print("✅ All tests passed!")
+        if args.parallel:
+            print(f"⚡ Tests ran in parallel with {args.workers or 'auto'} workers")
         if html_report:
             print(f"📁 Test results available in: tests/reports/")
             if args.type == "unit":

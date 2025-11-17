@@ -33,6 +33,26 @@ Each test generates its own log file in `tests/test-outputs/`:
 
 ## Running Tests in Parallel
 
+### Using run_tests.py (Recommended)
+
+The `tests/run_tests.py` script provides a convenient wrapper with parallel execution support:
+
+```bash
+# Run all integration tests in parallel (auto-detect CPU cores)
+python tests/run_tests.py --type integration --parallel
+
+# Run all integration tests with 4 workers
+python tests/run_tests.py --type integration --parallel --workers 4
+
+# Run all tests (unit + integration) in parallel
+python tests/run_tests.py --type all --parallel
+
+# Run with parallel execution and skip coverage (faster)
+python tests/run_tests.py --type integration --parallel --no-coverage
+```
+
+### Using pytest directly
+
 ### Run all integration tests in parallel (4 workers)
 ```bash
 pytest tests/integration/ -n 4 -v
