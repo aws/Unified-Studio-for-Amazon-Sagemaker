@@ -9,6 +9,7 @@ from typing import Optional
 import typer
 
 from ..application import ApplicationManifest
+from ..helpers.datazone import target_uses_serverless_airflow
 from ..helpers.utils import (  # noqa: F401
     build_domain_config,
     get_datazone_project_info,
@@ -81,7 +82,7 @@ def _check_status_changes(
         config = build_domain_config(target_config)
 
         # Check if this target uses serverless Airflow
-        uses_airflow_serverless = _target_uses_airflow_serverless(
+        uses_airflow_serverless = target_uses_serverless_airflow(
             manifest, target_config
         )
 
@@ -224,7 +225,7 @@ def _monitor_once(
                 )
 
             # Check if this target uses serverless Airflow
-            uses_airflow_serverless = _target_uses_airflow_serverless(
+            uses_airflow_serverless = target_uses_serverless_airflow(
                 manifest, target_config
             )
 
@@ -325,7 +326,7 @@ def _monitor_once(
                             typer.echo(f"   Owners: {owners_str}")
 
                     # Check if this target uses serverless Airflow
-                    uses_airflow_serverless = _target_uses_airflow_serverless(
+                    uses_airflow_serverless = target_uses_serverless_airflow(
                         manifest, target_config
                     )
 
@@ -417,73 +418,6 @@ def _monitor_once(
         else:
             typer.echo(f"Error monitoring pipeline: {e}", err=True)
         raise typer.Exit(1)
-
-
-def _target_uses_airflow_serverless(
-    manifest: ApplicationManifest, target_config
-) -> bool:
-    """
-    Check if a target uses serverless Airflow workflows.
-
-    Args:
-        manifest: Pipeline manifest object
-        target_config: Target configuration object
-
-    Returns:
-        True if target uses serverless Airflow, False otherwise
-    """
-    if hasattr(manifest.content, "workflows") and manifest.content.workflows:
-        import boto3
-
-        from ..helpers.datazone import get_project_id_by_name, resolve_domain_id
-
-        region = target_config.domain.region
-        project_name = target_config.project.name
-
-        try:
-            domain_id, _ = resolve_domain_id(
-                target_config.domain.name,
-                (
-                    target_config.domain.tags
-                    if hasattr(target_config.domain, "tags")
-                    else None
-                ),
-                region,
-            )
-
-            if not domain_id:
-                return False
-
-            project_id = get_project_id_by_name(project_name, domain_id, region)
-            if not project_id:
-                return False
-
-            client = boto3.client("datazone", region_name=region)
-            response = client.list_connections(
-                domainIdentifier=domain_id, projectIdentifier=project_id
-            )
-
-            # Check if any workflow uses serverless Airflow connection
-            # Serverless: type=WORKFLOWS_MWAA without MWAA ARN in physicalEndpoints
-            # MWAA: type=WORKFLOWS_MWAA with MWAA ARN in physicalEndpoints
-            for workflow in manifest.content.workflows:
-                conn_name = workflow.get("connectionName", "")
-                for conn in response.get("items", []):
-                    if conn["name"] == conn_name and conn["type"] == "WORKFLOWS_MWAA":
-                        # Check if physicalEndpoints contains MWAA ARN
-                        physical_endpoints = conn.get("physicalEndpoints", [])
-                        has_mwaa_arn = any(
-                            "glueConnection" in ep
-                            and "arn:aws:airflow" in str(ep.get("glueConnection", ""))
-                            for ep in physical_endpoints
-                        )
-                        # If no MWAA ARN, it's serverless
-                        if not has_mwaa_arn:
-                            return True
-        except Exception:
-            pass
-
-    return False
 
 
 def _monitor_airflow_serverless_workflows(

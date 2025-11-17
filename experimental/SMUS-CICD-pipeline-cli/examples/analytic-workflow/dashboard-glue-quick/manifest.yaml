@@ -15,18 +15,7 @@ content:
     url: https://github.com/datasets/covid-19.git
   quicksight:
   - dashboardId: sample-dashboard
-    source: quicksight/sample-dashboard.qs
-    overrideParameters:
-      ResourceIdOverrideConfiguration:
-        PrefixForAllResources: deployed-{proj.name}-covid-
-      Dashboards:
-      - DashboardId: e0772d4e-bd69-444e-a421-cb3f165dbad8
-        Name: TotalDeathByCountry-{proj.name}
-    permissions:
-    - principal: arn:aws:quicksight:${DEV_DOMAIN_REGION:us-east-2}:*:user/default/amirbo
-      actions:
-      - quicksight:DescribeDashboard
-      - quicksight:QueryDashboard
+    assetBundle: quicksight/sample-dashboard.qs
   workflows:
   - workflowName: covid_dashboard_glue_quick_pipeline
     connectionName: default.workflow_serverless
@@ -39,8 +28,6 @@ stages:
       region: ${DEV_DOMAIN_REGION:us-east-2}
     project:
       name: dev-marketing
-    environment_variables:
-      S3_PREFIX: dev
   test:
     stage: TEST
     domain:
@@ -59,6 +46,7 @@ stages:
     environment_variables:
       S3_PREFIX: test
       AWS_REGION: ${DEV_DOMAIN_REGION:us-east-1}
+      GRANT_TO: Admin
     deployment_configuration:
       storage:
       - name: dashboard-glue-quick
@@ -68,13 +56,17 @@ stages:
       - name: covid-19-dataset
         connectionName: default.s3_shared
         targetDirectory: repos
-    quicksight:
-    - dashboardId: deployed-test-monitoring-dashboard
-      source: export
-      permissions:
-      - principal: arn:aws:quicksight:us-east-1:198737698272:user/default/amirbo
-        actions:
-        - quicksight:DescribeDashboard
-        - quicksight:QueryDashboard
+      quicksight:
+        overrideParameters:
+          ResourceIdOverrideConfiguration:
+            PrefixForAllResources: deployed-{proj.name}-covid-
+          Dashboards:
+          - DashboardId: e0772d4e-bd69-444e-a421-cb3f165dbad8
+            Name: TotalDeathByCountry-{proj.name}
+        permissions:
+        - principal: arn:aws:quicksight:${DEV_DOMAIN_REGION:us-east-2}:*:user/default/amirbo
+          actions:
+          - quicksight:DescribeDashboard
+          - quicksight:QueryDashboard
 tests:
   folder: examples/analytic-workflow/dashboard-glue-quick/app_tests/

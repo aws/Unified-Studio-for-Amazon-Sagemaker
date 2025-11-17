@@ -197,20 +197,24 @@ def deploy_command(
             )
             raise
 
-        # Process bootstrap actions
-        if target_config.bootstrap:
-            typer.echo("Processing bootstrap actions...")
-            _process_bootstrap_actions(target_config, stage_name, config)
-
         # Find bundle file if not provided
         bundle_path = bundle
         if not bundle_path:
             bundle_path = _find_bundle_file(manifest, config)
 
-        # Deploy QuickSight dashboards
-        _deploy_quicksight_dashboards(
+        # Deploy QuickSight dashboards and capture imported dataset IDs
+        imported_dataset_ids = _deploy_quicksight_dashboards(
             manifest, target_config, stage_name, config, bundle_path
         )
+        
+        # Store imported dataset IDs in config for bootstrap actions
+        if imported_dataset_ids:
+            config["imported_quicksight_datasets"] = imported_dataset_ids
+
+        # Process bootstrap actions (after QuickSight deployment)
+        if target_config.bootstrap:
+            typer.echo("Processing bootstrap actions...")
+            _process_bootstrap_actions(target_config, stage_name, config)
 
         # Deploy bundle and track errors
         deployment_success = _deploy_bundle_to_target(
@@ -1333,6 +1337,7 @@ def _create_airflow_serverless_workflows(
             domain_id=domain_id,
             domain_name=domain_name,
             region=region,
+            stage_name=stage_name,
             env_vars=target_config.environment_variables or {},
         )
 
@@ -1842,6 +1847,7 @@ def _process_bootstrap_actions(
             "region": target_config.domain.region,
         },
         "region": config.get("region"),
+        "config": config,  # Pass full config including imported_quicksight_datasets
     }
 
     # Execute bootstrap actions
@@ -1862,25 +1868,33 @@ def _deploy_quicksight_dashboards(
     stage_name: str,
     config: Dict[str, Any],
     bundle: Optional[str],
-) -> None:
-    """Deploy QuickSight dashboards to target environment."""
+) -> List[str]:
+    """
+    Deploy QuickSight dashboards to target environment.
+    
+    Returns:
+        List of imported dataset IDs
+    """
     from ..helpers.quicksight import (
         grant_dashboard_permissions,
         import_dashboard,
         poll_import_job,
     )
 
-    # Get dashboards from content and stage
+    # Get dashboards from content
     dashboards = []
     if manifest.content and manifest.content.quicksight:
         dashboards.extend(manifest.content.quicksight)
-    if target_config.quicksight:
-        dashboards.extend(target_config.quicksight)
+
+    # Get QuickSight configuration from deployment_configuration
+    qs_config = None
+    if hasattr(target_config, 'deployment_configuration') and target_config.deployment_configuration:
+        qs_config = getattr(target_config.deployment_configuration, 'quicksight', None)
 
     typer.echo(f"🔍 DEBUG: Found {len(dashboards)} QuickSight dashboards to deploy")
 
     if not dashboards:
-        return
+        return []
 
     typer.echo("Deploying QuickSight dashboards...")
 
@@ -1899,12 +1913,17 @@ def _deploy_quicksight_dashboards(
                 "Warning: AWS account ID not found, skipping QuickSight deployment",
                 err=True,
             )
-            return
+            return []
+
+    imported_dataset_ids = []
 
     for dashboard_config in dashboards:
         dashboard_id = dashboard_config.dashboardId
         typer.echo(f"  Deploying dashboard: {dashboard_id}")
-        typer.echo(f"    🔍 DEBUG: source={dashboard_config.source}, bundle={bundle}")
+        
+        # Get assetBundle (with fallback to 'source' for backward compatibility during transition)
+        asset_bundle = getattr(dashboard_config, 'assetBundle', None) or getattr(dashboard_config, 'source', 'export')
+        typer.echo(f"    🔍 DEBUG: assetBundle={asset_bundle}, bundle={bundle}")
 
         try:
             # Determine bundle source
@@ -1921,11 +1940,11 @@ def _deploy_quicksight_dashboards(
             import zipfile
 
             # Determine file path in zip
-            if dashboard_config.source == "export":
+            if asset_bundle == "export":
                 dashboard_file_in_zip = f"quicksight/{dashboard_id}.qs"
             else:
-                # Use provided source path
-                dashboard_file_in_zip = dashboard_config.source
+                # Use provided asset bundle path
+                dashboard_file_in_zip = asset_bundle
 
             # Find the file in the zip (may be in a subdirectory)
             with zipfile.ZipFile(bundle, "r") as zip_ref:
@@ -1949,18 +1968,22 @@ def _deploy_quicksight_dashboards(
                 zip_ref.extract(file_in_zip, temp_dir)
                 bundle_path = os.path.join(temp_dir, file_in_zip)
 
-            # Import dashboard
+            # Import dashboard with override parameters from deployment_configuration
+            override_params = {}
+            if qs_config:
+                override_params = getattr(qs_config, 'overrideParameters', {}) or {}
+            
             job_id = import_dashboard(
                 bundle_path,
                 aws_account_id,
                 region,
-                dashboard_config.overrideParameters or {},
+                override_params,
             )
             result = poll_import_job(job_id, aws_account_id, region)
 
             # Print imported assets
             if result.get("Status") == "SUCCESSFUL":
-                typer.echo(f"    ✓ Dashboard deployed successfully")
+                typer.echo("    ✓ Dashboard deployed successfully")
 
                 # Get import job details to show created assets
                 import boto3
@@ -1972,25 +1995,33 @@ def _deploy_quicksight_dashboards(
 
                 # Print created assets
                 if job_details.get("Dashboards"):
-                    typer.echo(f"      Dashboards:")
+                    typer.echo("      Dashboards:")
                     for dash in job_details["Dashboards"]:
                         typer.echo(f"        - {dash['DashboardId']}")
 
                 if job_details.get("DataSets"):
-                    typer.echo(f"      DataSets:")
+                    typer.echo("      DataSets:")
                     for ds in job_details["DataSets"]:
-                        typer.echo(f"        - {ds['DataSetId']}")
+                        dataset_id = ds['DataSetId']
+                        typer.echo(f"        - {dataset_id}")
+                        imported_dataset_ids.append(dataset_id)
 
                 if job_details.get("DataSources"):
-                    typer.echo(f"      DataSources:")
+                    typer.echo("      DataSources:")
                     for source in job_details["DataSources"]:
                         typer.echo(f"        - {source['DataSourceId']}")
 
-            # Grant permissions
-            if dashboard_config.permissions:
+            # Grant permissions from deployment_configuration
+            permissions = []
+            if qs_config:
+                permissions = getattr(qs_config, 'permissions', []) or []
+            
+            if permissions:
                 grant_dashboard_permissions(
-                    dashboard_id, aws_account_id, region, dashboard_config.permissions
+                    dashboard_id, aws_account_id, region, permissions
                 )
 
         except Exception as e:
             typer.echo(f"    ✗ Error deploying dashboard: {e}", err=True)
+    
+    return imported_dataset_ids

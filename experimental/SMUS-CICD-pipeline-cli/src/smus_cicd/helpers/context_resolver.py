@@ -14,6 +14,7 @@ class ContextResolver:
         domain_id: str,
         domain_name: str,
         region: str,
+        stage_name: str = None,
         env_vars: Dict[str, str] = None,
     ):
         """
@@ -24,12 +25,14 @@ class ContextResolver:
             domain_id: Domain ID
             domain_name: Domain name
             region: AWS region
+            stage_name: Stage/target name (e.g., 'dev', 'test', 'prod')
             env_vars: Optional environment variables dict (defaults to os.environ)
         """
         self.project_name = project_name
         self.domain_id = domain_id
         self.domain_name = domain_name
         self.region = region
+        self.stage_name = stage_name
         self.env_vars = env_vars or dict(os.environ)
         self._context = None
 
@@ -81,6 +84,9 @@ class ContextResolver:
                 "id": self.domain_id,
                 "name": self.domain_name,
                 "region": self.region,
+            },
+            "stage": {
+                "name": self.stage_name or "",
             },
             "env": self.env_vars,
         }
@@ -137,7 +143,7 @@ class ContextResolver:
         Resolve all context variables in content.
 
         Args:
-            content: String content with {env.VAR} or {proj.property} variables
+            content: String content with {env.VAR}, {proj.property}, or {stage.name} variables
 
         Returns:
             Content with variables replaced
@@ -147,8 +153,8 @@ class ContextResolver:
         """
         context = self._build_context()
 
-        # Pattern matches {env.VAR}, {proj.property.nested}, or {domain.property}
-        pattern = r"\{(env|proj|domain)\.([^}]+)\}"
+        # Pattern matches {env.VAR}, {proj.property.nested}, {domain.property}, or {stage.name}
+        pattern = r"\{(env|proj|domain|stage)\.([^}]+)\}"
         unresolved = []
 
         def replacer(match):

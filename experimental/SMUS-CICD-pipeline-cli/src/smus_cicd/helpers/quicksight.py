@@ -4,6 +4,7 @@ import time
 from typing import Any, Dict, List, Optional
 
 import boto3
+from botocore.exceptions import ClientError
 
 from .logger import get_logger
 
@@ -346,3 +347,134 @@ def _download_bundle(url_or_path: str) -> bytes:
     response = requests.get(url_or_path, timeout=60)
     response.raise_for_status()
     return response.content
+
+
+def trigger_dataset_ingestion(
+    dataset_id: str,
+    aws_account_id: str,
+    region: str,
+    wait: bool = False,
+    timeout: int = 300,
+    ingestion_type: str = "FULL_REFRESH",
+) -> Dict[str, Any]:
+    """
+    Trigger QuickSight dataset ingestion to refresh data.
+
+    Args:
+        dataset_id: Dataset ID to refresh
+        aws_account_id: AWS account ID
+        region: AWS region
+        wait: Whether to wait for ingestion to complete
+        timeout: Maximum seconds to wait (default: 300)
+        ingestion_type: FULL_REFRESH or INCREMENTAL_REFRESH (default: FULL_REFRESH)
+
+    Returns:
+        Dict with ingestion_id, status, and success
+
+    Raises:
+        QuickSightDeploymentError: If ingestion fails
+    """
+    try:
+        client = boto3.client("quicksight", region_name=region)
+
+        # Create ingestion
+        ingestion_id = f"ingestion-{int(time.time())}"
+        response = client.create_ingestion(
+            DataSetId=dataset_id,
+            IngestionId=ingestion_id,
+            AwsAccountId=aws_account_id,
+            IngestionType=ingestion_type,
+        )
+
+        logger.info(f"Started dataset ingestion: {ingestion_id} (type: {ingestion_type})")
+
+        result = {
+            "ingestion_id": ingestion_id,
+            "arn": response.get("Arn"),
+            "status": response.get("IngestionStatus", "INITIALIZED"),
+            "success": True,
+            "dataset_id": dataset_id,
+        }
+
+        # Optionally wait for completion
+        if wait:
+            logger.info(f"Waiting for ingestion to complete (timeout: {timeout}s)...")
+            start_time = time.time()
+
+            while time.time() - start_time < timeout:
+                status_response = client.describe_ingestion(
+                    AwsAccountId=aws_account_id,
+                    DataSetId=dataset_id,
+                    IngestionId=ingestion_id,
+                )
+
+                status = status_response["Ingestion"]["IngestionStatus"]
+                result["status"] = status
+
+                if status == "COMPLETED":
+                    logger.info("Ingestion completed successfully")
+                    return result
+                elif status in ["FAILED", "CANCELLED"]:
+                    error_info = status_response["Ingestion"].get("ErrorInfo", {})
+                    raise QuickSightDeploymentError(
+                        f"Ingestion {status.lower()}: {error_info.get('Message', 'Unknown error')}"
+                    )
+
+                time.sleep(5)
+
+            raise QuickSightDeploymentError(
+                f"Ingestion timed out after {timeout}s (status: {result['status']})"
+            )
+
+        return result
+
+    except ClientError as e:
+        error_code = e.response["Error"]["Code"]
+        error_msg = e.response["Error"]["Message"]
+        raise QuickSightDeploymentError(
+            f"Failed to trigger ingestion: {error_code} - {error_msg}"
+        )
+
+
+def list_datasets(
+    aws_account_id: str,
+    region: str,
+) -> List[Dict[str, Any]]:
+    """
+    List all QuickSight datasets in the account.
+
+    Args:
+        aws_account_id: AWS account ID
+        region: AWS region
+
+    Returns:
+        List of dataset summaries
+
+    Raises:
+        QuickSightDeploymentError: If listing fails
+    """
+    try:
+        client = boto3.client("quicksight", region_name=region)
+        datasets = []
+        next_token = None
+
+        while True:
+            params = {"AwsAccountId": aws_account_id, "MaxResults": 100}
+            if next_token:
+                params["NextToken"] = next_token
+
+            response = client.list_data_sets(**params)
+            datasets.extend(response.get("DataSetSummaries", []))
+
+            next_token = response.get("NextToken")
+            if not next_token:
+                break
+
+        return datasets
+
+    except ClientError as e:
+        error_code = e.response["Error"]["Code"]
+        error_msg = e.response["Error"]["Message"]
+        raise QuickSightDeploymentError(
+            f"Failed to trigger ingestion: {error_code} - {error_msg}"
+        )

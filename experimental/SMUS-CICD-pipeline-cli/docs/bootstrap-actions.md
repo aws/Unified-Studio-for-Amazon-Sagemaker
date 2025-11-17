@@ -1,18 +1,182 @@
-# Bootstrap Actions - EventBridge Integration
+# Bootstrap Actions
 
 ← [Back to Main README](../README.md)
 
-Bootstrap actions allow you to emit custom EventBridge events during deployment to trigger downstream automation, notify external systems, or integrate with event-driven workflows.
+Bootstrap actions allow you to execute automated tasks during deployment, including triggering workflows, fetching logs, and emitting custom EventBridge events to integrate with CI/CD pipelines and event-driven automation.
 
 ## Overview
 
-When you deploy your application, the SMUS CLI can automatically emit events to Amazon EventBridge. These events can trigger:
-- AWS Lambda functions
-- Step Functions workflows
-- SNS notifications
-- Custom event-driven automation
+When you deploy your application, the SMUS CLI can automatically execute bootstrap actions. These actions can:
+- **Trigger workflow runs** automatically during deployment
+- **Fetch workflow logs** for validation or debugging
+- **Emit EventBridge events** to trigger downstream automation
+- **Integrate with CI/CD pipelines** without separate workflow execution jobs
 
-## Configuration
+## Available Actions
+
+### 1. Workflow Actions
+
+#### workflow.run - Trigger Workflow Execution
+
+Automatically trigger a workflow run during deployment.
+
+```yaml
+bootstrap:
+  actions:
+    - type: workflow.run
+      workflowName: etl_pipeline
+      wait: false  # optional, default: false
+```
+
+**Properties:**
+- `workflowName` (required): Name of the workflow to trigger
+- `wait` (optional): Whether to wait for workflow completion (default: false)
+- `region` (optional): AWS region override (defaults to target's domain region)
+
+**Use Case:** Trigger data processing workflows immediately after deploying new code/configs, eliminating the need for separate GitHub Actions jobs to run workflows.
+
+#### workflow.logs - Fetch Workflow Logs
+
+Fetch logs from a workflow run for validation or debugging.
+
+```yaml
+bootstrap:
+  actions:
+    - type: workflow.logs
+      workflowName: etl_pipeline
+      lines: 100  # optional, default: 100
+      runId: abc123  # optional, defaults to most recent run
+```
+
+**Properties:**
+- `workflowName` (required): Name of the workflow
+- `live` (optional): Stream logs continuously (default: false)
+- `lines` (optional): Number of log lines to fetch (default: 100)
+- `runId` (optional): Specific run ID (defaults to most recent)
+- `region` (optional): AWS region override
+
+**Use Case:** Validate workflow execution after deployment or debug issues.
+
+#### workflow.monitor - Monitor Workflow Status
+
+Get workflow status and recent run history.
+
+```yaml
+bootstrap:
+  actions:
+    - type: workflow.monitor
+      workflowName: etl_pipeline
+```
+
+**Properties:**
+- `workflowName` (required): Name of the workflow
+- `region` (optional): AWS region override
+
+**Returns:**
+- `workflow_name`: Full workflow name
+- `workflow_arn`: Workflow ARN
+- `recent_runs`: List of last 5 workflow runs with status
+
+**Use Case:** Check workflow health and recent execution history after deployment.
+
+### 2. QuickSight Actions
+
+#### quicksight.refresh_dataset - Trigger Dataset Ingestion
+
+Trigger QuickSight dataset ingestion to refresh dashboard data after deployment.
+
+```yaml
+bootstrap:
+  actions:
+    # Default: Refresh datasets imported by deploy command
+    - type: quicksight.refresh_dataset
+      refreshScope: IMPORTED  # default
+      ingestionType: FULL_REFRESH  # default
+      wait: false
+```
+
+**Properties:**
+- `refreshScope` (optional): Scope of datasets to refresh (default: IMPORTED)
+  - `IMPORTED`: Refresh only datasets imported during QuickSight dashboard deployment (default)
+  - `ALL`: Refresh all datasets in the AWS account
+  - `SPECIFIC`: Refresh specific datasets (requires datasetIds)
+- `datasetIds` (required if refreshScope=SPECIFIC): List of dataset IDs to refresh
+- `ingestionType` (optional): Type of refresh (default: FULL_REFRESH)
+  - `FULL_REFRESH`: Full data refresh
+  - `INCREMENTAL_REFRESH`: Incremental refresh (if supported by dataset)
+- `wait` (optional): Whether to wait for ingestion to complete (default: false)
+- `timeout` (optional): Maximum seconds to wait if wait=true (default: 300)
+- `region` (optional): AWS region override (defaults to target's domain region)
+
+**Note:** Uses the current AWS account from the deployment session.
+
+**Returns:**
+- `refresh_scope`: Scope used (IMPORTED, ALL, or SPECIFIC)
+- `ingestion_type`: Type of ingestion performed
+- `datasets_refreshed`: Number of successfully refreshed datasets
+- `total_datasets`: Total number of datasets attempted
+- `results`: List of ingestion results for each dataset
+
+**Use Case:** Automatically refresh QuickSight dashboards after deploying new data pipelines or ETL workflows.
+
+**Examples:**
+
+```yaml
+# Example 1: Refresh imported datasets (default)
+bootstrap:
+  actions:
+    - type: workflow.run
+      workflowName: etl_pipeline
+      wait: true
+    
+    - type: quicksight.refresh_dataset
+      # refreshScope: IMPORTED is default
+      wait: true
+
+# Example 2: Refresh specific datasets
+bootstrap:
+  actions:
+    - type: quicksight.refresh_dataset
+      refreshScope: SPECIFIC
+      datasetIds:
+        - sales-dashboard-dataset
+        - inventory-dataset
+      ingestionType: FULL_REFRESH
+      wait: true
+      timeout: 600
+
+# Example 3: Refresh all datasets in account
+bootstrap:
+  actions:
+    - type: quicksight.refresh_dataset
+      refreshScope: ALL
+      ingestionType: INCREMENTAL_REFRESH
+      wait: false
+
+# Example 4: Complete ETL + Dashboard refresh workflow
+bootstrap:
+  actions:
+    # Step 1: Run ETL workflow
+    - type: workflow.run
+      workflowName: data_processing_dag
+      wait: true
+    
+    # Step 2: Refresh imported QuickSight datasets
+    - type: quicksight.refresh_dataset
+      refreshScope: IMPORTED
+      ingestionType: FULL_REFRESH
+      wait: true
+      timeout: 600
+    
+    # Step 3: Verify workflow logs
+    - type: workflow.logs
+      workflowName: data_processing_dag
+      lines: 50
+```
+
+### 3. EventBridge Actions
+
+#### custom.put_events - Emit Custom Events
 
 Events are configured in the `bootstrap.actions` section of your manifest:
 

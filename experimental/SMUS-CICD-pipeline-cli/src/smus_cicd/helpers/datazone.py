@@ -1431,3 +1431,109 @@ def process_catalog_assets(
         )
 
     return True
+
+
+# Shared workflow helper functions
+def is_connection_serverless_airflow(
+    connection_name: str, domain_id: str, project_id: str, region: str
+) -> bool:
+    """
+    Check if a DataZone connection is serverless Airflow.
+
+    This handles the DataZone bug where both serverless and MWAA
+    connections have type WORKFLOWS_MWAA. We distinguish by checking
+    if physicalEndpoints contains a MWAA ARN.
+
+    Args:
+        connection_name: Connection name to check
+        domain_id: DataZone domain ID
+        project_id: DataZone project ID
+        region: AWS region
+
+    Returns:
+        True if connection is serverless Airflow, False otherwise
+    """
+    try:
+        client = _get_datazone_client(region)
+        response = client.list_connections(
+            domainIdentifier=domain_id, projectIdentifier=project_id
+        )
+
+        for conn in response.get("items", []):
+            if conn["name"] == connection_name:
+                # Check if it's a workflow connection
+                if conn["type"] == "WORKFLOWS_MWAA":
+                    # CRITICAL: Check physicalEndpoints for MWAA ARN
+                    # Serverless: type=WORKFLOWS_MWAA WITHOUT MWAA ARN
+                    # MWAA: type=WORKFLOWS_MWAA WITH MWAA ARN
+                    physical_endpoints = conn.get("physicalEndpoints", [])
+                    has_mwaa_arn = any(
+                        "glueConnection" in ep
+                        and "arn:aws:airflow" in str(ep.get("glueConnection", ""))
+                        for ep in physical_endpoints
+                    )
+                    # If no MWAA ARN, it's serverless
+                    return not has_mwaa_arn
+
+        return False
+
+    except Exception:
+        return False
+
+
+def target_uses_serverless_airflow(manifest, target_config) -> bool:
+    """
+    Check if a target uses serverless Airflow workflows.
+
+    This is the tested logic from monitor.py that properly detects
+    serverless Airflow by querying DataZone at runtime.
+
+    Args:
+        manifest: Application manifest
+        target_config: Target configuration
+
+    Returns:
+        True if target uses serverless Airflow, False otherwise
+    """
+    if not hasattr(manifest.content, "workflows") or not manifest.content.workflows:
+        return False
+
+    region = target_config.domain.region
+    project_name = target_config.project.name
+
+    try:
+        # Resolve domain and project IDs
+        domain_id, _ = resolve_domain_id(
+            target_config.domain.name,
+            (
+                target_config.domain.tags
+                if hasattr(target_config.domain, "tags")
+                else None
+            ),
+            region,
+        )
+
+        if not domain_id:
+            return False
+
+        project_id = get_project_id_by_name(project_name, domain_id, region)
+        if not project_id:
+            return False
+
+        # Check each workflow's connection
+        for workflow in manifest.content.workflows:
+            conn_name = workflow.get("connectionName", "")
+            if conn_name:
+                # Resolve project. prefix to default.
+                if conn_name.startswith("project."):
+                    conn_name = conn_name.replace("project.", "default.", 1)
+                
+                if is_connection_serverless_airflow(
+                    conn_name, domain_id, project_id, region
+                ):
+                    return True
+
+        return False
+
+    except Exception:
+        return False

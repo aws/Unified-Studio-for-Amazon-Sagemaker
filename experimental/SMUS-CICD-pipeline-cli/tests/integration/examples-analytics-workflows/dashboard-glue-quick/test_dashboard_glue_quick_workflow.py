@@ -74,6 +74,16 @@ class TestDashboardGlueQuickWorkflow(IntegrationTestBase):
         glue_client = boto3.client('glue', region_name='us-east-1')
         s3_client = boto3.client('s3', region_name='us-east-1')
         
+        # Also cleanup covid19_db to force recreation with fixed script
+        glue_client_us_east_2 = boto3.client('glue', region_name='us-east-2')
+        try:
+            glue_client_us_east_2.delete_table(DatabaseName='covid19_db', Name='us_simplified')
+            self.logger.info("✅ Deleted old covid19_db.us_simplified table")
+        except glue_client_us_east_2.exceptions.EntityNotFoundException:
+            pass
+        except Exception as e:
+            self.logger.warning(f"⚠️ Could not delete covid19_db.us_simplified: {e}")
+        
         databases_to_delete = ['analytic_workflow_test_db', 'covid19_summary_db']
         
         for db_name in databases_to_delete:
@@ -281,15 +291,43 @@ class TestDashboardGlueQuickWorkflow(IntegrationTestBase):
         role_arn = caller['Arn'].replace(':assumed-role/', ':role/').rsplit('/', 1)[0]
         
         lf = boto3.client('lakeformation', region_name='us-east-2')
+        
+        # Grant permissions on database first
+        try:
+            lf.grant_permissions(
+                Principal={'DataLakePrincipalIdentifier': role_arn},
+                Resource={'Database': {'Name': 'covid19_db'}},
+                Permissions=['DESCRIBE']
+            )
+            self.logger.info(f"✅ Granted database permissions to {role_arn}")
+        except Exception as e:
+            self.logger.warning(f"⚠️ Could not grant database permissions: {e}")
+        
+        # Grant permissions on table
         try:
             lf.grant_permissions(
                 Principal={'DataLakePrincipalIdentifier': role_arn},
                 Resource={'Table': {'DatabaseName': 'covid19_db', 'Name': 'us_simplified'}},
-                Permissions=['SELECT', 'DESCRIBE']
+                Permissions=['DESCRIBE']
             )
-            self.logger.info(f"✅ Granted Lake Formation permissions to {role_arn}")
+            self.logger.info(f"✅ Granted table DESCRIBE permissions to {role_arn}")
         except Exception as e:
-            self.logger.warning(f"⚠️ Could not grant permissions (may already exist): {e}")
+            self.logger.warning(f"⚠️ Could not grant table permissions: {e}")
+        
+        # Grant column-level SELECT permissions
+        try:
+            lf.grant_permissions(
+                Principal={'DataLakePrincipalIdentifier': role_arn},
+                Resource={'TableWithColumns': {
+                    'DatabaseName': 'covid19_db',
+                    'Name': 'us_simplified',
+                    'ColumnWildcard': {}
+                }},
+                Permissions=['SELECT']
+            )
+            self.logger.info(f"✅ Granted column SELECT permissions to {role_arn}")
+        except Exception as e:
+            self.logger.warning(f"⚠️ Could not grant column permissions: {e}")
         
         # Query table row count
         athena = boto3.client('athena', region_name='us-east-2')
@@ -313,7 +351,18 @@ class TestDashboardGlueQuickWorkflow(IntegrationTestBase):
             ResultConfiguration={'OutputLocation': 's3://amazon-sagemaker-198737698272-us-east-2-5330xnk7amt221/athena-results/'}
         )['QueryExecutionId']
         
-        time.sleep(5)
+        # Wait for query to complete
+        for _ in range(10):
+            time.sleep(3)
+            status = athena.get_query_execution(QueryExecutionId=query_id)
+            state = status['QueryExecution']['Status']['State']
+            if state in ['SUCCEEDED', 'FAILED', 'CANCELLED']:
+                break
+        
+        if state != 'SUCCEEDED':
+            error_msg = status['QueryExecution']['Status'].get('StateChangeReason', 'Unknown error')
+            self.logger.error(f"❌ Query failed: {error_msg}")
+            assert False, f"Query failed with state: {state}, reason: {error_msg}"
         
         result = athena.get_query_results(QueryExecutionId=query_id)
         rows = result['ResultSet']['Rows']

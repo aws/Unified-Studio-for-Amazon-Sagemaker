@@ -743,3 +743,171 @@ def cleanup_s3_dag(
     except Exception as e:
         logger.error(f"Failed to delete DAG from S3: {e}")
         return {"success": False, "error": str(e)}
+
+
+# Shared workflow helper functions
+def generate_workflow_name(
+    bundle_name: str, project_name: str, dag_name: str
+) -> str:
+    """
+    Generate standardized workflow name.
+
+    Args:
+        bundle_name: Application/bundle name
+        project_name: Project name
+        dag_name: DAG/workflow name
+
+    Returns:
+        Formatted workflow name: {bundle}_{project}_{dag}
+    """
+    safe_pipeline = bundle_name.replace("-", "_")
+    safe_project = project_name.replace("-", "_")
+    safe_dag = dag_name.replace("-", "_")
+    return f"{safe_pipeline}_{safe_project}_{safe_dag}"
+
+
+def find_workflow_arn(
+    workflow_name: str, region: str, connection_info: Dict[str, Any] = None
+) -> str:
+    """
+    Find workflow ARN by name.
+
+    Args:
+        workflow_name: Name of workflow to find
+        region: AWS region
+        connection_info: Optional connection info
+
+    Returns:
+        Workflow ARN
+
+    Raises:
+        Exception: If workflow not found
+    """
+    workflows = list_workflows(region=region, connection_info=connection_info)
+
+    for wf in workflows:
+        if wf["name"] == workflow_name:
+            return wf["workflow_arn"]
+
+    available = [wf["name"] for wf in workflows]
+    raise Exception(
+        f"Workflow '{workflow_name}' not found. Available workflows: {available}"
+    )
+
+
+def start_workflow_run_verified(
+    workflow_arn: str,
+    region: str,
+    run_name: str = None,
+    connection_info: Dict[str, Any] = None,
+    verify_started: bool = True,
+    wait_seconds: int = 10,
+) -> Dict[str, Any]:
+    """
+    Start workflow run and optionally verify it actually started.
+
+    This includes the tested logic from run.py that ensures the workflow
+    actually transitions to a running state, not just API success.
+
+    Args:
+        workflow_arn: Workflow ARN
+        region: AWS region
+        run_name: Optional run name
+        connection_info: Optional connection info
+        verify_started: Whether to verify workflow started (default: True)
+        wait_seconds: Seconds to wait before verification (default: 10)
+
+    Returns:
+        Dict with run_id, status, workflow_arn, success
+
+    Raises:
+        Exception: If workflow fails to start or verification fails
+    """
+    logger = get_logger("airflow_serverless")
+
+    # Start the workflow
+    result = start_workflow_run(
+        workflow_arn=workflow_arn,
+        run_name=run_name,
+        connection_info=connection_info,
+        region=region,
+    )
+
+    if not result.get("success"):
+        raise Exception(f"Failed to start workflow: {result.get('error')}")
+
+    run_id = result.get("run_id")
+    initial_status = result.get("status")
+
+    # Optionally verify workflow actually started
+    if verify_started:
+        logger.info(f"Verifying workflow started (initial status: {initial_status})")
+
+        # Valid running states
+        running_states = ["STARTING", "QUEUED", "RUNNING"]
+
+        if initial_status not in running_states:
+            logger.info(f"Waiting {wait_seconds}s before re-checking status...")
+            time.sleep(wait_seconds)
+
+            # Re-check status
+            status_check = get_workflow_status(
+                workflow_arn=workflow_arn, connection_info=connection_info, region=region
+            )
+
+            current_status = (
+                status_check.get("status")
+                if status_check.get("success")
+                else initial_status
+            )
+
+            if current_status not in running_states:
+                raise Exception(
+                    f"Workflow run started but status is '{current_status}' "
+                    f"(expected {running_states}). "
+                    f"The workflow may not have actually started."
+                )
+
+            logger.info(f"✓ Verified workflow status: {current_status}")
+            result["status"] = current_status
+
+    return result
+
+
+def get_workflow_logs(
+    workflow_arn: str,
+    run_id: str,
+    region: str,
+    max_lines: int = 100,
+    connection_info: Dict[str, Any] = None,
+) -> List[str]:
+    """
+    Get workflow logs for a specific run.
+
+    Args:
+        workflow_arn: Workflow ARN
+        run_id: Run ID
+        region: AWS region
+        max_lines: Maximum number of log lines
+        connection_info: Optional connection info
+
+    Returns:
+        List of formatted log lines
+    """
+    # Extract workflow name and construct log group
+    workflow_name = workflow_arn.split("/")[-1]
+    log_group = f"/aws/mwaa-serverless/{workflow_name}/"
+
+    log_events = get_cloudwatch_logs(log_group=log_group, region=region, limit=max_lines)
+
+    # Format log events as strings
+    formatted_logs = []
+    for event in log_events:
+        timestamp = time.strftime(
+            "%Y-%m-%d %H:%M:%S", time.localtime(event["timestamp"] / 1000)
+        )
+        stream = event.get("log_stream_name", "unknown")
+        message = event["message"]
+        formatted_logs.append(f"[{timestamp}] [{stream}] {message}")
+
+    return formatted_logs

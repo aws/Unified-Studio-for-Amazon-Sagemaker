@@ -15,10 +15,10 @@ The QuickSight deployment feature enables you to:
 
 ### Manifest Structure
 
-QuickSight dashboards can be configured in two locations:
+QuickSight dashboards are configured in two places:
 
-1. **Global dashboards** (`content.quicksight`) - deployed to all stages
-2. **Stage-specific dashboards** (`stages.<stage>.quicksight`) - deployed only to that stage
+1. **Content** (`content.quicksight`) - Defines WHAT dashboards to deploy
+2. **Deployment Configuration** (`stages.<stage>.deployment_configuration.quicksight`) - Defines HOW to deploy them (overrides, permissions)
 
 ```yaml
 applicationName: my-analytics-app
@@ -26,27 +26,37 @@ applicationName: my-analytics-app
 content:
   quicksight:
     - dashboardId: sales-dashboard
-      source: export
-      overrideParameters:
-        DataSetArn: "arn:aws:quicksight:us-east-1:123456789012:dataset/prod-sales-data"
-      permissions:
-        - principal: "arn:aws:quicksight:us-east-1:123456789012:user/default/admin"
-          actions:
-            - "quicksight:DescribeDashboard"
-            - "quicksight:ListDashboardVersions"
-            - "quicksight:QueryDashboard"
+      assetBundle: export  # or quicksight/sales-dashboard.qs
 
 stages:
-  prod:
+  dev:
+    domain:
+      region: us-east-2
     project:
-      name: prod-analytics
+      name: dev-analytics
+    deployment_configuration:
+      quicksight:
+        overrideParameters:
+          ResourceIdOverrideConfiguration:
+            PrefixForAllResources: dev-
+        permissions:
+          - principal: "arn:aws:quicksight:${DEV_DOMAIN_REGION:us-east-2}:*:user/default/admin"
+            actions:
+              - "quicksight:DescribeDashboard"
+              - "quicksight:QueryDashboard"
+  
+  prod:
     domain:
       region: us-east-1
-    quicksight:
-      - dashboardId: prod-metrics-dashboard
-        source: s3://my-bucket/dashboards/metrics.qs
+    project:
+      name: prod-analytics
+    deployment_configuration:
+      quicksight:
+        overrideParameters:
+          ResourceIdOverrideConfiguration:
+            PrefixForAllResources: prod-
         permissions:
-          - principal: "arn:aws:quicksight:us-east-1:123456789012:group/default/analysts"
+          - principal: "arn:aws:quicksight:us-east-1:*:group/default/analysts"
             actions:
               - "quicksight:DescribeDashboard"
               - "quicksight:QueryDashboard"
@@ -54,30 +64,31 @@ stages:
 
 ## Dashboard Configuration Fields
 
-### Required Fields
+### Content Level (content.quicksight)
 
-- **dashboardId** (string): QuickSight dashboard ID
+- **dashboardId** (string, required): QuickSight dashboard ID
+- **source** (string, optional): Dashboard bundle source
+  - `export` - Export from dev environment during bundle creation (default)
+  - `quicksight/dashboard.qs` - Path in bundle zip
 
-### Optional Fields
+### Deployment Configuration Level (deployment_configuration.quicksight)
 
-- **source** (string): Dashboard bundle source
-  - `export` - Export from dev environment during bundle creation
-  - `s3://bucket/path/file.qs` - Use existing bundle file
-  - Default: `export`
+- **overrideParameters** (object, optional): Parameters to override during import
+  - Common overrides: `ResourceIdOverrideConfiguration`, `DataSetArn`, `DataSourceArn`
+  - Format: AWS QuickSight OverrideParameters structure
+  - Supports variable substitution: `{proj.name}`, `${ENV_VAR}`
 
-- **overrideParameters** (object): Parameters to override during import
-  - Common overrides: `DataSetArn`, `DataSourceArn`, `ThemeArn`
-  - Format: Key-value pairs matching QuickSight asset bundle parameters
-
-- **permissions** (array): Dashboard permissions to grant after deployment
-  - **principal** (string): ARN of user or group
+- **permissions** (array, optional): Dashboard permissions to grant after deployment
+  - **principal** (string): ARN of user or group (use `*` for account wildcard)
   - **actions** (array): QuickSight permission actions
+
+**Note:** Use `*` instead of hardcoded account IDs in ARNs. Use `${REGION_VAR}` for regions.
 
 ## Workflow
 
 ### 1. Bundle Phase
 
-When running `smus-cli bundle`, dashboards with `source: export` are exported:
+When running `smus-cli bundle`, dashboards with `assetBundle: export` are exported:
 
 ```bash
 smus-cli bundle --targets dev
@@ -100,93 +111,130 @@ smus-cli deploy --targets prod
 **What happens:**
 1. Extracts dashboard bundle from zip
 2. Imports dashboard to target environment
-3. Applies override parameters (datasets, data sources)
+3. Applies override parameters from `deployment_configuration.quicksight`
 4. Grants permissions to specified principals
-5. Dashboard is live in target environment
+5. Dashboard and datasets are live in target environment
+6. Imported dataset IDs are captured for bootstrap actions
 
 ## Use Cases
 
 ### Use Case 1: Promote Dashboard from Dev to Prod
 
-**Scenario:** You have a dashboard in dev that you want to deploy to prod with different datasets.
+**Scenario:** You have a dashboard in dev that you want to deploy to prod with different resource prefixes.
 
 ```yaml
 content:
   quicksight:
     - dashboardId: sales-dashboard
-      source: export
-      overrideParameters:
-        DataSetArn: "arn:aws:quicksight:us-east-1:123456789012:dataset/${stage}-sales-data"
+      assetBundle: export
+
+stages:
+  dev:
+    deployment_configuration:
+      quicksight:
+        overrideParameters:
+          ResourceIdOverrideConfiguration:
+            PrefixForAllResources: dev-
+  
+  prod:
+    deployment_configuration:
+      quicksight:
+        overrideParameters:
+          ResourceIdOverrideConfiguration:
+            PrefixForAllResources: prod-
 ```
 
 **Steps:**
 1. Create dashboard in dev environment
-2. Add to manifest with `source: export`
+2. Add to manifest with `assetBundle: export`
 3. Run `smus-cli bundle --targets dev`
 4. Run `smus-cli deploy --targets prod`
 
-### Use Case 2: Deploy Pre-Built Dashboard
+### Use Case 2: Environment-Specific Permissions
 
-**Scenario:** You have a dashboard bundle stored in S3 that you want to deploy.
+**Scenario:** Different permissions for different environments.
 
 ```yaml
+content:
+  quicksight:
+    - dashboardId: analytics-dashboard
+      assetBundle: export
+
 stages:
-  prod:
-    quicksight:
-      - dashboardId: metrics-dashboard
-        source: s3://my-dashboards/metrics-v1.qs
+  dev:
+    deployment_configuration:
+      quicksight:
         permissions:
-          - principal: "arn:aws:quicksight:us-east-1:123456789012:group/default/viewers"
+          - principal: "arn:aws:quicksight:us-east-2:*:user/default/dev-team"
+            actions: ["quicksight:DescribeDashboard", "quicksight:QueryDashboard"]
+  
+  prod:
+    deployment_configuration:
+      quicksight:
+        permissions:
+          - principal: "arn:aws:quicksight:us-east-1:*:group/default/executives"
             actions: ["quicksight:DescribeDashboard", "quicksight:QueryDashboard"]
 ```
 
-### Use Case 3: Environment-Specific Dashboards
+### Use Case 3: Refresh Dashboards After ETL
 
-**Scenario:** Different dashboards for different environments.
+**Scenario:** Automatically refresh QuickSight datasets after deploying ETL workflows.
 
 ```yaml
+content:
+  quicksight:
+    - dashboardId: sales-dashboard
+      assetBundle: export
+  workflows:
+    - workflowName: etl_pipeline
+      connectionName: default.workflow_serverless
+
 stages:
-  dev:
-    quicksight:
-      - dashboardId: dev-debug-dashboard
-        source: export
-  
   prod:
-    quicksight:
-      - dashboardId: prod-executive-dashboard
-        source: export
-        permissions:
-          - principal: "arn:aws:quicksight:us-east-1:123456789012:group/default/executives"
-            actions: ["quicksight:DescribeDashboard", "quicksight:QueryDashboard"]
+    deployment_configuration:
+      quicksight:
+        overrideParameters:
+          ResourceIdOverrideConfiguration:
+            PrefixForAllResources: prod-
+    bootstrap:
+      actions:
+        - type: workflow.run
+          workflowName: etl_pipeline
+          wait: true
+        - type: quicksight.refresh_dataset
+          refreshScope: IMPORTED  # Refreshes datasets from dashboard import
+          wait: true
 ```
 
 ## Override Parameters
 
 Override parameters allow you to customize dashboards per environment. Common parameters:
 
+### Resource ID Prefix (Recommended)
+```yaml
+overrideParameters:
+  ResourceIdOverrideConfiguration:
+    PrefixForAllResources: prod-
+```
+
 ### Dataset ARN
 ```yaml
 overrideParameters:
-  DataSetArn: "arn:aws:quicksight:us-east-1:123456789012:dataset/prod-dataset"
+  DataSetArn: "arn:aws:quicksight:us-east-1:*:dataset/prod-dataset"
 ```
 
 ### Data Source ARN
 ```yaml
 overrideParameters:
-  DataSourceArn: "arn:aws:quicksight:us-east-1:123456789012:datasource/prod-source"
-```
-
-### Theme ARN
-```yaml
-overrideParameters:
-  ThemeArn: "arn:aws:quicksight:us-east-1:123456789012:theme/corporate-theme"
+  DataSourceArn: "arn:aws:quicksight:us-east-1:*:datasource/prod-source"
 ```
 
 ### Multiple Parameters
 ```yaml
 overrideParameters:
-  DataSetArn: "arn:aws:quicksight:us-east-1:123456789012:dataset/prod-sales"
-  DataSourceArn: "arn:aws:quicksight:us-east-1:123456789012:datasource/prod-db"
+  ResourceIdOverrideConfiguration:
+    PrefixForAllResources: ${STAGE}-
+  DataSetArn: "arn:aws:quicksight:${REGION}:*:dataset/${STAGE}-sales"
   ThemeArn: "arn:aws:quicksight:us-east-1:123456789012:theme/dark-mode"
 ```
 
@@ -275,7 +323,7 @@ aws:
 
 ## Best Practices
 
-1. **Use `source: export` for dev dashboards** - Ensures latest version is bundled
+1. **Use `assetBundle: export` for dev dashboards** - Ensures latest version is bundled
 2. **Override datasets per environment** - Keep dashboard logic same, swap data sources
 3. **Grant minimal permissions** - Only give users the actions they need
 4. **Test in dev first** - Validate dashboard works before promoting to prod

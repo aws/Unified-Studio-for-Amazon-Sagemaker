@@ -18,24 +18,6 @@ workflow_combined:
         MaxRetries: 0
         Timeout: 180
 
-    data_discovery_task:
-      operator: airflow.providers.amazon.aws.operators.glue.GlueJobOperator
-      retries: 0
-      job_name: discovery-glue-job
-      script_location: '{proj.connection.default.s3_shared.s3Uri}dashboard-glue-quick/bundle/glue_s3_list_job.py'
-      s3_bucket: '{proj.connection.default.s3_shared.bucket}'
-      iam_role_name: 'SMUSCICDTestRole'
-      region_name: '{domain.region}'
-      update_config: true
-      script_args:
-        '--BUCKET_NAME': '{proj.connection.default.s3_shared.bucket}'
-        '--REGION_NAME': '{domain.region}'
-      dependencies: [setup_covid_db_task]
-      create_job_kwargs:
-        GlueVersion: '4.0'
-        MaxRetries: 0
-        Timeout: 180
-
     data_summary_task:
       operator: airflow.providers.amazon.aws.operators.glue.GlueJobOperator
       retries: 0
@@ -51,7 +33,26 @@ workflow_combined:
         '--SUMMARY_DATABASE_NAME': 'covid19_summary_db'
         '--S3_DATABASE_PATH': '{proj.connection.default.s3_shared.s3Uri}dashboard-glue-quick/output/databases/covid19_summary_db/'
         '--BUCKET_NAME': '{proj.connection.default.s3_shared.bucket}'
-      dependencies: [data_discovery_task]
+      dependencies: [setup_covid_db_task]
+      create_job_kwargs:
+        GlueVersion: '4.0'
+        MaxRetries: 0
+        Timeout: 180
+
+    set_permission_check_task:
+      operator: airflow.providers.amazon.aws.operators.glue.GlueJobOperator
+      retries: 0
+      job_name: set-permission-check-job
+      script_location: '{proj.connection.default.s3_shared.s3Uri}dashboard-glue-quick/bundle/glue_set_permission_check.py'
+      s3_bucket: '{proj.connection.default.s3_shared.bucket}'
+      iam_role_name: 'SMUSCICDTestRole'
+      region_name: '{domain.region}'
+      update_config: true
+      script_args:
+        '--BUCKET_NAME': '{proj.connection.default.s3_shared.bucket}'
+        '--REGION_NAME': '{domain.region}'
+        '--ROLES': '{env.GRANT_TO}'
+      dependencies: [data_summary_task]
       create_job_kwargs:
         GlueVersion: '4.0'
         MaxRetries: 0

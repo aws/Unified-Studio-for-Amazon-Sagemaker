@@ -96,9 +96,20 @@ properties:
         additionalProperties: false
       quicksight:
         type: array
-        description: "QuickSight dashboards to deploy"
+        description: "QuickSight dashboards to deploy (dashboardId and assetBundle only)"
         items:
-          $ref: "#/definitions/quicksightDashboard"
+          type: object
+          required:
+            - dashboardId
+          properties:
+            dashboardId:
+              type: string
+              description: "QuickSight dashboard ID"
+            assetBundle:
+              type: string
+              description: "Dashboard asset bundle path in bundle zip (e.g., quicksight/dashboard.qs) or 'export' to export from source environment"
+              default: "export"
+          additionalProperties: false
       workflows:
         type: array
         description: "Workflow definitions for the application"
@@ -430,42 +441,28 @@ definitions:
         description: "Stage-specific deployment configuration"
         properties:
           storage:
-            oneOf:
-              - type: object
-                description: "Single storage configuration"
-                required: 
-                  - connectionName
-                  - directory
-                properties:
-                  connectionName:
-                    type: string
-                    description: "DataZone connection name"
-                  directory:
-                    type: string
-                    description: "Target directory"
-                additionalProperties: false
-              - type: array
-                description: "Multiple storage configurations"
-                items:
-                  type: object
-                  required:
-                    - connectionName
-                    - name
-                  properties:
-                    name:
-                      type: string
-                      description: "Name identifier for this storage content"
-                    connectionName:
-                      type: string
-                      description: "DataZone connection name"
-                    targetDirectory:
-                      type: string
-                      description: "Target directory"
-                    compression:
-                      type: string
-                      enum: ['gz', 'tar.gz']
-                      description: "Optional compression format"
-                  additionalProperties: false
+            type: array
+            description: "Storage deployment configurations"
+            items:
+              type: object
+              required:
+                - connectionName
+                - name
+              properties:
+                name:
+                  type: string
+                  description: "Name identifier for this storage content"
+                connectionName:
+                  type: string
+                  description: "DataZone connection name"
+                targetDirectory:
+                  type: string
+                  description: "Target directory"
+                compression:
+                  type: string
+                  enum: ['gz', 'tar.gz']
+                  description: "Optional compression format"
+              additionalProperties: false
           workflows:
             type: object
             description: "Workflow deployment configuration for this stage"
@@ -507,7 +504,32 @@ definitions:
               disable:
                 type: boolean
                 description: "Disable catalog asset processing for this stage"
-                default: false
+          quicksight:
+            type: object
+            description: "QuickSight deployment configuration for this stage"
+            properties:
+              overrideParameters:
+                type: object
+                description: "Parameters to override during dashboard import (AWS QuickSight OverrideParameters structure)"
+                additionalProperties: true
+              permissions:
+                type: array
+                description: "Dashboard permissions to grant"
+                items:
+                  type: object
+                  required:
+                    - principal
+                    - actions
+                  properties:
+                    principal:
+                      type: string
+                      description: "User or group ARN"
+                    actions:
+                      type: array
+                      description: "QuickSight permission actions"
+                      items:
+                        type: string
+                  additionalProperties: false
             additionalProperties: false
         additionalProperties: false
       environment_variables:
@@ -515,45 +537,4 @@ definitions:
         description: "Environment variables for this stage"
         additionalProperties:
           type: string
-      quicksight:
-        type: array
-        description: "Stage-specific QuickSight dashboards"
-        items:
-          $ref: "#/definitions/quicksightDashboard"
-    additionalProperties: false
-
-  quicksightDashboard:
-    type: object
-    required:
-      - dashboardId
-    properties:
-      dashboardId:
-        type: string
-        description: "QuickSight dashboard ID"
-      source:
-        type: string
-        description: "Dashboard bundle source (export or S3 path)"
-        default: "export"
-      overrideParameters:
-        type: object
-        description: "Parameters to override during import (AWS QuickSight OverrideParameters structure)"
-        additionalProperties: true
-      permissions:
-        type: array
-        description: "Dashboard permissions to grant"
-        items:
-          type: object
-          required:
-            - principal
-            - actions
-          properties:
-            principal:
-              type: string
-              description: "User or group ARN"
-            actions:
-              type: array
-              description: "QuickSight permission actions"
-              items:
-                type: string
-          additionalProperties: false
     additionalProperties: false

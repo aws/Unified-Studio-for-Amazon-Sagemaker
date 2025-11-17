@@ -1,10 +1,14 @@
 """IAM role management for SMUS projects."""
 
+import logging
 import os
+from datetime import datetime
 from typing import List, Optional
 
 import boto3
 import typer
+
+logger = logging.getLogger("smus_cicd.iam")
 
 
 def _load_trust_policy(account_id: str) -> str:
@@ -97,10 +101,6 @@ def create_or_update_project_role(
     # Create new role
     trust_policy = _load_trust_policy(account_id)
 
-    import logging
-    from datetime import datetime
-
-    logger = logging.getLogger("smus_cicd.iam")
     logger.info(f"Creating IAM role: {role_name} at {datetime.utcnow().isoformat()}")
 
     response = iam.create_role(

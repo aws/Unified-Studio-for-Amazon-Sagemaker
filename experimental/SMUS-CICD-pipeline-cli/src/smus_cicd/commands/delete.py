@@ -184,12 +184,12 @@ def delete_command(
                                     except dz.exceptions.ResourceNotFoundException:
                                         if output.upper() != "JSON":
                                             console.print(
-                                                f"    ✅ Environment {env_name} deleted after {i*2}s"
+                                                f"    ✅ Environment {env_name} deleted after {i * 2}s"
                                             )
                                         break
                     else:
                         if output.upper() != "JSON":
-                            console.print(f"  ℹ️  No environments to delete")
+                            console.print("  ℹ️  No environments to delete")
 
                 except Exception as e:
                     console.print(
@@ -205,7 +205,7 @@ def delete_command(
                 # Wait for project deletion
                 if not async_mode:
                     if output.upper() != "JSON":
-                        console.print(f"  ⏳ Waiting for project deletion...")
+                        console.print("  ⏳ Waiting for project deletion...")
 
                     for i in range(60):
                         try:
@@ -214,11 +214,13 @@ def delete_command(
                             )
                             status = proj.get("projectStatus", "UNKNOWN")
                             if output.upper() != "JSON" and i % 5 == 0:
-                                console.print(f"    Status: {status} (check {i+1}/60)")
+                                console.print(
+                                    f"    Status: {status} (check {i + 1}/60)"
+                                )
                             time.sleep(2)
                         except dz.exceptions.ResourceNotFoundException:
                             if output.upper() != "JSON":
-                                console.print(f"  ✅ Project deleted after {i*2}s")
+                                console.print(f"  ✅ Project deleted after {i * 2}s")
                             break
 
                 if async_mode:

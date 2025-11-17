@@ -4,8 +4,6 @@ from typing import Any, Dict, Optional
 
 import boto3
 
-from . import datazone
-
 
 def get_connection_type(
     connection_name: str, domain_id: str, project_id: str, region: str

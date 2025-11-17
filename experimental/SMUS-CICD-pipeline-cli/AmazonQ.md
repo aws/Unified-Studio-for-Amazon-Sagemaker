@@ -78,45 +78,42 @@ python tests/run_tests.py --type all
 
 ### 5. Integration Test Validation
 ```bash
-# Run integration tests with detailed logging (RECOMMENDED)
+# Run with detailed logging (creates logs in tests/test-outputs/)
 python run_integration_tests_with_logs.py
 
-# This creates:
-# - tests/test-outputs/{test_name}.log for each test's full output
-# - tests/test-outputs/test_results_summary.json with detailed results
-# - tests/test-outputs/test_results_summary.txt with human-readable summary
-# - tests/test-outputs/notebooks/ for executed notebook outputs
-
-# Alternative: Run integration tests without detailed logging
+# Or without logging
 python tests/run_tests.py --type integration
 
-# For faster iteration, skip slow tests:
+# Skip slow tests
 python tests/run_tests.py --type integration --skip-slow
 ```
 
 **IMPORTANT: Verifying Test Results**
-- **NEVER re-run a test just to check if it passed**
-- **ALWAYS check the logs first**: `tests/test-outputs/{test_name}.log`
-- **ALWAYS check output notebooks**: `tests/test-outputs/notebooks/` (if test executes notebooks)
-- Look for errors, stack traces, and assertion failures in logs
-- Verify notebook execution results and outputs
-- Only re-run tests after fixing identified issues
+- NEVER re-run test to check if it passed
+- ALWAYS check logs first: `tests/test-outputs/{test_name}.log`
+- ALWAYS check notebooks: `tests/test-outputs/notebooks/` (underscore-prefixed = actual outputs)
 
 ```bash
-# Check test logs
-ls -lh tests/test-outputs/*.log
+# Check logs and notebooks
 cat tests/test-outputs/TestMLWorkflow__test_ml_workflow_deployment.log
-
-# Check output notebooks
-ls -lh tests/test-outputs/notebooks/
-# Look for notebooks with underscore prefix (e.g., _notebook_name.ipynb)
-# These contain actual execution results
-
-# Search for errors in logs
+ls tests/test-outputs/notebooks/_*.ipynb
 grep -i "error\|failed\|exception" tests/test-outputs/*.log
+```
 
-# Check test summary
-cat tests/test-outputs/test_results_summary.txt
+**CRITICAL: Integration Tests Are Slow (10-15 min) - Test Fixes Quickly First**
+
+1. Identify issue from logs/notebooks
+2. Create small test script (30 sec - 1 min)
+3. Iterate on fix with small script
+4. Only then run full integration test
+
+```bash
+# Quick test examples:
+# Notebook: python -c "import papermill as pm; pm.execute_notebook('nb.ipynb', '/tmp/out.ipynb', parameters={'p': 'v'})"
+# Manifest: python -c "from smus_cicd.application.application_manifest import ApplicationManifest; m = ApplicationManifest.from_file('manifest.yaml'); print(m.initialization)"
+# CLI: smus-cli describe --manifest manifest.yaml
+
+# Run full integration test only after fix confirmed working
 ```
 
 ### 6. Final Validation and Commit
@@ -219,30 +216,14 @@ pytest tests/integration/examples-analytics-workflows/ml/test_ml_workflow.py::Te
 - Workflow: `examples/analytic-workflow/ml/workflows/ml_dev_workflow_v3.yaml`
 - Pipeline: `examples/analytic-workflow/ml/ml_pipeline.yaml`
 
-**Check executed notebook locally (ALWAYS CHECK HERE FIRST)**:
+**Check notebooks (ALWAYS CHECK HERE FIRST)**:
 ```bash
-# Integration tests automatically download notebooks to:
-ls -lh tests/test-outputs/notebooks/
+# Check local test outputs (underscore-prefixed = actual outputs)
+ls tests/test-outputs/notebooks/_*.ipynb
+grep '"output_type": "error"' tests/test-outputs/notebooks/_*.ipynb
 
-# Look for underscore-prefixed notebooks (actual execution results)
-# Example: tests/test-outputs/notebooks/_ml_orchestrator_notebook.ipynb
-
-# Open in Jupyter or view with cat/less
-jupyter notebook tests/test-outputs/notebooks/_ml_orchestrator_notebook.ipynb
-
-# Or check for errors in notebook
-grep -A 5 '"output_type": "error"' tests/test-outputs/notebooks/_ml_orchestrator_notebook.ipynb
-```
-
-**If notebooks not in test-outputs, download from S3**:
-```bash
-# Find latest output
-aws s3 ls s3://amazon-sagemaker-ACCOUNT-REGION-ID/shared/workflows/output/ml/bundle/workflows/ --recursive | grep output.tar.gz | sort | tail -1
-
-# Download and extract
-aws s3 cp s3://amazon-sagemaker-ACCOUNT-REGION-ID/PATH /tmp/ml_output.tar.gz
-cd /tmp && tar -xzf ml_output.tar.gz
-# View: /tmp/_ml_orchestrator_notebook.ipynb
+# If not local, download from S3
+aws s3 ls s3://amazon-sagemaker-ACCOUNT-REGION-ID/shared/workflows/output/ --recursive | grep output.tar.gz
 ```
 
 #### ETL Workflow Test
@@ -300,16 +281,9 @@ python -m pytest tests/integration -v
 
 ### Test Output Locations
 - **Logs**: `tests/test-outputs/{TestClass}__{test_method}.log`
-- **Output Notebooks**: `tests/test-outputs/notebooks/` (executed notebooks with results)
+- **Notebooks**: `tests/test-outputs/notebooks/_*.ipynb` (underscore = actual outputs)
 - **Reports**: `tests/reports/test-results.html`
 - **Coverage**: `tests/reports/coverage/`
-
-**How to Analyze Test Results:**
-1. **Check the log file first** - Contains full test execution output
-2. **Check output notebooks** - If test executes notebooks, check `tests/test-outputs/notebooks/`
-3. **Look for underscore-prefixed notebooks** - These are the actual executed outputs (e.g., `_notebook_name.ipynb`)
-4. **Search for errors** - Use grep to find errors in logs
-5. **Only re-run after fixing** - Don't re-run tests just to check status
 
 ### Common Test Patterns
 
@@ -342,34 +316,15 @@ aws mwaaserverless list-workflows --region us-east-2 --endpoint-url https://airf
 aws mwaaserverless list-workflow-runs --workflow-arn ARN --region us-east-2 --endpoint-url https://airflow-serverless.us-east-2.api.aws/
 ```
 
-**Check executed notebooks (ALWAYS CHECK HERE FIRST)**:
+**Check notebooks (ALWAYS CHECK HERE FIRST)**:
 ```bash
-# Integration tests automatically save notebooks to:
-ls -lh tests/test-outputs/notebooks/
+# Check local (underscore-prefixed = actual outputs)
+ls tests/test-outputs/notebooks/_*.ipynb
+grep '"output_type": "error"' tests/test-outputs/notebooks/_*.ipynb
 
-# Look for underscore-prefixed notebooks (actual execution results)
-# Example: tests/test-outputs/notebooks/_notebook_name.ipynb
-
-# Check for errors in notebook
-grep -A 5 '"output_type": "error"' tests/test-outputs/notebooks/_notebook_name.ipynb
-
-# Or use jq for detailed error info
-cat tests/test-outputs/notebooks/_notebook_name.ipynb | jq -r '.cells[] | select(.outputs != null) | select(.outputs[] | .output_type == "error") | "Cell \(.execution_count): \(.outputs[].ename)"'
-```
-
-**If notebooks not in test-outputs, use download script**:
-```bash
-# Use the automated download script
-python tests/scripts/download_workflow_outputs.py --workflow-arn <WORKFLOW_ARN>
-
-# This script:
-# - Finds the latest workflow run automatically
-# - Downloads all notebook outputs to /tmp/workflow_outputs/
-# - Extracts tar.gz files automatically
-# - Shows underscore-prefixed notebooks (true outputs with execution results)
-# - Provides paths to all downloaded files
-
-# Example output location: /tmp/workflow_outputs/_notebook_name.ipynb
+# If not local, use download script
+python tests/scripts/download_workflow_outputs.py --workflow-arn <ARN>
+# Downloads to /tmp/workflow_outputs/
 ```
 
 **Check Glue job parameters**:

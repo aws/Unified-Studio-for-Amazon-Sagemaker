@@ -171,3 +171,27 @@ def test_resolve_complex_yaml(mock_get_project_id, mock_get_role, mock_get_conne
     assert "s3://my-bucket/etl/script.py" in result
     assert "arn:aws:iam::123:role/TestRole" in result
     assert "us-east-1" in result
+
+
+@patch('smus_cicd.helpers.connections.get_project_connections')
+@patch('smus_cicd.helpers.datazone.get_project_user_role_arn')
+@patch('smus_cicd.helpers.datazone.get_project_id_by_name')
+def test_resolve_stage_name(mock_get_project_id, mock_get_role, mock_get_connections):
+    """Test resolving stage name variable."""
+    mock_get_project_id.return_value = "proj123"
+    mock_get_role.return_value = "arn:aws:iam::123:role/TestRole"
+    mock_get_connections.return_value = {}
+    
+    resolver = ContextResolver(
+        project_name="test-project",
+        domain_id="domain456",
+        domain_name="test-domain",
+        region="us-east-1",
+        stage_name="dev",
+        env_vars={}
+    )
+    
+    content = "Environment: {stage.name}, Prefix: {stage.name}-data"
+    result = resolver.resolve(content)
+    
+    assert result == "Environment: dev, Prefix: dev-data"

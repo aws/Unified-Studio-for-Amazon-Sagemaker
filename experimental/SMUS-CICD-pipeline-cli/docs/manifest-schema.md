@@ -142,25 +142,22 @@ See [Event Initialization Guide](event-bootstrap.md) for detailed documentation.
 ### QuickSight Dashboards
 ```yaml
 content:
-  quicksight:                  # Optional: Global QuickSight dashboards
+  quicksight:                  # Optional: QuickSight dashboards
     - dashboardId: sales-dashboard  # Required: Dashboard ID
-      source: export           # Optional: Bundle source (default: "export")
-      overrideParameters:      # Optional: Parameters to override
-        DataSetArn: arn:aws:quicksight:us-east-1:123456789012:dataset/prod-sales
-      permissions:             # Optional: Dashboard permissions
-        - principal: arn:aws:quicksight:us-east-1:123456789012:user/default/admin
-          actions:
-            - quicksight:DescribeDashboard
-            - quicksight:QueryDashboard
+      assetBundle: quicksight/sales-dashboard.qs  # Required: Path to asset bundle file
 
 stages:
   prod:
-    quicksight:                # Optional: Stage-specific dashboards
-      - dashboardId: prod-metrics
-        source: s3://bucket/dashboards/metrics.qs
-        permissions:
-          - principal: arn:aws:quicksight:us-east-1:123456789012:group/default/analysts
-            actions: ["quicksight:DescribeDashboard", "quicksight:QueryDashboard"]
+    deployment_configuration:
+      quicksight:              # Optional: Stage-specific QuickSight configuration
+        overrideParameters:    # Optional: Parameters to override during deployment
+          ResourceIdOverrideConfiguration:
+            PrefixForAllResources: prod-
+        permissions:           # Optional: Dashboard permissions
+          - principal: arn:aws:quicksight:us-east-1:123456789012:user/default/admin
+            actions:
+              - quicksight:DescribeDashboard
+              - quicksight:QueryDashboard
 ```
 
 **Dashboard Configuration:**
