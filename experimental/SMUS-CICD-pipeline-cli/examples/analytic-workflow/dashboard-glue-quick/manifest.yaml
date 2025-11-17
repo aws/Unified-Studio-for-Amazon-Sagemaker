@@ -20,9 +20,9 @@ content:
     - arn:aws:quicksight:${DEV_DOMAIN_REGION:us-east-2}:*:user/default/Admin/*
     viewers:
     - arn:aws:quicksight:${DEV_DOMAIN_REGION:us-east-2}:*:user/default/Admin/*
-  # workflows:
-  # - workflowName: covid_dashboard_glue_quick_pipeline
-  #   connectionName: default.workflow_serverless
+  workflows:
+  - workflowName: covid_dashboard_glue_quick_pipeline
+    connectionName: default.workflow_serverless
 stages:
   dev:
     stage: DEV
@@ -50,13 +50,18 @@ stages:
     environment_variables:
       S3_PREFIX: test
       AWS_REGION: ${DEV_DOMAIN_REGION:us-east-1}
-      GRANT_TO: Admin,aws-quicksight-service-role-v0
+      GRANT_TO: Admin,service-role/aws-quicksight-service-role-v0
     bootstrap:
       actions:
+      - type: workflow.logs
+        parameters:
+          workflowName: covid_dashboard_glue_quick_pipeline
+          live: true
+          lines: 10000
       - type: quicksight.refresh_dataset
         parameters:
           refreshScope: IMPORTED
-          ingestionType: FULL_REFRESH  # FULL_REFRESH or INCREMENTAL_REFRESH (if dataset configured for it)
+          ingestionType: FULL_REFRESH
           wait: false
     deployment_configuration:
       storage:

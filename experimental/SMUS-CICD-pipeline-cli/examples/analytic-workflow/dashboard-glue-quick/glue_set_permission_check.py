@@ -11,7 +11,13 @@ sts = boto3.client('sts')
 
 account_id = sts.get_caller_identity()['Account']
 role_names = args['ROLES'].split(',')
-roles = [f"arn:aws:iam::{account_id}:role/{name}" for name in role_names]
+roles = []
+for name in role_names:
+    # Handle service-role path if needed
+    if '/' in name:
+        roles.append(f"arn:aws:iam::{account_id}:role/{name}")
+    else:
+        roles.append(f"arn:aws:iam::{account_id}:role/{name}")
 
 databases = ['covid19_db', 'covid19_summary_db']
 tables = [
@@ -39,6 +45,16 @@ for role_arn in roles:
             Permissions=['SELECT']
         )
     print(f"✓ Granted permissions to {role_arn}")
+
+# Grant IAM_ALLOWED_PRINCIPALS for QuickSight UI visibility
+print("Granting IAM_ALLOWED_PRINCIPALS permissions...")
+for db, table in tables:
+    lf.grant_permissions(
+        Principal={'DataLakePrincipalIdentifier': 'IAM_ALLOWED_PRINCIPALS'},
+        Resource={'Table': {'CatalogId': account_id, 'DatabaseName': db, 'Name': table}},
+        Permissions=['ALL']
+    )
+    print(f"✓ Granted IAM_ALLOWED_PRINCIPALS to {db}.{table}")
 
 print("Validating data with Athena...")
 s3_output = f"s3://{args['BUCKET_NAME']}/athena-results/" if args['REGION_NAME'] == 'us-east-1' else f"s3://sagemaker-{args['REGION_NAME']}-{account_id}/athena-results/"

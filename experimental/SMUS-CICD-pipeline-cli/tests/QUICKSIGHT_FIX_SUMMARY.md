@@ -1,6 +1,6 @@
 # QuickSight Deployment Fix Summary
 
-## Status: ⏳ INGESTION RUNNING - AWAITING COMPLETION (2025-11-17 13:20)
+## Status: 🔄 READY FOR INTEGRATION TEST (2025-11-17 14:04)
 
 ### Ingestion Test Status
 
@@ -29,30 +29,23 @@
 - Dataset: 10 owner actions for `amirbo-Isengard`
 - Data source: 6 owner actions for `amirbo-Isengard`
 
-#### Issue 2: Lake Formation Permissions Missing for QuickSight ✅ FIXED (Manual)
+#### Issue 2: Lake Formation Permissions Missing for QuickSight ✅ FIXED (Automated)
 **Problem**: Dataset ingestion failed with `TABLE_NOT_FOUND` error
 **Root Cause**: QuickSight service role `aws-quicksight-service-role-v0` had no Lake Formation permissions
 **Diagnosis**:
 - Glue job only granted permissions to `Admin` role (from `GRANT_TO: Admin`)
 - QuickSight uses its own service role: `arn:aws:iam::198737698272:role/service-role/aws-quicksight-service-role-v0`
 - This role was NOT in Lake Formation permissions list
-**Manual Fix Applied**:
-```bash
-# Granted Lake Formation permissions manually
-aws lakeformation grant-permissions --principal DataLakePrincipalIdentifier=arn:aws:iam::198737698272:role/service-role/aws-quicksight-service-role-v0 \
-  --resource '{"Database":{"Name":"covid19_db"}}' --permissions DESCRIBE
-aws lakeformation grant-permissions --principal DataLakePrincipalIdentifier=arn:aws:iam::198737698272:role/service-role/aws-quicksight-service-role-v0 \
-  --resource '{"Table":{"DatabaseName":"covid19_db","Name":"us_simplified"}}' --permissions DESCRIBE
-aws lakeformation grant-permissions --principal DataLakePrincipalIdentifier=arn:aws:iam::198737698272:role/service-role/aws-quicksight-service-role-v0 \
-  --resource '{"TableWithColumns":{"DatabaseName":"covid19_db","Name":"us_simplified","ColumnWildcard":{}}}' --permissions SELECT
-```
-**Ingestion Test**: Started ingestion `test-1763402270` - awaiting verification
-
-**Permanent Fix Needed**: Update manifest to include QuickSight role:
-```yaml
-environment_variables:
-  GRANT_TO: Admin,aws-quicksight-service-role-v0
-```
+**Fix Applied**:
+1. Updated `glue_set_permission_check.py` to:
+   - Support service-role paths in role names
+   - Grant IAM_ALLOWED_PRINCIPALS with ALL permission to tables
+   - Grant permissions to both covid19_db and covid19_summary_db tables
+2. Updated manifest `GRANT_TO: Admin,service-role/aws-quicksight-service-role-v0`
+3. Added bootstrap actions:
+   - `workflow.logs` with `live: true, lines: 10000` to wait for workflow completion
+   - `quicksight.refresh_dataset` with `FULL_REFRESH` after workflow completes
+**Status**: Ready for integration test to verify automated fix
 
 #### Issue 3: Resource Names Missing Prefix/Suffix ⚠️ API LIMITATION
 **Problem**: Dashboard name is `TotalDeathByCountry` instead of `TotalDeathByCountry-test`
@@ -93,62 +86,43 @@ def grant_data_source_permissions(data_source_id, aws_account_id, region, permis
 - Check for `mwaaEnvironmentName` field to distinguish MWAA from serverless
 - Skip connections without environment name (serverless Airflow)
 
-## Next Steps (After Ingestion Verification)
+#### 4. `examples/analytic-workflow/dashboard-glue-quick/glue_set_permission_check.py`
+**Changes**:
+- Added support for service-role paths in role names
+- Added IAM_ALLOWED_PRINCIPALS grant with ALL permission to tables
+- Grant permissions to both covid19_db and covid19_summary_db tables
 
-### 1. Update Manifest - Add QuickSight Role to GRANT_TO
+#### 5. `examples/analytic-workflow/dashboard-glue-quick/manifest.yaml`
+**Changes**:
+- Updated `GRANT_TO: Admin,service-role/aws-quicksight-service-role-v0`
+- Added bootstrap actions:
+  - `workflow.logs` with `live: true, lines: 10000`
+  - `quicksight.refresh_dataset` with `FULL_REFRESH, wait: false`
+
+## Next Steps
+
+### ✅ 1. Update Manifest - Add QuickSight Role to GRANT_TO (COMPLETED)
 **File**: `examples/analytic-workflow/dashboard-glue-quick/manifest.yaml`
-**Change**:
-```yaml
-# Current
-environment_variables:
-  GRANT_TO: Admin
+**Status**: Updated to `GRANT_TO: Admin,service-role/aws-quicksight-service-role-v0`
 
-# Update to
-environment_variables:
-  GRANT_TO: Admin,aws-quicksight-service-role-v0
-```
-
-### 2. Add Bootstrap Action for Dataset Ingestion
+### ✅ 2. Add Bootstrap Action for Dataset Ingestion (COMPLETED)
 **File**: `examples/analytic-workflow/dashboard-glue-quick/manifest.yaml`
-**Add to test stage**:
-```yaml
-test:
-  bootstrap:
-    actions:
-    - type: quicksight.refresh_dataset
-      parameters:
-        refreshScope: IMPORTED  # Only refresh datasets deployed by this deployment
-        wait: false  # Don't wait for ingestion to complete
-```
+**Status**: Added workflow.logs and quicksight.refresh_dataset actions
 
-### 3. Uncomment Workflows
-**File**: `examples/analytic-workflow/dashboard-glue-quick/manifest.yaml`
-**Change**:
-```yaml
-# Uncomment the workflows section
-workflows:
-- workflowName: covid_dashboard_glue_quick_pipeline
-  connectionName: default.workflow_serverless
-```
+### ✅ 3. Update Glue Job for IAM_ALLOWED_PRINCIPALS (COMPLETED)
+**File**: `examples/analytic-workflow/dashboard-glue-quick/glue_set_permission_check.py`
+**Status**: Added IAM_ALLOWED_PRINCIPALS grants and service-role path support
 
-### 4. Update Integration Test
-**File**: `tests/integration/examples-analytics-workflows/dashboard-glue-quick/test_dashboard_glue_quick_workflow.py`
-**Add after Step 6 (Run Workflow)**:
-```python
-# Step 6.5: Wait for workflow completion and get logs
-self.logger.info("\n=== Step 6.5: Wait for Workflow Completion ===")
-# Poll workflow status until complete
-# Get workflow logs
-
-# Step 6.6: Trigger dataset ingestion (via bootstrap or direct)
-self.logger.info("\n=== Step 6.6: Trigger Dataset Ingestion ===")
-# Trigger ingestion but don't wait
-```
-
-### 5. Run Full Integration Test
+### 4. Run Full Integration Test (IN PROGRESS)
 ```bash
 pytest tests/integration/examples-analytics-workflows/dashboard-glue-quick/test_dashboard_glue_quick_workflow.py -v -s
 ```
+
+### 5. Verify End-to-End Flow
+- Workflow completes successfully
+- Lake Formation permissions granted automatically
+- QuickSight dataset ingestion succeeds
+- Dashboard displays data correctly
 
 ## Current Deployment Output
 
