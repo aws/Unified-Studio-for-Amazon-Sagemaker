@@ -1773,10 +1773,8 @@ def _upload_dag_to_s3(
                         CreateBucketConfiguration={"LocationConstraint": region},
                     )
             except Exception as e:
-                typer.echo(f"⚠️ Could not create bucket {bucket_name}: {e}")
-                # Fall back to existing bucket from tests
-                bucket_name = "amirbo-sample-data-588738596778-us-east-2"
-                object_key = f"airflow-serverless/workflows/{workflow_name}.yaml"
+                typer.echo(f"❌ Could not create bucket {bucket_name}: {e}")
+                raise typer.Exit(1)
 
         # Upload DAG file
         with open(dag_file_path, "r") as f:

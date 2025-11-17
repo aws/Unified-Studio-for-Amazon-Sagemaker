@@ -211,7 +211,7 @@ def _monitor_once(
         if output.upper() != "JSON":
             typer.echo(f"Pipeline: {manifest.application_name}")
 
-        # Validate MWAA/Overdrive health for targets before monitoring
+        # Validate MWAA/MWAA Serverless health for targets before monitoring
         healthy_targets = []
         for stage_name, target_config in targets_to_monitor.items():
             # Load AWS config
@@ -242,7 +242,7 @@ def _monitor_once(
                 else:
                     if output.upper() != "JSON":
                         typer.echo(
-                            f"⚠️  Skipping monitoring for target '{stage_name}' - Overdrive not healthy"
+                            f"⚠️  Skipping monitoring for target '{stage_name}' - MWAA Serverless not healthy"
                         )
             else:
                 # Validate MWAA health before monitoring
@@ -466,7 +466,7 @@ def _monitor_airflow_serverless_workflows(
 
         if relevant_workflows:
             serverlessairflow_data = {
-                "service": "overdrive",
+                "service": "mwaa-serverless",
                 "status": "healthy",
                 "workflows": {},
             }
@@ -600,25 +600,25 @@ def _monitor_airflow_serverless_workflows(
                         f"      {row[0]:<40} {row[1]:<10} {row[2]:<12} {row[3]:<12} {row[4]:<12} {row[5]:<20} {row[6]:<10}"
                     )
 
-            workflows_data["overdrive"] = serverlessairflow_data
+            workflows_data["mwaa-serverless"] = serverlessairflow_data
         else:
             if output.upper() != "JSON":
                 typer.echo(
                     "      ℹ️  No Serverless Airflow workflows found for this pipeline/target"
                 )
 
-            workflows_data["overdrive"] = {
-                "service": "overdrive",
+            workflows_data["mwaa-serverless"] = {
+                "service": "mwaa-serverless",
                 "status": "no_workflows",
                 "workflows": {},
             }
 
     except Exception as e:
         if output.upper() != "JSON":
-            typer.echo(f"      ❌ Error monitoring Overdrive workflows: {e}")
+            typer.echo(f"      ❌ Error monitoring MWAA Serverless workflows: {e}")
 
-        workflows_data["overdrive"] = {
-            "service": "overdrive",
+        workflows_data["mwaa-serverless"] = {
+            "service": "mwaa-serverless",
             "status": "error",
             "error": str(e),
             "workflows": {},

@@ -20,9 +20,9 @@ content:
     url: https://github.com/datasets/covid-19.git
   workflows:
   - workflowName: basic_test_workflow
-    connectionName: project.workflow_serverless
+    connectionName: default.workflow_serverless
   - workflowName: expected_failure_workflow
-    connectionName: project.workflow_serverless
+    connectionName: default.workflow_serverless
 stages:
   dev:
     stage: DEV
