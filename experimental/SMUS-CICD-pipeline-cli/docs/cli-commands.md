@@ -834,7 +834,7 @@ smus-cli logs --workflow arn:aws:airflow-serverless:us-east-2:123456789012:workf
 **Example Output:**
 ```
 📋 Fetching logs for workflow: IntegrationTestMLWorkflow_test_marketing_ml_dev_workflow_v3
-🔗 ARN: arn:aws:airflow-serverless:us-east-1:198737698272:workflow/IntegrationTestMLWorkflow_test_marketing_ml_dev_workflow_v3-A3zE3YBMKo
+🔗 ARN: arn:aws:airflow-serverless:us-east-1:123456789012:workflow/IntegrationTestMLWorkflow_test_marketing_ml_dev_workflow_v3-A3zE3YBMKo
 ================================================================================
 📁 Log Group: /aws/mwaa-serverless/IntegrationTestMLWorkflow_test_marketing_ml_dev_workflow_v3-A3zE3YBMKo/
 📊 Workflow Status: READY

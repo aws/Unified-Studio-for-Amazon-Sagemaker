@@ -674,8 +674,8 @@ cleanup:
 #### **Required Secrets**
 ```bash
 # Repository Settings → Secrets and Variables → Actions
-AWS_ROLE_ARN_DEV = arn:aws:iam::588738596778:role/GitHubActions-Dev
-AWS_ROLE_ARN_PROD = arn:aws:iam::588738596778:role/GitHubActions-Prod
+AWS_ROLE_ARN_DEV = arn:aws:iam::123456789012:role/GitHubActions-Dev
+AWS_ROLE_ARN_PROD = arn:aws:iam::123456789012:role/GitHubActions-Prod
 ```
 
 #### **Environment Variables**
