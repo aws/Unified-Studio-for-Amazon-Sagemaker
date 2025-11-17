@@ -480,20 +480,20 @@ def list_workflow_runs(
 def is_workflow_run_active(run: Dict[str, Any]) -> bool:
     """
     Check if a workflow run is still active (not completed).
-    
+
     A run is considered complete if it has ended_at OR has a terminal status.
     Terminal statuses: SUCCESS, FAILED, STOPPED, COMPLETED
-    
+
     Args:
         run: Run dictionary from list_workflow_runs with keys: run_id, status, ended_at, started_at
-        
+
     Returns:
         bool: True if run is still active, False if completed
     """
     terminal_statuses = {"SUCCESS", "FAILED", "STOPPED", "COMPLETED"}
     ended_at = run.get("ended_at")
     status = run.get("status")
-    
+
     # Run is complete if it has ended_at OR has terminal status
     return not (ended_at or status in terminal_statuses)
 
