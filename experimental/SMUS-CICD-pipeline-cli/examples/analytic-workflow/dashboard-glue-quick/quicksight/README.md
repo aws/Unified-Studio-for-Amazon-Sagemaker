@@ -62,13 +62,13 @@ To clean up test dashboards:
 ```bash
 # Delete test dashboard in dev (us-east-2)
 aws quicksight delete-dashboard \
-  --aws-account-id 198737698272 \
+  --aws-account-id 123456789012 \
   --dashboard-id test-covid-dashboard \
   --region us-east-2
 
 # Delete deployed dashboard in test (us-east-1)
 aws quicksight delete-dashboard \
-  --aws-account-id 198737698272 \
+  --aws-account-id 123456789012 \
   --dashboard-id deployed-test-covid-dashboard \
   --region us-east-1
 ```

@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
+# TODO: Replace {account_id} placeholders with test_config.get_account_id()
 import boto3
 import re
 
 def delete_generated_files():
     s3 = boto3.client('s3')
-    bucket = 'datazone-058264284947-us-east-1-cicd-test-domain'
+    bucket = 'datazone-{account_id}-us-east-1-cicd-test-domain'
     prefix = ''
     pattern = re.compile(r'generated_test_dag_\d+_\d+\.(py|cpython.*\.pyc)$')
     

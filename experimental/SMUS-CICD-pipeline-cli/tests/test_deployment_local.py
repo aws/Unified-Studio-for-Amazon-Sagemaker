@@ -13,11 +13,12 @@ import numpy as np
 import tempfile
 import tarfile
 import os
+from test_config import get_mlflow_arn, get_region
 
 # Configuration from successful training
-MLFLOW_ARN = "arn:aws:sagemaker:us-east-2:198737698272:mlflow-tracking-server/smus-integration-mlflow-use2"
+MLFLOW_ARN = get_mlflow_arn()
 MODEL_NAME = "realistic-classifier-v1"
-REGION = "us-east-2"
+REGION = get_region()
 INSTANCE_TYPE = "ml.m5.large"
 SKLEARN_VERSION = "1.2-1"  # Match training version
 

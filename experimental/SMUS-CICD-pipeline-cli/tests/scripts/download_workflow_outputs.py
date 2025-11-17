@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# TODO: Replace {account_id} placeholders with test_config.get_account_id()
 """Download notebook outputs from a workflow run."""
 
 import argparse
@@ -104,7 +105,7 @@ def download_workflow_outputs(s3_bucket: str, output_dir: str, run_id: str = Non
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Download workflow notebook outputs")
-    parser.add_argument("s3_bucket", help="S3 bucket name (e.g., amazon-sagemaker-198737698272-us-east-2-4uoxu0uszmmxbd)")
+    parser.add_argument("s3_bucket", help="S3 bucket name (e.g., amazon-sagemaker-{account_id}-us-east-2-4uoxu0uszmmxbd)")
     parser.add_argument("--output-dir", default="tests/test-outputs/1-notebooks", help="Output directory")
     parser.add_argument("--run-id", help="Filter by specific run ID (optional)")
     

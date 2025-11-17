@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# TODO: Replace {account_id} placeholders with test_config.get_account_id()
 """Test notebook download logic with real workflow data."""
 
 import boto3
@@ -7,7 +8,7 @@ import sys
 import os
 
 # Test data
-WORKFLOW_ARN = "arn:aws:airflow-serverless:us-east-2:198737698272:workflow/IntegrationTestMLTraining_test_marketing_ml_training_workflow-kzdAIFgVi0"
+WORKFLOW_ARN = "arn:aws:airflow-serverless:us-east-2:{account_id}:workflow/IntegrationTestMLTraining_test_marketing_ml_training_workflow-kzdAIFgVi0"
 RUN_ID = "8eWcohEKJp9jomr"
 TASK_INSTANCE_ID = "ex_b97788da-5efd-4347-8755-1ba2ed15db18_ml_training_notebook_1"
 

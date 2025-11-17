@@ -90,7 +90,7 @@ stages:
         create: true
         profile_name: All capabilities
         owners:
-        - arn:aws:iam::588738596778:role/GitHubActionsRole-SMUS-CLI-Tests
+        - arn:aws:iam::123456789012:role/GitHubActionsRole-SMUS-CLI-Tests
         - Eng1
         contributors: []
       environments:

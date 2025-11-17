@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# TODO: Replace {account_id} placeholders with test_config.get_account_id()
 """Quick test to validate covid19_db.us_simplified table."""
 import boto3
 import time
@@ -61,7 +62,7 @@ except Exception as e:
 
 # Test queries
 athena = boto3.client('athena', region_name=region)
-output_location = 's3://amazon-sagemaker-198737698272-us-east-2-5330xnk7amt221/athena-results/'
+output_location = 's3://amazon-sagemaker-{account_id}-us-east-2-5330xnk7amt221/athena-results/'
 
 # Query 1: Row count
 print("\n📊 Testing row count...")

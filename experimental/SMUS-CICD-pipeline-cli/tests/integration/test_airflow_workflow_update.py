@@ -1,4 +1,5 @@
 """Test Airflow Serverless workflow update on conflict."""
+# TODO: Replace {account_id} placeholders with test_config.get_account_id()
 import pytest
 from smus_cicd.helpers import airflow_serverless
 
@@ -7,8 +8,8 @@ from smus_cicd.helpers import airflow_serverless
 def workflow_config():
     return {
         "workflow_name": "test-workflow-update-conflict",
-        "dag_s3_location": "s3://amazon-sagemaker-198737698272-us-east-2-5330xnk7amt221/shared/ml/bundle/training-workflows/ml_training_workflow.yaml",
-        "role_arn": "arn:aws:iam::198737698272:role/SMUSCICDTestRole",
+        "dag_s3_location": "s3://amazon-sagemaker-{account_id}-us-east-2-5330xnk7amt221/shared/ml/bundle/training-workflows/ml_training_workflow.yaml",
+        "role_arn": "arn:aws:iam::{account_id}:role/SMUSCICDTestRole",
         "region": "us-east-2",
         "description": "Test workflow for conflict handling",
     }

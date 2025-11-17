@@ -1,7 +1,10 @@
+import os
 import boto3
 
-region = 'us-east-2'
-account_id = '198737698272'
+region = os.environ.get('AWS_REGION', 'us-east-2')
+# Get account ID from STS
+sts = boto3.client('sts')
+account_id = sts.get_caller_identity()['Account']
 
 qs = boto3.client('quicksight', region_name=region)
 

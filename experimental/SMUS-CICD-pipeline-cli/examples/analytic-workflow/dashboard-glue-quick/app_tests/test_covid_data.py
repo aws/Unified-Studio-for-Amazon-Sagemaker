@@ -22,7 +22,7 @@ def glue_client(smus_config):
 @pytest.fixture(scope="module")
 def s3_output_location(smus_config):
     """S3 location for Athena query results."""
-    account_id = smus_config.get('account_id', '198737698272')
+    account_id = smus_config.get('account_id', '123456789012')
     return f"s3://amazon-sagemaker-{account_id}-{smus_config['region']}-{smus_config['project_id']}/athena-results/"
 
 

@@ -4,6 +4,7 @@
 import subprocess
 import os
 import sys
+from test_config import get_s3_uri
 
 def test_ml_training_upload():
     """Test uploading ML training code using the refactored method."""
@@ -31,7 +32,7 @@ def test_ml_training_upload():
     
     # Test sync command directly
     print(f"\n🔄 Testing sync command (dry-run)...")
-    s3_uri = "s3://amazon-sagemaker-198737698272-us-east-2-b1rdp2ugixo97t/shared/ml/"
+    s3_uri = get_s3_uri('shared/ml/')
     
     cmd = ["aws", "s3", "sync", ml_dir, s3_uri, "--dryrun", 
            "--exclude", "*.pyc", 

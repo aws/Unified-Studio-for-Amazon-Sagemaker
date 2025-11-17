@@ -37,7 +37,8 @@ def setup_test_dashboard():
     # Configuration
     dashboard_bundle = os.path.join(os.path.dirname(__file__), "sample-dashboard.qs")
     dashboard_id = "test-covid-dashboard"
-    principal = f"arn:aws:quicksight:{dev_region}:{account_id}:user/default/amirbo"
+    quicksight_user = os.environ.get("QUICKSIGHT_USER", "default-user")
+    principal = f"arn:aws:quicksight:{dev_region}:{account_id}:user/default/{quicksight_user}"
     
     print(f"Setting up test dashboard: {dashboard_id}")
     print(f"  Bundle: {dashboard_bundle}")
