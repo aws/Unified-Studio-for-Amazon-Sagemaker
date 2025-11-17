@@ -40,7 +40,8 @@ def substitute_env_vars(data: Union[Dict, List, str]) -> Union[Dict, List, str]:
     Supports ${VAR_NAME} syntax for environment variable substitution.
 
     Pseudo environment variables (auto-resolved from AWS credentials):
-    - STS_ACCOUNT_ID: Current AWS account ID from STS
+    - AWS_ACCOUNT_ID: Current AWS account ID from STS
+    - STS_ACCOUNT_ID: Current AWS account ID from STS (alias for AWS_ACCOUNT_ID)
     - STS_REGION: Current AWS region from boto3 session
 
     Args:
@@ -62,7 +63,7 @@ def substitute_env_vars(data: Union[Dict, List, str]) -> Union[Dict, List, str]:
             default_value = match.group(2) if match.group(2) is not None else ""
 
             # Handle pseudo environment variables
-            if var_name == "STS_ACCOUNT_ID":
+            if var_name == "STS_ACCOUNT_ID" or var_name == "AWS_ACCOUNT_ID":
                 import boto3
 
                 return boto3.client("sts").get_caller_identity()["Account"]
