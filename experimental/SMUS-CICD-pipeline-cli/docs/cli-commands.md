@@ -163,9 +163,9 @@ smus-cli run --workflow test_dag --output JSON
 2.10.1
 ```
 
-**Example Output (TEXT format - Serverless Airflow):**
+**Example Output (TEXT format - Amazon MWAA Serverless):**
 ```
-🎯 Stage: test (Serverless Airflow)
+🎯 Stage: test (Amazon MWAA Serverless)
 🚀 Starting workflow run: MyPipeline_test_test_dag
 🔗 ARN: arn:aws:airflow-serverless:us-east-2:123456789012:workflow/MyPipeline_test_test_dag
 ✅ Workflow run started successfully

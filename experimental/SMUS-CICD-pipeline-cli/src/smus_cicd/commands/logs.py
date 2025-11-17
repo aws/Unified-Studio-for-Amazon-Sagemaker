@@ -247,24 +247,22 @@ def _live_log_monitoring(
             # Check completion status via ended_at field or terminal status
             active_runs = []
             completed_runs = []
-            terminal_statuses = {"SUCCESS", "FAILED", "STOPPED", "COMPLETED"}
 
             for run in runs:
-                ended_at = run.get("ended_at")
                 status = run.get("status")
 
                 if output.upper() != "JSON":
                     typer.echo(
-                        f"🔍 DEBUG: Run {run.get('run_id')}: ended_at={ended_at}, status={status}"
+                        f"🔍 DEBUG: Run {run.get('run_id')}: ended_at={run.get('ended_at')}, status={status}"
                     )
 
-                # Run is complete if it has ended_at OR has terminal status
-                if ended_at or status in terminal_statuses:
-                    run["final_status"] = status or "COMPLETED"
-                    completed_runs.append(run)
-                else:
+                # Use shared helper to check if run is active
+                if airflow_serverless.is_workflow_run_active(run):
                     active_runs.append(run)
                     run["final_status"] = None
+                else:
+                    run["final_status"] = status or "COMPLETED"
+                    completed_runs.append(run)
 
             if output.upper() != "JSON":
                 typer.echo(

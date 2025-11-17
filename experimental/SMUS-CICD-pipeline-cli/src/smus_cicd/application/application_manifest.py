@@ -358,6 +358,7 @@ class ApplicationManifest:
                     profile_name=project_data.get("profileName"),
                     owners=project_data.get("owners", []),
                     contributors=project_data.get("contributors", []),
+                    role=project_data.get("role"),
                 )
 
             # Parse bootstrap config

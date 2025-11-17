@@ -484,7 +484,7 @@ stages:
 - `role` (optional): Customer-provided IAM role for the project
   - `arn`: IAM role ARN (e.g., `arn:aws:iam::123456789012:role/MyProjectRole`)
   - Use `*` as wildcard for account ID: `arn:aws:iam::*:role/MyProjectRole` (replaced with current account)
-  - The role must have a trust policy allowing DataZone and Airflow Serverless service principals
+  - The role must have a trust policy allowing DataZone and Amazon MWAA Serverless service principals
 - `userParameters` (optional): Override project profile parameters
   - `EnvironmentConfigurationName`: Environment configuration to override
   - `parameters`: Array of name/value pairs
@@ -734,7 +734,7 @@ bootstrap:
 **Properties:**
 - `mwaaEnvironmentName` (required): MWAA environment name
 
-#### WORKFLOWS_SERVERLESS - Serverless Airflow Workflows
+#### WORKFLOWS_SERVERLESS - Amazon MWAA Serverless Workflows
 
 ```yaml
 - name: serverless-workflows

@@ -115,15 +115,14 @@ def _check_status_changes(
                 if recent_runs:
                     latest_run = recent_runs[0]
                     run_id = latest_run.get("run_id", "N/A")
-                    ended_at = latest_run.get("ended_at")
                     status = latest_run.get("status")
 
-                    # Check if run has ended
-                    if ended_at:
-                        run_status = status or "COMPLETED"
-                    else:
+                    # Check if run is still active using shared helper
+                    if airflow_serverless.is_workflow_run_active(latest_run):
                         run_status = "RUNNING"
                         has_running = True
+                    else:
+                        run_status = status or "COMPLETED"
 
                     # Check for status change
                     key = f"{stage_name}:{workflow_name}:{run_id}"

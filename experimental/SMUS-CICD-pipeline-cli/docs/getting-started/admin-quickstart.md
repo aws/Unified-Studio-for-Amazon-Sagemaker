@@ -365,7 +365,7 @@ stages:
     mwaaEnvironmentName: "production-airflow-env"
 ```
 
-#### WORKFLOWS_SERVERLESS - Serverless Airflow
+#### WORKFLOWS_SERVERLESS - Amazon MWAA Serverless
 ```yaml
 - name: serverless-workflows
   type: WORKFLOWS_SERVERLESS

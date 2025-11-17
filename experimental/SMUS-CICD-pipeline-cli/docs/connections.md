@@ -12,7 +12,7 @@ Connections enable your workflows to interact with:
 - **Data Storage** - S3, Redshift, RDS
 - **Compute Engines** - Spark (Glue/EMR), Athena
 - **ML Services** - SageMaker, MLflow
-- **Orchestration** - MWAA, Serverless Airflow
+- **Orchestration** - MWAA, Amazon MWAA Serverless
 
 **Two ways to create connections:**
 1. **Manifest-based** (recommended) - Define in `manifest.yaml` for automated creation
@@ -358,7 +358,7 @@ content:
 
 ---
 
-### WORKFLOWS_SERVERLESS - Serverless Airflow
+### WORKFLOWS_SERVERLESS - Amazon MWAA Serverless
 
 Use serverless Airflow workflows (no MWAA environment required).
 

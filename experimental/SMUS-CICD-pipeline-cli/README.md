@@ -134,7 +134,7 @@ smus-cli test --manifest manifest.yaml --targets test
 **📓 Code & Workflows**
 - Jupyter notebooks
 - Python scripts
-- Airflow DAGs (MWAA and Serverless)
+- Airflow DAGs (MWAA and Amazon MWAA Serverless)
 - Lambda functions (future)
 
 **💾 Data & Storage**
@@ -251,7 +251,7 @@ Orchestration logic that executes your application. Workflows serve two purposes
 - Data processing and transformations
 - Model training and inference
 
-Workflows are defined as Airflow DAGs (Directed Acyclic Graphs) in YAML format. Supports MWAA (Managed Workflows for Apache Airflow) and Airflow Serverless.
+Workflows are defined as Airflow DAGs (Directed Acyclic Graphs) in YAML format. Supports [MWAA (Managed Workflows for Apache Airflow)](https://aws.amazon.com/managed-workflows-for-apache-airflow/) and [Amazon MWAA Serverless](https://aws.amazon.com/blogs/big-data/introducing-amazon-mwaa-serverless/) ([User Guide](https://docs.aws.amazon.com/mwaa/latest/mwaa-serverless-userguide/what-is-mwaa-serverless.html)).
 
 ### CI/CD Automation
 GitHub Actions workflows (or other CI/CD systems) that automate deployment:
