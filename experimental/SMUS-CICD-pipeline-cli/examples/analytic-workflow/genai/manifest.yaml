@@ -30,7 +30,7 @@ stages:
         purpose: smus-cicd-testing
       region: ${DEV_DOMAIN_REGION:us-east-1}
     project:
-      name: test-marketing
+      name: test-genai
       create: true
       owners:
       - Eng1

@@ -36,17 +36,18 @@ class TestDataZoneConnectionsE2E(IntegrationTestBase):
         if not self.domain_id:
             pytest.skip("No test domain found with tag purpose=smus-cicd-testing")
         
-        # Find test project
+        # Find test project (prefer test-marketing, but accept any test-* project)
         projects = self.datazone_client.list_projects(domainIdentifier=self.domain_id)
         self.project_id = None
         for project in projects.get('items', []):
-            if 'test-marketing' in project.get('name', '').lower():
+            project_name = project.get('name', '').lower()
+            if 'test-marketing' in project_name or project_name.startswith('test-'):
                 self.project_id = project['id']
-                print(f"🔍 Found test project: {self.project_id}")
+                print(f"🔍 Found test project: {project.get('name')} ({self.project_id})")
                 break
         
         if not self.project_id:
-            pytest.skip("No test-marketing project found in domain")
+            pytest.skip("No test project found in domain")
         
         # Get the first environment for this project
         try:

@@ -128,7 +128,7 @@ class TestGenAIWorkflow(IntegrationTestBase):
         # Extract S3 bucket from test project (not dev)
         describe_result = self.run_cli_command(["describe", "--manifest", pipeline_file, "--connect"])
         test_s3_uri_match = re.search(
-            r"test: test-marketing.*?default\.s3_shared:.*?s3Uri: (s3://[^\s]+)",
+            r"test: test-[\w-]+.*?default\.s3_shared:.*?s3Uri: (s3://[^\s]+)",
             describe_result["output"],
             re.DOTALL
         )
@@ -138,10 +138,10 @@ class TestGenAIWorkflow(IntegrationTestBase):
         if not test_s3_uri_match:
             self.logger.info(f"🔍 DEBUG: Describe output length: {len(describe_result['output'])}")
             # Show a snippet to see the format
-            if 'test-marketing' in describe_result['output']:
-                self.logger.info("🔍 DEBUG: 'test-marketing' found in output")
+            if 'test: test-' in describe_result['output']:
+                self.logger.info("🔍 DEBUG: 'test:' project found in output")
             else:
-                self.logger.info("🔍 DEBUG: 'test-marketing' NOT found in output")
+                self.logger.info("🔍 DEBUG: 'test:' project NOT found in output")
         
         if test_s3_uri_match and run_id:
             test_s3_uri = test_s3_uri_match.group(1)

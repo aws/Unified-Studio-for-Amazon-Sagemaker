@@ -39,7 +39,7 @@ stages:
         purpose: smus-cicd-testing
       region: ${DEV_DOMAIN_REGION:us-east-2}
     project:
-      name: test-marketing
+      name: test-dashboard-quick
       create: true
       owners:
       - Eng1

@@ -101,7 +101,7 @@ class TestMLTrainingWorkflow(IntegrationTestBase):
         # Extract S3 bucket from test project (not dev)
         describe_result = self.run_cli_command(["describe", "--manifest", pipeline_file, "--connect"])
         test_s3_uri_match = re.search(
-            r"test: test-marketing.*?default\.s3_shared:.*?s3Uri: (s3://[^\s]+)",
+            r"test: test-[\w-]+.*?default\.s3_shared:.*?s3Uri: (s3://[^\s]+)",
             describe_result["output"],
             re.DOTALL
         )

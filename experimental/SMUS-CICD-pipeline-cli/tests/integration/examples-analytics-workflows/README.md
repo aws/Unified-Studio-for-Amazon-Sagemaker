@@ -2,6 +2,21 @@
 
 Integration tests for analytics workflows from `examples/analytic-workflow/`.
 
+## Project Naming Convention
+
+To enable parallel test execution, each analytics workflow test uses a unique test project:
+
+- **Shared Dev Project**: `dev-marketing` (read-only, shared by all tests)
+- **Reserved Projects**: `test-marketing`, `prod-marketing` (long-standing, not for CI/CD tests)
+- **Test Projects** (created/deleted by tests):
+  - `test-dashboard-quick` - Dashboard with Glue and QuickSight
+  - `test-ml-training` - ML training workflow
+  - `test-ml-deployment` - ML deployment workflow
+  - `test-genai` - GenAI workflow
+  - `test-notebooks` - Notebooks workflow
+
+Each test creates its own project, allowing tests to run in parallel without conflicts.
+
 ## Structure
 
 ```
