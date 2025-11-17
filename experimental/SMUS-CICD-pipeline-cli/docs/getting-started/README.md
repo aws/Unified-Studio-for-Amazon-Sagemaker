@@ -1,5 +1,8 @@
 # Getting Started with SMUS CI/CD CLI
 
+← [Back to Main README](../../README.md)
+
+
 Choose the guide that matches your role:
 
 ## 👨‍💻 For Data Teams (Data Scientists, Data Engineers, GenAI App Developers)

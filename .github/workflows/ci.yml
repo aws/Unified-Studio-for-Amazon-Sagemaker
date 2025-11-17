@@ -109,3 +109,29 @@ jobs:
       with:
         name: security-report
         path: experimental/SMUS-CICD-pipeline-cli/bandit-report.json
+
+  validate-docs:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install dependencies
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli
+        python -m pip install --upgrade pip
+        pip install pyyaml
+    
+    - name: Validate documentation manifests
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli
+        python tests/scripts/validate_doc_manifests.py
+    
+    - name: Validate documentation back links
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli
+        python tests/scripts/validate_doc_backlinks.py

@@ -1,122 +1,107 @@
-# SMUS CLI Test Scripts
+# Documentation Validation Scripts
 
-This directory contains scripts and utilities for SMUS (SageMaker Unified Studio) integration testing.
+Scripts to ensure documentation examples remain consistent with the codebase.
 
-## 📁 Directory Structure
+## Scripts
 
-```
-scripts/
-├── setup/                          # 🆕 Organized setup scripts (USE THIS!)
-│   ├── README.md                   # Comprehensive setup guide
-│   ├── deploy-all.sh               # Deploy all stages
-│   ├── 1-account-setup/            # Stage 1: OIDC, VPC
-│   ├── 2-domain-creation/          # Stage 2: Create domain
-│   ├── 3-domain-configuration/     # Stage 3: Blueprints, profiles
-│   ├── 4-project-setup/            # Stage 4: Projects, memberships
-│   └── 5-testing-infrastructure/   # Stage 5: MLflow, testing resources
-├── datazone/                       # DataZone utilities
-│   ├── setup-covid-data.py
-│   ├── publish-covid-assets.py
-│   └── ...
-├── config.yaml                     # Configuration file
-├── deploy-*.sh                     # Legacy individual scripts (still work)
-└── *.yaml                          # CloudFormation templates
-```
+### validate_doc_manifests.py
 
-## 🚀 Quick Start
+Extracts and validates all complete YAML manifests from documentation files.
 
-### For New Account Setup
-
-Use the organized setup directory:
-
+**Usage:**
 ```bash
-cd setup
-./deploy-all.sh
+python tests/scripts/validate_doc_manifests.py
 ```
 
-See [setup/README.md](setup/README.md) for detailed documentation.
+**What it checks:**
+- ✅ Uses `applicationName` (not outdated `bundleName`)
+- ✅ Uses `stages` (not outdated `targets`)
+- ✅ Uses `content` section (not outdated `bundle`)
+- ✅ Workflows in `content.workflows` (not deprecated `activation`)
+- ✅ Stage structure has required `domain.region` and `project.name`
 
-### For Individual Components
+**Exit codes:**
+- `0` - All manifests valid
+- `1` - Validation errors found
 
-Legacy scripts still work for individual deployments:
+### fix_doc_manifests.py
 
+Auto-fixes common manifest issues in documentation files.
+
+**Usage:**
 ```bash
-./deploy-vpc.sh              # Deploy VPC
-./deploy-domain.sh           # Deploy domain
-./deploy-shared-resources.sh # Deploy MLflow and testing resources
+python tests/scripts/fix_doc_manifests.py
 ```
 
-## 📋 Setup Stages
+**What it fixes:**
+- `bundleName:` → `applicationName:`
+- `bundle:` → `content:`
+- `activation: workflows:` → `content: workflows:`
 
-The new organized structure provides 5 deployment stages:
+### validate_doc_backlinks.py
 
-1. **Account Setup** - Minimal requirements (OIDC, VPC)
-2. **Domain Creation** - Create SMUS domain
-3. **Domain Configuration** - Blueprints, profiles, permissions
-4. **Project Setup** - Dev project and memberships
-5. **Testing Infrastructure** - MLflow, databases, Lake Formation
+Validates that all documentation files have back links to main README.
 
-Each stage can be run independently or all together.
+**Usage:**
+```bash
+python tests/scripts/validate_doc_backlinks.py
+```
 
-## 🔧 Configuration
+**Exit codes:**
+- `0` - All docs have back links
+- `1` - Missing back links
 
-All scripts use `config.yaml`:
+### add_doc_backlinks.py
+
+Adds back links to main README in all documentation files that are missing them.
+
+**Usage:**
+```bash
+python tests/scripts/add_doc_backlinks.py
+```
+
+**What it does:**
+- Scans all `.md` files in `docs/`
+- Adds `← [Back to Main README](../README.md)` after first heading
+- Calculates correct relative path based on file location
+
+## CI Integration
+
+The validation scripts run automatically in CI on every PR and push to main:
 
 ```yaml
-account_id: "123456789012"
-regions:
-  primary:
-    name: us-east-1
-    enabled: true
-  secondary:
-    name: us-west-2
-    enabled: false
-
-domain:
-  name: smus-integration-domain
-  admin_user: admin@example.com
+validate-docs:
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    - name: Validate documentation manifests
+      run: python tests/scripts/validate_doc_manifests.py
+    - name: Validate documentation back links
+      run: python tests/scripts/validate_doc_backlinks.py
 ```
 
-## 📚 Documentation
+## Development Workflow
 
-- **[setup/README.md](setup/README.md)** - Complete setup guide with scenarios
-- **[setup/5-testing-infrastructure/README.md](setup/5-testing-infrastructure/README.md)** - Testing resources details
-- **[../../development.md](../../development.md)** - Development and testing guide
+1. **Make documentation changes**
+2. **Run auto-fix** (optional): 
+   ```bash
+   python tests/scripts/fix_doc_manifests.py
+   python tests/scripts/add_doc_backlinks.py
+   ```
+3. **Validate**: 
+   ```bash
+   python tests/scripts/validate_doc_manifests.py
+   python tests/scripts/validate_doc_backlinks.py
+   ```
+4. **Commit** if validation passes
 
-## 🧪 DataZone Utilities
+## Notes
 
-The `datazone/` directory contains utilities for:
-- Setting up COVID-19 test data
-- Publishing DataZone assets
-- Managing data sources
-- Creating cross-project subscriptions
-
-## 🔄 Migration from Old Structure
-
-If you were using the old scripts:
-
-| Old Script | New Location |
-|------------|--------------|
-| `deploy-all.sh` | `setup/deploy-all.sh` |
-| `deploy-vpc.sh` | `setup/1-account-setup/` |
-| `deploy-domain.sh` | `setup/2-domain-creation/` |
-| `deploy-blueprints-profiles.sh` | `setup/3-domain-configuration/` |
-| `deploy-projects.sh` | `setup/4-project-setup/` |
-| `deploy-shared-resources.sh` | `setup/5-testing-infrastructure/` |
-
-Old scripts still work but use the new organized structure for better clarity.
-
-## Prerequisites
-
-- AWS CLI configured with appropriate permissions
-- AWS Identity Center (IDC) enabled
-- `yq` YAML processor installed: `brew install yq`
-
-## For Complete Setup Instructions
-
-See **[setup/README.md](setup/README.md)** for:
-- Stage-by-stage deployment guide
-- Common deployment scenarios
-- Multi-region configuration
-- Troubleshooting
-- Resource outputs and usage
+- Only validates **complete manifests** (must have both `applicationName` and `stages`)
+- Partial YAML snippets are ignored (e.g., showing only a `content:` section)
+- Validation focuses on structure, not AWS-specific values
+- Back links use relative paths calculated from file location

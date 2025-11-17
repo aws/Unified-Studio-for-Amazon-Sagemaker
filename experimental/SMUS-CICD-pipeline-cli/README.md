@@ -12,12 +12,11 @@ Deploy Airflow DAGs, Jupyter notebooks, and ML workflows from development to pro
 
 ✅ **AWS Abstraction Layer** - CLI encapsulates all AWS analytics, ML, and SMUS complexity - DevOps teams never call AWS APIs directly  
 ✅ **Separation of Concerns** - Data teams define WHAT to deploy (manifest.yaml), DevOps teams define HOW and WHEN (CI/CD workflows)  
-✅ **Generic CI/CD Workflows** - Same workflow works for Glue, SageMaker, Bedrock, or any AWS service combination  
+✅ **Generic CI/CD Workflows** - Same workflow works for Glue, SageMaker, Bedrock, QuickSight, or any AWS service combination  
 ✅ **Deploy with Confidence** - Automated testing and validation before production  
 ✅ **Multi-Environment Management** - Test → Prod with environment-specific configuration  
 ✅ **Infrastructure as Code** - Version-controlled application manifests and reproducible deployments  
 ✅ **Event-Driven Workflows** - Trigger workflows automatically via EventBridge on deployment  
-✅ **QuickSight Dashboards** - Export from dev, deploy to test/prod with automated permissions  
 
 ---
 
@@ -46,38 +45,6 @@ smus-cli test --manifest manifest.yaml --targets test
 ```
 
 **See it in action:** [Live GitHub Actions Example](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/actions/runs/17631303500)
-
----
-
-## Global Options
-
-All commands support these global options:
-
-| Option | Description | Values | Default |
-|--------|-------------|--------|---------|
-| `--log-level` | Control logging verbosity | `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` | `INFO` |
-| `--output` | Output format | `TEXT`, `JSON` | `TEXT` |
-| `--manifest` / `-m` | Path to manifest file | File path | `manifest.yaml` |
-| `--target` / `-t` | Target environment | Target name(s) | All targets |
-
-**Examples:**
-```bash
-# Debug mode for troubleshooting
-smus-cli describe --manifest manifest.yaml --log-level DEBUG
-
-# Quiet mode - only errors
-smus-cli deploy --targets prod --log-level ERROR
-
-# JSON output for automation
-smus-cli describe --manifest manifest.yaml --output JSON --log-level WARNING
-```
-
-**Environment Variable:**
-```bash
-# Set default log level
-export SMUS_LOG_LEVEL=DEBUG
-smus-cli describe --manifest manifest.yaml
-```
 
 ---
 
@@ -143,12 +110,46 @@ smus-cli describe --manifest manifest.yaml
 
 ---
 
+## What Can You Deploy?
+
+**📊 Analytics & BI**
+- Glue ETL jobs and crawlers
+- Athena queries
+- QuickSight dashboards
+- EMR jobs (future)
+- Redshift queries (future)
+
+**🤖 Machine Learning**
+- SageMaker training jobs
+- ML models and endpoints
+- MLflow experiments
+- Feature Store (future)
+- Batch transforms (future)
+
+**🧠 Generative AI**
+- Bedrock agents
+- Knowledge bases
+- Foundation model configurations (future)
+
+**📓 Code & Workflows**
+- Jupyter notebooks
+- Python scripts
+- Airflow DAGs (MWAA and Serverless)
+- Lambda functions (future)
+
+**💾 Data & Storage**
+- S3 data files
+- Git repositories
+- Data catalogs (future)
+
+---
+
 ## Supported AWS Services
 
 Deploy workflows using these AWS services through Airflow YAML syntax:
 
 ### 🎯 Analytics & Data
-**Amazon Athena** • **AWS Glue** • **Amazon EMR** • **Amazon Redshift** • **Lake Formation**
+**Amazon Athena** • **AWS Glue** • **Amazon EMR** • **Amazon Redshift** • **Amazon QuickSight** • **Lake Formation**
 
 ### 🤖 Machine Learning  
 **SageMaker Training** • **SageMaker Pipelines** • **Feature Store** • **Model Registry** • **Batch Transform**
@@ -209,13 +210,13 @@ manifest.yaml          smus-cli deploy                    GitHub Actions
 
 ---
 
-### Application Deployment Manifest
+### Application Manifest
 A declarative YAML file (`manifest.yaml`) that defines your data application:
 - **Application details** - Name, version, description
-- **Content sources** - Code from git repositories, data/models from storage
-- **Activation** - How to run the application (workflows, events, CloudFormation)
-- **Deployment stages** - Where to deploy (dev, test, prod environments)
-- **Configuration** - Environment-specific settings and parameters
+- **Content** - Code from git repositories, data/models from storage, QuickSight dashboards
+- **Workflows** - Airflow DAGs for orchestration and automation
+- **Stages** - Where to deploy (dev, test, prod environments)
+- **Configuration** - Environment-specific settings, connections, and bootstrap actions
 
 **Created and owned by data teams.** Defines **what** to deploy and **where**. No CI/CD knowledge required.
 
@@ -227,6 +228,14 @@ Your data/analytics workload being deployed:
 - ETL pipelines and transformations
 - GenAI agents and MCP servers
 - Foundation model configurations
+
+### Stage
+A deployment environment (dev, test, prod) mapped to a SageMaker Unified Studio project:
+- Domain and region configuration
+- Project name and settings
+- Resource connections (S3, Airflow, Athena, Glue)
+- Environment-specific parameters
+- Optional branch mapping for git-based deployments
 
 ### Workflow
 Orchestration logic that executes your application. Workflows serve two purposes:
@@ -243,14 +252,6 @@ Orchestration logic that executes your application. Workflows serve two purposes
 - Model training and inference
 
 Workflows are defined as Airflow DAGs (Directed Acyclic Graphs) in YAML format. Supports MWAA (Managed Workflows for Apache Airflow) and Airflow Serverless.
-
-### Stage
-A deployment environment (dev, test, prod) mapped to a SageMaker Unified Studio project:
-- Domain and region configuration
-- Project name and settings
-- Resource connections (S3, Airflow, Athena, Glue)
-- Environment-specific parameters
-- Optional branch mapping for git-based deployments
 
 ### CI/CD Automation
 GitHub Actions workflows (or other CI/CD systems) that automate deployment:
@@ -301,37 +302,80 @@ Creates manifest.yaml          Creates generic workflow       Workflow calls:
 - **DevOps teams never call AWS APIs** - the CLI encapsulates all AWS analytics, ML, and SMUS complexity
 - CI/CD workflows are simple: just call `smus-cli deploy`
 - Same workflow works for ANY application, regardless of AWS services used
-## Documentation
-
-### Getting Started
-- **[Quick Start Guide](docs/getting-started/quickstart.md)** - Deploy your first application (10 min)
-- **[Admin Guide](docs/getting-started/admin-quickstart.md)** - Set up infrastructure (15 min)
-
-### Guides
-- **[Application Deployment Manifest](docs/manifest.md)** - Complete YAML configuration guide
-- **[Connections Guide](docs/connections.md)** - Configure AWS service integrations
-- **[CLI Commands](docs/cli-commands.md)** - Detailed command documentation
-- **[Substitutions & Variables](docs/substitutions-and-variables.md)** - Dynamic configuration
-- **[GitHub Actions Integration](docs/github-actions-integration.md)** - CI/CD pipeline automation
-- **[Workflow Templates](git-templates/)** - Pre-built GitHub Actions workflows (optional)
-- **[Deployment Metrics](docs/pipeline-deployment-metrics.md)** - Monitoring and operational metrics with EventBridge
-
-### Reference
-- **[Manifest Schema](docs/manifest-schema.md)** - YAML schema reference
-- **[Airflow AWS Operators](docs/airflow-aws-operators.md)** - Custom operators
-
-### Examples
-- **[ETL Application](examples/analytic-workflow/etl/)** - Glue jobs with Airflow orchestration
-- **[ML Application](examples/analytic-workflow/ml/)** - SageMaker training with MLflow tracking
-- **[Serverless Example](examples/serverless-example/)** - Airflow Serverless workflows
-- **[MWAA Example](examples/mwaa-example/)** - Managed Airflow workflows
-
-### Development
-- **[Development Guide](docs/development.md)** - Contributing and testing
 
 ---
 
-## Example Deployment Flow
+## Complete Example
+
+Here's a minimal working example showing all three components:
+
+### 1. Application Manifest (`manifest.yaml`)
+```yaml
+applicationName: my-data-app
+
+content:
+  storage:
+    - name: code
+      connectionName: default.s3_shared
+      include: [scripts/]
+  workflows:
+    - workflowName: daily_etl
+      connectionName: project.workflow_serverless
+
+stages:
+  test:
+    domain:
+      region: us-east-1
+    project:
+      name: test-analytics
+```
+
+### 2. Airflow Workflow (`scripts/daily_etl.yaml`)
+```yaml
+dag:
+  dag_id: daily_etl
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  
+tasks:
+  extract_data:
+    operator: airflow.providers.amazon.aws.operators.glue.GlueJobOperator
+    job_name: extract_s3_data
+    script_location: '{proj.connection.default.s3_shared.s3Uri}scripts/extract.py'
+    iam_role_name: '{proj.iam_role_name}'
+    region_name: '{env.AWS_REGION}'
+```
+
+### 3. GitHub Actions (`.github/workflows/deploy.yml`)
+```yaml
+name: Deploy Data App
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+      
+      - name: Install SMUS CLI
+        run: |
+          git clone https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker.git
+          pip install -e Unified-Studio-for-Amazon-Sagemaker/experimental/SMUS-CICD-pipeline-cli
+      
+      - name: Deploy to Test
+        run: smus-cli deploy --targets test --manifest manifest.yaml
+      
+      - name: Run Tests
+        run: smus-cli test --targets test --manifest manifest.yaml
+```
 
 ```mermaid
 graph LR
@@ -353,148 +397,44 @@ graph LR
     end
 ```
 
----
-
-## Example Applications
-
-### ETL Application (`examples/analytic-workflow/etl/`)
-
-**What it deploys:**
-- **2 AWS Glue jobs** running on Glue 4.0
-  - `data_discovery_task` - Lists and discovers S3 data files
-  - `data_summary_task` - Processes COVID-19 data from Athena tables
-- **Airflow Serverless workflow** orchestrating job dependencies
-- **Python scripts** deployed to S3 shared storage
-
-**Application manifest (`manifest.yaml`):**
-- Defines application content from `etl/` directory
-- Deploys to `test` (TEST stage with auto-created project)
-- Injects environment variables (`S3_PREFIX`, `AWS_REGION`)
-- Runs integration tests from `pipeline_tests/` folder
-
-**Workflow (`workflow_combined.yaml`):**
-```yaml
-workflow_combined:
-  dag_id: 'covid_etl_workflow'
-  tasks:
-    data_discovery_task:
-      operator: airflow.providers.amazon.aws.operators.glue.GlueJobOperator
-      script_location: 's3://.../etl/bundle/glue_s3_list_job.py'
-      script_args:
-        '--BUCKET_NAME': 'amazon-sagemaker-...'
-    
-    data_summary_task:
-      operator: airflow.providers.amazon.aws.operators.glue.GlueJobOperator
-      script_location: 's3://.../etl/bundle/glue_covid_summary_job.py'
-      script_args:
-        '--DATABASE_NAME': 'covid19_db'
-        '--TABLE_NAME': 'us_simplified'
-```
-
-**Deploy:**
-```bash
-cd examples/analytic-workflow/etl
-smus-cli bundle --manifest manifest.yaml --targets dev
-smus-cli deploy --targets test --manifest manifest.yaml
-```
-
-### ML Training Bundle (`examples/analytic-workflow/ml/`)
-
-**What it deploys:**
-- **SageMaker Notebook Operator** executing ML orchestration notebook
-- **Training code** bundled with compression to S3 (`job-code/` directory)
-- **Workflow definition** with MLflow connection injection
-- **MLflow tracking server** connection for experiment tracking
-
-**Bundle manifest (`manifest.yaml`):**
-- Bundles 2 storage locations:
-  - `training-code` → compressed tarball with training script + inference code
-  - `ml-workflows` → notebook and workflow definitions
-- Auto-creates test project with MLflow connection
-- Injects MLflow tracking server ARN via connection parameter substitution
-
-**Workflow (`ml_dev_workflow_v3.yaml`):**
-```yaml
-ml_dev_workflow:
-  dag_id: "ml_dev_workflow_v3"
-  tasks:
-    ml_orchestrator_notebook:
-      operator: airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator
-      input_config:
-        input_path: "ml/bundle/workflows/ml_orchestrator_notebook.ipynb"
-        input_params:
-          mlflow_tracking_server_arn: "{proj.connection.mlflow-server.trackingServerArn}"
-```
-
-**ML Orchestrator Notebook does:**
-1. Generates synthetic training data (1000 samples, 20 features, 3 classes)
-2. Uploads training/inference data to S3
-3. Launches SageMaker training job with SKLearn estimator
-4. Logs metrics and model to MLflow tracking server
-5. Runs batch transform inference on test data
-6. Outputs predictions to S3
-
-**Training script (`sagemaker_training_script.py`):**
-- Trains RandomForest classifier on synthetic data
-- Logs hyperparameters and metrics to MLflow
-- Saves model artifacts (model.joblib, scaler.joblib)
-- **Copies inference.py to model tarball** for batch transform
-
-**Deploy:**
-```bash
-cd examples/analytic-workflow/ml
-smus-cli bundle --manifest manifest.yaml --targets dev
-smus-cli deploy --targets test --manifest manifest.yaml
-```
-
-**Key features:**
-- ✅ Dynamic parameter injection from project connections
-- ✅ MLflow experiment tracking and model registry integration
-- ✅ SageMaker training with custom dependencies (requirements.txt)
-- ✅ Batch transform inference with custom inference handler
-- ✅ Compressed bundle storage for efficient deployment
+**See more examples:** [GitHub Workflows Guide](.github/workflows/README.md) | [Example Applications](examples/)
 
 ---
 
-## Common Use Cases
+## Documentation
 
-### Deploy Airflow DAGs
-```bash
-# Bundle and deploy workflows (YAML syntax) to test environment
-smus-cli bundle --targets dev
-smus-cli deploy --targets test
-smus-cli run --targets test --workflow my_dag
-```
+### Getting Started
+- **[Quick Start Guide](docs/getting-started/quickstart.md)** - Deploy your first application (10 min)
+- **[Admin Guide](docs/getting-started/admin-quickstart.md)** - Set up infrastructure (15 min)
 
-### Promote to Production
-```bash
-# Run tests in staging
-smus-cli test --targets test
+### Guides
+- **[Application Manifest](docs/manifest.md)** - Complete YAML configuration reference
+- **[CLI Commands](docs/cli-commands.md)** - All available commands and options
+- **[Substitutions & Variables](docs/substitutions-and-variables.md)** - Dynamic configuration
+- **[Connections Guide](docs/connections.md)** - Configure AWS service integrations
+- **[GitHub Actions Integration](docs/github-actions-integration.md)** - CI/CD automation setup
+- **[Deployment Metrics](docs/pipeline-deployment-metrics.md)** - Monitoring with EventBridge
 
-# Deploy to production if tests pass
-smus-cli deploy --targets prod
-```
+### Reference
+- **[Manifest Schema](docs/manifest-schema.md)** - YAML schema validation and structure
+- **[Airflow AWS Operators](docs/airflow-aws-operators.md)** - Custom operator reference
 
-### Manage Catalog Assets
-```bash
-# Request access to catalog tables
-smus-cli deploy --targets test  # Automatically requests subscriptions
-smus-cli monitor --targets test  # Track approval status
-```
+### Examples
+- **[Examples Guide](docs/examples-guide.md)** - Walkthrough of example applications
+- **[Data Notebooks](examples/analytic-workflow/data-notebooks/)** - Jupyter notebooks with Airflow
+- **[ML Training](examples/analytic-workflow/ml/training/)** - SageMaker training with MLflow
+- **[ML Deployment](examples/analytic-workflow/ml/deployment/)** - SageMaker endpoint deployment
+- **[QuickSight Dashboard](examples/analytic-workflow/dashboard-glue-quick/)** - BI dashboards with Glue
+- **[GenAI Application](examples/analytic-workflow/genai/)** - Bedrock agents and knowledge bases
 
-### CI/CD Automation
-```yaml
-# .github/workflows/deploy.yml
-- name: Deploy to Test
-  run: smus-cli deploy --targets test --manifest manifest.yaml
-  
-- name: Run Tests
-  run: smus-cli test --targets test --manifest manifest.yaml
-  
-- name: Deploy to Prod
-  if: success()
-  run: smus-cli deploy --targets prod --manifest manifest.yaml
-```
+### Development
+- **[Development Guide](docs/development.md)** - Contributing and testing
+- **[Tests Overview](tests/README.md)** - Testing infrastructure
+
+### Support
+- **Issues**: [GitHub Issues](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/issues)
+- **Documentation**: [docs/](docs/)
+- **Examples**: [examples/](examples/)
 
 ---
 
@@ -511,46 +451,6 @@ pip install -e .
 # ❌ Wrong - Do not use PyPI
 pip install smus-cicd-cli  # May contain malicious code
 ```
-
----
-
-## Support & Community
-
-- **Documentation**: [docs/](docs/)
-- **Examples**: [examples/](examples/)
-- **Issues**: [GitHub Issues](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/issues)
-- **Contributing**: [Development Guide](docs/development.md)
-
----
-
-## Quick Navigation - All READMEs
-
-### 📚 Documentation
-- **[Getting Started Hub](docs/getting-started/README.md)** - Role-based navigation for DevOps teams and admins
-- **[Quick Start Guide](docs/getting-started/quickstart.md)** - Deploy your first application in 10 minutes
-- **[Admin Quick Start](docs/getting-started/admin-quickstart.md)** - Infrastructure setup in 15 minutes
-
-### 📖 Reference Guides
-- **[Bundle Manifest](docs/bundle-manifest.md)** - Complete YAML configuration reference
-- **[CLI Commands](docs/cli-commands.md)** - All available commands and options
-- **[Substitutions & Variables](docs/substitutions-and-variables.md)** - Dynamic configuration guide
-- **[GitHub Actions Integration](docs/github-actions-integration.md)** - CI/CD automation setup
-- **[Bundle Deployment Metrics](docs/pipeline-deployment-metrics.md)** - Monitoring and operational metrics
-- **[Airflow AWS Operators](docs/airflow-aws-operators.md)** - Custom operator reference
-- **[Bundle Manifest Schema](docs/pipeline-manifest-schema.md)** - YAML schema validation
-
-### 💡 Examples
-- **[Examples Overview](examples/README.md)** - All available examples and usage
-- **[ETL Bundle](examples/analytic-workflow/etl/)** - Glue jobs with Airflow orchestration
-- **[ML Bundle](examples/analytic-workflow/ml/README.md)** - SageMaker training with MLflow tracking
-- **[ML Training Code](examples/analytic-workflow/ml/job-code/README.md)** - Training script details
-- **[Serverless Example](examples/serverless-example/README.md)** - Airflow Serverless workflows
-- **[MWAA Example](examples/mwaa-example/README.md)** - Managed Airflow workflows
-
-### 🧪 Testing & Development
-- **[Tests Overview](tests/README.md)** - Testing infrastructure and guidelines
-- **[Test Scripts](tests/scripts/README.md)** - Helper scripts for testing
-- **[Development Guide](docs/development.md)** - Contributing and local development
 
 ---
 

@@ -1,5 +1,8 @@
 # Q CLI Conversation Examples
 
+← [Back to Main README](../README.md)
+
+
 This document shows realistic conversations between users and Q CLI using the SMUS MCP integration.
 
 ## Scenario 1: Create CICD for AWS Glue Job
@@ -28,7 +31,7 @@ Would you like me to generate a bundle manifest for you?
 **Q:** Here's your `manifest.yaml`:
 
 ```yaml
-bundleName: ETLBundle
+applicationName: ETLBundle
 
 stages:
   dev:
@@ -64,14 +67,14 @@ stages:
     project:
       name: prod-project
 
-bundle:
+content:
   storage:
     - name: glue-scripts
       connectionName: default.s3_shared
       include: ['glue/**/*.py']
       exclude: ['**/__pycache__/', '**/*.pyc']
 
-activation:
+content:
   workflows:
     - workflowName: deploy_glue_jobs
       connectionName: project.workflow_serverless
@@ -154,7 +157,7 @@ This workflow will:
 **Q:** Here's a notebook deployment pipeline:
 
 ```yaml
-bundleName: NotebookBundle
+applicationName: NotebookBundle
 
 stages:
   dev:
@@ -179,7 +182,7 @@ stages:
     project:
       name: prod-notebooks
 
-bundle:
+content:
   storage:
     - name: notebooks
       connectionName: default.s3_shared

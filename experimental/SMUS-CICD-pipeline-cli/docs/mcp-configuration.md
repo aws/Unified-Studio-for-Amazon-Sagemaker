@@ -1,5 +1,8 @@
 # MCP Configuration Guide
 
+← [Back to Main README](../README.md)
+
+
 ## Overview
 
 The MCP server knowledge base is configurable via YAML files. This allows you to customize what documentation and templates are loaded into the Q CLI integration.

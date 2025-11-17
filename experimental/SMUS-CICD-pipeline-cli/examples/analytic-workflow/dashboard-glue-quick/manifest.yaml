@@ -16,9 +16,13 @@ content:
   quicksight:
   - dashboardId: sample-dashboard
     assetBundle: quicksight/sample-dashboard.qs
-  workflows:
-  - workflowName: covid_dashboard_glue_quick_pipeline
-    connectionName: default.workflow_serverless
+    owners:
+    - arn:aws:quicksight:${DEV_DOMAIN_REGION:us-east-2}:*:user/default/Admin/*
+    viewers:
+    - arn:aws:quicksight:${DEV_DOMAIN_REGION:us-east-2}:*:user/default/Admin/*
+  # workflows:
+  # - workflowName: covid_dashboard_glue_quick_pipeline
+  #   connectionName: default.workflow_serverless
 stages:
   dev:
     stage: DEV
@@ -46,7 +50,14 @@ stages:
     environment_variables:
       S3_PREFIX: test
       AWS_REGION: ${DEV_DOMAIN_REGION:us-east-1}
-      GRANT_TO: Admin
+      GRANT_TO: Admin,aws-quicksight-service-role-v0
+    bootstrap:
+      actions:
+      - type: quicksight.refresh_dataset
+        parameters:
+          refreshScope: IMPORTED
+          ingestionType: FULL_REFRESH  # FULL_REFRESH or INCREMENTAL_REFRESH (if dataset configured for it)
+          wait: false
     deployment_configuration:
       storage:
       - name: dashboard-glue-quick
@@ -59,14 +70,9 @@ stages:
       quicksight:
         overrideParameters:
           ResourceIdOverrideConfiguration:
-            PrefixForAllResources: deployed-{proj.name}-covid-
+            PrefixForAllResources: deployed-{stage.name}-covid-
           Dashboards:
           - DashboardId: e0772d4e-bd69-444e-a421-cb3f165dbad8
-            Name: TotalDeathByCountry-{proj.name}
-        permissions:
-        - principal: arn:aws:quicksight:${DEV_DOMAIN_REGION:us-east-2}:*:user/default/amirbo
-          actions:
-          - quicksight:DescribeDashboard
-          - quicksight:QueryDashboard
+            Name: TotalDeathByCountry-{stage.name}
 tests:
   folder: examples/analytic-workflow/dashboard-glue-quick/app_tests/

@@ -1527,7 +1527,7 @@ def target_uses_serverless_airflow(manifest, target_config) -> bool:
                 # Resolve project. prefix to default.
                 if conn_name.startswith("project."):
                     conn_name = conn_name.replace("project.", "default.", 1)
-                
+
                 if is_connection_serverless_airflow(
                     conn_name, domain_id, project_id, region
                 ):

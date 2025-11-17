@@ -38,22 +38,19 @@ class WorkflowOperations:
         full_workflow_name = airflow_serverless.generate_workflow_name(
             bundle_name=manifest.application_name,
             project_name=target_config.project.name,
-            dag_name=workflow_name
+            dag_name=workflow_name,
         )
 
         logger.info(f"Triggering workflow: {full_workflow_name}")
 
         # Find workflow ARN using helper
         workflow_arn = airflow_serverless.find_workflow_arn(
-            workflow_name=full_workflow_name,
-            region=region
+            workflow_name=full_workflow_name, region=region
         )
 
         # Start workflow run with verification
         result = airflow_serverless.start_workflow_run_verified(
-            workflow_arn=workflow_arn,
-            region=region,
-            verify_started=True
+            workflow_arn=workflow_arn, region=region, verify_started=True
         )
 
         logger.info(
@@ -142,14 +139,13 @@ class WorkflowOperations:
         full_workflow_name = airflow_serverless.generate_workflow_name(
             bundle_name=manifest.application_name,
             project_name=target_config.project.name,
-            dag_name=workflow_name
+            dag_name=workflow_name,
         )
 
         # Find workflow ARN using helper
         try:
             workflow_arn = airflow_serverless.find_workflow_arn(
-                workflow_name=full_workflow_name,
-                region=region
+                workflow_name=full_workflow_name, region=region
             )
         except Exception as e:
             return {"success": False, "error": str(e)}

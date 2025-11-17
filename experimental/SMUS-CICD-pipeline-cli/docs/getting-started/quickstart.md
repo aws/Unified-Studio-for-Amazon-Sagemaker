@@ -1,8 +1,10 @@
-# Data Team Quick Start
+# Quick Start Guide
 
-**Goal:** Deploy your first data application in 10-15 minutes
+← [Back to Main README](../../README.md)
 
-**Audience:** DevOps teams building automated deployment pipelines for data engineering, ML, and GenAI workflows
+**Goal:** Deploy your first data application in 10 minutes
+
+**What you'll build:** A notebook-based data pipeline with Airflow orchestration
 
 ---
 
@@ -10,9 +12,8 @@
 
 - ✅ Python 3.8+ installed
 - ✅ AWS CLI configured with credentials
-- ✅ SageMaker Unified Studio domain and projects (dev, test, prod)
-- ✅ Basic understanding of Airflow DAGs or Jupyter notebooks
-- ✅ Git repository for your code (optional but recommended)
+- ✅ SageMaker Unified Studio domain and project created
+- ✅ Basic understanding of Jupyter notebooks
 
 ---
 
@@ -26,145 +27,116 @@ pip install -e .
 
 ---
 
-## Step 2: Create Application Deployment Manifest
+## Step 2: Use the Notebook Example
 
-Create a `manifest.yaml` file defining your application and deployment stages:
+Copy the data notebooks example:
 
-```yaml
-applicationName: CustomerAnalyticsPipeline
-
-content:
-  git:
-    - repository: customer-analytics
-      url: https://github.com/myorg/customer-analytics.git
-  storage:
-    - name: reference-data
-      connectionName: default.s3_shared
-      include:
-        - 'data/reference/'
-      exclude:
-        - '__pycache__/'
-        - '*.pyc'
-
-activation:
-  workflows:
-    - workflowName: customer_analytics
-      engine: airflow-serverless
-  # Future activation options:
-  # events:
-  #   - eventBridgeRule: data-ingestion-trigger
-  # cloudformation:
-  #   - stackName: model-training-resources  # S3 buckets, ECR repos, etc.
-
-stages:
-  dev:
-    stage: DEV
-    domain:
-      name: my-domain
-      region: us-east-1
-    project:
-      name: dev-analytics-project
-      create: false
-  
-  test:
-    stage: TEST
-    branch: release_test
-    domain:
-      name: my-domain
-      region: us-east-1
-    project:
-      name: test-analytics-project
-      create: true
-    bootstrap:
-      project:
-        create: true
-        profileName: 'All capabilities'
-        owners: [admin@example.com]
-    
-  prod:
-    stage: PROD
-    branch: release_prod
-    domain:
-      name: my-domain
-      region: us-east-1
-    project:
-      name: prod-analytics-project
-      create: true
-    bootstrap:
-      project:
-        create: true
-        profileName: 'All capabilities'
-        owners: [admin@example.com]
+```bash
+cp -r examples/analytic-workflow/data-notebooks my-notebook-app
+cd my-notebook-app
 ```
 
-**Key sections:**
-- `applicationName`: Name of your data application
-- `content`: Application code from git, data from storage
-- `stages`: Define dev/test/prod environments (dev for local work, test/prod with branch mapping)
-- `initialization`: Auto-create projects with settings
-
-**See more:** [Bundle Manifest Reference](../bundle-manifest.md)
+This example includes:
+- Sample Jupyter notebooks for data processing
+- Airflow workflow for parallel execution
+- Complete manifest configuration
 
 ---
 
-## Step 3: Create Your Workflow
+## Step 3: Customize the Manifest
 
-Choose the example that matches your use case. Workflows use SMUS YAML format for Airflow Serverless.
-
-### Example 1: Data Engineering with Glue
-
-Create `workflows/data_etl.yaml`:
+Edit `manifest.yaml` to match your environment:
 
 ```yaml
-data_etl_pipeline:
-  dag_id: "data_etl_pipeline"
-  schedule_interval: "0 2 * * *"
-  default_args:
-    owner: "devops"
-  tasks:
-    transform_data:
-      operator: "airflow.providers.amazon.aws.operators.glue.GlueJobOperator"
-      job_name: "customer-data-transform"
-      script_location: "s3://${proj.s3.root}/scripts/transform.py"
-      arguments:
-        --DATABASE: "${proj.connection.athena.database}"
-        --OUTPUT_PATH: "s3://${proj.s3.root}/processed/"
-    
-    validate_data:
-      operator: "airflow.providers.amazon.aws.operators.athena.AthenaOperator"
-      query: |
-        SELECT COUNT(*) as record_count 
-        FROM ${proj.connection.athena.database}.processed_data
-      output_location: "s3://${proj.s3.root}/query-results/"
-      database: "${proj.connection.athena.database}"
+applicationName: MyNotebookApp  # Change this
+
+content:
+  storage:
+    - name: notebooks
+      connectionName: default.s3_shared
+      include: ['notebooks/', 'workflows/']
+  workflows:
+    - workflowName: parallel_notebooks_execution
+      connectionName: default.workflow_serverless
+
+stages:
+  dev:
+    domain:
+      region: us-east-1  # Your AWS region
+    project:
+      name: my-dev-project  # Your project name
 ```
 
-### Example 2: Data Engineering with Notebooks
+**What to change:**
+- `applicationName`: Your application name
+- `domain.region`: Your AWS region
+- `project.name`: Your SageMaker Unified Studio project name
 
-Create `workflows/notebook_etl.yaml`:
+---
 
-```yaml
-notebook_etl_pipeline:
-  dag_id: "notebook_etl_pipeline"
-  schedule_interval: "0 3 * * *"
-  default_args:
-    owner: "devops"
-  tasks:
-    process_with_notebook:
-      operator: "airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator"
-      input_config:
-        input_path: "notebooks/data_processing.ipynb"
-        input_params:
-          input_path: "s3://${proj.s3.root}/raw-data/"
-          output_path: "s3://${proj.s3.root}/processed/"
-      output_config:
-        output_formats: ['NOTEBOOK']
-      wait_for_completion: true
+## Step 4: Deploy
+
+Deploy to your dev environment:
+
+```bash
+smus-cli deploy --targets dev --manifest manifest.yaml
 ```
 
-### Example 3: ML Training with Notebooks
+**What happens:**
+1. ✅ Uploads notebooks to S3
+2. ✅ Deploys Airflow workflow
+3. ✅ Configures project connections
+4. ✅ Ready to run!
 
-Create `workflows/ml_training.yaml`:
+---
+
+## Step 5: Verify Deployment
+
+Check your deployment in SageMaker Unified Studio console:
+
+1. Navigate to your project
+2. Go to **Workflows** section
+3. Find `parallel_notebooks_execution` workflow
+4. Click **Run** to execute
+
+---
+
+## Next Steps
+
+### Explore More Examples
+
+- **[ML Training](../../examples/analytic-workflow/ml/training/)** - Train models with SageMaker
+- **[QuickSight Dashboard](../../examples/analytic-workflow/dashboard-glue-quick/)** - Deploy BI dashboards
+- **[GenAI Application](../../examples/analytic-workflow/genai/)** - Build with Bedrock
+
+See all examples: **[Examples Guide](../examples-guide.md)**
+
+### Learn More
+
+- **[Manifest Guide](../manifest.md)** - Complete configuration reference
+- **[CLI Commands](../cli-commands.md)** - All available commands
+- **[GitHub Actions Integration](../github-actions-integration.md)** - Automate deployments
+
+### Set Up CI/CD
+
+For DevOps teams: **[Admin Guide](admin-quickstart.md)** - Configure automated pipelines
+
+---
+
+## Troubleshooting
+
+**Connection not found?**
+- Verify your project has `default.s3_shared` and `default.workflow_serverless` connections
+- Check connection names in SageMaker Unified Studio console
+
+**Deployment fails?**
+- Run `smus-cli describe --manifest manifest.yaml --connect` to validate configuration
+- Check AWS credentials: `aws sts get-caller-identity`
+
+**Need help?**
+- Open an issue: [GitHub Issues](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/issues)
+- Check documentation: [docs/](../)
+
 
 ```yaml
 ml_training_pipeline:
@@ -386,7 +358,7 @@ If your workflows need DataZone catalog assets:
 
 **Update `manifest.yaml`:**
 ```yaml
-bundle:
+content:
   catalog:
     assets:
       - selector:
@@ -450,7 +422,7 @@ stages:
 ### Custom Bundle Configuration
 
 ```yaml
-bundle:
+content:
   include:
     - workflows/
     - notebooks/

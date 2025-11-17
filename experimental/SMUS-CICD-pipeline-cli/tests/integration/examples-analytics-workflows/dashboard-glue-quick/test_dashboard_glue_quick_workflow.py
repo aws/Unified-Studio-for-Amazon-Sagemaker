@@ -184,6 +184,37 @@ class TestDashboardGlueQuickWorkflow(IntegrationTestBase):
         pipeline_file = self.get_pipeline_file()
         workflow_name = "covid_dashboard_glue_quick_pipeline"
         
+        # Cleanup: Delete QuickSight deployed assets
+        self.logger.info("\n=== Cleanup: Delete QuickSight deployed assets ===")
+        try:
+            import boto3
+            qs = boto3.client('quicksight', region_name='us-east-2')
+            account_id = '198737698272'
+            
+            # Delete dashboards
+            dashboards = qs.list_dashboards(AwsAccountId=account_id)['DashboardSummaryList']
+            for dash in dashboards:
+                if dash['DashboardId'].startswith('deployed-test'):
+                    qs.delete_dashboard(AwsAccountId=account_id, DashboardId=dash['DashboardId'])
+                    self.logger.info(f"✅ Deleted dashboard: {dash['DashboardId']}")
+            
+            # Delete datasets
+            datasets = qs.list_data_sets(AwsAccountId=account_id)['DataSetSummaries']
+            for ds in datasets:
+                if ds['DataSetId'].startswith('deployed-test'):
+                    qs.delete_data_set(AwsAccountId=account_id, DataSetId=ds['DataSetId'])
+                    self.logger.info(f"✅ Deleted dataset: {ds['DataSetId']}")
+            
+            # Delete data sources
+            sources = qs.list_data_sources(AwsAccountId=account_id)['DataSources']
+            for src in sources:
+                if src['DataSourceId'].startswith('deployed-test'):
+                    qs.delete_data_source(AwsAccountId=account_id, DataSourceId=src['DataSourceId'])
+                    self.logger.info(f"✅ Deleted data source: {src['DataSourceId']}")
+                    
+        except Exception as e:
+            self.logger.info(f"⚠️ Could not delete QuickSight assets: {e}")
+        
         # Cleanup: Remove etl directory from test project S3
         self.logger.info("\n=== Cleanup: Remove test project S3 etl directory ===")
         try:

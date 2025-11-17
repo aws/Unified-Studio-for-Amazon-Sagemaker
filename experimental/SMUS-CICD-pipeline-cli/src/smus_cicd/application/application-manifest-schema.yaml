@@ -109,6 +109,16 @@ properties:
               type: string
               description: "Dashboard asset bundle path in bundle zip (e.g., quicksight/dashboard.qs) or 'export' to export from source environment"
               default: "export"
+            owners:
+              type: array
+              description: "List of QuickSight user ARNs with owner permissions (supports wildcards)"
+              items:
+                type: string
+            viewers:
+              type: array
+              description: "List of QuickSight user ARNs with viewer permissions (supports wildcards)"
+              items:
+                type: string
           additionalProperties: false
       workflows:
         type: array

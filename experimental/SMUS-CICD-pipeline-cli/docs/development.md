@@ -1,6 +1,29 @@
 # Development Guide
 
+← [Back to Main README](../README.md)
+
 This guide covers development workflows, testing, and contribution guidelines for the SMUS CI/CD CLI.
+
+## Testing
+
+### Running Tests
+
+**Unit Tests:**
+```bash
+python tests/run_tests.py --type unit
+```
+
+**Integration Tests:**
+```bash
+python tests/run_tests.py --type integration
+```
+
+**All Tests:**
+```bash
+python tests/run_tests.py --type all
+```
+
+For detailed information about integration tests and example pipelines, see [Examples Testing Guide](../examples/README.md).
 
 ## Development Workflow
 

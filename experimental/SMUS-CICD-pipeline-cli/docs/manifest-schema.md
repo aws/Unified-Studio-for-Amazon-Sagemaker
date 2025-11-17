@@ -1,310 +1,273 @@
-# Bundle Manifest Schema
+# Application Manifest Schema
 
-← [Back to Main README](../README.md)
+← [Back to Main README](../README.md) | 📖 [Complete Manifest Guide](manifest.md)
 
-This directory contains the JSON schema and validation tools for SMUS CI/CD bundle manifests.
-
-## Files
-
-- **`pipeline-manifest-schema.yaml`** - YAML Schema definition for bundle manifests
-- **`pipeline-manifest-schema.json`** - JSON Schema definition (legacy)
-- **`validate_manifests.py`** - Python script to validate manifests against the schema
-- **`INCONSISTENCIES.md`** - Documentation of inconsistencies found during schema creation
-- **`README.md`** - This documentation file
+This document defines the schema for SMUS CI/CD application manifests. For detailed explanations, examples, and best practices, see the [Application Manifest Guide](manifest.md).
 
 ## Schema Overview
 
-The schema defines the structure for SMUS CI/CD bundle manifests with the following main sections:
+The manifest defines your application structure with these main sections:
 
 ### Required Fields
-- **`bundleName`** - Unique bundle identifier
-- **`domain`** - DataZone domain configuration (name, region)
-- **`targets`** - Target environments (dev, test, prod, etc.)
+- **`applicationName`** - Unique application identifier
+- **`stages`** - Deployment environments (dev, test, prod, etc.)
 
 ### Optional Fields
-- **`bundle`** - Bundle creation configuration
-- **`workflows`** - Global workflow definitions
+- **`content`** - Application content (storage, git, workflows, quicksight)
 
-## Usage
+## Complete Schema Structure
 
-### Validate All Manifests
-```bash
-cd /path/to/smus_cicd
-python schema/validate_manifests.py
-```
-
-### Validate Single Manifest (Python)
-```python
-import yaml
-from jsonschema import validate
-
-# Load schema
-with open('schema/pipeline-manifest-schema.yaml', 'r') as f:
-    schema = yaml.safe_load(f)
-
-# Load manifest
-with open('manifest.yaml', 'r') as f:
-    manifest = yaml.safe_load(f)
-
-# Validate
-validate(manifest, schema)
-print("✅ Valid!")
-```
-
-### Integration with CLI
-The schema can be integrated into the CLI commands for validation:
-
-```python
-from smus_cicd.validation import validate_manifest_schema
-
-# In describe command
-if not validate_manifest_schema(manifest_path):
-    typer.echo("❌ Invalid manifest schema", err=True)
-    raise typer.Exit(1)
-```
-
-## Schema Structure
-
-### Domain Configuration
+### Application Identity
 ```yaml
-domain:
-  name: cicd-test-domain    # Required: DataZone domain name
-  region: us-east-1         # Required: AWS region
+applicationName: MyDataApp    # Required: Unique application name
 ```
 
-### Bundle Configuration
-```yaml
-bundle:
-  bundlesDirectory: ./bundles  # Optional: Bundle output directory (local or S3)
-  storage:                     # Optional: Storage bundle config (unified - includes workflows)
-    - name: code               # Required: Unique name for this bundle item
-      connectionName: default.s3_shared
-      append: false            # Optional: Append vs replace
-      include: ['src/']        # Optional: Include patterns
-      exclude: ['*.pyc']       # Optional: Exclude patterns
-    - name: workflows          # Required: Unique name for workflows
-      connectionName: default.s3_shared
-      append: true
-      include: ['workflows/']
-  git:                         # Optional: Git repository
-    repository: my-repo
-    url: https://github.com/user/repo.git
-  catalog:                     # Optional: Catalog asset access
-    assets:                    # Required: List of assets
-      - selector:              # Required: Asset selector
-          search:              # Required: Search configuration
-            assetType: GlueTable  # Required: Asset type
-            identifier: db.table  # Required: Asset identifier
-        permission: READ       # Required: Access permission
-        requestReason: "Pipeline access"  # Required: Access justification
-```
-
-### Initialization Actions
-```yaml
-bootstrap:
-  actions:                     # List of initialization actions
-    # Event Action - Emit EventBridge events
-    - type: event              # Required: Action type
-      eventSource: com.mycompany.app  # Required: Event source
-      eventDetailType: ApplicationDeployed  # Required: Event detail type
-      eventBusName: default    # Optional: Event bus name (default: "default")
-      detail:                  # Optional: Event detail with variable support
-        application: ${application.name}  # Variable: application name
-        stage: ${stage}        # Variable: stage name
-        project: ${project.name}  # Variable: project name
-        region: ${domain.region}  # Variable: domain region
-      resources:               # Optional: Resource ARNs
-        - arn:aws:s3:::my-bucket
-    
-    # Workflow Action - Trigger workflows
-    - type: workflow           # Required: Action type
-      workflowName: test_dag   # Required: Workflow name
-      connectionName: project.workflow_mwaa  # Required: Connection
-      engine: MWAA             # Optional: Engine type
-      parameters:              # Optional: Workflow parameters
-        key: value
-```
-
-**Supported Variables in Event Details:**
-- `${application.name}` - Application name from manifest
-- `${stage}` - Target stage name (dev, test, prod)
-- `${project.name}` - DataZone project name
-- `${domain.name}` - DataZone domain name
-- `${domain.region}` - AWS region
-
-**Validation Rules:**
-- Event actions require `eventSource` and `eventDetailType`
-- Variables are resolved at deployment time
-- Actions are processed sequentially after project initialization
-
-See [Event Initialization Guide](event-bootstrap.md) for detailed documentation.
-
-### QuickSight Dashboards
+### Content Configuration
 ```yaml
 content:
-  quicksight:                  # Optional: QuickSight dashboards
+  # Storage content (S3 files, data, models)
+  storage:
+    - name: code               # Required: Unique name for this content
+      connectionName: default.s3_shared  # Required: Connection name
+      include: ['src/']        # Optional: Include patterns
+      exclude: ['*.pyc']       # Optional: Exclude patterns
+      append: false            # Optional: Append vs replace (default: false)
+  
+  # Git repositories
+  git:
+    - repository: my-repo      # Required: Repository name
+      url: https://github.com/user/repo.git  # Required: Git URL
+      branch: main             # Optional: Branch name (default: main)
+      include: ['src/']        # Optional: Include patterns
+      exclude: ['*.pyc']       # Optional: Exclude patterns
+  
+  # Workflows (Airflow DAGs)
+  workflows:
+    - workflowName: daily_etl  # Required: Workflow name
+      connectionName: project.workflow_serverless  # Required: Connection
+  
+  # QuickSight dashboards
+  quicksight:
     - dashboardId: sales-dashboard  # Required: Dashboard ID
-      assetBundle: quicksight/sales-dashboard.qs  # Required: Path to asset bundle file
+      assetBundle: quicksight/sales-dashboard.qs  # Required: Asset bundle path
+  
+  # Catalog assets
+  catalog:
+    assets:
+      - selector:
+          search:
+            assetType: GlueTable  # Required: Asset type
+            identifier: db.table  # Required: Asset identifier
+        permission: READ       # Required: Permission level
+        requestReason: "Pipeline access"  # Required: Justification
+```
 
+### Stage Configuration
+```yaml
 stages:
-  prod:
-    deployment_configuration:
-      quicksight:              # Optional: Stage-specific QuickSight configuration
-        overrideParameters:    # Optional: Parameters to override during deployment
+  dev:                         # Stage name (required)
+    stage: DEV                 # Optional: Stage identifier
+    domain:
+      region: us-east-1        # Required: AWS region
+      tags:                    # Optional: Domain tags
+        purpose: development
+    project:
+      name: dev-project        # Required: Project name
+      create: true             # Optional: Auto-create project (default: false)
+      owners:                  # Optional: Project owners (required if create: true)
+        - Eng1
+        - arn:aws:iam::*:role/MyRole
+      contributors: []         # Optional: Project contributors
+      role:
+        # Option 1: Use existing role
+        arn: arn:aws:iam::123456789012:role/MyProjectRole
+        
+        # Option 2: Create new role with policies
+        name: my-custom-role   # Optional: Custom role name
+        policies:              # Policy ARNs to attach
+          - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+          - arn:aws:iam::123456789012:policy/MyCustomPolicy
+    
+    environment_variables:     # Optional: Environment variables
+      S3_PREFIX: dev
+      DATABASE: dev_db
+    
+    deployment_configuration:  # Optional: Stage-specific deployment config
+      storage:
+        - name: code           # Required: Name matching content.storage item
+          connectionName: default.s3_shared
+          targetDirectory: src # Required: Target directory
+      quicksight:              # Optional: QuickSight overrides
+        overrideParameters:
           ResourceIdOverrideConfiguration:
-            PrefixForAllResources: prod-
-        permissions:           # Optional: Dashboard permissions
+            PrefixForAllResources: dev-
+        permissions:
           - principal: arn:aws:quicksight:us-east-1:123456789012:user/default/admin
             actions:
               - quicksight:DescribeDashboard
-              - quicksight:QueryDashboard
+    
+    bootstrap:                 # Optional: Initialization actions
+      actions:
+        # Event action - Emit EventBridge events
+        - type: event
+          eventSource: com.mycompany.app
+          eventDetailType: ApplicationDeployed
+          eventBusName: default  # Optional: Event bus (default: "default")
+          detail:              # Optional: Event detail with variables
+            application: ${application.name}
+            stage: ${stage.name}
+            project: ${project.name}
+            region: ${domain.region}
+          resources:           # Optional: Resource ARNs
+            - arn:aws:s3:::my-bucket
+        
+        # Workflow action - Trigger workflows
+        - type: workflow
+          workflowName: setup_dag
+          connectionName: project.workflow_mwaa
+          engine: MWAA         # Optional: Engine type
+          parameters:          # Optional: Workflow parameters
+            key: value
+        
+        # DataZone connection action
+        - type: datazone.create_connection
+          connectionName: custom.athena
+          connectionType: ATHENA
+          properties:
+            workgroup: primary
 ```
 
-**Dashboard Configuration:**
-- `dashboardId` (required): QuickSight dashboard identifier
-- `source` (optional): Dashboard bundle source
-  - `export` - Export from dev during bundle creation (default)
-  - `s3://...` - Use existing bundle from S3
-- `overrideParameters` (optional): Key-value pairs to override (DataSetArn, DataSourceArn, ThemeArn)
-- `permissions` (optional): Array of permission grants
-  - `principal` (required): User or group ARN
-  - `actions` (required): Array of QuickSight permission actions
+## Supported Variables
 
-**Validation Rules:**
-- Dashboard ID must be specified
-- Principal ARNs must be valid QuickSight user/group ARNs
-- Actions must be valid QuickSight permissions
+Variables can be used in workflow files and bootstrap event details:
 
-See [QuickSight Deployment Guide](quicksight-deployment.md) for detailed documentation.
+### Application Variables
+- `${application.name}` - Application name from manifest
 
-### Target Configuration
-```yaml
-stages:
-  dev:                         # Target name (required)
-    stage: DEV                 # Optional: Stage identifier
-    default: true              # Optional: Default target flag
-    project:                   # Required: Project config
-      name: dev-project        # Required: Project name
-    bootstrap:            # Optional: Init config
-      project:                 # Optional: Project creation
-        create: true           # Optional: Auto-create project
-        profileName: 'All capabilities'
-        owners: [Eng1]         # Optional: Project owners
-        contributors: []       # Optional: Project contributors
-        role:                  # Optional: IAM role configuration
-          # Common Scenario 1: Create new role with policies
-          name: my-custom-role-name  # Optional: Custom role name (default: smus-{project-name}-role)
-          policies:            # Policy ARNs to attach (AWS managed or customer managed)
-            - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
-            - arn:aws:iam::aws:policy/AmazonAthenaFullAccess
-            - arn:aws:iam::123456789012:policy/MyCustomPolicy
-          # Common Scenario 2: Use existing role (no policies)
-          # arn: arn:aws:iam::123456789012:role/MyProjectRole
-      environments:            # Optional: Environment configs
-        - EnvironmentConfigurationName: 'OnDemand Workflows'
-    deployment_configuration: # Optional: Target-specific bundle config
-      storage:
-        - name: code           # Required: Name matching bundle storage item
-          connectionName: default.s3_shared
-          targetDirectory: 'src'  # Required: Target directory on connection
-        - name: workflows
-          connectionName: default.s3_shared
-          targetDirectory: 'workflows'
-    workflows:                 # Optional: Stage-specific workflows
-      - workflowName: prepareData
-        parameters:
-          stage_database: DevDB
-```
+### Stage Variables
+- `${stage.name}` - Stage name (dev, test, prod)
 
-### Activation Configuration
-```yaml
-activation:
-  workflows:
-    - workflowName: test_dag           # Required: Workflow name
-      connectionName: project.workflow_mwaa  # Required: Connection
-      triggerPostDeployment: true      # Optional: Auto-trigger
-      engine: MWAA                     # Optional: Engine type
-      parameters:                      # Optional: Workflow parameters
-        default-sql-connection: project.athena
-      logging: console                 # Optional: Logging config
-```
+### Project Variables
+- `${project.name}` - DataZone project name
+- `${proj.connection.CONNECTION_NAME.PROPERTY}` - Connection properties
+- `${proj.iam_role_name}` - Project IAM role name
+- `${proj.iam_role_arn}` - Project IAM role ARN
+
+### Domain Variables
+- `${domain.name}` - DataZone domain name
+- `${domain.region}` - AWS region
+
+### Environment Variables
+- `${env.VAR_NAME}` - Environment variable
+- `${VAR_NAME:default}` - Environment variable with default value
+
+See [Substitutions & Variables](substitutions-and-variables.md) for complete documentation.
 
 ## Validation Rules
 
 ### Naming Conventions
-- **Pipeline names**: Must start with letter, contain only alphanumeric, underscore, hyphen
-- **Target names**: Must start with letter, contain only alphanumeric, underscore, hyphen
+- **Application names**: Must start with letter, alphanumeric + underscore/hyphen
+- **Stage names**: Must start with letter, alphanumeric + underscore/hyphen
 - **Regions**: Must match AWS region pattern (e.g., `us-east-1`)
 
 ### Constraints
-- At least one target must be defined
-- Only string, number, or boolean values allowed in parameters
-- Connection names should follow DataZone naming conventions
+- At least one stage must be defined
+- Storage/git content items must have unique names
+- Connection names should follow DataZone conventions (default.*, project.*)
 - File patterns should use forward slashes
 
-### Optional vs Required
-- Most fields are optional to accommodate different use cases
-- Only core identification fields are required
-- Schema allows for flexible manifest structures
+### Bootstrap Actions
+- Event actions require `eventSource` and `eventDetailType`
+- Workflow actions require `workflowName` and `connectionName`
+- Variables are resolved at deployment time
+- Actions are processed sequentially
 
 ## Common Patterns
 
-### Dev-Only Pipeline
+### Minimal Manifest
 ```yaml
-bundleName: DevOnlyBundle
-domain:
-  name: my-domain
-  region: us-east-1
+applicationName: SimpleApp
+
+content:
+  storage:
+    - name: code
+      connectionName: default.s3_shared
+      include: ['src/']
+
 stages:
   dev:
-    default: true
+    domain:
+      region: us-east-1
     project:
       name: dev-project
 ```
 
-### Multi-Target Pipeline
+### Multi-Stage with Workflows
 ```yaml
-bundleName: MultiTargetBundle
-domain:
-  name: my-domain
-  region: us-east-1
+applicationName: ETLPipeline
+
+content:
+  storage:
+    - name: scripts
+      connectionName: default.s3_shared
+      include: ['scripts/']
+  workflows:
+    - workflowName: daily_etl
+      connectionName: project.workflow_serverless
+
 stages:
-  dev:
-    default: true
-    project:
-      name: dev-project
   test:
+    domain:
+      region: us-east-1
     project:
-      name: test-project
-    bootstrap:
-      project:
-        create: true
-        owners: [Eng1]
+      name: test-analytics
+      create: true
+      owners: [Eng1]
+    environment_variables:
+      DATABASE: test_db
+  
   prod:
+    domain:
+      region: us-east-1
     project:
-      name: prod-project
-    bootstrap:
-      project:
-        create: true
-        owners: [Eng1]
+      name: prod-analytics
+    environment_variables:
+      DATABASE: prod_db
 ```
 
-## Error Handling
+### Git + Storage + QuickSight
+```yaml
+applicationName: AnalyticsDashboard
 
-The validation script provides detailed error messages including:
-- **Path**: Location of the error in the manifest
-- **Message**: Description of the validation failure
-- **Expected**: What the schema expected (for enum/pattern violations)
+content:
+  git:
+    - repository: analytics-code
+      url: https://github.com/myorg/analytics.git
+  storage:
+    - name: data
+      connectionName: default.s3_shared
+      include: ['data/']
+  quicksight:
+    - dashboardId: sales-dashboard
+      assetBundle: quicksight/sales.qs
 
-Example error output:
+stages:
+  prod:
+    domain:
+      region: us-east-1
+    project:
+      name: prod-analytics
+    deployment_configuration:
+      quicksight:
+        overrideParameters:
+          ResourceIdOverrideConfiguration:
+            PrefixForAllResources: prod-
 ```
-❌ INVALID - Found 2 schema violations:
-  1. Path: domain -> region
-     Error: 'invalid-region' does not match '^[a-z0-9-]+$'
-     Expected: ^[a-z0-9-]+$
 
-  2. Path: targets -> dev -> project
-     Error: 'name' is a required property
-```
+## Related Documentation
 
-
+- **[Manifest Guide](manifest.md)** - Complete manifest documentation
+- **[CLI Commands](cli-commands.md)** - Command reference
+- **[Bootstrap Actions](bootstrap-actions.md)** - Initialization actions
+- **[QuickSight Deployment](quicksight-deployment.md)** - Dashboard deployment
+- **[Substitutions & Variables](substitutions-and-variables.md)** - Variable resolution

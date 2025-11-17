@@ -360,7 +360,7 @@ class TestCreateCommand:
 
                 # Optional fields (commented)
                 assert "# Application content configuration" in content
-                assert "# initialization:" in content
+                assert "# Bootstrap actions" in content
 
                 # Placeholder indicators
                 assert "PLACEHOLDER" in content

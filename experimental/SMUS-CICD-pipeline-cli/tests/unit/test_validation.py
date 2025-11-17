@@ -190,11 +190,11 @@ stages:
     stage: DEV
     project:
       name: dev-project
-initialization:
-  - type: workflow
-    workflowName: test_workflow
-    connectionName: project.workflow_mwaa
-    engine: InvalidEngine
+bootstrap:
+  actions:
+    - type: mwaaserverless.start_workflow_run
+      workflowArn: arn:aws:airflow-serverless:us-east-1:123456789012:workflow/test
+      engine: InvalidEngine
 """
         manifest_file = self.create_temp_manifest(invalid_engine)
         try:

@@ -293,7 +293,7 @@ The CLI handles DataZone catalog asset access throughout the pipeline:
 
 ```yaml
 # In manifest.yaml - catalog assets are automatically managed
-bundle:
+content:
   catalog:
     assets:
       - selector:

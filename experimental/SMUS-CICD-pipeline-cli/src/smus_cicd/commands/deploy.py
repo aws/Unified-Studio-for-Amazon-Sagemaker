@@ -206,7 +206,7 @@ def deploy_command(
         imported_dataset_ids = _deploy_quicksight_dashboards(
             manifest, target_config, stage_name, config, bundle_path
         )
-        
+
         # Store imported dataset IDs in config for bootstrap actions
         if imported_dataset_ids:
             config["imported_quicksight_datasets"] = imported_dataset_ids
@@ -1871,12 +1871,14 @@ def _deploy_quicksight_dashboards(
 ) -> List[str]:
     """
     Deploy QuickSight dashboards to target environment.
-    
+
     Returns:
         List of imported dataset IDs
     """
     from ..helpers.quicksight import (
         grant_dashboard_permissions,
+        grant_data_source_permissions,
+        grant_dataset_permissions,
         import_dashboard,
         poll_import_job,
     )
@@ -1888,8 +1890,21 @@ def _deploy_quicksight_dashboards(
 
     # Get QuickSight configuration from deployment_configuration
     qs_config = None
-    if hasattr(target_config, 'deployment_configuration') and target_config.deployment_configuration:
-        qs_config = getattr(target_config.deployment_configuration, 'quicksight', None)
+    typer.echo(
+        f"🔍 target_config has deployment_configuration: {hasattr(target_config, 'deployment_configuration')}"
+    )
+    if (
+        hasattr(target_config, "deployment_configuration")
+        and target_config.deployment_configuration
+    ):
+        typer.echo(
+            f"🔍 deployment_configuration exists: {target_config.deployment_configuration}"
+        )
+        typer.echo(
+            f"🔍 deployment_configuration has quicksight: {hasattr(target_config.deployment_configuration, 'quicksight')}"
+        )
+        qs_config = getattr(target_config.deployment_configuration, "quicksight", None)
+        typer.echo(f"🔍 qs_config value: {qs_config}")
 
     typer.echo(f"🔍 DEBUG: Found {len(dashboards)} QuickSight dashboards to deploy")
 
@@ -1920,9 +1935,11 @@ def _deploy_quicksight_dashboards(
     for dashboard_config in dashboards:
         dashboard_id = dashboard_config.dashboardId
         typer.echo(f"  Deploying dashboard: {dashboard_id}")
-        
+
         # Get assetBundle (with fallback to 'source' for backward compatibility during transition)
-        asset_bundle = getattr(dashboard_config, 'assetBundle', None) or getattr(dashboard_config, 'source', 'export')
+        asset_bundle = getattr(dashboard_config, "assetBundle", None) or getattr(
+            dashboard_config, "source", "export"
+        )
         typer.echo(f"    🔍 DEBUG: assetBundle={asset_bundle}, bundle={bundle}")
 
         try:
@@ -1969,10 +1986,32 @@ def _deploy_quicksight_dashboards(
                 bundle_path = os.path.join(temp_dir, file_in_zip)
 
             # Import dashboard with override parameters from deployment_configuration
+            typer.echo(f"🔍 qs_config exists: {qs_config is not None}")
             override_params = {}
             if qs_config:
-                override_params = getattr(qs_config, 'overrideParameters', {}) or {}
-            
+                typer.echo("🔍 Getting overrideParameters from qs_config")
+                # qs_config is a dict, not an object
+                override_params = (
+                    qs_config.get("overrideParameters", {})
+                    if isinstance(qs_config, dict)
+                    else getattr(qs_config, "overrideParameters", {}) or {}
+                )
+                typer.echo(f"🔍 Raw override params: {override_params}")
+                # Resolve variables in override parameters using simple string replacement
+                # We don't use ContextResolver here because it requires project lookup which may fail
+                import json
+
+                override_json = json.dumps(override_params)
+                # Replace {stage.name} and {proj.name}
+                override_json = override_json.replace("{stage.name}", stage_name)
+                override_json = override_json.replace(
+                    "{proj.name}", target_config.project.name
+                )
+                override_params = json.loads(override_json)
+                typer.echo(
+                    f"🔍 Resolved override params: {json.dumps(override_params, indent=2)}"
+                )
+
             job_id = import_dashboard(
                 bundle_path,
                 aws_account_id,
@@ -1981,47 +2020,207 @@ def _deploy_quicksight_dashboards(
             )
             result = poll_import_job(job_id, aws_account_id, region)
 
+            # Initialize with original dashboard ID
+            imported_dashboard_id = dashboard_id
+
             # Print imported assets
-            if result.get("Status") == "SUCCESSFUL":
+            if result.get("JobStatus") == "SUCCESSFUL":
                 typer.echo("    ✓ Dashboard deployed successfully")
 
-                # Get import job details to show created assets
+                # Get the actual imported dashboard ID from override parameters
+                # The imported ID is: prefix + dashboard_id_from_overrides
+                imported_dashboard_id = dashboard_id
+                prefix = ""
+                if (
+                    override_params
+                    and "ResourceIdOverrideConfiguration" in override_params
+                ):
+                    prefix = override_params["ResourceIdOverrideConfiguration"].get(
+                        "PrefixForAllResources", ""
+                    )
+                    # Find the dashboard ID in the override parameters
+                    if "Dashboards" in override_params:
+                        for dash_override in override_params["Dashboards"]:
+                            # The imported ID is prefix + original dashboard ID from overrides
+                            imported_dashboard_id = (
+                                f"{prefix}{dash_override['DashboardId']}"
+                            )
+                            typer.echo(f"      Dashboard: {imported_dashboard_id}")
+                            break
+
+                # List imported datasets and data sources
                 import boto3
 
-                client = boto3.client("quicksight", region_name=region)
-                job_details = client.describe_asset_bundle_import_job(
-                    AwsAccountId=aws_account_id, AssetBundleImportJobId=job_id
-                )
+                qs_client = boto3.client("quicksight", region_name=region)
 
-                # Print created assets
-                if job_details.get("Dashboards"):
-                    typer.echo("      Dashboards:")
-                    for dash in job_details["Dashboards"]:
-                        typer.echo(f"        - {dash['DashboardId']}")
+                # List datasets with prefix
+                try:
+                    datasets_response = qs_client.list_data_sets(
+                        AwsAccountId=aws_account_id
+                    )
+                    datasets = [
+                        ds
+                        for ds in datasets_response.get("DataSetSummaries", [])
+                        if prefix and prefix in ds["DataSetId"]
+                    ]
+                    if datasets:
+                        typer.echo(f"      Datasets ({len(datasets)}):")
+                        for ds in datasets:
+                            typer.echo(f"        - {ds['DataSetId']}")
+                            imported_dataset_ids.append(ds["DataSetId"])
+                except Exception as e:
+                    typer.echo(f"      ⚠️  Could not list datasets: {e}")
 
-                if job_details.get("DataSets"):
-                    typer.echo("      DataSets:")
-                    for ds in job_details["DataSets"]:
-                        dataset_id = ds['DataSetId']
-                        typer.echo(f"        - {dataset_id}")
-                        imported_dataset_ids.append(dataset_id)
+                # List data sources with prefix
+                try:
+                    sources_response = qs_client.list_data_sources(
+                        AwsAccountId=aws_account_id
+                    )
+                    sources = [
+                        src
+                        for src in sources_response.get("DataSources", [])
+                        if prefix and prefix in src["DataSourceId"]
+                    ]
+                    if sources:
+                        typer.echo(f"      Data Sources ({len(sources)}):")
+                        for src in sources:
+                            typer.echo(
+                                f"        - {src['DataSourceId']} ({src['Type']})"
+                            )
+                except Exception as e:
+                    typer.echo(f"      ⚠️  Could not list data sources: {e}")
 
-                if job_details.get("DataSources"):
-                    typer.echo("      DataSources:")
-                    for source in job_details["DataSources"]:
-                        typer.echo(f"        - {source['DataSourceId']}")
+                # Grant permissions from deployment_configuration
+                permissions = []
+                if qs_config:
+                    permissions = getattr(qs_config, "permissions", []) or []
 
-            # Grant permissions from deployment_configuration
-            permissions = []
-            if qs_config:
-                permissions = getattr(qs_config, 'permissions', []) or []
-            
-            if permissions:
-                grant_dashboard_permissions(
-                    dashboard_id, aws_account_id, region, permissions
-                )
+                # Add owner and viewer permissions from dashboard config
+                owners = getattr(dashboard_config, "owners", []) or []
+                viewers = getattr(dashboard_config, "viewers", []) or []
+
+                typer.echo(f"🔍 Dashboard config owners: {owners}")
+                typer.echo(f"🔍 Dashboard config viewers: {viewers}")
+
+                # Track principals to avoid duplicates (owners take precedence over viewers)
+                principal_actions = {}
+
+                for owner in owners:
+                    principal_actions[owner] = [
+                        "quicksight:DescribeDashboard",
+                        "quicksight:ListDashboardVersions",
+                        "quicksight:UpdateDashboardPermissions",
+                        "quicksight:QueryDashboard",
+                        "quicksight:UpdateDashboard",
+                        "quicksight:DeleteDashboard",
+                        "quicksight:UpdateDashboardPublishedVersion",
+                        "quicksight:DescribeDashboardPermissions",
+                    ]
+
+                for viewer in viewers:
+                    # Only add viewer if not already an owner
+                    if viewer not in principal_actions:
+                        principal_actions[viewer] = [
+                            "quicksight:DescribeDashboard",
+                            "quicksight:ListDashboardVersions",
+                            "quicksight:QueryDashboard",
+                        ]
+
+                # Convert to permissions list
+                for principal, actions in principal_actions.items():
+                    permissions.append({"principal": principal, "actions": actions})
+
+                typer.echo(f"🔍 Total permissions to grant: {len(permissions)}")
+                if permissions:
+                    # Grant dashboard permissions
+                    grant_dashboard_permissions(
+                        imported_dashboard_id, aws_account_id, region, permissions
+                    )
+
+                    # Grant dataset permissions
+                    for dataset_id in imported_dataset_ids:
+                        try:
+                            dataset_perms = []
+                            for principal in principal_actions.keys():
+                                if principal in owners:  # Owner
+                                    dataset_actions = [
+                                        "quicksight:DescribeDataSet",
+                                        "quicksight:DescribeDataSetPermissions",
+                                        "quicksight:PassDataSet",
+                                        "quicksight:DescribeIngestion",
+                                        "quicksight:ListIngestions",
+                                        "quicksight:UpdateDataSet",
+                                        "quicksight:DeleteDataSet",
+                                        "quicksight:CreateIngestion",
+                                        "quicksight:CancelIngestion",
+                                        "quicksight:UpdateDataSetPermissions",
+                                    ]
+                                else:  # Viewer
+                                    dataset_actions = [
+                                        "quicksight:DescribeDataSet",
+                                        "quicksight:DescribeDataSetPermissions",
+                                        "quicksight:PassDataSet",
+                                        "quicksight:DescribeIngestion",
+                                        "quicksight:ListIngestions",
+                                    ]
+                                dataset_perms.append(
+                                    {"principal": principal, "actions": dataset_actions}
+                                )
+
+                            grant_dataset_permissions(
+                                dataset_id, aws_account_id, region, dataset_perms
+                            )
+                            typer.echo(
+                                f"      ✓ Granted permissions to dataset {dataset_id}"
+                            )
+                        except Exception as e:
+                            typer.echo(
+                                f"      ⚠️  Could not grant dataset permissions: {e}"
+                            )
+
+                    # Grant data source permissions
+                    if sources:
+                        for src in sources:
+                            try:
+                                source_perms = []
+                                for principal in principal_actions.keys():
+                                    if principal in owners:  # Owner
+                                        source_actions = [
+                                            "quicksight:DescribeDataSource",
+                                            "quicksight:DescribeDataSourcePermissions",
+                                            "quicksight:PassDataSource",
+                                            "quicksight:UpdateDataSource",
+                                            "quicksight:DeleteDataSource",
+                                            "quicksight:UpdateDataSourcePermissions",
+                                        ]
+                                    else:  # Viewer
+                                        source_actions = [
+                                            "quicksight:DescribeDataSource",
+                                            "quicksight:DescribeDataSourcePermissions",
+                                            "quicksight:PassDataSource",
+                                        ]
+                                    source_perms.append(
+                                        {
+                                            "principal": principal,
+                                            "actions": source_actions,
+                                        }
+                                    )
+
+                                grant_data_source_permissions(
+                                    src["DataSourceId"],
+                                    aws_account_id,
+                                    region,
+                                    source_perms,
+                                )
+                                typer.echo(
+                                    f"      ✓ Granted permissions to data source {src['DataSourceId']}"
+                                )
+                            except Exception as e:
+                                typer.echo(
+                                    f"      ⚠️  Could not grant data source permissions: {e}"
+                                )
 
         except Exception as e:
             typer.echo(f"    ✗ Error deploying dashboard: {e}", err=True)
-    
+
     return imported_dataset_ids

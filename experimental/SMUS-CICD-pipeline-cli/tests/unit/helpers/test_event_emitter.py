@@ -23,7 +23,7 @@ class TestEventEmitter:
         emitter = EventEmitter(enabled=False)
         assert emitter.enabled is False
 
-    @patch("smus_cicd.helpers.event_emitter.boto3.client")
+    @patch("smus_cicd.helpers.eventbridge_client.boto3.client")
     def test_lazy_client_loading(self, mock_boto_client):
         """Test that boto3 client is lazy-loaded."""
         emitter = EventEmitter(enabled=True, region="us-east-1")
@@ -33,7 +33,7 @@ class TestEventEmitter:
         _ = emitter.client
         mock_boto_client.assert_called_once_with("events", region_name="us-east-1")
 
-    @patch("smus_cicd.helpers.event_emitter.boto3.client")
+    @patch("smus_cicd.helpers.eventbridge_client.boto3.client")
     def test_emit_success(self, mock_boto_client):
         """Test successful event emission."""
         mock_client = MagicMock()
@@ -49,7 +49,7 @@ class TestEventEmitter:
         assert call_args["Entries"][0]["Source"] == "com.amazon.smus.cicd"
         assert call_args["Entries"][0]["DetailType"] == "TestEvent"
 
-    @patch("smus_cicd.helpers.event_emitter.boto3.client")
+    @patch("smus_cicd.helpers.eventbridge_client.boto3.client")
     def test_emit_failure(self, mock_boto_client):
         """Test failed event emission."""
         mock_client = MagicMock()
@@ -67,7 +67,7 @@ class TestEventEmitter:
         result = emitter.emit("TestEvent", {"key": "value"})
         assert result is True
 
-    @patch("smus_cicd.helpers.event_emitter.boto3.client")
+    @patch("smus_cicd.helpers.eventbridge_client.boto3.client")
     def test_deploy_started(self, mock_boto_client):
         """Test deploy started event."""
         mock_client = MagicMock()
@@ -87,7 +87,7 @@ class TestEventEmitter:
         assert detail["stage"] == "deploy"
         assert detail["status"] == "started"
 
-    @patch("smus_cicd.helpers.event_emitter.boto3.client")
+    @patch("smus_cicd.helpers.eventbridge_client.boto3.client")
     def test_deploy_failed(self, mock_boto_client):
         """Test deploy failed event."""
         mock_client = MagicMock()
@@ -106,7 +106,7 @@ class TestEventEmitter:
         assert detail["status"] == "failed"
         assert detail["error"]["code"] == "TEST_ERROR"
 
-    @patch("smus_cicd.helpers.event_emitter.boto3.client")
+    @patch("smus_cicd.helpers.eventbridge_client.boto3.client")
     def test_workflow_creation_completed(self, mock_boto_client):
         """Test workflow creation completed event."""
         mock_client = MagicMock()

@@ -1,5 +1,8 @@
 # Bundle Deployment Metrics and Monitoring with EventBridge
 
+← [Back to Main README](../README.md)
+
+
 **Track deployment lifecycle events, operational metrics, and build custom alerts for your data application bundles.**
 
 The SMUS CICD CLI emits deployment lifecycle events to Amazon EventBridge, enabling you to monitor bundle deployments, track operational metrics, build custom alerts, and automate workflows.
@@ -15,7 +18,7 @@ The SMUS CICD CLI emits deployment lifecycle events to Amazon EventBridge, enabl
 Add to `manifest.yaml`:
 
 ```yaml
-bundleName: MyBundle
+applicationName: MyBundle
 
 monitoring:
   eventbridge:
@@ -89,7 +92,7 @@ During deployment, the CLI emits events at key stages:
 Add monitoring configuration to your `manifest.yaml`:
 
 ```yaml
-bundleName: MyBundle
+applicationName: MyBundle
 
 monitoring:
   eventbridge:

@@ -1,8 +1,10 @@
 # Application Deployment Manifest
 
-← [Back to Main README](../README.md)
+← [Back to Main README](../README.md) | 📋 [Schema Reference](manifest-schema.md)
 
 The Application Deployment Manifest is a YAML file that defines **what** your application is and **where** it should be deployed in Amazon SageMaker Unified Studio.
+
+> **Quick Reference:** For schema structure and validation rules, see [Manifest Schema](manifest-schema.md)
 
 ## What is an Application Deployment Manifest?
 
@@ -378,7 +380,7 @@ content:
 Request access to DataZone catalog assets:
 
 ```yaml
-bundle:
+content:
   catalog:
     assets:
       - selector:
@@ -819,7 +821,7 @@ The bundle manifest supports two types of parameterization:
 Use environment variables in the manifest with `${VAR_NAME:default_value}` syntax:
 
 ```yaml
-bundleName: ${BUNDLE_NAME:MarketingBundle}
+applicationName: ${APP_NAME:MarketingApp}
 
 stages:
   dev:

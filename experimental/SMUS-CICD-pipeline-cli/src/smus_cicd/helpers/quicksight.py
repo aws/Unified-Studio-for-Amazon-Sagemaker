@@ -1,5 +1,6 @@
 """QuickSight dashboard deployment helper."""
 
+import json
 import time
 from typing import Any, Dict, List, Optional
 
@@ -142,6 +143,9 @@ def import_dashboard(
 
         if override_parameters:
             import_params["OverrideParameters"] = override_parameters
+            logger.info(
+                f"Override parameters being sent to API: {json.dumps(override_parameters, indent=2)}"
+            )
 
         response = client.start_asset_bundle_import_job(**import_params)
 
@@ -235,24 +239,105 @@ def grant_dashboard_permissions(
 
         grant_permissions = []
         for perm in permissions:
-            grant_permissions.append(
-                {
-                    "Principal": perm.get("principal", ""),
-                    "Actions": perm.get("actions", ["quicksight:DescribeDashboard"]),
-                }
+            principal = perm.get("principal", "")
+            actions = perm.get("actions", ["quicksight:DescribeDashboard"])
+
+            logger.info(f"Expanding principal: {principal}")
+            # Expand wildcards in principal
+            expanded_principals = expand_principal_wildcards(
+                principal, aws_account_id, region
+            )
+            logger.info(
+                f"Expanded to {len(expanded_principals)} principals: {expanded_principals}"
             )
 
-        client.update_dashboard_permissions(
-            AwsAccountId=aws_account_id,
-            DashboardId=dashboard_id,
-            GrantPermissions=grant_permissions,
-        )
+            for expanded_principal in expanded_principals:
+                grant_permissions.append(
+                    {
+                        "Principal": expanded_principal,
+                        "Actions": actions,
+                    }
+                )
 
-        logger.info(f"Granted permissions to dashboard {dashboard_id}")
+        logger.info(
+            f"Granting {len(grant_permissions)} permission sets to dashboard {dashboard_id}"
+        )
+        if grant_permissions:
+            client.update_dashboard_permissions(
+                AwsAccountId=aws_account_id,
+                DashboardId=dashboard_id,
+                GrantPermissions=grant_permissions,
+            )
+            logger.info(
+                f"Granted permissions to dashboard {dashboard_id} for {len(grant_permissions)} principals"
+            )
+
         return True
 
     except Exception as e:
         raise QuickSightDeploymentError(f"Failed to grant permissions: {e}")
+
+
+def grant_dataset_permissions(
+    dataset_id: str,
+    aws_account_id: str,
+    region: str,
+    permissions: List[Dict[str, str]],
+) -> bool:
+    """Grant permissions to QuickSight dataset."""
+    try:
+        client = boto3.client("quicksight", region_name=region)
+
+        expanded_perms = []
+        for perm in permissions:
+            expanded = expand_principal_wildcards(
+                perm["principal"], aws_account_id, region
+            )
+            for exp_principal in expanded:
+                expanded_perms.append(
+                    {"Principal": exp_principal, "Actions": perm["actions"]}
+                )
+
+        client.update_data_set_permissions(
+            AwsAccountId=aws_account_id,
+            DataSetId=dataset_id,
+            GrantPermissions=expanded_perms,
+        )
+        logger.info(f"Granted permissions to dataset {dataset_id}")
+        return True
+    except Exception as e:
+        raise QuickSightDeploymentError(f"Failed to grant dataset permissions: {e}")
+
+
+def grant_data_source_permissions(
+    data_source_id: str,
+    aws_account_id: str,
+    region: str,
+    permissions: List[Dict[str, str]],
+) -> bool:
+    """Grant permissions to QuickSight data source."""
+    try:
+        client = boto3.client("quicksight", region_name=region)
+
+        expanded_perms = []
+        for perm in permissions:
+            expanded = expand_principal_wildcards(
+                perm["principal"], aws_account_id, region
+            )
+            for exp_principal in expanded:
+                expanded_perms.append(
+                    {"Principal": exp_principal, "Actions": perm["actions"]}
+                )
+
+        client.update_data_source_permissions(
+            AwsAccountId=aws_account_id,
+            DataSourceId=data_source_id,
+            GrantPermissions=expanded_perms,
+        )
+        logger.info(f"Granted permissions to data source {data_source_id}")
+        return True
+    except Exception as e:
+        raise QuickSightDeploymentError(f"Failed to grant data source permissions: {e}")
 
 
 def grant_asset_bundle_permissions(
@@ -322,7 +407,10 @@ def grant_asset_bundle_permissions(
                             "Principal": principal,
                             "Actions": [
                                 "quicksight:DescribeDataSource",
+                                "quicksight:DescribeDataSourcePermissions",
                                 "quicksight:PassDataSource",
+                                "quicksight:UpdateDataSource",
+                                "quicksight:UpdateDataSourcePermissions",
                             ],
                         }
                     ],
@@ -330,6 +418,47 @@ def grant_asset_bundle_permissions(
 
         except Exception as e:
             logger.warning(f"Failed to grant permissions to {arn}: {e}")
+
+
+def expand_principal_wildcards(
+    principal: str, account_id: str, region: str
+) -> List[str]:
+    """
+    Expand wildcard patterns in QuickSight principal ARNs.
+
+    Example: arn:aws:quicksight:us-east-2:*:user/default/Admin/*
+    Returns: List of actual user ARNs matching the pattern
+    """
+    import boto3
+
+    if "*" not in principal:
+        return [principal]
+
+    # Replace account wildcard
+    principal = principal.replace(":*:", f":{account_id}:")
+
+    # Check if there's a user wildcard
+    if not principal.endswith("/*"):
+        return [principal]
+
+    # Extract the prefix pattern
+    prefix = principal.split("user/default/")[-1].rstrip("/*")
+
+    try:
+        client = boto3.client("quicksight", region_name=region)
+        response = client.list_users(AwsAccountId=account_id, Namespace="default")
+
+        expanded = []
+        for user in response.get("UserList", []):
+            user_name = user["UserName"]
+            if user_name.startswith(prefix):
+                user_arn = user["Arn"]
+                expanded.append(user_arn)
+
+        return expanded if expanded else [principal]
+    except Exception as e:
+        logger.warning(f"Failed to expand wildcard {principal}: {e}")
+        return [principal]
 
 
 def _download_bundle(url_or_path: str) -> bytes:
@@ -386,7 +515,9 @@ def trigger_dataset_ingestion(
             IngestionType=ingestion_type,
         )
 
-        logger.info(f"Started dataset ingestion: {ingestion_id} (type: {ingestion_type})")
+        logger.info(
+            f"Started dataset ingestion: {ingestion_id} (type: {ingestion_type})"
+        )
 
         result = {
             "ingestion_id": ingestion_id,

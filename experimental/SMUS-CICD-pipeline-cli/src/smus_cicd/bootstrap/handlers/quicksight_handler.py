@@ -1,6 +1,6 @@
 """QuickSight bootstrap action handler."""
 
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from ...helpers import quicksight
 from ...helpers.logger import get_logger
@@ -39,6 +39,7 @@ def refresh_dataset(action: BootstrapAction, context: Dict[str, Any]) -> Dict[st
 
     # Get AWS account ID from current session
     import boto3
+
     aws_account_id = boto3.client("sts").get_caller_identity()["Account"]
 
     # Get parameters
@@ -82,16 +83,18 @@ def refresh_dataset(action: BootstrapAction, context: Dict[str, Any]) -> Dict[st
         # Get datasets imported by deploy command from context
         config = context.get("config", {})
         imported_datasets = config.get("imported_quicksight_datasets", [])
-        
+
         if not imported_datasets:
-            logger.warning("No imported QuickSight datasets found in deployment context, skipping refresh")
+            logger.warning(
+                "No imported QuickSight datasets found in deployment context, skipping refresh"
+            )
             return {
                 "action": "quicksight.refresh_dataset",
                 "refresh_scope": refresh_scope,
                 "datasets_refreshed": 0,
                 "results": [],
             }
-        
+
         datasets_to_refresh = imported_datasets
         logger.info(f"Refreshing {len(datasets_to_refresh)} imported datasets")
 
@@ -111,16 +114,16 @@ def refresh_dataset(action: BootstrapAction, context: Dict[str, Any]) -> Dict[st
             results.append(result)
         except Exception as e:
             logger.error(f"Failed to refresh dataset {dataset_id}: {e}")
-            results.append({
-                "dataset_id": dataset_id,
-                "success": False,
-                "error": str(e),
-            })
+            results.append(
+                {
+                    "dataset_id": dataset_id,
+                    "success": False,
+                    "error": str(e),
+                }
+            )
 
     successful = sum(1 for r in results if r.get("success", False))
-    logger.info(
-        f"Dataset refresh complete: {successful}/{len(results)} successful"
-    )
+    logger.info(f"Dataset refresh complete: {successful}/{len(results)} successful")
 
     return {
         "action": "quicksight.refresh_dataset",

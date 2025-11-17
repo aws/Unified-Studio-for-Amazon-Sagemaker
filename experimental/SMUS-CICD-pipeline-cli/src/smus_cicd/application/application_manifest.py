@@ -85,6 +85,8 @@ class QuickSightDashboardConfig:
     source: str = "export"  # export or bundle
     overrideParameters: Dict[str, Any] = field(default_factory=dict)
     permissions: List[Dict[str, str]] = field(default_factory=list)
+    owners: List[str] = field(default_factory=list)
+    viewers: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -135,6 +137,7 @@ class DeploymentConfiguration:
     storage: List[StorageConfig] = field(default_factory=list)
     git: List[GitConfig] = field(default_factory=list)
     catalog: Optional[Dict[str, Any]] = None
+    quicksight: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -281,6 +284,8 @@ class ApplicationManifest:
                     source=qs_data.get("source", "export"),
                     overrideParameters=qs_data.get("overrideParameters", {}),
                     permissions=qs_data.get("permissions", []),
+                    owners=qs_data.get("owners", []),
+                    viewers=qs_data.get("viewers", []),
                 )
             )
 
@@ -409,6 +414,7 @@ class ApplicationManifest:
                     storage=storage_configs,
                     git=git_configs,
                     catalog=btc_data.get("catalog"),
+                    quicksight=btc_data.get("quicksight"),
                 )
 
             # Parse stage - derive from target name if not provided
@@ -426,6 +432,8 @@ class ApplicationManifest:
                         source=qs_data.get("source", "export"),
                         overrideParameters=qs_data.get("overrideParameters", {}),
                         permissions=qs_data.get("permissions", []),
+                        owners=qs_data.get("owners", []),
+                        viewers=qs_data.get("viewers", []),
                     )
                 )
 

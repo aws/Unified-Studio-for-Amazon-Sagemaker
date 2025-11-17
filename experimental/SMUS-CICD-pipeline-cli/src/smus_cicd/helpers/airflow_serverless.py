@@ -746,9 +746,7 @@ def cleanup_s3_dag(
 
 
 # Shared workflow helper functions
-def generate_workflow_name(
-    bundle_name: str, project_name: str, dag_name: str
-) -> str:
+def generate_workflow_name(bundle_name: str, project_name: str, dag_name: str) -> str:
     """
     Generate standardized workflow name.
 
@@ -836,7 +834,6 @@ def start_workflow_run_verified(
     if not result.get("success"):
         raise Exception(f"Failed to start workflow: {result.get('error')}")
 
-    run_id = result.get("run_id")
     initial_status = result.get("status")
 
     # Optionally verify workflow actually started
@@ -852,7 +849,9 @@ def start_workflow_run_verified(
 
             # Re-check status
             status_check = get_workflow_status(
-                workflow_arn=workflow_arn, connection_info=connection_info, region=region
+                workflow_arn=workflow_arn,
+                connection_info=connection_info,
+                region=region,
             )
 
             current_status = (
@@ -898,7 +897,9 @@ def get_workflow_logs(
     workflow_name = workflow_arn.split("/")[-1]
     log_group = f"/aws/mwaa-serverless/{workflow_name}/"
 
-    log_events = get_cloudwatch_logs(log_group=log_group, region=region, limit=max_lines)
+    log_events = get_cloudwatch_logs(
+        log_group=log_group, region=region, limit=max_lines
+    )
 
     # Format log events as strings
     formatted_logs = []

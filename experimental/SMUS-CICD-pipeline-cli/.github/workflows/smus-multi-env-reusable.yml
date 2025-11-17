@@ -74,6 +74,13 @@ jobs:
       - name: Install SMUS CLI
         run: pip install -e .
       
+      # Temporary: Register mwaaserverless-internal model until service is GA
+      - name: Register AWS CLI model patch
+        run: |
+          aws configure add-model \
+            --service-model file://src/smus_cicd/resources/mwaaserverless-2024-07-26.normal-edited-2.json \
+            --service-name mwaaserverless-internal
+      
       - name: Validate configuration
         run: |
           smus-cli describe --manifest ${{ inputs.manifest_path }} --connect
@@ -94,6 +101,13 @@ jobs:
       
       - name: Install SMUS CLI
         run: pip install -e .
+      
+      # Temporary: Register mwaaserverless-internal model until service is GA
+      - name: Register AWS CLI model patch
+        run: |
+          aws configure add-model \
+            --service-model file://src/smus_cicd/resources/mwaaserverless-2024-07-26.normal-edited-2.json \
+            --service-name mwaaserverless-internal
       
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -124,6 +138,13 @@ jobs:
       - name: Install SMUS CLI
         run: pip install -e .
       
+      # Temporary: Register mwaaserverless-internal model until service is GA
+      - name: Register AWS CLI model patch
+        run: |
+          aws configure add-model \
+            --service-model file://src/smus_cicd/resources/mwaaserverless-2024-07-26.normal-edited-2.json \
+            --service-name mwaaserverless-internal
+      
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -153,6 +174,13 @@ jobs:
       
       - name: Install SMUS CLI
         run: pip install -e .
+      
+      # Temporary: Register mwaaserverless-internal model until service is GA
+      - name: Register AWS CLI model patch
+        run: |
+          aws configure add-model \
+            --service-model file://src/smus_cicd/resources/mwaaserverless-2024-07-26.normal-edited-2.json \
+            --service-name mwaaserverless-internal
       
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4

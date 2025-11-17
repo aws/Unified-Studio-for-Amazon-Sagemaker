@@ -1,5 +1,8 @@
 # Admin Quick Start
 
+← [Back to Main README](../../README.md)
+
+
 **Goal:** Understand and configure SMUS CI/CD infrastructure for data teams
 
 **Audience:** Platform administrators and DevOps engineers setting up deployment pipelines

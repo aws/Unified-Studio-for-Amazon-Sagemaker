@@ -4,6 +4,38 @@
 
 The SMUS CLI provides eight main commands for managing CI/CD pipelines in SageMaker Unified Studio.
 
+## Global Options
+
+All commands support these global options:
+
+| Option | Description | Values | Default |
+|--------|-------------|--------|---------|
+| `--log-level` | Control logging verbosity | `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` | `INFO` |
+| `--output` | Output format | `TEXT`, `JSON` | `TEXT` |
+| `--manifest` / `-m` | Path to manifest file | File path | `manifest.yaml` |
+| `--target` / `-t` | Target environment | Target name(s) | All targets |
+
+**Examples:**
+```bash
+# Debug mode for troubleshooting
+smus-cli describe --manifest manifest.yaml --log-level DEBUG
+
+# Quiet mode - only errors
+smus-cli deploy --targets prod --log-level ERROR
+
+# JSON output for automation
+smus-cli describe --manifest manifest.yaml --output JSON --log-level WARNING
+```
+
+**Environment Variable:**
+```bash
+# Set default log level
+export SMUS_LOG_LEVEL=DEBUG
+smus-cli describe --manifest manifest.yaml
+```
+
+---
+
 ## Command Overview
 
 | Command | Purpose | Example |

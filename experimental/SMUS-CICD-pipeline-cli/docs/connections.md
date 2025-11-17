@@ -348,7 +348,7 @@ Connect to Amazon Managed Workflows for Apache Airflow (MWAA).
 
 **Example workflow usage:**
 ```yaml
-activation:
+content:
   workflows:
     - workflowName: data_pipeline
       connectionName: mwaa-workflows
@@ -379,7 +379,7 @@ Use serverless Airflow workflows (no MWAA environment required).
 
 **Example workflow usage:**
 ```yaml
-activation:
+content:
   workflows:
     - workflowName: simple_etl
       engine: airflow-serverless
@@ -393,7 +393,7 @@ activation:
 Full manifest with multiple connection types:
 
 ```yaml
-bundleName: CustomerSegmentationModel
+applicationName: CustomerSegmentationModel
 
 stages:
   test:
@@ -472,7 +472,7 @@ stages:
           properties:
             glueLineageSyncEnabled: true
 
-bundle:
+content:
   storage:
     - name: workflows
       connectionName: default.s3_shared
