@@ -1,10 +1,6 @@
 name: MWAA SMUS CICD Pipeline Lifecycle Demo
 
 on:
-  pull_request:
-    branches: [ main, master ]
-    paths:
-      - 'experimental/SMUS-CICD-pipeline-cli/**'
   workflow_dispatch:
     inputs:
       domain_name:
