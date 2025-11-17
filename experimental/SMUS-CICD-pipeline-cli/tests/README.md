@@ -1,6 +1,6 @@
 # SMUS CI/CD Tests
 
-See [DEVELOPER_GUIDE.md](../DEVELOPER_GUIDE.md) for comprehensive testing documentation.
+See [developer-guide.md](../developer-guide.md) for comprehensive testing documentation.
 
 ## Quick Start
 

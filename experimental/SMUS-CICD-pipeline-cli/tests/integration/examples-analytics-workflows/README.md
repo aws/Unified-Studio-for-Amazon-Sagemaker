@@ -2,7 +2,7 @@
 
 Integration tests for analytics workflow examples.
 
-See [DEVELOPER_GUIDE.md](../../../DEVELOPER_GUIDE.md) for testing framework details.
+See [developer-guide.md](../../../developer-guide.md) for testing framework details.
 
 ## Tests
 
