@@ -9,7 +9,7 @@ import boto3
 from . import boto3_client
 from .logger import get_logger
 
-# Airflow Serverless (Overdrive) configuration - configurable via environment variables
+# Airflow Serverless (MWAA Serverless) configuration - configurable via environment variables
 AIRFLOW_SERVERLESS_ENDPOINT = os.environ.get("AIRFLOW_SERVERLESS_ENDPOINT")
 AIRFLOW_SERVERLESS_SERVICE = "mwaaserverless-internal"
 

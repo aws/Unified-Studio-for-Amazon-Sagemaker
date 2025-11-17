@@ -62,7 +62,7 @@ stages:
         connection_type: MLFLOW
         properties:
           trackingServerName: smus-integration-mlflow-use2
-          trackingServerArn: arn:aws:sagemaker:us-east-2:058264284947:mlflow-tracking-server/smus-integration-mlflow-use2
+          trackingServerArn: arn:aws:sagemaker:us-east-2:${AWS_ACCOUNT_ID}:mlflow-tracking-server/smus-integration-mlflow-use2
     deployment_configuration:
       storage:
       - name: code

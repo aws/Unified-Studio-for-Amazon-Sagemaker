@@ -34,11 +34,11 @@ def logs_command(
     try:
         config = load_config()
 
-        # Determine if this is an Overdrive workflow ARN
+        # Determine if this is an MWAA Serverless workflow ARN
         if "airflow-serverless" in workflow:
             _monitor_airflow_serverless_logs(workflow, live, output, lines, config)
         else:
-            typer.echo("❌ Error: Only Overdrive workflow ARNs are currently supported")
+            typer.echo("❌ Error: Only MWAA Serverless workflow ARNs are currently supported")
             typer.echo(
                 "Expected format: arn:aws:airflow-serverless:region:account:workflow/name"
             )
@@ -56,10 +56,10 @@ def _monitor_airflow_serverless_logs(
     workflow_arn: str, live: bool, output: str, lines: int, config: dict
 ) -> None:
     """
-    Monitor Overdrive workflow logs.
+    Monitor MWAA Serverless workflow logs.
 
     Args:
-        workflow_arn: Overdrive workflow ARN
+        workflow_arn: MWAA Serverless workflow ARN
         live: Whether to continuously monitor logs
         output: Output format (TEXT or JSON)
         lines: Number of log lines to fetch

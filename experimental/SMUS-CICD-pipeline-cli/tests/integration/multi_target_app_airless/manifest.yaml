@@ -50,7 +50,7 @@ stages:
       profile_name: All capabilities
       owners:
       - Eng1
-      - arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests
+      - arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
       - Admin
       contributors: []
       user_parameters:
@@ -80,7 +80,7 @@ stages:
       profile_name: All capabilities
       owners:
       - Eng1
-      - arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests
+      - arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
       contributors: []
       user_parameters:
       - environment_configuration_name: Lakehouse Database

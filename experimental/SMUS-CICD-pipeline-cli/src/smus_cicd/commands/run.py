@@ -10,7 +10,7 @@ from ..helpers import airflow_serverless, mwaa
 from ..helpers.airflow_parser import parse_airflow_output
 from ..helpers.utils import get_datazone_project_info, load_config
 
-# TEMPORARY: Airflow Serverless (Overdrive) configuration
+# Airflow Serverless (MWAA Serverless) configuration
 # TODO: Remove these overrides once service is available in all regions
 AIRFLOW_SERVERLESS_REGION = "us-west-2"  # Force us-west-2 for Airflow Serverless
 AIRFLOW_SERVERLESS_ENDPOINT_URL = "https://airflow-serverless.us-west-2.api.aws/"
@@ -24,12 +24,12 @@ def run_command(
     output: str,
 ) -> None:
     """
-    Run workflow commands in target environment (supports both MWAA and Overdrive).
+    Run workflow commands in target environment (supports both MWAA and MWAA Serverless).
 
     Args:
         manifest_file: Path to pipeline manifest file
         workflow: Name of the workflow to run
-        command: Optional command to execute (for MWAA only, ignored for Overdrive)
+        command: Optional command to execute (for MWAA only, ignored for MWAA Serverless)
         targets: Comma-separated list of targets (optional, defaults to all)
         output: Output format (TEXT or JSON)
 
@@ -652,7 +652,7 @@ def _execute_airflow_serverless_workflows(
                 )
 
         except Exception as e:
-            error_msg = f"Error executing Overdrive workflow: {str(e)}"
+            error_msg = f"Error executing MWAA Serverless workflow: {str(e)}"
             if output.upper() != "JSON":
                 typer.echo(f"❌ {error_msg}")
 

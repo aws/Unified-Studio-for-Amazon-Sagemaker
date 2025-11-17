@@ -19,7 +19,7 @@ from ..helpers.utils import (  # noqa: F401
     load_config,
 )
 
-# TEMPORARY: Airflow Serverless (Overdrive) configuration
+# Airflow Serverless (MWAA Serverless) configuration
 # TODO: Remove these overrides once service is available in all regions
 AIRFLOW_SERVERLESS_REGION = "us-west-2"  # Force us-west-2 for Airflow Serverless
 AIRFLOW_SERVERLESS_ENDPOINT_URL = "https://airflow-serverless.us-west-2.api.aws/"
@@ -1437,7 +1437,7 @@ def _create_airflow_serverless_workflows(
                         "s3_key": s3_key,
                     }
                 )
-                typer.echo(f"✅ Created Overdrive workflow: {workflow_name}")
+                typer.echo(f"✅ Created MWAA Serverless workflow: {workflow_name}")
                 typer.echo(f"   ARN: {workflow_arn}")
 
                 # Validate workflow status
@@ -1495,7 +1495,7 @@ def _create_airflow_serverless_workflows(
 
         if workflows_created:
             typer.echo(
-                f"\n🎉 Successfully created {len(workflows_created)} Overdrive workflows"
+                f"\n🎉 Successfully created {len(workflows_created)} MWAA Serverless workflows"
             )
 
             # Emit workflow creation completed
@@ -1520,7 +1520,7 @@ def _create_airflow_serverless_workflows(
             return True
 
     except Exception as e:
-        error_msg = f"Error creating Overdrive workflows: {e}"
+        error_msg = f"Error creating MWAA Serverless workflows: {e}"
         typer.echo(f"❌ {error_msg}")
         if emitter:
             target_info = build_target_info(stage_name, target_config)
@@ -1537,7 +1537,7 @@ def _create_airflow_serverless_workflows(
 
 def _get_airflow_serverless_execution_role(config: Dict[str, Any]) -> Optional[str]:
     """
-    Get the IAM role ARN for Overdrive workflow execution.
+    Get the IAM role ARN for MWAA Serverless workflow execution.
 
     Args:
         config: Configuration dictionary
@@ -1561,7 +1561,7 @@ def _get_airflow_serverless_execution_role(config: Dict[str, Any]) -> Optional[s
             return None
 
     # Use the role we created during testing
-    return f"arn:aws:iam::{account_id}:role/OverdriveExecutionRole"
+    return f"arn:aws:iam::{account_id}:role/MWAA ServerlessExecutionRole"
 
 
 def _find_dag_files_in_s3(
@@ -1659,7 +1659,7 @@ def _find_dag_files_in_s3(
 
 def _generate_workflow_name(bundle_name: str, dag_name: str, target_config) -> str:
     """
-    Generate a unique workflow name for Overdrive.
+    Generate a unique workflow name for MWAA Serverless.
 
     Args:
         bundle_name: Name of the bundle
@@ -1713,7 +1713,7 @@ def _upload_dag_to_s3(
     domain_id=None,
 ) -> Optional[Dict[str, str]]:
     """
-    Upload DAG file to S3 for Overdrive workflow creation.
+    Upload DAG file to S3 for MWAA Serverless workflow creation.
 
     Args:
         dag_file_path: Local path to DAG file
