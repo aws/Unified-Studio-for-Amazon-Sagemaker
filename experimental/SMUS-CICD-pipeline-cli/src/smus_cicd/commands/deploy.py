@@ -214,7 +214,7 @@ def deploy_command(
         # Process bootstrap actions (after QuickSight deployment)
         if target_config.bootstrap:
             typer.echo("Processing bootstrap actions...")
-            _process_bootstrap_actions(target_config, stage_name, config)
+            _process_bootstrap_actions(target_config, stage_name, config, manifest)
 
         # Deploy bundle and track errors
         deployment_success = _deploy_bundle_to_target(
@@ -1827,6 +1827,7 @@ def _process_bootstrap_actions(
     target_config,
     stage_name: str,
     config: Dict[str, Any],
+    manifest=None,
 ) -> None:
     """
     Process bootstrap actions sequentially.
@@ -1835,6 +1836,7 @@ def _process_bootstrap_actions(
         target_config: Target configuration
         stage_name: Stage name
         config: Configuration dictionary
+        manifest: Manifest object (optional)
     """
     from ..bootstrap import executor
 
@@ -1848,6 +1850,8 @@ def _process_bootstrap_actions(
         },
         "region": config.get("region"),
         "config": config,  # Pass full config including imported_quicksight_datasets
+        "manifest": manifest,  # Add manifest to context
+        "target_config": target_config,  # Add target_config to context
     }
 
     # Execute bootstrap actions

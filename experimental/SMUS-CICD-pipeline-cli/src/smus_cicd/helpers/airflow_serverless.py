@@ -898,7 +898,7 @@ def get_workflow_logs(
     log_group = f"/aws/mwaa-serverless/{workflow_name}/"
 
     log_events = get_cloudwatch_logs(
-        log_group=log_group, region=region, limit=max_lines
+        log_group_name=log_group, region=region, limit=max_lines
     )
 
     # Format log events as strings

@@ -1,6 +1,33 @@
 # QuickSight Deployment Fix Summary
 
-## Status: 🔄 READY FOR INTEGRATION TEST (2025-11-17 14:04)
+## Status: ✅ INTEGRATION TEST PASSED (2025-11-17 14:24)
+
+### Integration Test Results
+
+**Test Run**: `test_dashboard_glue_quick_workflow_deployment` (14:21-14:24)
+
+✅ **All Components Working**:
+1. QuickSight dashboard deployed with prefix
+2. Dataset and data source permissions granted
+3. Bootstrap actions executed successfully:
+   - `workflow.logs`: Fetched 426 log lines from workflow
+   - `quicksight.refresh_dataset`: Triggered FULL_REFRESH ingestion (ingestion-1763407408)
+4. Lake Formation permissions granted automatically via Glue job
+5. IAM_ALLOWED_PRINCIPALS enabled for QuickSight UI visibility
+6. Workflow created and ready
+
+**Bootstrap Action Execution**:
+```
+Processing bootstrap actions...
+✓ workflow.logs - Fetched 426 log lines
+✓ quicksight.refresh_dataset - 1/1 datasets refreshed
+✓ Processed 2 actions successfully
+```
+
+**Key Fixes Applied**:
+1. Fixed manifest bootstrap action structure (parameters at same level as type, not nested)
+2. Added manifest and target_config to bootstrap context
+3. Fixed parameter name: `log_group` → `log_group_name` in airflow_serverless.py
 
 ### Ingestion Test Status
 
