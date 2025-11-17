@@ -49,7 +49,7 @@ class TestMetadataCollector:
         assert cicd_info["runId"] == "12345"
         assert cicd_info["runUrl"] == "https://github.com/test/repo/actions/runs/12345"
 
-    @patch.dict("os.environ", {"GITLAB_CI": "true", "CI_PIPELINE_ID": "67890", "CI_PROJECT_URL": "https://gitlab.com/test/repo"})
+    @patch.dict("os.environ", {"GITLAB_CI": "true", "CI_PIPELINE_ID": "67890", "CI_PROJECT_URL": "https://gitlab.com/test/repo"}, clear=True)
     def test_get_cicd_info_gitlab(self):
         """Test CI/CD info collection for GitLab CI."""
         cicd_info = MetadataCollector._get_cicd_info()
