@@ -38,7 +38,9 @@ def logs_command(
         if "airflow-serverless" in workflow:
             _monitor_airflow_serverless_logs(workflow, live, output, lines, config)
         else:
-            typer.echo("❌ Error: Only MWAA Serverless workflow ARNs are currently supported")
+            typer.echo(
+                "❌ Error: Only MWAA Serverless workflow ARNs are currently supported"
+            )
             typer.echo(
                 "Expected format: arn:aws:airflow-serverless:region:account:workflow/name"
             )
