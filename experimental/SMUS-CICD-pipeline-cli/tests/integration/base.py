@@ -110,7 +110,8 @@ class IntegrationTestBase:
         import boto3
         from datetime import datetime
         
-        client = boto3.client('mwaaserverless-internal', region_name=self.config['region'])
+        region = os.environ.get('AWS_DEFAULT_REGION', self.config.get('aws', {}).get('region', 'us-east-2'))
+        client = boto3.client('mwaaserverless-internal', region_name=region)
         
         try:
             response = client.get_workflow_run(

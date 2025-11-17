@@ -62,7 +62,7 @@ stages:
     initialization:
       project:
         create: true
-        profileName: All capabilities
+        profile_name: All capabilities
         owners:
         - arn:aws:iam::123456789012:role/GitHubActionsRole-SMUS-CLI-Tests
         - Eng1
@@ -88,7 +88,7 @@ stages:
     initialization:
       project:
         create: true
-        profileName: All capabilities
+        profile_name: All capabilities
         owners:
         - arn:aws:iam::588738596778:role/GitHubActionsRole-SMUS-CLI-Tests
         - Eng1
@@ -105,11 +105,6 @@ stages:
       - connectionName: default.s3_shared
         name: workflows
         targetDirectory: workflows
-initialization:
-- workflowName: sample_dag
-  connectionName: project.workflow_mwaa
-  engine: MWAA
-  logging: console
-  type: workflow
+
 tests:
   folder: ./tests

@@ -84,7 +84,7 @@ def create_workflow(
         #         "SecurityGroupIds": security_group_ids,
         #         "SubnetIds": subnet_ids
         #     }
-        #     logger.info(f"🔍 DEBUG: Network configuration: SecurityGroups={security_group_ids}, Subnets={subnet_ids}")
+        #     logger.debug(f"Network configuration: SecurityGroups={security_group_ids}, Subnets={subnet_ids}")
 
         if description:
             params["Description"] = description
@@ -130,7 +130,7 @@ def create_workflow(
                 env_vars["DataZoneEndpoint"] = os.getenv("AWS_ENDPOINT_URL_DATAZONE")
 
             params["EnvironmentVariables"] = env_vars
-            logger.info(f"🔍 DEBUG: DataZone environment variables: {env_vars}")
+            logger.debug(f"DataZone environment variables: {env_vars}")
 
         import typer
 
@@ -157,8 +157,8 @@ def create_workflow(
         }
 
     except Exception as e:
-        logger.error(f"🔍 DEBUG: Exception in create_workflow: {type(e).__name__}: {e}")
-        logger.error(f"🔍 DEBUG: Full exception details: {str(e)}")
+        logger.debug(f"Exception in create_workflow: {type(e).__name__}: {e}")
+        logger.debug(f"Full exception details: {str(e)}")
         # Handle ConflictException when workflow already exists (idempotent behavior)
         if "ConflictException" in str(e):
             logger.info(f"Workflow {workflow_name} already exists, updating it")

@@ -85,12 +85,38 @@ python run_integration_tests_with_logs.py
 # - tests/test-outputs/{test_name}.log for each test's full output
 # - tests/test-outputs/test_results_summary.json with detailed results
 # - tests/test-outputs/test_results_summary.txt with human-readable summary
+# - tests/test-outputs/notebooks/ for executed notebook outputs
 
 # Alternative: Run integration tests without detailed logging
 python tests/run_tests.py --type integration
 
 # For faster iteration, skip slow tests:
 python tests/run_tests.py --type integration --skip-slow
+```
+
+**IMPORTANT: Verifying Test Results**
+- **NEVER re-run a test just to check if it passed**
+- **ALWAYS check the logs first**: `tests/test-outputs/{test_name}.log`
+- **ALWAYS check output notebooks**: `tests/test-outputs/notebooks/` (if test executes notebooks)
+- Look for errors, stack traces, and assertion failures in logs
+- Verify notebook execution results and outputs
+- Only re-run tests after fixing identified issues
+
+```bash
+# Check test logs
+ls -lh tests/test-outputs/*.log
+cat tests/test-outputs/TestMLWorkflow__test_ml_workflow_deployment.log
+
+# Check output notebooks
+ls -lh tests/test-outputs/notebooks/
+# Look for notebooks with underscore prefix (e.g., _notebook_name.ipynb)
+# These contain actual execution results
+
+# Search for errors in logs
+grep -i "error\|failed\|exception" tests/test-outputs/*.log
+
+# Check test summary
+cat tests/test-outputs/test_results_summary.txt
 ```
 
 ### 6. Final Validation and Commit
@@ -193,13 +219,28 @@ pytest tests/integration/examples-analytics-workflows/ml/test_ml_workflow.py::Te
 - Workflow: `examples/analytic-workflow/ml/workflows/ml_dev_workflow_v3.yaml`
 - Pipeline: `examples/analytic-workflow/ml/ml_pipeline.yaml`
 
-**Download executed notebook**:
+**Check executed notebook locally (ALWAYS CHECK HERE FIRST)**:
+```bash
+# Integration tests automatically download notebooks to:
+ls -lh tests/test-outputs/notebooks/
+
+# Look for underscore-prefixed notebooks (actual execution results)
+# Example: tests/test-outputs/notebooks/_ml_orchestrator_notebook.ipynb
+
+# Open in Jupyter or view with cat/less
+jupyter notebook tests/test-outputs/notebooks/_ml_orchestrator_notebook.ipynb
+
+# Or check for errors in notebook
+grep -A 5 '"output_type": "error"' tests/test-outputs/notebooks/_ml_orchestrator_notebook.ipynb
+```
+
+**If notebooks not in test-outputs, download from S3**:
 ```bash
 # Find latest output
-aws s3 ls s3://amazon-sagemaker-198737698272-us-east-1-4pg255jku47vdz/shared/workflows/output/ml/bundle/workflows/ --recursive | grep output.tar.gz | sort | tail -1
+aws s3 ls s3://amazon-sagemaker-ACCOUNT-REGION-ID/shared/workflows/output/ml/bundle/workflows/ --recursive | grep output.tar.gz | sort | tail -1
 
 # Download and extract
-aws s3 cp s3://amazon-sagemaker-198737698272-us-east-1-4pg255jku47vdz/PATH /tmp/ml_output.tar.gz
+aws s3 cp s3://amazon-sagemaker-ACCOUNT-REGION-ID/PATH /tmp/ml_output.tar.gz
 cd /tmp && tar -xzf ml_output.tar.gz
 # View: /tmp/_ml_orchestrator_notebook.ipynb
 ```
@@ -259,8 +300,16 @@ python -m pytest tests/integration -v
 
 ### Test Output Locations
 - **Logs**: `tests/test-outputs/{TestClass}__{test_method}.log`
+- **Output Notebooks**: `tests/test-outputs/notebooks/` (executed notebooks with results)
 - **Reports**: `tests/reports/test-results.html`
 - **Coverage**: `tests/reports/coverage/`
+
+**How to Analyze Test Results:**
+1. **Check the log file first** - Contains full test execution output
+2. **Check output notebooks** - If test executes notebooks, check `tests/test-outputs/notebooks/`
+3. **Look for underscore-prefixed notebooks** - These are the actual executed outputs (e.g., `_notebook_name.ipynb`)
+4. **Search for errors** - Use grep to find errors in logs
+5. **Only re-run after fixing** - Don't re-run tests just to check status
 
 ### Common Test Patterns
 
@@ -293,7 +342,22 @@ aws mwaaserverless list-workflows --region us-east-2 --endpoint-url https://airf
 aws mwaaserverless list-workflow-runs --workflow-arn ARN --region us-east-2 --endpoint-url https://airflow-serverless.us-east-2.api.aws/
 ```
 
-**Download workflow outputs** (notebooks, artifacts):
+**Check executed notebooks (ALWAYS CHECK HERE FIRST)**:
+```bash
+# Integration tests automatically save notebooks to:
+ls -lh tests/test-outputs/notebooks/
+
+# Look for underscore-prefixed notebooks (actual execution results)
+# Example: tests/test-outputs/notebooks/_notebook_name.ipynb
+
+# Check for errors in notebook
+grep -A 5 '"output_type": "error"' tests/test-outputs/notebooks/_notebook_name.ipynb
+
+# Or use jq for detailed error info
+cat tests/test-outputs/notebooks/_notebook_name.ipynb | jq -r '.cells[] | select(.outputs != null) | select(.outputs[] | .output_type == "error") | "Cell \(.execution_count): \(.outputs[].ename)"'
+```
+
+**If notebooks not in test-outputs, use download script**:
 ```bash
 # Use the automated download script
 python tests/scripts/download_workflow_outputs.py --workflow-arn <WORKFLOW_ARN>
@@ -306,12 +370,6 @@ python tests/scripts/download_workflow_outputs.py --workflow-arn <WORKFLOW_ARN>
 # - Provides paths to all downloaded files
 
 # Example output location: /tmp/workflow_outputs/_notebook_name.ipynb
-```
-
-**Check notebook execution**:
-```bash
-# Search for errors in executed notebook
-cat /tmp/_notebook.ipynb | jq -r '.cells[] | select(.outputs != null) | select(.outputs[] | .output_type == "error") | "Cell \(.execution_count): \(.outputs[].ename)"'
 ```
 
 **Check Glue job parameters**:
@@ -337,6 +395,26 @@ Important Note: These are pytest-based integration tests, NOT Hydra tests. Do no
 - [ ] CLI parameter usage is consistent
 - [ ] Documentation reflects actual behavior
 - [ ] Check that the code and markdown files don't contain aws account ids, web addresses, or host names. Mask all of these before committing.
+  ```bash
+  # Run automated check for hardcoded values
+  ./tests/scripts/check-hardcoded-values.sh
+  
+  # This checks for:
+  # - AWS Account IDs (12-digit numbers)
+  # - Hardcoded AWS regions in code
+  # - Hardcoded AWS endpoints
+  # - IP addresses
+  # - IAM role ARNs with account IDs
+  # - S3 bucket names with account IDs
+  # - Internal hostnames
+  # - Email addresses
+  
+  # If issues found, fix them:
+  # - Account IDs: Use boto3.client('sts').get_caller_identity()['Account']
+  # - Regions: Use os.environ.get('AWS_DEFAULT_REGION', 'us-east-1')
+  # - Endpoints: Use environment variables or dynamic lookup
+  # - Emails: Use placeholders like user@example.com
+  ```
 - [ ] Check that lint is passing
 - [ ] Don't swallow exceptions, if an error is thrown, it must be logged or handled
 - [ ] All changes are committed
@@ -517,3 +595,41 @@ When updating documentation or code, use this approach to get current values:
 - The airflow-serverless service may use different endpoints/regions across environments
 - Use `aws sts get-caller-identity` to verify you're working with the correct AWS account
 - **Pre-GA**: Service name is `mwaaserverless-internal` - this will change to `airflow-serverless` at GA
+
+### Verify No Hardcoded Values
+Before committing code, run the automated check:
+```bash
+./tests/scripts/check-hardcoded-values.sh
+```
+
+This script checks for:
+- AWS Account IDs (12-digit numbers)
+- Hardcoded AWS regions in code (not in config files)
+- Hardcoded AWS endpoints
+- IP addresses
+- IAM role ARNs with account IDs
+- S3 bucket names with account IDs
+- Internal hostnames
+- Email addresses (potential PII)
+
+**How to fix issues:**
+```python
+# ❌ Bad - Hardcoded account ID
+account_id = "123456789012"
+
+# ✅ Good - Dynamic lookup
+account_id = boto3.client('sts').get_caller_identity()['Account']
+
+# ❌ Bad - Hardcoded region
+region = "us-east-1"
+
+# ✅ Good - Environment variable with default
+region = os.environ.get('AWS_DEFAULT_REGION', 'us-east-1')
+
+# ❌ Bad - Hardcoded endpoint
+endpoint = "https://airflow-serverless.us-east-1.api.aws/"
+
+# ✅ Good - Environment variable
+endpoint = os.environ.get('AIRFLOW_SERVERLESS_ENDPOINT', 
+                         f'https://airflow-serverless.{region}.api.aws/')
+```

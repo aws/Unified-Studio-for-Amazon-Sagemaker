@@ -51,7 +51,7 @@ stages:
     initialization:
       project:
         create: true
-        profileName: All capabilities
+        profile_name: All capabilities
         owners:
         - arn:aws:iam::123456789012:role/GitHubActionsRole-SMUS-CLI-Tests
         - Eng1
@@ -84,7 +84,7 @@ stages:
     initialization:
       project:
         create: true
-        profileName: All capabilities
+        profile_name: All capabilities
         owners:
         - arn:aws:iam::588738596778:role/GitHubActionsRole-SMUS-CLI-Tests
         - Eng1
@@ -101,15 +101,12 @@ stages:
       LOG_LEVEL: WARN
     deployment_configuration:
       storage:
+      - name: code
         connectionName: default.s3_shared
-        directory: src
-      workflows:
+        targetDirectory: src
+      - name: workflows
         connectionName: default.s3_shared
-        directory: workflows
-initialization:
-- workflowName: marketing_dag2
-  logging: console
-  engine: airflow-serverless
-  type: workflow
+        targetDirectory: workflows
+
 tests:
   folder: ./tests

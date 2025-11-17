@@ -16,6 +16,8 @@ Deploy Airflow DAGs, Jupyter notebooks, and ML workflows from development to pro
 ✅ **Deploy with Confidence** - Automated testing and validation before production  
 ✅ **Multi-Environment Management** - Test → Prod with environment-specific configuration  
 ✅ **Infrastructure as Code** - Version-controlled application manifests and reproducible deployments  
+✅ **Event-Driven Workflows** - Trigger workflows automatically via EventBridge on deployment  
+✅ **QuickSight Dashboards** - Export from dev, deploy to test/prod with automated permissions  
 
 ---
 
@@ -44,6 +46,38 @@ smus-cli test --manifest manifest.yaml --targets test
 ```
 
 **See it in action:** [Live GitHub Actions Example](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/actions/runs/17631303500)
+
+---
+
+## Global Options
+
+All commands support these global options:
+
+| Option | Description | Values | Default |
+|--------|-------------|--------|---------|
+| `--log-level` | Control logging verbosity | `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL` | `INFO` |
+| `--output` | Output format | `TEXT`, `JSON` | `TEXT` |
+| `--manifest` / `-m` | Path to manifest file | File path | `manifest.yaml` |
+| `--target` / `-t` | Target environment | Target name(s) | All targets |
+
+**Examples:**
+```bash
+# Debug mode for troubleshooting
+smus-cli describe --manifest manifest.yaml --log-level DEBUG
+
+# Quiet mode - only errors
+smus-cli deploy --targets prod --log-level ERROR
+
+# JSON output for automation
+smus-cli describe --manifest manifest.yaml --output JSON --log-level WARNING
+```
+
+**Environment Variable:**
+```bash
+# Set default log level
+export SMUS_LOG_LEVEL=DEBUG
+smus-cli describe --manifest manifest.yaml
+```
 
 ---
 
@@ -99,6 +133,7 @@ smus-cli test --manifest manifest.yaml --targets test
 - **Connection Setup** - Configure S3, Airflow, Athena, and Lakehouse connections
 - **Resource Mapping** - Link AWS resources to project connections
 - **Permission Management** - Control access and collaboration
+- **Event Initialization** - Emit EventBridge events during deployment for downstream automation
 
 ### 📊 Catalog Integration
 - **Asset Discovery** - Automatically find required catalog assets (Glue, Lake Formation, DataZone)

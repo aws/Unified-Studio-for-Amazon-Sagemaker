@@ -58,22 +58,18 @@ stages:
       region: ${DEV_DOMAIN_REGION:us-east-2}
     project:
       name: integration-test-test
-    initialization:
-      project:
-        create: true
-        profileName: All capabilities
-        owners:
-        - Eng1
-        - arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests
-        - Admin
-        contributors: []
-        userParameters:
-        - EnvironmentConfigurationName: Lakehouse Database
-          parameters:
-          - name: glueDbName
-            value: multi_target_test_db
-      environments:
-      - EnvironmentConfigurationName: OnDemand Workflows
+      create: true
+      profile_name: All capabilities
+      owners:
+      - Eng1
+      - arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests
+      - Admin
+      contributors: []
+      user_parameters:
+      - environment_configuration_name: Lakehouse Database
+        parameters:
+        - name: glueDbName
+          value: multi_target_test_db
     deployment_configuration:
       storage:
       - connectionName: default.s3_shared
@@ -82,6 +78,10 @@ stages:
       - connectionName: default.s3_shared
         name: workflows
         targetDirectory: workflows
+    bootstrap:
+      actions:
+      - type: datazone.create_environment
+        environment_configuration_name: OnDemand Workflows
   prod:
     stage: PROD
     domain:
@@ -90,21 +90,17 @@ stages:
       region: ${DEV_DOMAIN_REGION:us-east-2}
     project:
       name: integration-test-prod
-    initialization:
-      project:
-        create: true
-        profileName: All capabilities
-        owners:
-        - Eng1
-        - arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests
-        contributors: []
-        userParameters:
-        - EnvironmentConfigurationName: Lakehouse Database
-          parameters:
-          - name: glueDbName
-            value: multi_target_prod_db
-      environments:
-      - EnvironmentConfigurationName: OnDemand Workflows
+      create: true
+      profile_name: All capabilities
+      owners:
+      - Eng1
+      - arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests
+      contributors: []
+      user_parameters:
+      - environment_configuration_name: Lakehouse Database
+        parameters:
+        - name: glueDbName
+          value: multi_target_prod_db
     deployment_configuration:
       storage:
       - connectionName: default.s3_shared
@@ -113,18 +109,9 @@ stages:
       - connectionName: default.s3_shared
         name: workflows
         targetDirectory: workflows
-initialization:
-- workflowName: test_dag
-  connectionName: project.workflow_mwaa
-  engine: MWAA
-  type: workflow
-- workflowName: test_dag_not_mentioned
-  connectionName: project.workflow_mwaa
-  engine: MWAA
-  type: workflow
-- workflowName: runGettingStartedNotebook
-  connectionName: project.workflow_mwaa
-  engine: MWAA
-  type: workflow
+    bootstrap:
+      actions:
+      - type: datazone.create_environment
+        environment_configuration_name: OnDemand Workflows
 tests:
   folder: tests/integration/multi_target_bundle/pipeline_tests/

@@ -28,17 +28,13 @@ stages:
       region: ${DEV_DOMAIN_REGION:us-east-2}
     project:
       name: integration-test-test
-    initialization:
-      project:
-        create: true
-        profileName: All capabilities
-        owners:
-        - Eng1
-        - arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests
-        - Admin
-        contributors: []
-      environments:
-      - EnvironmentConfigurationName: OnDemand Workflows
+      create: true
+      profile_name: All capabilities
+      owners:
+      - Eng1
+      - arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests
+      - Admin
+      contributors: []
     deployment_configuration:
       storage:
       - connectionName: default.s3_shared
@@ -47,10 +43,9 @@ stages:
       - connectionName: default.s3_shared
         name: workflows
         targetDirectory: workflows
-initialization:
-- workflowName: execute_notebooks_dag
-  connectionName: project.workflow_mwaa
-  engine: MWAA
-  type: workflow
+    bootstrap:
+      actions:
+      - type: datazone.create_environment
+        environment_configuration_name: OnDemand Workflows
 tests:
   folder: tests/integration/bundle_deploy_pipeline/pipeline_tests/

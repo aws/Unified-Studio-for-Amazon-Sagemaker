@@ -9,6 +9,7 @@ This directory contains example pipelines and configurations demonstrating SMUS 
 - [Test Setup](#test-setup)
 - [Running Tests Locally](#running-tests-locally)
 - [Example Pipelines](#example-pipelines)
+- [Feature Examples](#feature-examples)
 
 ---
 
@@ -22,6 +23,8 @@ Located in `tests/unit/`, these tests validate individual components and helper 
 - **Connection creator** - DataZone connection configuration
 - **Pipeline manifest** - YAML schema validation and parsing
 - **Monitoring** - Event emission and metadata collection
+- **QuickSight** - Dashboard export/import logic
+- **Event initialization** - EventBridge event emission
 
 Run unit tests:
 ```bash
@@ -35,11 +38,38 @@ Located in `tests/integration/`, these tests validate end-to-end pipeline workfl
 - Execute workflows on Airflow Serverless
 - Validate data processing results
 - Test multi-target deployments
+- Test event-driven workflow triggering
+- Test QuickSight dashboard deployment
 
 Run integration tests:
 ```bash
 pytest tests/integration/ -v
 ```
+
+---
+
+## Feature Examples
+
+### Event Initialization
+**Example:** `analytic-workflow/dashboard-glue-quick/`
+
+Demonstrates automatic workflow triggering via EventBridge events:
+- Event emitted on deployment with application metadata
+- EventBridge rule triggers Airflow workflow
+- Variables resolved from manifest (${application.name}, ${stage.name})
+
+See [docs/bootstrap-actions.md](../docs/bootstrap-actions.md) for details.
+
+### QuickSight Dashboard Deployment
+**Example:** `analytic-workflow/dashboard-glue-quick/`
+
+Demonstrates dashboard export from dev and import to test/prod:
+- Export dashboard with datasets and data sources
+- Override resource IDs and names per environment
+- Automatic permission grants to users/groups
+- SPICE ingestion triggering
+
+See [docs/quicksight-deployment.md](../docs/quicksight-deployment.md) for details.
 
 ---
 

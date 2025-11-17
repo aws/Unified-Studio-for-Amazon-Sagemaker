@@ -212,6 +212,65 @@ def bundle_command(
                 total_files_added += files_added
                 typer.echo(f"  Downloaded {files_added} files for '{name}'")
 
+            # Process QuickSight dashboards
+            quicksight_dashboards = (
+                manifest.content.quicksight
+                if manifest.content and manifest.content.quicksight
+                else []
+            )
+
+            if quicksight_dashboards:
+                from ..helpers.quicksight import export_dashboard, poll_export_job
+
+                aws_account_id = config.get("aws", {}).get("account_id")
+                if not aws_account_id:
+                    # Try to get from STS
+                    try:
+                        sts = boto3.client("sts", region_name=region)
+                        aws_account_id = sts.get_caller_identity()["Account"]
+                    except Exception:
+                        typer.echo(
+                            "Warning: AWS account ID not found, skipping QuickSight export",
+                            err=True,
+                        )
+
+                if aws_account_id:
+                    for dashboard_config in quicksight_dashboards:
+                        if dashboard_config.source == "export":
+                            typer.echo(
+                                f"Exporting QuickSight dashboard: {dashboard_config.dashboardId}"
+                            )
+                            try:
+                                job_id = export_dashboard(
+                                    dashboard_config.dashboardId, aws_account_id, region
+                                )
+                                download_url = poll_export_job(
+                                    job_id, aws_account_id, region
+                                )
+
+                                # Download bundle to temp directory
+                                import requests
+
+                                response = requests.get(download_url)
+                                response.raise_for_status()
+
+                                bundle_path = os.path.join(
+                                    temp_bundle_dir,
+                                    "quicksight",
+                                    f"{dashboard_config.dashboardId}.qs",
+                                )
+                                os.makedirs(os.path.dirname(bundle_path), exist_ok=True)
+                                with open(bundle_path, "wb") as f:
+                                    f.write(response.content)
+
+                                total_files_added += 1
+                                typer.echo("  Exported dashboard to bundle")
+                            except Exception as e:
+                                typer.echo(
+                                    f"Error exporting dashboard {dashboard_config.dashboardId}: {e}",
+                                    err=True,
+                                )
+
             # Process Git repositories (supports both dict and list formats)
             git_repos = (
                 manifest.content.git

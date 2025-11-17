@@ -31,13 +31,13 @@ class TestMLTrainingWorkflow(IntegrationTestBase):
         workflow_name = "ml_training_workflow"
 
         # Step 1: Describe --connect
-        print("\n=== Step 1: Describe with Connections ===")
+        self.logger.info("\n=== Step 1: Describe with Connections ===")
         result = self.run_cli_command(["describe", "--manifest", pipeline_file, "--connect"])
         assert result["success"], f"Describe --connect failed: {result['output']}"
-        print("✅ Describe --connect successful")
+        self.logger.info("✅ Describe --connect successful")
 
         # Step 2: Upload ML code to S3
-        print("\n=== Step 2: Upload ML Code to S3 ===")
+        self.logger.info("\n=== Step 2: Upload ML Code to S3 ===")
         ml_dir = os.path.abspath(os.path.join(
             os.path.dirname(__file__),
             "../../../../examples/analytic-workflow/ml"
@@ -49,34 +49,34 @@ class TestMLTrainingWorkflow(IntegrationTestBase):
         )
 
         # Step 3: Bundle
-        print("\n=== Step 3: Bundle ===")
+        self.logger.info("\n=== Step 3: Bundle ===")
         result = self.run_cli_command(["bundle", "--manifest", pipeline_file, "--target", "dev"])
         assert result["success"], f"Bundle failed: {result['output']}"
-        print("✅ Bundle successful")
+        self.logger.info("✅ Bundle successful")
 
         # Step 4: Deploy
-        print("\n=== Step 4: Deploy ===")
+        self.logger.info("\n=== Step 4: Deploy ===")
         result = self.run_cli_command(["deploy", "test", "--manifest", pipeline_file])
         assert result["success"], f"Deploy failed: {result['output']}"
-        print("✅ Deploy successful")
+        self.logger.info("✅ Deploy successful")
 
         # Step 5: Run workflow
-        print("\n=== Step 5: Run Workflow ===")
+        self.logger.info("\n=== Step 5: Run Workflow ===")
         result = self.run_cli_command(
             ["run", "--workflow", workflow_name, "--targets", "test", "--manifest", pipeline_file]
         )
         assert result["success"], f"Run workflow failed: {result['output']}"
-        print("✅ Workflow started")
+        self.logger.info("✅ Workflow started")
 
         # Step 6: Get workflow ARN
-        print("\n=== Step 6: Get Workflow ARN ===")
+        self.logger.info("\n=== Step 6: Get Workflow ARN ===")
         expected_name = 'IntegrationTestMLTraining_test_marketing_ml_training_workflow'
         workflow_arn = self.get_workflow_arn(expected_name)
-        print(f"✅ Workflow ARN: {workflow_arn}")
+        self.logger.info(f"✅ Workflow ARN: {workflow_arn}")
 
 
         # Step 7: Wait for completion
-        print("\n=== Step 7: Wait for Completion ===")
+        self.logger.info("\n=== Step 7: Wait for Completion ===")
         result = self.run_cli_command(
             ["logs", "--live", "--workflow", workflow_arn]
         )
@@ -91,12 +91,12 @@ class TestMLTrainingWorkflow(IntegrationTestBase):
             self.assert_workflow_run_after_test_start(run_id, workflow_arn)
         
         if workflow_succeeded:
-            print("✅ Training workflow completed successfully")
+            self.logger.info("✅ Training workflow completed successfully")
         else:
-            print(f"⚠️ Workflow failed: {result['output']}")
+            self.logger.info(f"⚠️ Workflow failed: {result['output']}")
         
         # Step 8: Download and validate output notebooks (always run, even if workflow failed)
-        print("\n=== Step 8: Download and Validate Output Notebooks ===")
+        self.logger.info("\n=== Step 8: Download and Validate Output Notebooks ===")
         
         # Extract S3 bucket from test project (not dev)
         describe_result = self.run_cli_command(["describe", "--manifest", pipeline_file, "--connect"])
@@ -112,7 +112,7 @@ class TestMLTrainingWorkflow(IntegrationTestBase):
             
             # Wait for S3 propagation
             import time
-            print("⏳ Waiting 10s for S3 propagation...")
+            self.logger.info("⏳ Waiting 10s for S3 propagation...")
             time.sleep(10)
             
             notebooks_valid = self.download_and_validate_notebooks(
@@ -121,9 +121,9 @@ class TestMLTrainingWorkflow(IntegrationTestBase):
             )
             
             assert notebooks_valid, "Output notebooks contain errors or were not found"
-            print("✅ All output notebooks validated successfully")
+            self.logger.info("✅ All output notebooks validated successfully")
         else:
-            print("❌ Could not determine run_id")
+            self.logger.info("❌ Could not determine run_id")
             assert False, "Could not determine run_id for notebook validation"
         
         # Final assertion - workflow must succeed

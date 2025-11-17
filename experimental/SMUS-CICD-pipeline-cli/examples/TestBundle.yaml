@@ -47,13 +47,7 @@ stages:
     project:
       name: dev-marketing-test
       create: true
-    initialization:
-      project:
-        create: true
-        profileName: All capabilities
-        owners:
-        - arn:aws:iam::123456789012:role/GitHubActionsRole-SMUS-CLI-Tests
-        contributors: []
+
     deployment_configuration:
       storage:
       - connectionName: default.s3_shared
@@ -71,13 +65,7 @@ stages:
     project:
       name: dev-marketing-prod
       create: true
-    initialization:
-      project:
-        create: true
-        profileName: All capabilities
-        owners:
-        - arn:aws:iam::123456789012:role/GitHubActionsRole-SMUS-CLI-Tests
-        contributors: []
+
     deployment_configuration:
       storage:
       - connectionName: default.s3_shared

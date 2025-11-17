@@ -18,6 +18,17 @@ def _load_trust_policy(account_id: str) -> str:
     return trust_policy.replace("{ACCOUNT_ID}", account_id)
 
 
+def _load_pass_role_policy(role_arn: str) -> str:
+    """Load and customize PassRole policy template."""
+    resources_dir = os.path.join(os.path.dirname(__file__), "..", "resources")
+    policy_path = os.path.join(resources_dir, "project_role_pass_role_policy.json")
+
+    with open(policy_path, "r") as f:
+        policy = f.read()
+
+    return policy.replace("{ROLE_ARN}", role_arn)
+
+
 def create_or_update_project_role(
     role_name: str,
     policy_arns: List[str],
@@ -47,46 +58,86 @@ def create_or_update_project_role(
         if policy_arns:
             _attach_policies(iam, existing_role_name, policy_arns)
 
+        # Ensure inline PassRole policy exists
+        pass_role_policy = _load_pass_role_policy(role_arn)
+        iam.put_role_policy(
+            RoleName=existing_role_name,
+            PolicyName="SelfPassRolePolicy",
+            PolicyDocument=pass_role_policy,
+        )
+        typer.echo(f"✅ Ensured inline PassRole policy on {existing_role_name}")
+
         return role_arn
 
-    # Create new role
-    trust_policy = _load_trust_policy(account_id)
-
+    # Check if role already exists (idempotent)
     try:
-        response = iam.create_role(
-            RoleName=role_name,
-            AssumeRolePolicyDocument=trust_policy,
-            Description="SMUS project role created by SMUS CLI",
-            Tags=[
-                {"Key": "CreatedBy", "Value": "SMUS-CICD"},
-                {"Key": "ManagedBy", "Value": "SMUS-CLI"},
-            ],
-        )
-        created_role_arn = response["Role"]["Arn"]
-        typer.echo(f"✅ Created role: {created_role_arn}")
-
-        # Attach policies
-        if policy_arns:
-            _attach_policies(iam, role_name, policy_arns)
-
-        # Wait for IAM role to propagate
-        import time
-
-        typer.echo("⏳ Waiting for IAM role to propagate...")
-        time.sleep(30)
-
-        return created_role_arn
-
-    except iam.exceptions.EntityAlreadyExistsException:
-        # Role exists, get its ARN and attach policies
         response = iam.get_role(RoleName=role_name)
         existing_role_arn = response["Role"]["Arn"]
         typer.echo(f"✓ Role already exists: {existing_role_arn}")
 
+        # Attach any new policies
         if policy_arns:
             _attach_policies(iam, role_name, policy_arns)
 
+        # Ensure inline PassRole policy exists
+        pass_role_policy = _load_pass_role_policy(existing_role_arn)
+        iam.put_role_policy(
+            RoleName=role_name,
+            PolicyName="SelfPassRolePolicy",
+            PolicyDocument=pass_role_policy,
+        )
+        typer.echo(f"✅ Ensured inline PassRole policy on {role_name}")
+
         return existing_role_arn
+
+    except iam.exceptions.NoSuchEntityException:
+        # Role doesn't exist, create it
+        pass
+
+    # Create new role
+    trust_policy = _load_trust_policy(account_id)
+
+    import logging
+    from datetime import datetime
+
+    logger = logging.getLogger("smus_cicd.iam")
+    logger.info(f"Creating IAM role: {role_name} at {datetime.utcnow().isoformat()}")
+
+    response = iam.create_role(
+        RoleName=role_name,
+        AssumeRolePolicyDocument=trust_policy,
+        Description="SMUS project role created by SMUS CLI",
+        Tags=[
+            {"Key": "CreatedBy", "Value": "SMUS-CICD"},
+            {"Key": "ManagedBy", "Value": "SMUS-CLI"},
+        ],
+    )
+    created_role_arn = response["Role"]["Arn"]
+    logger.info(
+        f"Successfully created role: {created_role_arn} at {datetime.utcnow().isoformat()}"
+    )
+    typer.echo(f"✅ Created role: {created_role_arn}")
+
+    # Attach policies
+    if policy_arns:
+        _attach_policies(iam, role_name, policy_arns)
+
+    # Attach inline PassRole policy to allow role to pass itself
+    pass_role_policy = _load_pass_role_policy(created_role_arn)
+    iam.put_role_policy(
+        RoleName=role_name,
+        PolicyName="SelfPassRolePolicy",
+        PolicyDocument=pass_role_policy,
+    )
+    typer.echo(f"✅ Attached inline PassRole policy to {role_name}")
+
+    # Wait for IAM role to propagate
+    import time
+
+    typer.echo("⏳ Waiting for IAM role to propagate...")
+    time.sleep(30)
+
+    return created_role_arn
 
 
 def _attach_policies(iam, role_name: str, policy_arns: List[str]):

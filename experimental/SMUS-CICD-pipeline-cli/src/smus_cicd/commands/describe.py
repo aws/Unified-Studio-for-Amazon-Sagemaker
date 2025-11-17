@@ -92,54 +92,14 @@ def describe_command(
                 },
             }
 
-            # Add initialization data if it exists
-            if (
-                hasattr(target_config, "initialization")
-                and target_config.initialization
-            ):
-                target_data["initialization"] = {}
-                if (
-                    hasattr(target_config.initialization, "project")
-                    and target_config.initialization.project
-                ):
-                    project_init = target_config.initialization.project
-                    target_data["initialization"]["project"] = {}
-
-                    # Add project initialization fields
-                    if hasattr(project_init, "create"):
-                        target_data["initialization"]["project"][
-                            "create"
-                        ] = project_init.create
-                    if hasattr(project_init, "profile_name"):
-                        target_data["initialization"]["project"][
-                            "profileName"
-                        ] = project_init.profile_name
-                    if hasattr(project_init, "owners"):
-                        target_data["initialization"]["project"][
-                            "owners"
-                        ] = project_init.owners
-                    if hasattr(project_init, "contributors"):
-                        target_data["initialization"]["project"][
-                            "contributors"
-                        ] = project_init.contributors
-                    if hasattr(project_init, "userParameters"):
-                        target_data["initialization"]["project"][
-                            "userParameters"
-                        ] = project_init.userParameters
-
-                # Add connections from initialization
-                if (
-                    hasattr(target_config.initialization, "connections")
-                    and target_config.initialization.connections
-                ):
-                    target_data["initialization"]["connections"] = []
-                    for conn in target_config.initialization.connections:
-                        conn_data = {
-                            "name": conn.name,
-                            "type": conn.type,
-                            "properties": conn.properties,
-                        }
-                        target_data["initialization"]["connections"].append(conn_data)
+            # Add bootstrap data if it exists
+            if hasattr(target_config, "bootstrap") and target_config.bootstrap:
+                target_data["bootstrap"] = {
+                    "actions": [
+                        {"type": action.type, **action.parameters}
+                        for action in target_config.bootstrap.actions
+                    ]
+                }
 
             if output.upper() != "JSON":
                 typer.echo(f"  - {stage_name}: {target_config.project.name}")
@@ -156,14 +116,7 @@ def describe_command(
                     # Check if project exists
                     if project_info.get("status") == "NOT_FOUND":
                         # Project doesn't exist - check if it will be created
-                        should_create = False
-                        if (
-                            target_config.initialization
-                            and target_config.initialization.project
-                        ):
-                            should_create = getattr(
-                                target_config.initialization.project, "create", False
-                            )
+                        should_create = target_config.project.create
 
                         if output.upper() != "JSON":
                             typer.echo("    ⚠️  Project does not exist yet")
@@ -455,14 +408,14 @@ def describe_command(
         # Show manifest workflows if they exist
         if (
             hasattr(manifest, "workflows")
-            and manifest.workflows
+            and manifest.content.workflows
             and output.upper() != "JSON"
         ):
             typer.echo("\nManifest Workflows:")
-            for workflow in manifest.workflows:
+            for workflow in manifest.content.workflows:
                 typer.echo(f"  - {workflow.workflow_name}")
                 typer.echo(f"    Connection: {workflow.connection_name}")
-                typer.echo(f"    Engine: {workflow.engine}")
+                typer.echo(f"    Connection: {workflow.get('connectionName', '')}")
                 if hasattr(workflow, "parameters") and workflow.parameters:
                     typer.echo(f"    Parameters: {workflow.parameters}")
 
@@ -471,37 +424,23 @@ def describe_command(
         if output.upper() != "JSON":
             for stage_name, target_config in manifest.stages.items():
                 if (
-                    hasattr(target_config, "initialization")
-                    and target_config.initialization
-                    and hasattr(target_config.initialization, "connections")
-                    and target_config.initialization.connections
+                    hasattr(target_config, "bootstrap")
+                    and target_config.bootstrap
+                    and target_config.bootstrap.actions
                 ):
                     if not connections_found:
-                        typer.echo("\nInitialization Connections:")
+                        typer.echo("\nBootstrap Actions:")
                         connections_found = True
 
                     typer.echo(f"  Target: {stage_name}")
-                    for conn in target_config.initialization.connections:
-                        typer.echo(f"    - {conn.name} ({conn.type})")
-                        if conn.properties:
-                            for key, value in conn.properties.items():
+                    for action in target_config.bootstrap.actions:
+                        typer.echo(f"    - {action.type}")
+                        if action.parameters:
+                            for key, value in action.parameters.items():
                                 typer.echo(f"      {key}: {value}")
 
         # Output JSON if requested
         if output.upper() == "JSON":
-            # Add manifest workflows to JSON output
-            if hasattr(manifest, "workflows") and manifest.workflows:
-                output_data["manifest_workflows"] = []
-                for workflow in manifest.workflows:
-                    workflow_data = {
-                        "workflow_name": workflow.workflow_name,
-                        "connection_name": workflow.connection_name,
-                        "engine": workflow.engine,
-                    }
-                    if hasattr(workflow, "parameters") and workflow.parameters:
-                        workflow_data["parameters"] = workflow.parameters
-                    output_data["manifest_workflows"].append(workflow_data)
-
             typer.echo(json.dumps(output_data, indent=2))
 
         # Exit with error code if any errors occurred

@@ -2,6 +2,7 @@
 
 import datetime
 import json
+import logging
 import time
 from typing import Optional
 
@@ -13,6 +14,8 @@ from ..helpers.utils import (  # noqa: F401
     get_datazone_project_info,
     load_config,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def monitor_command(
@@ -148,6 +151,24 @@ def _monitor_once(
     try:
         # Load pipeline manifest using centralized parser
         manifest = ApplicationManifest.from_file(manifest_file)
+
+        # Check if manifest has any workflows defined
+        if not (hasattr(manifest.content, "workflows") and manifest.content.workflows):
+            if output.upper() == "JSON":
+                typer.echo(
+                    json.dumps(
+                        {
+                            "bundle": manifest.application_name,
+                            "message": "No workflows defined in manifest",
+                            "status": "success",
+                        },
+                        indent=2,
+                    )
+                )
+            else:
+                typer.echo(f"Pipeline: {manifest.application_name}")
+                typer.echo("📋 No workflows defined in manifest - nothing to monitor")
+            return
 
         # Parse targets - handle single target or comma-separated list
         target_list = []
@@ -342,11 +363,11 @@ def _monitor_once(
         # Show manifest workflows summary
         if (
             hasattr(manifest, "workflows")
-            and manifest.workflows
+            and manifest.content.workflows
             and output.upper() != "JSON"
         ):
             typer.echo("\n📋 Manifest Workflows:")
-            for workflow in manifest.workflows:
+            for workflow in manifest.content.workflows:
                 typer.echo(
                     f"   - {workflow.workflow_name} (Connection: {workflow.connection_name})"
                 )
@@ -354,13 +375,13 @@ def _monitor_once(
         # Output JSON if requested
         if output.upper() == "JSON":
             # Add manifest workflows to JSON output
-            if hasattr(manifest, "workflows") and manifest.workflows:
+            if hasattr(manifest, "workflows") and manifest.content.workflows:
                 output_data["manifest_workflows"] = []
-                for workflow in manifest.workflows:
+                for workflow in manifest.content.workflows:
                     workflow_data = {
                         "workflow_name": workflow.workflow_name,
                         "connection_name": workflow.connection_name,
-                        "engine": workflow.engine,
+                        "connectionName": workflow.get("connectionName", ""),
                     }
                     if hasattr(workflow, "parameters") and workflow.parameters:
                         workflow_data["parameters"] = workflow.parameters
@@ -411,11 +432,56 @@ def _target_uses_airflow_serverless(
     Returns:
         True if target uses serverless Airflow, False otherwise
     """
-    # Check workflows section for airflow-serverless engine
-    if manifest.workflows:
-        for workflow in manifest.workflows:
-            if workflow.engine == "airflow-serverless":
-                return True
+    if hasattr(manifest.content, "workflows") and manifest.content.workflows:
+        import boto3
+
+        from ..helpers.datazone import get_project_id_by_name, resolve_domain_id
+
+        region = target_config.domain.region
+        project_name = target_config.project.name
+
+        try:
+            domain_id, _ = resolve_domain_id(
+                target_config.domain.name,
+                (
+                    target_config.domain.tags
+                    if hasattr(target_config.domain, "tags")
+                    else None
+                ),
+                region,
+            )
+
+            if not domain_id:
+                return False
+
+            project_id = get_project_id_by_name(project_name, domain_id, region)
+            if not project_id:
+                return False
+
+            client = boto3.client("datazone", region_name=region)
+            response = client.list_connections(
+                domainIdentifier=domain_id, projectIdentifier=project_id
+            )
+
+            # Check if any workflow uses serverless Airflow connection
+            # Serverless: type=WORKFLOWS_MWAA without MWAA ARN in physicalEndpoints
+            # MWAA: type=WORKFLOWS_MWAA with MWAA ARN in physicalEndpoints
+            for workflow in manifest.content.workflows:
+                conn_name = workflow.get("connectionName", "")
+                for conn in response.get("items", []):
+                    if conn["name"] == conn_name and conn["type"] == "WORKFLOWS_MWAA":
+                        # Check if physicalEndpoints contains MWAA ARN
+                        physical_endpoints = conn.get("physicalEndpoints", [])
+                        has_mwaa_arn = any(
+                            "glueConnection" in ep
+                            and "arn:aws:airflow" in str(ep.get("glueConnection", ""))
+                            for ep in physical_endpoints
+                        )
+                        # If no MWAA ARN, it's serverless
+                        if not has_mwaa_arn:
+                            return True
+        except Exception:
+            pass
 
     return False
 
@@ -694,9 +760,9 @@ def _monitor_mwaa_workflows(
 
                     # Get manifest workflows for comparison
                     manifest_workflows = set()
-                    if hasattr(manifest, "workflows") and manifest.workflows:
+                    if hasattr(manifest, "workflows") and manifest.content.workflows:
                         manifest_workflows = {
-                            w.workflow_name for w in manifest.workflows
+                            w.workflow_name for w in manifest.content.workflows
                         }
 
                     # Monitor each DAG

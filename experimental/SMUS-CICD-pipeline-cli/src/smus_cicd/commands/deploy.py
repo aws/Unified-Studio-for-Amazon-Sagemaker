@@ -197,6 +197,21 @@ def deploy_command(
             )
             raise
 
+        # Process bootstrap actions
+        if target_config.bootstrap:
+            typer.echo("Processing bootstrap actions...")
+            _process_bootstrap_actions(target_config, stage_name, config)
+
+        # Find bundle file if not provided
+        bundle_path = bundle
+        if not bundle_path:
+            bundle_path = _find_bundle_file(manifest, config)
+
+        # Deploy QuickSight dashboards
+        _deploy_quicksight_dashboards(
+            manifest, target_config, stage_name, config, bundle_path
+        )
+
         # Deploy bundle and track errors
         deployment_success = _deploy_bundle_to_target(
             target_config, manifest, config, bundle, stage_name, emitter, metadata
@@ -541,15 +556,15 @@ def _deploy_storage_item(
     """
     name = storage_config.name
     has_target_dir = hasattr(storage_config, "targetDirectory")
-    target_dir = (
-        storage_config.targetDirectory
-        if has_target_dir
-        else ""
+    target_dir = storage_config.targetDirectory if has_target_dir else ""
+
+    typer.echo(
+        f"🔍 DEBUG _deploy_storage_item: name='{name}', has_targetDirectory={has_target_dir}"
     )
-    
-    typer.echo(f"🔍 DEBUG _deploy_storage_item: name='{name}', has_targetDirectory={has_target_dir}")
     if has_target_dir:
-        typer.echo(f"🔍 DEBUG _deploy_storage_item: targetDirectory='{storage_config.targetDirectory}'")
+        typer.echo(
+            f"🔍 DEBUG _deploy_storage_item: targetDirectory='{storage_config.targetDirectory}'"
+        )
     typer.echo(f"🔍 DEBUG _deploy_storage_item: target_dir='{target_dir}'")
 
     typer.echo(f"Deploying storage item '{name}' to {target_dir}...")
@@ -1187,10 +1202,10 @@ def _create_airflow_serverless_workflows(
                 airflow_serverless_enabled = True
                 break
 
-    # Check workflows section for airflow-serverless engine
-    if manifest.workflows:
-        for workflow in manifest.workflows:
-            if workflow.engine == "airflow-serverless":
+    # Check workflows section for serverless workflows
+    if hasattr(manifest.content, "workflows") and manifest.content.workflows:
+        for workflow in manifest.content.workflows:
+            if workflow.get("connectionName", ""):
                 airflow_serverless_enabled = True
                 break
 
@@ -1205,11 +1220,11 @@ def _create_airflow_serverless_workflows(
         target_info = build_target_info(stage_name, target_config)
         workflows_info = [
             {
-                "workflowName": wf.workflow_name,
-                "engine": wf.engine,
+                "workflowName": wf.get("workflowName", ""),
+                "connectionName": wf.get("connectionName", ""),
             }
-            for wf in manifest.workflows
-            if wf.engine == "airflow-serverless"
+            for wf in manifest.content.workflows
+            if wf.get("connectionName", "")
         ]
         emitter.workflow_creation_started(
             manifest.application_name, target_info, workflows_info, metadata
@@ -1484,7 +1499,7 @@ def _create_airflow_serverless_workflows(
                 workflow_results = [
                     {
                         "workflowName": wf["name"],
-                        "engine": "airflow-serverless",
+                        "connectionName": "airflow-serverless",
                         "status": "created",
                         "workflowArn": wf["arn"],
                     }
@@ -1566,7 +1581,7 @@ def _find_dag_files_in_s3(
     """
     dag_files = []
 
-    if not manifest.workflows:
+    if not manifest.content.workflows:
         return dag_files
 
     # Get target directories from deployment_configuration
@@ -1587,8 +1602,8 @@ def _find_dag_files_in_s3(
         search_prefixes = [s3_prefix]
 
     # Search for each workflow specified in manifest
-    for workflow in manifest.workflows:
-        workflow_name = workflow.workflow_name
+    for workflow in manifest.content.workflows:
+        workflow_name = workflow.get("workflowName", "")
         found = False
 
         # Search each configured prefix
@@ -1801,3 +1816,181 @@ def _upload_dag_to_s3(
     except Exception as e:
         typer.echo(f"❌ Failed to upload DAG to S3: {e}")
         return None
+
+
+def _process_bootstrap_actions(
+    target_config,
+    stage_name: str,
+    config: Dict[str, Any],
+) -> None:
+    """
+    Process bootstrap actions sequentially.
+
+    Args:
+        target_config: Target configuration
+        stage_name: Stage name
+        config: Configuration dictionary
+    """
+    from ..bootstrap import executor
+
+    # Build context for action execution
+    context = {
+        "stage": stage_name,
+        "project": {"name": target_config.project.name},
+        "domain": {
+            "name": target_config.domain.name,
+            "region": target_config.domain.region,
+        },
+        "region": config.get("region"),
+    }
+
+    # Execute bootstrap actions
+    results = executor.execute_actions(target_config.bootstrap.actions, context)
+
+    # Log results
+    success_count = sum(1 for r in results if r["status"] == "success")
+    failed_count = sum(1 for r in results if r["status"] == "failed")
+
+    typer.echo(f"  ✓ Processed {success_count} actions successfully")
+    if failed_count > 0:
+        typer.echo(f"  ✗ {failed_count} actions failed", err=True)
+
+
+def _deploy_quicksight_dashboards(
+    manifest: ApplicationManifest,
+    target_config,
+    stage_name: str,
+    config: Dict[str, Any],
+    bundle: Optional[str],
+) -> None:
+    """Deploy QuickSight dashboards to target environment."""
+    from ..helpers.quicksight import (
+        grant_dashboard_permissions,
+        import_dashboard,
+        poll_import_job,
+    )
+
+    # Get dashboards from content and stage
+    dashboards = []
+    if manifest.content and manifest.content.quicksight:
+        dashboards.extend(manifest.content.quicksight)
+    if target_config.quicksight:
+        dashboards.extend(target_config.quicksight)
+
+    typer.echo(f"🔍 DEBUG: Found {len(dashboards)} QuickSight dashboards to deploy")
+
+    if not dashboards:
+        return
+
+    typer.echo("Deploying QuickSight dashboards...")
+
+    aws_account_id = config.get("aws", {}).get("account_id")
+    region = target_config.domain.region
+
+    if not aws_account_id:
+        # Try to get from STS
+        try:
+            import boto3
+
+            sts = boto3.client("sts", region_name=region)
+            aws_account_id = sts.get_caller_identity()["Account"]
+        except Exception:
+            typer.echo(
+                "Warning: AWS account ID not found, skipping QuickSight deployment",
+                err=True,
+            )
+            return
+
+    for dashboard_config in dashboards:
+        dashboard_id = dashboard_config.dashboardId
+        typer.echo(f"  Deploying dashboard: {dashboard_id}")
+        typer.echo(f"    🔍 DEBUG: source={dashboard_config.source}, bundle={bundle}")
+
+        try:
+            # Determine bundle source
+            if not bundle:
+                typer.echo(
+                    f"    Warning: No bundle specified, skipping {dashboard_id}",
+                    err=True,
+                )
+                continue
+
+            # Extract dashboard from zip
+            import os
+            import tempfile
+            import zipfile
+
+            # Determine file path in zip
+            if dashboard_config.source == "export":
+                dashboard_file_in_zip = f"quicksight/{dashboard_id}.qs"
+            else:
+                # Use provided source path
+                dashboard_file_in_zip = dashboard_config.source
+
+            # Find the file in the zip (may be in a subdirectory)
+            with zipfile.ZipFile(bundle, "r") as zip_ref:
+                # Look for exact match or match within subdirectories
+                matching_files = [
+                    f for f in zip_ref.namelist() if f.endswith(dashboard_file_in_zip)
+                ]
+
+                if not matching_files:
+                    typer.echo(
+                        f"    Warning: Dashboard {dashboard_file_in_zip} not found in bundle",
+                        err=True,
+                    )
+                    continue
+
+                # Use first match
+                file_in_zip = matching_files[0]
+
+                # Extract to temp file
+                temp_dir = tempfile.mkdtemp()
+                zip_ref.extract(file_in_zip, temp_dir)
+                bundle_path = os.path.join(temp_dir, file_in_zip)
+
+            # Import dashboard
+            job_id = import_dashboard(
+                bundle_path,
+                aws_account_id,
+                region,
+                dashboard_config.overrideParameters or {},
+            )
+            result = poll_import_job(job_id, aws_account_id, region)
+
+            # Print imported assets
+            if result.get("Status") == "SUCCESSFUL":
+                typer.echo(f"    ✓ Dashboard deployed successfully")
+
+                # Get import job details to show created assets
+                import boto3
+
+                client = boto3.client("quicksight", region_name=region)
+                job_details = client.describe_asset_bundle_import_job(
+                    AwsAccountId=aws_account_id, AssetBundleImportJobId=job_id
+                )
+
+                # Print created assets
+                if job_details.get("Dashboards"):
+                    typer.echo(f"      Dashboards:")
+                    for dash in job_details["Dashboards"]:
+                        typer.echo(f"        - {dash['DashboardId']}")
+
+                if job_details.get("DataSets"):
+                    typer.echo(f"      DataSets:")
+                    for ds in job_details["DataSets"]:
+                        typer.echo(f"        - {ds['DataSetId']}")
+
+                if job_details.get("DataSources"):
+                    typer.echo(f"      DataSources:")
+                    for source in job_details["DataSources"]:
+                        typer.echo(f"        - {source['DataSourceId']}")
+
+            # Grant permissions
+            if dashboard_config.permissions:
+                grant_dashboard_permissions(
+                    dashboard_id, aws_account_id, region, dashboard_config.permissions
+                )
+
+        except Exception as e:
+            typer.echo(f"    ✗ Error deploying dashboard: {e}", err=True)

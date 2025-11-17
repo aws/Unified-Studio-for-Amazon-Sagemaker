@@ -53,15 +53,21 @@ def run_command(
         manifest = ApplicationManifest.from_file(manifest_file)
         targets_to_check = _resolve_targets(targets, manifest)
 
-        # Check if any workflow uses serverless Airflow
+        # Check if any workflow uses serverless Airflow by looking up connection type
         uses_airflow_serverless = False
 
-        # Check workflows section for airflow-serverless engine
-        if manifest.workflows:
-            for wf in manifest.workflows:
-                if wf.engine == "airflow-serverless":
-                    uses_airflow_serverless = True
-                    break
+        # Check workflows section and lookup connection types
+        if hasattr(manifest.content, "workflows") and manifest.content.workflows:
+            for wf in manifest.content.workflows:
+                conn_name = wf.get("connectionName", "")
+                if conn_name:
+                    # Get connection type from DataZone
+                    conn_type = _get_connection_type(
+                        conn_name, targets_to_check, manifest
+                    )
+                    if conn_type == "WORKFLOWS_SERVERLESS":
+                        uses_airflow_serverless = True
+                        break
 
         if uses_airflow_serverless:
             results = _execute_airflow_serverless_workflows(
@@ -653,3 +659,57 @@ def _execute_airflow_serverless_workflows(
             results.append({"target": stage_name, "success": False, "error": error_msg})
 
     return results
+
+
+def _get_connection_type(connection_name: str, targets: dict, manifest) -> str:
+    """Get connection type from DataZone by looking it up in the first target."""
+    import boto3
+
+    from ..helpers.datazone import get_project_id_by_name, resolve_domain_id
+
+    # Get first target to lookup connection
+    first_target = next(iter(targets.values()))
+    region = first_target.domain.region
+    project_name = first_target.project.name
+
+    try:
+        # Get domain and project IDs
+        domain_id, _ = resolve_domain_id(
+            first_target.domain.name,
+            first_target.domain.tags if hasattr(first_target.domain, "tags") else None,
+            region,
+        )
+
+        if not domain_id:
+            return "UNKNOWN"
+
+        project_id = get_project_id_by_name(project_name, domain_id, region)
+        if not project_id:
+            return "UNKNOWN"
+
+        # List connections and find the one matching the name
+        client = boto3.client("datazone", region_name=region)
+        response = client.list_connections(
+            domainIdentifier=domain_id, projectIdentifier=project_id
+        )
+
+        for conn in response.get("items", []):
+            if conn["name"] == connection_name:
+                conn_type = conn["type"]
+                # If type is WORKFLOWS_MWAA, check if it's actually serverless
+                if conn_type == "WORKFLOWS_MWAA":
+                    # Check if physicalEndpoints contains MWAA ARN
+                    physical_endpoints = conn.get("physicalEndpoints", [])
+                    has_mwaa_arn = any(
+                        "glueConnection" in ep
+                        and "arn:aws:airflow" in str(ep.get("glueConnection", ""))
+                        for ep in physical_endpoints
+                    )
+                    # If no MWAA ARN, it's serverless
+                    if not has_mwaa_arn:
+                        return "WORKFLOWS_SERVERLESS"
+                return conn_type
+
+        return "UNKNOWN"
+    except Exception:
+        return "UNKNOWN"

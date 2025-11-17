@@ -251,21 +251,22 @@ content:
 
 stages:
 {targets_config}
-# Initialization actions (optional)
-# initialization:
-#   - type: workflow
-#     workflowName: your_workflow_name
-#     connectionName: project.workflow_mwaa
-#     logging: console
-#     engine: MWAA
-#     # parameters:
-#     #   env: production
-#     #   timeout: 3600
-#
-#   - workflowName: another_workflow
-#     connectionName: project.workflow_mwaa
-#     logging: none
-#     engine: MWAA
+# Bootstrap actions (optional)
+# Example bootstrap actions:
+#   bootstrap:
+#     actions:
+#       - type: datazone.create_environment
+#         environmentConfigurationName: "OnDemand Workflows"
+#       
+#       - type: datazone.create_connection
+#         name: mlflow
+#         connectionType: MLFLOW
+#         properties:
+#           trackingServerUrl: "https://mlflow.example.com"
+#       
+#       - type: mwaaserverless.start_workflow_run
+#         workflowArn: "arn:aws:airflow-serverless:us-east-1:123456789012:workflow/my-workflow"
+#         clientToken: "unique-run-id"
 """
 
 

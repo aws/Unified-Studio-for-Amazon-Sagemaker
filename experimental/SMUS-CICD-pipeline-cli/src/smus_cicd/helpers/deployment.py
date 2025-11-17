@@ -27,21 +27,29 @@ def deploy_files(
         typer.echo(f"  ❌ No S3 URI found for connection {conn_id} (type: {conn_type})")
         return False  # Return False to indicate failure
 
-    typer.echo(f"  🔍 DEBUG deploy_files: target_directory='{target_directory}' (type: {type(target_directory).__name__})")
+    typer.echo(
+        f"  🔍 DEBUG deploy_files: target_directory='{target_directory}' (type: {type(target_directory).__name__})"
+    )
     typer.echo(f"  🔍 DEBUG deploy_files: s3_uri='{s3_uri}'")
-    
+
     # Normalize target_directory: treat ".", "", or None as root
     if target_directory in (".", "", None):
-        typer.echo(f"  🔍 DEBUG deploy_files: target_directory normalized to empty (was: '{target_directory}')")
+        typer.echo(
+            f"  🔍 DEBUG deploy_files: target_directory normalized to empty (was: '{target_directory}')"
+        )
         target_directory = ""
 
     # Construct full S3 path
     if target_directory:
         full_s3_path = f"{s3_uri.rstrip('/')}/{target_directory}/"
-        typer.echo(f"  🔍 DEBUG deploy_files: Using target_directory, full_s3_path='{full_s3_path}'")
+        typer.echo(
+            f"  🔍 DEBUG deploy_files: Using target_directory, full_s3_path='{full_s3_path}'"
+        )
     else:
         full_s3_path = s3_uri if s3_uri.endswith("/") else f"{s3_uri}/"
-        typer.echo(f"  🔍 DEBUG deploy_files: No target_directory, full_s3_path='{full_s3_path}'")
+        typer.echo(
+            f"  🔍 DEBUG deploy_files: No target_directory, full_s3_path='{full_s3_path}'"
+        )
 
     typer.echo(f"  S3 Location: {full_s3_path}")
 

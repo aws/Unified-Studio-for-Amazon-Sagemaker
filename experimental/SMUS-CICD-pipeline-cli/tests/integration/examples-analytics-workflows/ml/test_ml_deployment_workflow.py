@@ -37,7 +37,7 @@ class TestMLDeploymentWorkflow(IntegrationTestBase):
         for job in response['TrainingJobSummaries']:
             job_name = job['TrainingJobName']
             if 'orchestrated-training' in job_name or 'ml-training' in job_name:
-                print(f"✅ Found training job: {job_name}")
+                self.logger.info(f"✅ Found training job: {job_name}")
                 return job_name
         
         pytest.skip("No completed training job found")
@@ -52,13 +52,13 @@ class TestMLDeploymentWorkflow(IntegrationTestBase):
         workflow_name = "ml_deployment_workflow"
 
         # Step 1: Describe --connect
-        print("\n=== Step 1: Describe with Connections ===")
+        self.logger.info("\n=== Step 1: Describe with Connections ===")
         result = self.run_cli_command(["describe", "--manifest", pipeline_file, "--connect"])
         assert result["success"], f"Describe --connect failed: {result['output']}"
-        print("✅ Describe --connect successful")
+        self.logger.info("✅ Describe --connect successful")
 
         # Step 2: Upload ML code to S3
-        print("\n=== Step 2: Upload ML Code to S3 ===")
+        self.logger.info("\n=== Step 2: Upload ML Code to S3 ===")
         ml_dir = os.path.abspath(os.path.join(
             os.path.dirname(__file__),
             "../../../../examples/analytic-workflow/ml"
@@ -70,27 +70,27 @@ class TestMLDeploymentWorkflow(IntegrationTestBase):
         )
 
         # Step 3: Bundle from dev
-        print("\n=== Step 3: Bundle from dev ===")
+        self.logger.info("\n=== Step 3: Bundle from dev ===")
         result = self.run_cli_command(["bundle", "--manifest", pipeline_file, "--target", "dev"])
         assert result["success"], f"Bundle failed: {result['output']}"
-        print("✅ Bundle successful")
+        self.logger.info("✅ Bundle successful")
 
         # Step 4: Deploy to test
-        print("\n=== Step 4: Deploy to test ===")
+        self.logger.info("\n=== Step 4: Deploy to test ===")
         result = self.run_cli_command(["deploy", "test", "--manifest", pipeline_file])
         assert result["success"], f"Deploy failed: {result['output']}"
-        print("✅ Deploy successful")
+        self.logger.info("✅ Deploy successful")
 
         # Step 5: Run workflow
-        print("\n=== Step 5: Run Workflow ===")
+        self.logger.info("\n=== Step 5: Run Workflow ===")
         result = self.run_cli_command(
             ["run", "--workflow", workflow_name, "--targets", "test", "--manifest", pipeline_file]
         )
         assert result["success"], f"Run workflow failed: {result['output']}"
-        print("✅ Workflow started")
+        self.logger.info("✅ Workflow started")
 
         # Step 6: Get workflow ARN
-        print("\n=== Step 6: Get Workflow ARN ===")
+        self.logger.info("\n=== Step 6: Get Workflow ARN ===")
         region = os.environ.get('DEV_DOMAIN_REGION', 'us-east-2')
         endpoint = os.environ.get('AIRFLOW_SERVERLESS_ENDPOINT', f'https://airflow-serverless.{region}.api.aws/')
         client = boto3.client('mwaaserverless-internal', region_name=region, endpoint_url=endpoint)
@@ -102,10 +102,10 @@ class TestMLDeploymentWorkflow(IntegrationTestBase):
                 workflow_arn = wf.get('WorkflowArn')
                 break
         assert workflow_arn, "Could not find workflow ARN"
-        print(f"✅ Workflow ARN: {workflow_arn}")
+        self.logger.info(f"✅ Workflow ARN: {workflow_arn}")
 
         # Step 7: Wait for completion
-        print("\n=== Step 7: Wait for Completion ===")
+        self.logger.info("\n=== Step 7: Wait for Completion ===")
         result = self.run_cli_command(
             ["logs", "--live", "--workflow", workflow_arn]
         )
@@ -120,12 +120,12 @@ class TestMLDeploymentWorkflow(IntegrationTestBase):
             self.assert_workflow_run_after_test_start(run_id, workflow_arn)
         
         if workflow_succeeded:
-            print("✅ Deployment workflow completed successfully")
+            self.logger.info("✅ Deployment workflow completed successfully")
         else:
-            print(f"⚠️ Workflow failed: {result['output']}")
+            self.logger.info(f"⚠️ Workflow failed: {result['output']}")
         
         # Step 8: Download and validate output notebooks (always run, even if workflow failed)
-        print("\n=== Step 8: Download and Validate Output Notebooks ===")
+        self.logger.info("\n=== Step 8: Download and Validate Output Notebooks ===")
         
         # Extract S3 bucket from test project (not dev)
         test_s3_uri_match = re.search(
@@ -149,7 +149,7 @@ class TestMLDeploymentWorkflow(IntegrationTestBase):
             
             # Wait for S3 propagation
             import time
-            print("⏳ Waiting 10s for S3 propagation...")
+            self.logger.info("⏳ Waiting 10s for S3 propagation...")
             time.sleep(10)
             
             notebooks_valid = self.download_and_validate_notebooks(
@@ -159,9 +159,9 @@ class TestMLDeploymentWorkflow(IntegrationTestBase):
             )
             
             assert notebooks_valid, "Output notebooks contain errors or were not found"
-            print("✅ All output notebooks validated successfully")
+            self.logger.info("✅ All output notebooks validated successfully")
         else:
-            print("❌ Could not determine S3 bucket or run_id")
+            self.logger.info("❌ Could not determine S3 bucket or run_id")
             assert False, "Could not determine S3 bucket or run_id for notebook validation"
         
         # Final assertion - workflow must succeed

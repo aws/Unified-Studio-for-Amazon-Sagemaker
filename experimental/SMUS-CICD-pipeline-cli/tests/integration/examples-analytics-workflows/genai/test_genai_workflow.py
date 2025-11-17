@@ -37,13 +37,13 @@ class TestGenAIWorkflow(IntegrationTestBase):
         workflow_name = "genai_dev_workflow"
 
         # Step 1: Describe --connect
-        print("\n=== Step 1: Describe with Connections ===")
+        self.logger.info("\n=== Step 1: Describe with Connections ===")
         result = self.run_cli_command(["describe", "--manifest", pipeline_file, "--connect"])
         assert result["success"], f"Describe --connect failed: {result['output']}"
-        print("✅ Describe --connect successful")
+        self.logger.info("✅ Describe --connect successful")
 
         # Step 2: Upload GenAI code to S3 (dev project)
-        print("\n=== Step 2: Upload GenAI Code to S3 (dev project) ===")
+        self.logger.info("\n=== Step 2: Upload GenAI Code to S3 (dev project) ===")
         genai_dir = os.path.abspath(os.path.join(
             os.path.dirname(__file__),
             "../../../../examples/analytic-workflow/genai"
@@ -55,73 +55,75 @@ class TestGenAIWorkflow(IntegrationTestBase):
         )
 
         # Step 3: Bundle from dev
-        print("\n=== Step 3: Bundle from dev ===")
+        self.logger.info("\n=== Step 3: Bundle from dev ===")
         result = self.run_cli_command(["bundle", "--manifest", pipeline_file, "--target", "dev"])
         assert result["success"], f"Bundle failed: {result['output']}"
-        print("✅ Bundle successful")
+        self.logger.info("✅ Bundle successful")
 
         # Step 3.5: Check for active workflow runs - fail if any exist
-        print("\n=== Step 3.5: Check for Active Workflow Runs ===")
+        self.logger.info("\n=== Step 3.5: Check for Active Workflow Runs ===")
         expected_name = 'IntegrationTestGenAIWorkflow_test_marketing_genai_dev_workflow'
         try:
             workflow_arn = self.get_workflow_arn(expected_name)
             active_runs = self.check_active_workflow_runs(workflow_arn)
             if active_runs:
                 pytest.fail(f"❌ Found {len(active_runs)} active workflow run(s) from previous test: {active_runs}. Clean up before running tests.")
-            print("✅ No active workflow runs found")
+            self.logger.info("✅ No active workflow runs found")
         except AssertionError:
-            print("✅ Workflow doesn't exist yet (first run)")
+            self.logger.info("✅ Workflow doesn't exist yet (first run)")
 
 
         # Step 4: Deploy
-        print("\n=== Step 4: Deploy ===")
+        self.logger.info("\n=== Step 4: Deploy ===")
         result = self.run_cli_command(["deploy", "test", "--manifest", pipeline_file])
         assert result["success"], f"Deploy failed: {result['output']}"
-        print("✅ Deploy successful")
+        self.logger.info("✅ Deploy successful")
 
         # Step 5: Monitor
-        print("\n=== Step 5: Monitor ===")
+        self.logger.info("\n=== Step 5: Monitor ===")
         result = self.run_cli_command(["monitor", "--targets", "test", "--manifest", pipeline_file])
         assert result["success"], f"Monitor failed: {result['output']}"
-        print("✅ Monitor successful")
+        self.logger.info("✅ Monitor successful")
 
         # Step 6: Run workflow
-        print("\n=== Step 6: Run Workflow ===")
+        self.logger.info("\n=== Step 6: Run Workflow ===")
         result = self.run_cli_command(
             ["run", "--workflow", workflow_name, "--targets", "test", "--manifest", pipeline_file]
         )
         assert result["success"], f"Run workflow failed: {result['output']}"
-        print("✅ Workflow started")
+        self.logger.info("✅ Workflow started")
 
         # Step 7: Get workflow ARN
-        print("\n=== Step 7: Get Workflow ARN ===")
+        self.logger.info("\n=== Step 7: Get Workflow ARN ===")
         expected_name = 'IntegrationTestGenAIWorkflow_test_marketing_genai_dev_workflow'
         workflow_arn = self.get_workflow_arn(expected_name)
-        print(f"✅ Workflow ARN: {workflow_arn}")
+        self.logger.info(f"✅ Workflow ARN: {workflow_arn}")
 
 
         # Step 8: Fetch workflow logs and wait for completion
-        print("\n=== Step 8: Fetch Workflow Logs and Wait ===")
+        self.logger.info("\n=== Step 8: Fetch Workflow Logs and Wait ===")
         result = self.run_cli_command(
             ["logs", "--live", "--workflow", workflow_arn]
         )
         workflow_succeeded = result["success"]
         
-        # Extract run_id from logs output - match pattern like "Run: dyo4EXeWXjVP4nd"
-        run_id_match = re.search(r"Run:\s+([a-zA-Z0-9]+)", result["output"])
+        # Extract run_id from logs output - match pattern like "run_id=3LW8KKBVW8QkYK4" or "Run: dyo4EXeWXjVP4nd"
+        run_id_match = re.search(r"(?:run_id=|Run:\s+)([a-zA-Z0-9]+)", result["output"])
         run_id = run_id_match.group(1) if run_id_match else None
+        
+        self.logger.info(f"🔍 DEBUG: Extracted run_id={run_id}")
         
         # Assert workflow run started after test began
         if run_id and workflow_arn:
             self.assert_workflow_run_after_test_start(run_id, workflow_arn)
         
         if workflow_succeeded:
-            print("✅ Workflow completed successfully")
+            self.logger.info("✅ Workflow completed successfully")
         else:
-            print(f"⚠️ Workflow failed: {result['output']}")
+            self.logger.info(f"⚠️ Workflow failed: {result['output']}")
 
         # Step 9: Download and validate notebooks
-        print("\n=== Step 9: Download and Validate Notebooks ===")
+        self.logger.info("\n=== Step 9: Download and Validate Notebooks ===")
         
         # Extract S3 bucket from test project (not dev)
         describe_result = self.run_cli_command(["describe", "--manifest", pipeline_file, "--connect"])
@@ -131,13 +133,23 @@ class TestGenAIWorkflow(IntegrationTestBase):
             re.DOTALL
         )
         
+        self.logger.info(f"🔍 DEBUG: run_id={run_id}")
+        self.logger.info(f"🔍 DEBUG: test_s3_uri_match={'Found' if test_s3_uri_match else 'Not found'}")
+        if not test_s3_uri_match:
+            self.logger.info(f"🔍 DEBUG: Describe output length: {len(describe_result['output'])}")
+            # Show a snippet to see the format
+            if 'test-marketing' in describe_result['output']:
+                self.logger.info("🔍 DEBUG: 'test-marketing' found in output")
+            else:
+                self.logger.info("🔍 DEBUG: 'test-marketing' NOT found in output")
+        
         if test_s3_uri_match and run_id:
             test_s3_uri = test_s3_uri_match.group(1)
             s3_bucket = re.search(r"s3://([^/]+)", test_s3_uri).group(1)
             
             # Wait for S3 propagation
             import time
-            print("⏳ Waiting 10s for S3 propagation...")
+            self.logger.info("⏳ Waiting 10s for S3 propagation...")
             time.sleep(10)
             
             notebooks_valid = self.download_and_validate_notebooks(
@@ -146,13 +158,13 @@ class TestGenAIWorkflow(IntegrationTestBase):
                 run_id=run_id
             )
             assert notebooks_valid, "Output notebooks contain errors or were not found"
-            print("✅ All output notebooks validated successfully")
+            self.logger.info("✅ All output notebooks validated successfully")
         else:
-            print("❌ Could not determine S3 bucket or run_id")
+            self.logger.info("❌ Could not determine S3 bucket or run_id")
             assert False, "Could not determine S3 bucket or run_id for notebook validation"
         
         # Step 10: Check final workflow status
-        print("\n=== Step 10: Verify Final Workflow Status ===")
+        self.logger.info("\n=== Step 10: Verify Final Workflow Status ===")
         if run_id:
             self.verify_workflow_status(workflow_arn, run_id)
         else:

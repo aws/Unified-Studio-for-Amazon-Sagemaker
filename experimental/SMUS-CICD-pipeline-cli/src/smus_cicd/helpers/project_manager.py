@@ -107,10 +107,7 @@ class ProjectManager:
 
     def _should_create_project(self, target_config) -> bool:
         """Check if project should be created based on configuration."""
-        should_create = target_config.project.create
-        if target_config.initialization and target_config.initialization.project:
-            should_create = should_create or target_config.initialization.project.create
-        return should_create
+        return target_config.project.create
 
     def _create_new_project(
         self,
@@ -178,10 +175,13 @@ class ProjectManager:
 
         # Extract environments for environment creation
         _ = None  # Reserved for future use
-        if target_config.initialization and hasattr(
-            target_config.initialization, "environments"
-        ):
-            _ = target_config.initialization.environments
+        # Check if bootstrap actions include environment creation
+        if target_config.bootstrap and target_config.bootstrap.actions:
+            _ = [
+                a
+                for a in target_config.bootstrap.actions
+                if a.type.startswith("datazone.create_environment")
+            ]
 
         # TODO: Re-enable CloudFormation path once service role permissions are configured for gamma endpoints
         # typer.echo(f"Creating project '{project_name}' via CloudFormation...")
@@ -279,7 +279,7 @@ class ProjectManager:
     def _update_existing_project(
         self, stage_name: str, target_config, project_name: str, region: str
     ):
-        """Update existing project stack tags and memberships."""
+        """Update existing project stack tags, memberships, and ensure role exists."""
         typer.echo("Updating project stack tags...")
 
         # Construct stack name and tags
@@ -299,13 +299,44 @@ class ProjectManager:
                 "⚠️ Project memberships cannot be updated for existing projects - use CloudFormation console to modify memberships"
             )
 
+        # Ensure role exists with correct policies (idempotent)
+        role_arn = self._get_role_arn(target_config)
+        policy_arns = self._get_policy_arns(target_config)
+
+        if policy_arns or not role_arn:
+            import boto3
+
+            from . import iam
+
+            sts = boto3.client("sts")
+            account_id = sts.get_caller_identity()["Account"]
+
+            if not role_arn:
+                # No role specified, create default role
+                role_name = self._get_role_name(target_config, project_name)
+                typer.echo(f"🔧 Ensuring IAM role exists: {role_name}")
+                role_arn = iam.create_or_update_project_role(
+                    role_name=role_name,
+                    policy_arns=policy_arns,
+                    account_id=account_id,
+                    region=region,
+                )
+            else:
+                # Role specified, ensure policies are attached
+                typer.echo(f"🔧 Ensuring policies on existing role: {role_arn}")
+                role_arn = iam.create_or_update_project_role(
+                    role_name="",  # Not used when role_arn provided
+                    policy_arns=policy_arns,
+                    account_id=account_id,
+                    region=region,
+                    role_arn=role_arn,
+                )
+
     def _get_profile_name(self, target_config) -> str:
         """Extract profile name from target configuration."""
         profile_name = target_config.project.profile_name
-        if target_config.initialization and target_config.initialization.project:
-            profile_name = (
-                profile_name or target_config.initialization.project.profile_name
-            )
+        if target_config.bootstrap and target_config.project:
+            profile_name = profile_name or target_config.project.profile_name
 
         # If no profile name provided, auto-detect from domain
         if not profile_name:
@@ -431,8 +462,8 @@ class ProjectManager:
         role_arn = None
 
         # Check initialization.project.role.arn first
-        if target_config.initialization and target_config.initialization.project:
-            init_project = target_config.initialization.project
+        if target_config.bootstrap and target_config.project:
+            init_project = target_config.project
             if hasattr(init_project, "role") and init_project.role:
                 if isinstance(init_project.role, dict):
                     role_arn = init_project.role.get("arn")
@@ -465,8 +496,8 @@ class ProjectManager:
         role_name = None
 
         # Check initialization.project.role.name first
-        if target_config.initialization and target_config.initialization.project:
-            init_project = target_config.initialization.project
+        if target_config.bootstrap and target_config.project:
+            init_project = target_config.project
             if hasattr(init_project, "role") and init_project.role:
                 if isinstance(init_project.role, dict):
                     role_name = init_project.role.get("name")
@@ -492,8 +523,8 @@ class ProjectManager:
         policy_arns = []
 
         # Check initialization.project.role.policies first
-        if target_config.initialization and target_config.initialization.project:
-            init_project = target_config.initialization.project
+        if target_config.bootstrap and target_config.project:
+            init_project = target_config.project
             if hasattr(init_project, "role") and init_project.role:
                 if isinstance(init_project.role, dict):
                     policies = init_project.role.get("policies", [])
@@ -608,7 +639,7 @@ class ProjectManager:
         """Extract user parameters from target configuration."""
         print(f"🔍 DEBUG: Extracting user parameters for target: {stage_name}")
 
-        if not (target_config.initialization and target_config.initialization.project):
+        if not (target_config.bootstrap and target_config.project):
             print(f"🔍 DEBUG: No initialization.project found for target: {stage_name}")
             return None
 
@@ -688,31 +719,30 @@ class ProjectManager:
         """Ensure required environments exist in the project."""
         print(f"🔍 DEBUG: _ensure_environments_exist called for target: {stage_name}")
         print(
-            f"🔍 DEBUG: target_config.initialization exists: {target_config.initialization is not None}"
+            f"🔍 DEBUG: target_config.bootstrap exists: {target_config.bootstrap is not None}"
         )
 
-        if target_config.initialization:
+        if target_config.bootstrap:
             print(
-                f"🔍 DEBUG: target_config.initialization type: {type(target_config.initialization)}"
+                f"🔍 DEBUG: target_config.bootstrap type: {type(target_config.bootstrap)}"
             )
             print(
-                f"🔍 DEBUG: target_config.initialization attributes: {dir(target_config.initialization)}"
+                f"🔍 DEBUG: target_config.bootstrap attributes: {dir(target_config.bootstrap)}"
             )
             print(
-                f"🔍 DEBUG: hasattr environments: {hasattr(target_config.initialization, 'environments')}"
+                f"🔍 DEBUG: hasattr environments: {hasattr(target_config.bootstrap, 'environments')}"
             )
-            if hasattr(target_config.initialization, "environments"):
+            if hasattr(target_config.bootstrap, "environments"):
                 print(
-                    f"🔍 DEBUG: environments value: {target_config.initialization.environments}"
+                    f"🔍 DEBUG: environments value: {target_config.bootstrap.actions}"
                 )
 
         if not (
-            target_config.initialization
-            and hasattr(target_config.initialization, "environments")
+            target_config.bootstrap and hasattr(target_config.bootstrap, "environments")
         ):
             print(f"🔍 DEBUG: No environments specified for target: {stage_name}")
             # Still create connections even if no environments specified
-            if target_config.initialization:
+            if target_config.bootstrap:
                 project_id = project_info.get("project_id")
                 domain_id = datazone.get_domain_id_by_name(domain_name, region)
                 if project_id and domain_id:
@@ -767,7 +797,7 @@ class ProjectManager:
 
         # Check each required environment
         all_environments_ready = True
-        for env_config in target_config.initialization.environments:
+        for env_config in target_config.bootstrap.actions:
             env_name = (
                 env_config.get("EnvironmentConfigurationName")
                 if isinstance(env_config, dict)
@@ -938,11 +968,11 @@ class ProjectManager:
     def _ensure_manifest_connections(
         self, target_config, domain_id: str, project_id: str, region: str
     ) -> None:
-        """Ensure connections from manifest exist (idempotent)."""
+        """Ensure connections from manifest exist (idempotent). Updates existing connections by recreating them."""
         if not (
-            target_config.initialization
-            and hasattr(target_config.initialization, "connections")
-            and target_config.initialization.connections
+            target_config.bootstrap
+            and hasattr(target_config.bootstrap, "connections")
+            and target_config.bootstrap.actions
         ):
             return
 
@@ -978,12 +1008,20 @@ class ProjectManager:
 
         creator = ConnectionCreator(domain_id, region)
 
-        for conn_config in target_config.initialization.connections:
+        for conn_config in target_config.bootstrap.actions:
             full_name = f"project.{conn_config.name}.{conn_config.type.lower()}"
 
+            # If connection exists, delete it first to update
             if full_name in existing_conns:
-                print(f"✅ Connection already exists: {full_name}")
-                continue
+                try:
+                    print(f"🔄 Updating connection: {full_name} (deleting old)")
+                    datazone_client.delete_connection(
+                        domainIdentifier=domain_id, identifier=existing_conns[full_name]
+                    )
+                    print(f"✅ Deleted old connection: {full_name}")
+                except Exception as e:
+                    print(f"⚠️  Failed to delete connection {full_name}: {e}")
+                    continue
 
             try:
                 print(f"🔗 Creating connection: {full_name} ({conn_config.type})")
@@ -1000,11 +1038,9 @@ class ProjectManager:
         owners = []
         contributors = []
 
-        if target_config.initialization and target_config.initialization.project:
-            owners = getattr(target_config.initialization.project, "owners", [])
-            contributors = getattr(
-                target_config.initialization.project, "contributors", []
-            )
+        if target_config.bootstrap and target_config.project:
+            owners = getattr(target_config.project, "owners", [])
+            contributors = getattr(target_config.project, "contributors", [])
         else:
             owners = target_config.project.owners or []
             contributors = target_config.project.contributors or []

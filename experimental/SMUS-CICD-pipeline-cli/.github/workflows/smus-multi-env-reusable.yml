@@ -1,0 +1,167 @@
+name: SMUS Multi-Environment Deploy (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      manifest_path:
+        description: 'Path to manifest file'
+        required: false
+        type: string
+        default: 'manifest.yaml'
+      
+      test_target:
+        description: 'Test environment target name'
+        required: false
+        type: string
+        default: 'test'
+      
+      prod_target:
+        description: 'Production environment target name'
+        required: false
+        type: string
+        default: 'prod'
+      
+      python_version:
+        description: 'Python version'
+        required: false
+        type: string
+        default: '3.12'
+      
+      aws_region:
+        description: 'AWS region'
+        required: false
+        type: string
+        default: 'us-east-1'
+      
+      skip_tests:
+        description: 'Skip test execution'
+        required: false
+        type: boolean
+        default: false
+      
+      deploy_to_prod:
+        description: 'Deploy to production after test'
+        required: false
+        type: boolean
+        default: true
+    
+    secrets:
+      AWS_ROLE_ARN_TEST:
+        description: 'AWS IAM role ARN for test'
+        required: true
+      
+      AWS_ROLE_ARN_PROD:
+        description: 'AWS IAM role ARN for production'
+        required: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  validate:
+    name: Validate Manifest
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+      
+      - name: Install SMUS CLI
+        run: pip install -e .
+      
+      - name: Validate configuration
+        run: |
+          smus-cli describe --manifest ${{ inputs.manifest_path }} --connect
+
+  deploy-test:
+    name: Deploy to Test
+    runs-on: ubuntu-latest
+    needs: validate
+    environment: test
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+      
+      - name: Install SMUS CLI
+        run: pip install -e .
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_TEST }}
+          aws-region: ${{ inputs.aws_region }}
+      
+      - name: Deploy to test
+        run: |
+          smus-cli deploy \
+            --manifest ${{ inputs.manifest_path }} \
+            --targets ${{ inputs.test_target }}
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    needs: deploy-test
+    if: ${{ !inputs.skip_tests }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+      
+      - name: Install SMUS CLI
+        run: pip install -e .
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_TEST }}
+          aws-region: ${{ inputs.aws_region }}
+      
+      - name: Run validation tests
+        run: |
+          smus-cli test \
+            --manifest ${{ inputs.manifest_path }} \
+            --targets ${{ inputs.test_target }}
+
+  deploy-prod:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [deploy-test, test]
+    if: ${{ inputs.deploy_to_prod && (success() || inputs.skip_tests) }}
+    environment: production
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+      
+      - name: Install SMUS CLI
+        run: pip install -e .
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
+          aws-region: ${{ inputs.aws_region }}
+      
+      - name: Deploy to production
+        run: |
+          smus-cli deploy \
+            --manifest ${{ inputs.manifest_path }} \
+            --targets ${{ inputs.prod_target }}

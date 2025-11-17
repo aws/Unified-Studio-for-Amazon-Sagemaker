@@ -46,20 +46,18 @@ stages:
       region: ${DEV_DOMAIN_REGION:us-east-2}
     project:
       name: integration-airless-test
-    initialization:
-      project:
-        create: true
-        profileName: All capabilities
-        owners:
-        - Eng1
-        - arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests
-        - Admin
-        contributors: []
-        userParameters:
-        - EnvironmentConfigurationName: Lakehouse Database
-          parameters:
-          - name: glueDbName
-            value: multi_target_airless_test_db
+      create: true
+      profile_name: All capabilities
+      owners:
+      - Eng1
+      - arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests
+      - Admin
+      contributors: []
+      user_parameters:
+      - environment_configuration_name: Lakehouse Database
+        parameters:
+        - name: glueDbName
+          value: multi_target_airless_test_db
     environment_variables:
       S3_PREFIX: test
     deployment_configuration:
@@ -78,19 +76,17 @@ stages:
       region: ${DEV_DOMAIN_REGION:us-east-2}
     project:
       name: integration-airless-test
-    initialization:
-      project:
-        create: true
-        profileName: All capabilities
-        owners:
-        - Eng1
-        - arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests
-        contributors: []
-        userParameters:
-        - EnvironmentConfigurationName: Lakehouse Database
-          parameters:
-          - name: glueDbName
-            value: multi_target_airless_prod_db
+      create: true
+      profile_name: All capabilities
+      owners:
+      - Eng1
+      - arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests
+      contributors: []
+      user_parameters:
+      - environment_configuration_name: Lakehouse Database
+        parameters:
+        - name: glueDbName
+          value: multi_target_airless_prod_db
     environment_variables:
       S3_PREFIX: prod
     deployment_configuration:
@@ -101,9 +97,5 @@ stages:
       - connectionName: default.s3_shared
         name: workflows
         targetDirectory: workflows
-initialization:
-- workflowName: test_dag
-  engine: airflow-serverless
-  type: workflow
 tests:
   folder: tests/integration/multi_target_bundle/pipeline_tests/

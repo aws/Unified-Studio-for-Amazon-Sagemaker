@@ -1,0 +1,42 @@
+name: Deploy Application
+
+on:
+  push:
+    branches:
+      - main
+      - test
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: 'Deployment targets'
+        required: true
+        type: choice
+        options:
+          - test
+          - prod
+          - test,prod
+
+jobs:
+  deploy-test:
+    name: Deploy to Test
+    if: github.ref == 'refs/heads/test' || github.event.inputs.targets == 'test' || github.event.inputs.targets == 'test,prod'
+    uses: ./.github/workflows/smus-deploy-reusable.yml
+    with:
+      manifest_path: 'manifest.yaml'
+      targets: 'test'
+      run_tests: true
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_TEST }}
+
+  deploy-prod:
+    name: Deploy to Production
+    if: github.ref == 'refs/heads/main' || github.event.inputs.targets == 'prod' || github.event.inputs.targets == 'test,prod'
+    needs: deploy-test
+    environment: production
+    uses: ./.github/workflows/smus-deploy-reusable.yml
+    with:
+      manifest_path: 'manifest.yaml'
+      targets: 'prod'
+      run_tests: true
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_PROD }}

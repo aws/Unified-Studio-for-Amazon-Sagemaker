@@ -67,7 +67,7 @@ stages:
     project:
       name: test-project       # SMUS project name
       create: true             # Let CLI create project
-    initialization:            # Project creation settings
+    bootstrap:            # Project creation settings
       project:
         create: true
         profileName: 'All capabilities'
@@ -118,7 +118,7 @@ stages:
     project:
       name: monthly-metrics-test
       create: true  # Create dedicated project
-    initialization:
+    bootstrap:
       project:
         create: true
         profileName: 'Analytics'
@@ -134,7 +134,7 @@ stages:
     project:
       name: churn-model-test
       create: true  # Create separate dedicated project
-    initialization:
+    bootstrap:
       project:
         create: true
         profileName: 'ML and AI'
@@ -158,7 +158,7 @@ When `create: true`, the CLI automatically creates projects with these settings:
 ### Basic Project Creation
 
 ```yaml
-initialization:
+bootstrap:
   project:
     create: true
     profileName: 'All capabilities'    # Project profile
@@ -170,7 +170,7 @@ initialization:
 ### With Environment Configuration
 
 ```yaml
-initialization:
+bootstrap:
   project:
     create: true
     profileName: 'All capabilities'
@@ -206,7 +206,7 @@ stages:
     project:
       name: test-data-platform
       create: true
-    initialization:
+    bootstrap:
       project:
         create: true
         profileName: 'All capabilities'
@@ -221,7 +221,7 @@ stages:
     project:
       name: prod-data-platform
       create: true
-    initialization:
+    bootstrap:
       project:
         create: true
         profileName: 'All capabilities'
@@ -248,7 +248,7 @@ SMUS projects automatically include these connections:
 
 ### Create Connections via Manifest
 
-The recommended approach is to define connections in the bundle manifest under `initialization.connections`:
+The recommended approach is to define connections in the bundle manifest under `bootstrap.connections`:
 
 ```yaml
 stages:
@@ -259,7 +259,7 @@ stages:
     project:
       name: test-data-platform
       create: true
-    initialization:
+    bootstrap:
       project:
         create: true
         profileName: 'All capabilities'
@@ -552,7 +552,7 @@ stages:
     project:
       name: my-app-prod
       create: true   # Isolated production
-    initialization:
+    bootstrap:
       project:
         create: true
         profileName: 'All capabilities'

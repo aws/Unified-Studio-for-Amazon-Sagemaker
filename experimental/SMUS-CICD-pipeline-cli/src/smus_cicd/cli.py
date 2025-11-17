@@ -26,18 +26,19 @@ from .helpers.logger import setup_logger
 console = Console()
 
 
-def configure_logging(output_format: str = "TEXT"):
-    """Configure logging based on output format."""
+def configure_logging(output_format: str = "TEXT", log_level: str = None):
+    """Configure logging based on output format and log level."""
     import os
 
-    # Set log level from environment or default to INFO
-    log_level = os.environ.get("SMUS_LOG_LEVEL", "INFO")
+    # Set log level: CLI option > environment > default
+    if log_level is None:
+        log_level = os.environ.get("SMUS_LOG_LEVEL", "INFO")
 
     # For JSON output, send logs to stderr to keep stdout clean
     json_output = output_format.upper() == "JSON"
 
     # Configure root logger for the application
-    setup_logger("smus_cicd", log_level, json_output)
+    setup_logger("smus_cicd", log_level.upper(), json_output)
 
 
 def show_help_suggestion():
@@ -48,9 +49,12 @@ def show_help_suggestion():
     console.print("   [cyan]smus-cli deploy -p my-pipeline.yaml -t prod[/cyan]")
 
     console.print("\n[yellow]🔧 Universal switches (work on all commands):[/yellow]")
-    console.print("   [green]--manifest/-m[/green]  - Path to bundle manifest")
-    console.print("   [green]--target/-t[/green]    - Target environment")
-    console.print("   [green]--output[/green]       - Output format (TEXT/JSON)")
+    console.print("   [green]--manifest/-m[/green]   - Path to bundle manifest")
+    console.print("   [green]--target/-t[/green]     - Target environment")
+    console.print("   [green]--output[/green]        - Output format (TEXT/JSON)")
+    console.print(
+        "   [green]--log-level[/green]     - Logging level (DEBUG/INFO/WARNING/ERROR)"
+    )
 
     console.print("\n[yellow]📖 For detailed help:[/yellow]")
     console.print("   [cyan]smus-cli --help[/cyan]")
@@ -63,6 +67,25 @@ app = typer.Typer(
     add_completion=False,
     epilog="💡 Use 'smus-cli <command> --help' for command-specific help",
 )
+
+
+# Global log level option
+LOG_LEVEL = None
+
+
+@app.callback()
+def main(
+    ctx: typer.Context,
+    log_level: str = typer.Option(
+        None,
+        "--log-level",
+        help="Set logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+        case_sensitive=False,
+    ),
+):
+    """SMUS CI/CD CLI - Manage SageMaker Unified Studio CI/CD pipelines."""
+    global LOG_LEVEL
+    LOG_LEVEL = log_level
 
 
 # Register commands with proper ordering
@@ -99,6 +122,7 @@ def describe(
     ),
 ):
     """Describe and validate pipeline manifest file."""
+    configure_logging(output, LOG_LEVEL)
     describe_command(file_path, targets, output, connections, connect)
 
 
@@ -135,6 +159,9 @@ def bundle(
     """Create bundle zip files. By default bundles FROM dev target for deployment to specified target."""
     # Use positional argument if provided, otherwise use --target flag
     final_target = target_positional if target_positional else target
+
+    """Create bundle zip files. By default bundles FROM dev target for deployment to specified target."""
+    configure_logging(output, LOG_LEVEL)
 
     # Determine bundle source
     if local:
@@ -183,6 +210,8 @@ def deploy(
     ),
 ):
     """Deploy bundle files to target's deployment_configuration (auto-initializes infrastructure if needed)."""
+    configure_logging("TEXT", LOG_LEVEL)
+
     # Use positional argument if provided, otherwise use --targets flag
     final_targets = target_positional if target_positional else targets
     deploy_command(final_targets, manifest_file, bundle, emit_events, event_bus_name)
@@ -214,6 +243,7 @@ def monitor(
     ),
 ):
     """Monitor workflow status across target environments."""
+    configure_logging(output, LOG_LEVEL)
     monitor_command(targets, manifest_file, output, live)
 
 
@@ -249,6 +279,9 @@ def create(
     region: str = typer.Option("us-east-1", "--region", help="AWS region"),
 ):
     """Create a new pipeline manifest with all required fields and commented optional fields."""
+    """Create a new pipeline manifest file with specified configuration."""
+    configure_logging("TEXT", LOG_LEVEL)
+
     # If no name provided, use default expected by tests
     if not name:
         name = "YourPipelineName"
@@ -281,6 +314,7 @@ def logs(
     ),
 ):
     """Fetch and display workflow logs from CloudWatch."""
+    configure_logging(output, LOG_LEVEL)
     logs_command(workflow, live, output, lines)
 
 
@@ -310,6 +344,7 @@ def run(
     ),
 ):
     """Run Airflow CLI commands in target environment."""
+    configure_logging(output, LOG_LEVEL)
     run_command(manifest_file, workflow, command, targets, output)
 
 
@@ -341,6 +376,7 @@ def test(
     ),
 ):
     """Run tests for pipeline targets."""
+    configure_logging(output, LOG_LEVEL)
     test_command(targets, output, verbose, test_output, file_path)
 
 
@@ -368,6 +404,7 @@ def delete(
     ),
 ):
     """Delete projects and environments that were deployed during initialize."""
+    configure_logging(output, LOG_LEVEL)
     delete_command(pipeline, targets, force, async_mode, output)
 
 
@@ -396,6 +433,7 @@ def integrate(
       smus-cli integrate qcli --status                  # Check integration status
       smus-cli integrate qcli --uninstall               # Remove integration
     """
+    configure_logging("TEXT", LOG_LEVEL)
     if tool.lower() == "qcli":
         sys.exit(
             integrate_qcli(status=status, uninstall=uninstall, configure=configure)
@@ -432,22 +470,10 @@ def chat(
     - Troubleshoot issues
     - Provide examples and guidance
     """
+    configure_logging("TEXT", LOG_LEVEL)
     from .agent.chat_agent import start_chat
 
     start_chat(model_id=model, kb_id=kb_id)
-
-
-@app.callback()
-def main():
-    """
-    SMUS CI/CD CLI - Manage SageMaker Unified Studio CI/CD pipelines
-
-    Universal switches that work on all commands:
-    • --bundle/-b : Path to bundle manifest file
-    • --target/-t   : Target environment
-    • --output      : Output format (TEXT/JSON)
-    """
-    pass
 
 
 def cli_error_handler():

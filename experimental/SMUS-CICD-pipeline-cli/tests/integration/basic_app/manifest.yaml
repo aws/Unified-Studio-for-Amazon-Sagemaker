@@ -18,6 +18,11 @@ content:
   git:
   - repository: covid-19-dateset
     url: https://github.com/datasets/covid-19.git
+  workflows:
+  - workflowName: basic_test_workflow
+    connectionName: project.workflow_serverless
+  - workflowName: expected_failure_workflow
+    connectionName: project.workflow_serverless
 stages:
   dev:
     stage: DEV
@@ -27,15 +32,13 @@ stages:
       region: ${DEV_DOMAIN_REGION:us-east-2}
     project:
       name: dev-marketing
-    initialization:
-      project:
-        create: true
-        owners:
-        - Eng1
-        - arn:aws:iam::*:role/GitHubActionsRole-SMUS-CLI-Tests
-        contributors: []
-        role:
-          arn: arn:aws:iam::*:role/SMUSCICDTestRole
+      create: true
+      owners:
+      - Eng1
+      - arn:aws:iam::*:role/GitHubActionsRole-SMUS-CLI-Tests
+      contributors: []
+      role:
+        arn: arn:aws:iam::*:role/SMUSCICDTestRole
   test:
     stage: TEST
     domain:
@@ -44,19 +47,19 @@ stages:
       region: ${DEV_DOMAIN_REGION:us-east-2}
     project:
       name: test-project-basic
-    initialization:
-      project:
-        create: true
-        owners:
-        - Eng1
-        - arn:aws:iam::*:role/GitHubActionsRole-SMUS-CLI-Tests
-        contributors: []
-        role:
-          policies:
-            - arn:aws:iam::aws:policy/SageMakerStudioUserIAMPermissiveExecutionPolicy
-      connections:
-      - name: mlflow-server
-        type: MLFLOW
+      create: true
+      owners:
+      - Eng1
+      - arn:aws:iam::*:role/GitHubActionsRole-SMUS-CLI-Tests
+      contributors: []
+      role:
+        policies:
+        - arn:aws:iam::aws:policy/SageMakerStudioUserIAMPermissiveExecutionPolicy
+    bootstrap:
+      actions:
+      - type: datazone.create_connection
+        name: mlflow-server
+        connection_type: MLFLOW
         properties:
           trackingServerName: smus-integration-mlflow-use2
           trackingServerArn: arn:aws:sagemaker:us-east-2:058264284947:mlflow-tracking-server/smus-integration-mlflow-use2
@@ -69,13 +72,3 @@ stages:
       - name: covid-19-dateset
         connectionName: default.s3_shared
         targetDirectory: repos
-
-initialization:
-- workflowName: basic_test_workflow
-  connectionName: project.workflow_serverless
-  engine: airflow-serverless
-  type: workflow
-- workflowName: expected_failure_workflow
-  connectionName: project.workflow_serverless
-  engine: airflow-serverless
-  type: workflow

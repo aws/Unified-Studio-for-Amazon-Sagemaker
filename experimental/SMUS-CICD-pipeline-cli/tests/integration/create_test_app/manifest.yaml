@@ -36,21 +36,17 @@ stages:
       region: ${DEV_DOMAIN_REGION:us-east-2}
     project:
       name: create-test-project
-    initialization:
-      project:
-        create: true
-        profileName: All capabilities
-        owners:
-        - Eng1
-        - arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests
-        contributors: []
-        userParameters:
-        - EnvironmentConfigurationName: Lakehouse Database
-          parameters:
-          - name: glueDbName
-            value: create_test_db
-      environments:
-      - EnvironmentConfigurationName: OnDemand Workflows
+      create: true
+      profile_name: All capabilities
+      owners:
+      - Eng1
+      - arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests
+      contributors: []
+      user_parameters:
+      - environment_configuration_name: Lakehouse Database
+        parameters:
+        - name: glueDbName
+          value: create_test_db
     deployment_configuration:
       storage:
       - connectionName: default.s3_shared
@@ -59,8 +55,7 @@ stages:
       - connectionName: default.s3_shared
         name: workflows
         targetDirectory: workflows
-initialization:
-- workflowName: simple_dag
-  connectionName: project.workflow_mwaa
-  engine: MWAA
-  type: workflow
+    bootstrap:
+      actions:
+      - type: datazone.create_environment
+        environment_configuration_name: OnDemand Workflows

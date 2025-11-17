@@ -9,6 +9,9 @@ content:
     connectionName: default.s3_shared
     include:
     - ml/training/workflows
+  workflows:
+  - workflowName: ml_training_workflow
+    connectionName: default.workflow_serverless
 stages:
   dev:
     stage: DEV
@@ -28,26 +31,18 @@ stages:
       region: ${DEV_DOMAIN_REGION:us-east-1}
     project:
       name: test-marketing
-    initialization:
-      project:
-        create: true
-        owners:
-        - Eng1
-        - arn:aws:iam::*:role/GitHubActionsRole-SMUS-CLI-Tests
-        contributors: []
-        role:
-          arn: arn:aws:iam::*:role/SMUSCICDTestRole
-        userParameters:
-        - EnvironmentConfigurationName: Lakehouse Database
-          parameters:
-          - name: glueDbName
-            value: analytic_workflow_test_db
-      connections:
-      - name: mlflow-server
-        type: MLFLOW
-        properties:
-          trackingServerArn: arn:aws:sagemaker:${STS_REGION}:${STS_ACCOUNT_ID}:mlflow-tracking-server/smus-integration-mlflow-use2
-          trackingServerName: smus-integration-mlflow-use2
+      create: true
+      owners:
+      - Eng1
+      - arn:aws:iam::*:role/GitHubActionsRole-SMUS-CLI-Tests
+      contributors: []
+      role:
+        arn: arn:aws:iam::*:role/SMUSCICDTestRole
+      user_parameters:
+      - environment_configuration_name: Lakehouse Database
+        parameters:
+        - name: glueDbName
+          value: analytic_workflow_test_db
     environment_variables:
       S3_PREFIX: test
     deployment_configuration:
@@ -59,9 +54,13 @@ stages:
       - name: training-workflows
         connectionName: default.s3_shared
         targetDirectory: ml/bundle/training-workflows
-initialization:
-- workflowName: ml_training_workflow
-  engine: airflow-serverless
-  type: workflow
+    bootstrap:
+      actions:
+      - type: datazone.create_connection
+        name: mlflow-server
+        connection_type: MLFLOW
+        properties:
+          trackingServerArn: arn:aws:sagemaker:${STS_REGION}:${STS_ACCOUNT_ID}:mlflow-tracking-server/smus-integration-mlflow-use2
+          trackingServerName: smus-integration-mlflow-use2
 tests:
   folder: examples/analytic-workflow/ml/training/app_tests/

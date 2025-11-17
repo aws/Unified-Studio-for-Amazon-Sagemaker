@@ -35,7 +35,7 @@ Every SMUS project includes these connections automatically:
 
 ## Creating Connections via Manifest
 
-Define connections in your bundle manifest under `initialization.connections`:
+Define connections in your bundle manifest under `bootstrap.connections`:
 
 ```yaml
 stages:
@@ -46,7 +46,7 @@ stages:
     project:
       name: test-project
       create: true
-    initialization:
+    bootstrap:
       project:
         create: true
         profileName: 'All capabilities'
@@ -404,7 +404,7 @@ stages:
       name: test-data-platform
       create: true
     
-    initialization:
+    bootstrap:
       project:
         create: true
         profileName: 'All capabilities'
@@ -594,7 +594,7 @@ Use different connections per environment:
 ```yaml
 stages:
   test:
-    initialization:
+    bootstrap:
       connections:
         - name: redshift-warehouse
           properties:
@@ -602,7 +602,7 @@ stages:
               clusterName: "test-cluster"
   
   prod:
-    initialization:
+    bootstrap:
       connections:
         - name: redshift-warehouse
           properties:

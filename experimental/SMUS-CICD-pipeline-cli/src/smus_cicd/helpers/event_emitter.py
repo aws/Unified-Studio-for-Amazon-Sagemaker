@@ -1,47 +1,19 @@
 """EventBridge event emitter for deployment monitoring."""
 
-import json
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-import boto3
-
+from .eventbridge_client import EventBridgeEmitter
 from .logger import get_logger
 
-logger = get_logger("event_emitter")
+logger = get_logger("deployment_event_emitter")
 
 
-class EventEmitter:
+class DeploymentEventEmitter(EventBridgeEmitter):
     """Emit deployment lifecycle events to EventBridge."""
 
     EVENT_SOURCE = "com.amazon.smus.cicd"
     EVENT_VERSION = "1.0"
-
-    def __init__(
-        self,
-        enabled: bool = True,
-        event_bus_name: str = "default",
-        region: Optional[str] = None,
-    ):
-        """
-        Initialize EventEmitter.
-
-        Args:
-            enabled: Whether event emission is enabled
-            event_bus_name: EventBridge event bus name or ARN
-            region: AWS region for EventBridge client
-        """
-        self.enabled = enabled
-        self.event_bus_name = event_bus_name
-        self.region = region
-        self._client = None
-
-    @property
-    def client(self):
-        """Lazy-load EventBridge client."""
-        if self._client is None and self.enabled:
-            self._client = boto3.client("events", region_name=self.region)
-        return self._client
 
     def emit(
         self,
@@ -60,32 +32,7 @@ class EventEmitter:
         Returns:
             True if event emitted successfully, False otherwise
         """
-        if not self.enabled:
-            return True
-
-        try:
-            entry = {
-                "Source": self.EVENT_SOURCE,
-                "DetailType": detail_type,
-                "Detail": json.dumps(detail),
-                "EventBusName": self.event_bus_name,
-            }
-
-            if resources:
-                entry["Resources"] = resources
-
-            response = self.client.put_events(Entries=[entry])
-
-            if response.get("FailedEntryCount", 0) > 0:
-                logger.error(f"Failed to emit event: {response.get('Entries', [])}")
-                return False
-
-            logger.info(f"✓ Emitted event: {detail_type}")
-            return True
-
-        except Exception as e:
-            logger.error(f"Error emitting event {detail_type}: {e}")
-            return False
+        return self.emit_event(self.EVENT_SOURCE, detail_type, detail, resources)
 
     def _build_base_detail(
         self,
@@ -334,3 +281,7 @@ class EventEmitter:
         detail["error"] = error
 
         return self.emit("SMUS-CICD-Deploy-CatalogAssets-Failed", detail)
+
+
+# Backward compatibility alias
+EventEmitter = DeploymentEventEmitter

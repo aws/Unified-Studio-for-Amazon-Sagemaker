@@ -1,7 +1,5 @@
-bundleName: TestBundle
-bundle:
-  bundlesDirectory: /tmp/bundles
-targets:
+applicationName: TestBundle
+stages:
   dev:
     stage: DEV
     domain:

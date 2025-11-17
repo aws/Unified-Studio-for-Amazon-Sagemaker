@@ -75,7 +75,7 @@ stages:
     project:
       name: test-analytics-project
       create: true
-    initialization:
+    bootstrap:
       project:
         create: true
         profileName: 'All capabilities'
@@ -90,7 +90,7 @@ stages:
     project:
       name: prod-analytics-project
       create: true
-    initialization:
+    bootstrap:
       project:
         create: true
         profileName: 'All capabilities'

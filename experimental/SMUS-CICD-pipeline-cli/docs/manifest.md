@@ -75,10 +75,10 @@ content:
       include: ['data/reference/']
 
 # How to activate/run the application
-activation:
+content:
   workflows:
     - workflowName: etl_workflow
-      engine: airflow-serverless
+      connectionName: default.workflow_serverless
 
 # Where to deploy
 stages:
@@ -100,7 +100,7 @@ This minimal example:
 - Defines application code from git repository
 - Includes reference data from S3 storage
 - Creates a serverless Airflow workflow after deployment
-- Uses an existing project (no initialization needed)
+- Uses an existing project (no bootstrap actions needed)
 - Perfect for git-based workflows with data dependencies
 
 ## Comprehensive Example
@@ -132,10 +132,10 @@ content:
       exclude: ['*.tmp', '.DS_Store']
 
 # How to activate/run the application
-activation:
+content:
   workflows:
     - workflowName: ml_training_workflow
-      engine: airflow-serverless
+      connectionName: default.workflow_serverless
     
     - name: training-data
       connectionName: default.s3_shared
@@ -187,51 +187,54 @@ stages:
       region: ${AWS_REGION:us-east-1}
     project:
       name: test-marketing
+      create: true
+      profile_name: 'All capabilities'
+      owners: ['alice@company.com']
+      contributors: ['bob@company.com']
+      role:
+        arn: arn:aws:iam::123456789012:role/MyProjectRole
+      user_parameters:
+        - environment_configuration_name: 'Lakehouse Database'
+          parameters:
+            - name: glueDbName
+              value: test_marketing_db
     
-    # Auto-create project and resources
-    initialization:
-      project:
-        create: true
-        profileName: 'All capabilities'
-        owners: ['alice@company.com']
-        contributors: ['bob@company.com']
-        role:
-          arn: arn:aws:iam::123456789012:role/MyProjectRole
-        userParameters:
-          - EnvironmentConfigurationName: 'Lakehouse Database'
-            parameters:
-              - name: glueDbName
-                value: test_marketing_db
-      
-      environments:
-        - EnvironmentConfigurationName: 'OnDemand Workflows'
-      
-      # Create connections
-      connections:
-        - name: s3-data-lake
-          type: S3
+    # Bootstrap actions for project setup
+    bootstrap:
+      actions:
+        - type: datazone.create_environment
+          environment_configuration_name: 'OnDemand Workflows'
+        
+        # Create connections
+        - type: datazone.create_connection
+          name: s3-data-lake
+          connection_type: S3
           properties:
             s3Uri: "s3://test-data-bucket/data/"
         
-        - name: athena-analytics
-          type: ATHENA
+        - type: datazone.create_connection
+          name: athena-analytics
+          connection_type: ATHENA
           properties:
             workgroupName: "test-workgroup"
         
-        - name: spark-processing
-          type: SPARK_GLUE
+        - type: datazone.create_connection
+          name: spark-processing
+          connection_type: SPARK_GLUE
           properties:
             glueVersion: "4.0"
             workerType: "G.1X"
             numberOfWorkers: 5
         
-        - name: mwaa-workflows
-          type: WORKFLOWS_MWAA
+        - type: datazone.create_connection
+          name: mwaa-workflows
+          connection_type: WORKFLOWS_MWAA
           properties:
             mwaaEnvironmentName: "test-airflow-env"
         
-        - name: serverless-workflows
-          type: WORKFLOWS_SERVERLESS
+        - type: datazone.create_connection
+          name: serverless-workflows
+          connection_type: WORKFLOWS_SERVERLESS
           properties: {}
     
     deployment_configuration:
@@ -255,15 +258,15 @@ stages:
       region: ${AWS_REGION:us-east-1}
     project:
       name: prod-marketing
+      create: true
+      profile_name: 'All capabilities'
+      owners: ['alice@company.com']
+      contributors: []
     
-    initialization:
-      project:
-        create: true
-        profileName: 'All capabilities'
-        owners: ['alice@company.com']
-        contributors: []
-      environments:
-        - EnvironmentConfigurationName: 'OnDemand Workflows'
+    bootstrap:
+      actions:
+        - type: datazone.create_environment
+          environment_configuration_name: 'OnDemand Workflows'
     
     deployment_configuration:
       storage:
@@ -282,7 +285,7 @@ stages:
       MAX_RETRIES: 10
 
 # How to activate/run the application (apply to all stages unless overridden)
-activation:
+content:
   workflows:
     - workflowName: marketing_etl_dag
       connectionName: project.workflow_mwaa
@@ -445,26 +448,26 @@ stages:
       region: us-east-1
     project:
       name: test-marketing
+      create: true
+      profile_name: 'All capabilities'
+      owners: ['alice@company.com']
+      contributors: ['bob@company.com', 'charlie@company.com']
+      user_parameters:
+        - environment_configuration_name: 'Lakehouse Database'
+          parameters:
+            - name: glueDbName
+              value: my_unique_db_name
     
-    initialization:
-      project:
-        create: true
-        profileName: 'All capabilities'
-        owners: ['alice@company.com']
-        contributors: ['bob@company.com', 'charlie@company.com']
-        userParameters:
-          - EnvironmentConfigurationName: 'Lakehouse Database'
-            parameters:
-              - name: glueDbName
-                value: my_unique_db_name
-      
-      environments:
-        - EnvironmentConfigurationName: 'OnDemand Workflows'
-        - EnvironmentConfigurationName: 'Lakehouse Database'
-      
-      connections:
-        - name: s3-data-lake
-          type: S3
+    bootstrap:
+      actions:
+        - type: datazone.create_environment
+          environment_configuration_name: 'OnDemand Workflows'
+        - type: datazone.create_environment
+          environment_configuration_name: 'Lakehouse Database'
+        
+        - type: datazone.create_connection
+          name: s3-data-lake
+          connection_type: S3
           properties:
             s3Uri: "s3://my-data-bucket/data/"
 ```
@@ -545,7 +548,7 @@ The `activation` section defines how to run and trigger your application. Curren
 Workflows define DAGs or pipelines to trigger after deployment. Apply to all stages unless overridden:
 
 ```yaml
-activation:
+content:
   workflows:
     - workflowName: marketing_etl_dag
       connectionName: project.workflow_mwaa
@@ -570,7 +573,7 @@ activation:
 Integration tests to run after deployment:
 
 ```yaml
-activation:
+content:
   tests:
     folder: tests/integration/
 ```
@@ -597,15 +600,16 @@ The `activation` section will support additional methods:
 
 ## Connections
 
-Connections define integrations with AWS services and data sources. They are created during target initialization.
+Connections define integrations with AWS services and data sources. They are created during bootstrap actions.
 
 ### Connection Configuration
 
 ```yaml
-initialization:
-  connections:
-    - name: connection-name
-      type: CONNECTION_TYPE
+bootstrap:
+  actions:
+    - type: datazone.create_connection
+      name: connection-name
+      connection_type: CONNECTION_TYPE
       properties:
         # Type-specific properties
 ```
@@ -744,15 +748,17 @@ initialization:
 Complete example with multiple connection types:
 
 ```yaml
-initialization:
-  connections:
-    - name: s3-raw-data
-      type: S3
+bootstrap:
+  actions:
+    - type: datazone.create_connection
+      name: s3-raw-data
+      connection_type: S3
       properties:
         s3Uri: "s3://raw-data-bucket/incoming/"
     
-    - name: iam-lineage
-      type: IAM
+    - type: datazone.create_connection
+      name: iam-lineage
+      connection_type: IAM
       properties:
         glueLineageSyncEnabled: true
     
@@ -845,10 +851,10 @@ Parameters can be defined at two levels:
 
 #### 1. Global Workflow Parameters
 
-Defined in the `activation.workflows` section, apply to all stages:
+Defined in the `content.workflows` section, apply to all stages:
 
 ```yaml
-activation:
+content:
   workflows:
     - workflowName: marketing_etl_dag
       connectionName: project.workflow_mwaa
@@ -959,7 +965,7 @@ stages:
       MAX_RETRIES: 3
       DB_HOST: "dev-db.company.com"
 
-activation:
+content:
   # Global workflow parameters
   workflows:
     - workflowName: etl_dag
@@ -1000,15 +1006,15 @@ etl_dag:
 ### Required Fields
 - `applicationName`
 - `content` with at least `workflows` defined
-- `targets` (at least one target)
-- Each target must have: `stage`, `domain.name`, `domain.region`, `project.name`
+- `stages` (at least one stage)
+- Each stage must have: `stage`, `domain.name`, `domain.region`, `project.name`
 
 ### Optional Sections
 - `content.storage` - If omitted, no storage items to deploy
 - `content.git` - If omitted, no git repositories to include
 - `content.catalog` - If omitted, no catalog assets to subscribe
 - `bundlesDirectory` - If omitted, defaults to `./bundles/` for bundle operations
-- `initialization` - If omitted, assumes projects exist
+- `bootstrap` - If omitted, assumes projects exist
 
 ### Connection Names
 - Must match actual connection names in SageMaker Unified Studio projects
@@ -1035,26 +1041,26 @@ etl_dag:
 - **Direct**: Use for simpler workflows, rapid iterations, or git-based deployments
 - Both modes work with any combination of storage and git sources
 
-### Target Organization
-- Use initialization only for non-production environments
-- Keep production targets minimal and explicit
+### Stage Organization
+- Use bootstrap actions only for non-production environments
+- Keep production stages minimal and explicit
 - Use consistent naming: `dev`, `test`, `prod`
 
 ### Parameterization
 - Use manifest-level parameters for infrastructure configuration
 - Use workflow-level parameters for application configuration
-- Use environment variables for target-specific values in workflows
+- Use environment variables for stage-specific values in workflows
 - Always provide default values for optional parameters
 - Use descriptive variable names (e.g., `DEV_DOMAIN_REGION` not `REGION`)
 
 ### Workflow Parameters
 - Define common parameters globally
-- Override with target-specific parameters for environment differences
-- Use environment variables for values that change per target
+- Override with stage-specific parameters for environment differences
+- Use environment variables for values that change per stage
 - Avoid hardcoded values - use parameters instead
 
 ### Connection Management
-- Create connections during initialization for new projects
+- Create connections during bootstrap for new projects
 - Use descriptive connection names
 - Document connection requirements in project README
 - Test connections after creation

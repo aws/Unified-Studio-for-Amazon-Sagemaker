@@ -34,12 +34,7 @@ content:
           identifier: covid19_db.worldwide_aggregate
       permission: READ
       requestReason: Global data access for marketing insights
-initialization:
-- type: workflow
-  workflowName: sample_dag
-  connectionName: project.workflow_mwaa
-  engine: MWAA
-  logging: console
+
 tests:
   folder: ./tests
 stages:
@@ -67,16 +62,7 @@ stages:
     project:
       name: dev-marketing-test
       create: true
-    initialization:
-      project:
-        create: true
-        profileName: All capabilities
-        owners:
-        - arn:aws:iam::123456789012:role/GitHubActionsRole-SMUS-CLI-Tests
-        - Eng1
-        contributors: []
-      environments:
-      - EnvironmentConfigurationName: OnDemand Workflows
+
     deployment_configuration:
       storage:
       - name: code
@@ -93,16 +79,7 @@ stages:
     project:
       name: prod-marketing
       create: true
-    initialization:
-      project:
-        create: true
-        profileName: All capabilities
-        owners:
-        - arn:aws:iam::588738596778:role/GitHubActionsRole-SMUS-CLI-Tests
-        - Eng1
-        contributors: []
-      environments:
-      - EnvironmentConfigurationName: OnDemand Workflows
+
     deployment_configuration:
       storage:
       - name: code

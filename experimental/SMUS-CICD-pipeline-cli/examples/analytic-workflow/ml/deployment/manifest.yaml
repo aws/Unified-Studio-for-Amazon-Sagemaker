@@ -13,6 +13,9 @@ content:
     connectionName: default.s3_shared
     include:
     - ml/output/model-artifacts/latest
+  workflows:
+  - workflowName: ml_deployment_workflow
+    connectionName: default.workflow_serverless
 stages:
   dev:
     stage: DEV
@@ -32,15 +35,13 @@ stages:
       region: ${DEV_DOMAIN_REGION:us-east-1}
     project:
       name: test-marketing
-    initialization:
-      project:
-        create: true
-        owners:
-        - Eng1
-        - arn:aws:iam::*:role/GitHubActionsRole-SMUS-CLI-Tests
-        contributors: []
-        role:
-          arn: arn:aws:iam::*:role/SMUSCICDTestRole
+      create: true
+      owners:
+      - Eng1
+      - arn:aws:iam::*:role/GitHubActionsRole-SMUS-CLI-Tests
+      contributors: []
+      role:
+        arn: arn:aws:iam::*:role/SMUSCICDTestRole
     environment_variables:
       S3_PREFIX: test
     deployment_configuration:
@@ -54,7 +55,3 @@ stages:
       - name: model-artifacts
         connectionName: default.s3_shared
         targetDirectory: ml/bundle/model-artifacts
-initialization:
-- workflowName: ml_deployment_workflow
-  engine: airflow-serverless
-  type: workflow

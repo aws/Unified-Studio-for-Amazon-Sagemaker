@@ -3,24 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-
-@dataclass
-class InitializationAction:
-    """Single initialization action (workflow, event, cloudformation)."""
-
-    type: str  # workflow, event, cloudformation
-    # Workflow fields
-    workflowName: Optional[str] = None
-    connectionName: Optional[str] = None
-    engine: Optional[str] = None
-    triggerPostDeployment: bool = False
-    parameters: Dict[str, Any] = field(default_factory=dict)
-    logging: Optional[str] = None
-    # Event fields
-    eventBridgeRule: Optional[str] = None
-    # CloudFormation fields
-    stackName: Optional[str] = None
-    templatePath: Optional[str] = None
+from ..bootstrap.models import BootstrapAction, BootstrapConfig
 
 
 @dataclass
@@ -95,12 +78,24 @@ class GitConfig:
 
 
 @dataclass
+class QuickSightDashboardConfig:
+    """QuickSight dashboard configuration."""
+
+    dashboardId: str
+    source: str = "export"  # export or bundle
+    overrideParameters: Dict[str, Any] = field(default_factory=dict)
+    permissions: List[Dict[str, str]] = field(default_factory=list)
+
+
+@dataclass
 class ContentConfig:
     """Application content configuration."""
 
     storage: List[StorageConfig] = field(default_factory=list)
     git: List[GitConfig] = field(default_factory=list)
     catalog: Optional[CatalogConfig] = None
+    quicksight: List[QuickSightDashboardConfig] = field(default_factory=list)
+    workflows: List[Dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -134,42 +129,6 @@ class ProjectConfig:
 
 
 @dataclass
-class EnvironmentConfig:
-    """Environment configuration."""
-
-    environment_configuration_name: str
-    user_parameters: List[UserParameter] = field(default_factory=list)
-
-
-@dataclass
-class DomainInitConfig:
-    """Domain initialization configuration."""
-
-    name: str
-    region: str
-    create: bool = False
-
-
-@dataclass
-class ConnectionConfig:
-    """DataZone connection configuration."""
-
-    name: str
-    type: str
-    properties: Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class InitializationConfig:
-    """Initialization configuration."""
-
-    project: Optional[ProjectConfig] = None
-    domain: Optional[DomainInitConfig] = None
-    environments: List[EnvironmentConfig] = field(default_factory=list)
-    connections: List[ConnectionConfig] = field(default_factory=list)
-
-
-@dataclass
 class DeploymentConfiguration:
     """Deployment configuration for a stage."""
 
@@ -185,19 +144,10 @@ class StageConfig:
     project: ProjectConfig
     domain: DomainConfig
     stage: str
-    initialization: Optional[InitializationConfig] = None
+    bootstrap: Optional["BootstrapConfig"] = None
     deployment_configuration: Optional[DeploymentConfiguration] = None
     environment_variables: Optional[Dict[str, Any]] = None
-
-
-@dataclass
-class WorkflowConfig:
-    """Workflow configuration."""
-
-    workflow_name: str
-    connection_name: str
-    engine: str = "MWAA"
-    parameters: Dict[str, Any] = field(default_factory=dict)
+    quicksight: List[QuickSightDashboardConfig] = field(default_factory=list)
 
 
 @dataclass
@@ -223,9 +173,7 @@ class ApplicationManifest:
     application_name: str
     content: ContentConfig
     stages: Dict[str, StageConfig]
-    initialization: List[InitializationAction] = field(default_factory=list)
     tests: Optional[TestConfig] = None
-    workflows: List[WorkflowConfig] = field(default_factory=list)
     monitoring: Optional[MonitoringConfig] = None
     _file_path: Optional[str] = field(default=None, init=False)
 
@@ -324,16 +272,28 @@ class ApplicationManifest:
                 )
             )
 
+        # Parse QuickSight dashboards
+        quicksight_dashboards = []
+        for qs_data in content_data.get("quicksight", []):
+            quicksight_dashboards.append(
+                QuickSightDashboardConfig(
+                    dashboardId=qs_data.get("dashboardId", ""),
+                    source=qs_data.get("source", "export"),
+                    overrideParameters=qs_data.get("overrideParameters", {}),
+                    permissions=qs_data.get("permissions", []),
+                )
+            )
+
+        # Parse workflows
+        workflows = content_data.get("workflows", [])
+
         content = ContentConfig(
             storage=storage_configs,
             git=git_configs,
             catalog=catalog,
+            quicksight=quicksight_dashboards,
+            workflows=workflows,
         )
-
-        # Parse initialization actions
-        initialization = []
-        for action_data in data.get("initialization", []):
-            initialization.append(InitializationAction(**action_data))
 
         # Parse tests
         tests = None
@@ -395,68 +355,25 @@ class ApplicationManifest:
                     contributors=project_data.get("contributors", []),
                 )
 
-            # Parse initialization config
-            stage_initialization = None
-            init_data = stage_data.get("initialization")
-            if init_data:
-                init_project = None
-                init_domain = None
-                if "project" in init_data:
-                    proj_data = init_data["project"]
-                    init_project = ProjectConfig(
-                        name=proj_data.get("name", project.name),
-                        create=proj_data.get("create", False),
-                        profile_name=proj_data.get("profileName"),
-                        owners=proj_data.get("owners", []),
-                        contributors=proj_data.get("contributors", []),
-                        role=proj_data.get("role"),
+            # Parse bootstrap config
+            stage_bootstrap = None
+            bootstrap_data = stage_data.get("bootstrap")
+            if bootstrap_data:
+                actions = []
+                for action_data in bootstrap_data.get("actions", []):
+                    # Extract type and all other fields as parameters
+                    action_type = action_data.get("type")
+                    if not action_type:
+                        raise ValueError("Bootstrap action must have 'type' field")
+
+                    # All fields except 'type' go into parameters
+                    parameters = {k: v for k, v in action_data.items() if k != "type"}
+
+                    actions.append(
+                        BootstrapAction(type=action_type, parameters=parameters)
                     )
 
-                if "domain" in init_data:
-                    domain_data = init_data["domain"]
-                    init_domain = DomainInitConfig(
-                        name=domain_data.get("name", domain.name),
-                        region=domain_data.get("region", domain.region),
-                        create=domain_data.get("create", False),
-                    )
-
-                # Parse connections
-                connections = []
-                connections_data = init_data.get("connections", [])
-                for conn_data in connections_data:
-                    connection = ConnectionConfig(
-                        name=conn_data.get("name", ""),
-                        type=conn_data.get("type", ""),
-                        properties=conn_data.get("properties", {}),
-                    )
-                    connections.append(connection)
-
-                # Parse environments
-                environments = []
-                for env_data in init_data.get("environments", []):
-                    user_params = []
-                    for param_data in env_data.get("user_parameters", []):
-                        user_params.append(
-                            UserParameter(
-                                name=param_data.get("name", ""),
-                                value=param_data.get("value", ""),
-                            )
-                        )
-                    environments.append(
-                        EnvironmentConfig(
-                            environment_configuration_name=env_data.get(
-                                "environment_configuration_name", ""
-                            ),
-                            user_parameters=user_params,
-                        )
-                    )
-
-                stage_initialization = InitializationConfig(
-                    project=init_project,
-                    domain=init_domain,
-                    environments=environments,
-                    connections=connections,
-                )
+                stage_bootstrap = BootstrapConfig(actions=actions)
 
             # Parse bundle target configuration
             deployment_config = None
@@ -500,52 +417,27 @@ class ApplicationManifest:
                 # Derive stage from target name
                 stage = stage_name.upper()
 
+            # Parse stage-specific QuickSight dashboards
+            stage_quicksight = []
+            for qs_data in stage_data.get("quicksight", []):
+                stage_quicksight.append(
+                    QuickSightDashboardConfig(
+                        dashboardId=qs_data.get("dashboardId", ""),
+                        source=qs_data.get("source", "export"),
+                        overrideParameters=qs_data.get("overrideParameters", {}),
+                        permissions=qs_data.get("permissions", []),
+                    )
+                )
+
             stages[stage_name] = StageConfig(
                 project=project,
                 domain=domain,
                 stage=stage,
-                initialization=stage_initialization,
+                bootstrap=stage_bootstrap,
                 deployment_configuration=deployment_config,
                 environment_variables=stage_data.get("environment_variables"),
+                quicksight=stage_quicksight,
             )
-
-        # Parse workflows
-        workflows = []
-        workflows_data = data.get("workflows", [])
-        for i, workflow_data in enumerate(workflows_data):
-            workflow_name = workflow_data.get("workflowName", "")
-            if not workflow_name.strip():
-                raise ValueError(
-                    f"workflow[{i}].workflowName is required and cannot be empty"
-                )
-
-            connection_name = workflow_data.get("connectionName", "")
-            engine = workflow_data.get("engine", "MWAA")
-
-            # connectionName is required for MWAA but optional for airflow-serverless
-            if engine != "airflow-serverless" and not connection_name.strip():
-                raise ValueError(
-                    f"workflow[{i}].connectionName is required and cannot be empty for {engine} engine"
-                )
-
-            workflow = WorkflowConfig(
-                workflow_name=workflow_name,
-                connection_name=connection_name,
-                engine=engine,
-                parameters=workflow_data.get("parameters", {}),
-            )
-            workflows.append(workflow)
-
-        # Also extract workflows from initialization actions
-        for action in initialization:
-            if action.type == "workflow":
-                workflow = WorkflowConfig(
-                    workflow_name=action.workflowName,
-                    connection_name=action.connectionName or "",
-                    engine=action.engine or "MWAA",
-                    parameters={},
-                )
-                workflows.append(workflow)
 
         # Parse monitoring configuration
         monitoring = None
@@ -565,26 +457,10 @@ class ApplicationManifest:
             application_name=data.get("applicationName", ""),
             content=content,
             stages=stages,
-            initialization=initialization,
             tests=tests,
-            workflows=workflows,
             monitoring=monitoring,
         )
 
     def get_stage(self, stage_name: str) -> Optional[StageConfig]:
         """Get stage configuration by name."""
         return self.stages.get(stage_name)
-
-    def get_workflows_for_stage(self, stage_name: str) -> List[WorkflowConfig]:
-        """Get workflows that should be triggered for a stage."""
-        # Return workflow-type initialization actions
-        return [
-            WorkflowConfig(
-                workflow_name=action.workflowName,
-                connection_name=action.connectionName or "",
-                engine=action.engine or "MWAA",
-                parameters=action.parameters,
-            )
-            for action in self.initialization
-            if action.type == "workflow" and action.workflowName
-        ]

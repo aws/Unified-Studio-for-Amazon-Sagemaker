@@ -99,6 +99,87 @@ bundle:
         requestReason: "Pipeline access"  # Required: Access justification
 ```
 
+### Initialization Actions
+```yaml
+bootstrap:
+  actions:                     # List of initialization actions
+    # Event Action - Emit EventBridge events
+    - type: event              # Required: Action type
+      eventSource: com.mycompany.app  # Required: Event source
+      eventDetailType: ApplicationDeployed  # Required: Event detail type
+      eventBusName: default    # Optional: Event bus name (default: "default")
+      detail:                  # Optional: Event detail with variable support
+        application: ${application.name}  # Variable: application name
+        stage: ${stage}        # Variable: stage name
+        project: ${project.name}  # Variable: project name
+        region: ${domain.region}  # Variable: domain region
+      resources:               # Optional: Resource ARNs
+        - arn:aws:s3:::my-bucket
+    
+    # Workflow Action - Trigger workflows
+    - type: workflow           # Required: Action type
+      workflowName: test_dag   # Required: Workflow name
+      connectionName: project.workflow_mwaa  # Required: Connection
+      engine: MWAA             # Optional: Engine type
+      parameters:              # Optional: Workflow parameters
+        key: value
+```
+
+**Supported Variables in Event Details:**
+- `${application.name}` - Application name from manifest
+- `${stage}` - Target stage name (dev, test, prod)
+- `${project.name}` - DataZone project name
+- `${domain.name}` - DataZone domain name
+- `${domain.region}` - AWS region
+
+**Validation Rules:**
+- Event actions require `eventSource` and `eventDetailType`
+- Variables are resolved at deployment time
+- Actions are processed sequentially after project initialization
+
+See [Event Initialization Guide](event-bootstrap.md) for detailed documentation.
+
+### QuickSight Dashboards
+```yaml
+content:
+  quicksight:                  # Optional: Global QuickSight dashboards
+    - dashboardId: sales-dashboard  # Required: Dashboard ID
+      source: export           # Optional: Bundle source (default: "export")
+      overrideParameters:      # Optional: Parameters to override
+        DataSetArn: arn:aws:quicksight:us-east-1:123456789012:dataset/prod-sales
+      permissions:             # Optional: Dashboard permissions
+        - principal: arn:aws:quicksight:us-east-1:123456789012:user/default/admin
+          actions:
+            - quicksight:DescribeDashboard
+            - quicksight:QueryDashboard
+
+stages:
+  prod:
+    quicksight:                # Optional: Stage-specific dashboards
+      - dashboardId: prod-metrics
+        source: s3://bucket/dashboards/metrics.qs
+        permissions:
+          - principal: arn:aws:quicksight:us-east-1:123456789012:group/default/analysts
+            actions: ["quicksight:DescribeDashboard", "quicksight:QueryDashboard"]
+```
+
+**Dashboard Configuration:**
+- `dashboardId` (required): QuickSight dashboard identifier
+- `source` (optional): Dashboard bundle source
+  - `export` - Export from dev during bundle creation (default)
+  - `s3://...` - Use existing bundle from S3
+- `overrideParameters` (optional): Key-value pairs to override (DataSetArn, DataSourceArn, ThemeArn)
+- `permissions` (optional): Array of permission grants
+  - `principal` (required): User or group ARN
+  - `actions` (required): Array of QuickSight permission actions
+
+**Validation Rules:**
+- Dashboard ID must be specified
+- Principal ARNs must be valid QuickSight user/group ARNs
+- Actions must be valid QuickSight permissions
+
+See [QuickSight Deployment Guide](quicksight-deployment.md) for detailed documentation.
+
 ### Target Configuration
 ```yaml
 stages:
@@ -107,7 +188,7 @@ stages:
     default: true              # Optional: Default target flag
     project:                   # Required: Project config
       name: dev-project        # Required: Project name
-    initialization:            # Optional: Init config
+    bootstrap:            # Optional: Init config
       project:                 # Optional: Project creation
         create: true           # Optional: Auto-create project
         profileName: 'All capabilities'
@@ -198,14 +279,14 @@ stages:
   test:
     project:
       name: test-project
-    initialization:
+    bootstrap:
       project:
         create: true
         owners: [Eng1]
   prod:
     project:
       name: prod-project
-    initialization:
+    bootstrap:
       project:
         create: true
         owners: [Eng1]

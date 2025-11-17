@@ -9,6 +9,9 @@ content:
     exclude:
     - .ipynb_checkpoints/
     - __pycache__/
+  workflows:
+  - workflowName: parallel_notebooks_execution
+    connectionName: default.workflow_serverless
 stages:
   dev:
     stage: DEV
@@ -28,21 +31,13 @@ stages:
       region: ${DEV_DOMAIN_REGION:us-east-1}
     project:
       name: test-notebooks
-    initialization:
-      project:
-        create: true
-        owners:
-        - Eng1
-        - arn:aws:iam::*:role/GitHubActionsRole-SMUS-CLI-Tests
-        contributors: []
-        role:
-          arn: arn:aws:iam::*:role/SMUSCICDTestRole
-      connections:
-      - name: mlflow-server
-        type: MLFLOW
-        properties:
-          trackingServerArn: arn:aws:sagemaker:${STS_REGION}:${STS_ACCOUNT_ID}:mlflow-tracking-server/smus-integration-mlflow-use2
-          trackingServerName: smus-integration-mlflow-use2
+      create: true
+      owners:
+      - Eng1
+      - arn:aws:iam::*:role/GitHubActionsRole-SMUS-CLI-Tests
+      contributors: []
+      role:
+        arn: arn:aws:iam::*:role/SMUSCICDTestRole
     environment_variables:
       S3_PREFIX: test
     deployment_configuration:
@@ -50,9 +45,13 @@ stages:
       - name: notebooks
         connectionName: default.s3_shared
         targetDirectory: notebooks/bundle/notebooks
-initialization:
-- workflowName: parallel_notebooks_workflow
-  engine: airflow-serverless
-  type: workflow
+    bootstrap:
+      actions:
+      - type: datazone.create_connection
+        name: mlflow-server
+        connection_type: MLFLOW
+        properties:
+          trackingServerArn: arn:aws:sagemaker:${STS_REGION}:${STS_ACCOUNT_ID}:mlflow-tracking-server/smus-integration-mlflow-use2
+          trackingServerName: smus-integration-mlflow-use2
 tests:
   folder: examples/analytic-workflow/data-notebooks/app_tests/

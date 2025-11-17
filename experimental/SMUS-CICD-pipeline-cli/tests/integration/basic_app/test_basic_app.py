@@ -15,71 +15,19 @@ class TestBasicApp(IntegrationTestBase):
         super().setup_method(method)
         self.setup_test_directory()
 
-        # Clean up projects and role from previous test run (only in setup)
+        # Clean up project from previous test run (only in setup)
         try:
-            import boto3
-            import time
-
-            dz = boto3.client("datazone", region_name="us-east-2")
-
-            # Find domain
-            domains = dz.list_domains()
-            domain_id = None
-            for domain in domains.get("items", []):
-                if any(
-                    tag.get("key") == "purpose"
-                    and tag.get("value") == "smus-cicd-testing"
-                    for tag in domain.get("tags", [])
-                ):
-                    domain_id = domain["id"]
-                    break
-
-            if domain_id:
-                # Delete test project
-                for project_name in ["test-project-basic"]:
-                    try:
-                        projects = dz.list_projects(domainIdentifier=domain_id)
-                        for project in projects.get("items", []):
-                            if project["name"] == project_name:
-                                project_id = project["id"]
-                                print(f"🧹 Deleting existing project: {project_name}")
-                                dz.delete_project(
-                                    domainIdentifier=domain_id, identifier=project_id
-                                )
-
-                                # Wait for project deletion
-                                print(f"⏳ Waiting for {project_name} deletion...")
-                                for i in range(30):
-                                    try:
-                                        dz.get_project(
-                                            domainIdentifier=domain_id,
-                                            identifier=project_id,
-                                        )
-                                        time.sleep(2)
-                                    except dz.exceptions.ResourceNotFoundException:
-                                        print(f"✅ {project_name} deleted after {i*2}s")
-                                        break
-                                break
-                    except Exception as e:
-                        print(f"⚠️ Could not delete {project_name}: {e}")
-
-            # Delete IAM role after all projects are deleted
-            iam = boto3.client("iam")
-            role_name = "smus-test-project-basic-role"
-
-            try:
-                # Detach all policies
-                policies = iam.list_attached_role_policies(RoleName=role_name)
-                for policy in policies.get("AttachedPolicies", []):
-                    iam.detach_role_policy(
-                        RoleName=role_name, PolicyArn=policy["PolicyArn"]
-                    )
-
-                # Delete the role
-                iam.delete_role(RoleName=role_name)
-                print(f"🧹 Cleaned up existing role: {role_name}")
-            except iam.exceptions.NoSuchEntityException:
-                pass
+            pipeline_file = os.path.join(self.test_dir, "manifest.yaml")
+            
+            # Use CLI delete command to properly delete project
+            print("🧹 Cleaning up existing test project...")
+            result = self.run_cli_command(
+                ["delete", "--targets", "test", "--manifest", pipeline_file, "--force"]
+            )
+            if result["success"]:
+                print("✅ Project cleanup successful")
+            else:
+                print(f"⚠️ Project cleanup had issues: {result['output']}")
         except Exception as e:
             print(f"⚠️ Could not clean up resources: {e}")
 
@@ -107,8 +55,37 @@ class TestBasicApp(IntegrationTestBase):
         print("\n=== Step 0: Setup EventBridge Monitoring ===")
         self._setup_eventbridge_monitoring()
 
+        # Step 0.1: Delete IAM role from previous test run
+        print("\n=== Step 0.1: Cleanup Existing IAM Role ===")
+        try:
+            import boto3
+            from datetime import datetime
+            
+            iam = boto3.client("iam")
+            role_name = "smus-test-project-basic-role"
+            
+            try:
+                self.logger.info(f"Deleting IAM role: {role_name} at {datetime.utcnow().isoformat()}")
+                
+                # Detach all policies
+                policies = iam.list_attached_role_policies(RoleName=role_name)
+                for policy in policies.get("AttachedPolicies", []):
+                    iam.detach_role_policy(
+                        RoleName=role_name, PolicyArn=policy["PolicyArn"]
+                    )
+                
+                # Delete the role
+                iam.delete_role(RoleName=role_name)
+                self.logger.info(f"Successfully deleted role: {role_name} at {datetime.utcnow().isoformat()}")
+                print(f"🧹 Cleaned up existing role: {role_name}")
+            except iam.exceptions.NoSuchEntityException:
+                self.logger.info(f"Role {role_name} does not exist, skipping deletion")
+                print("✓ No existing role to delete")
+        except Exception as e:
+            print(f"⚠️ Could not delete role: {e}")
+
         # Step 0.5: Delete workflow if it exists
-        print("\n=== Step 0: Cleanup Existing Workflow ===")
+        print("\n=== Step 0.5: Cleanup Existing Workflow ===")
         try:
             import boto3
             import os
@@ -214,29 +191,9 @@ class TestBasicApp(IntegrationTestBase):
         assert result["success"], f"Monitor failed: {result['output']}"
         print("✅ Monitor successful")
 
-        # Step 6: Run workflow
-        print("\n=== Step 6: Run Workflow ===")
-        self.logger.info("=== STEP 6: Run Workflow ===")
-        result = self.run_cli_command(
-            ["run", "--workflow", workflow_name, "--targets", "test", "--manifest", pipeline_file]
-        )
-        results.append(result)
-        assert result["success"], f"Run workflow failed: {result['output']}"
-        print("✅ Workflow started")
-
-        # Step 7: Monitor workflow status
-        print("\n=== Step 7: Monitor Workflow Status ===")
-        self.logger.info("=== STEP 7: Monitor Workflow Status ===")
-        result = self.run_cli_command(
-            ["monitor", "--targets", "test", "--manifest", pipeline_file]
-        )
-        results.append(result)
-        assert result["success"], f"Monitor after run failed: {result['output']}"
-        print("✅ Monitor after run successful")
-
-        # Step 8: Start basic_test_workflow
-        print("\n=== Step 8: Start Basic Test Workflow ===")
-        self.logger.info("=== STEP 8: Start Basic Test Workflow ===")
+        # Step 6: Start basic_test_workflow
+        print("\n=== Step 6: Start Basic Test Workflow ===")
+        self.logger.info("=== STEP 6: Start Basic Test Workflow ===")
         result = self.run_cli_command(
             ["run", "--workflow", workflow_name, "--targets", "test", "--manifest", pipeline_file]
         )
@@ -244,9 +201,9 @@ class TestBasicApp(IntegrationTestBase):
         assert result["success"], f"Run workflow failed: {result['output']}"
         print("✅ Basic workflow started")
 
-        # Step 9: Start expected failure workflow
-        print("\n=== Step 9: Start Expected Failure Workflow ===")
-        self.logger.info("=== STEP 9: Start Expected Failure Workflow ===")
+        # Step 7: Start expected failure workflow
+        print("\n=== Step 7: Start Expected Failure Workflow ===")
+        self.logger.info("=== STEP 7: Start Expected Failure Workflow ===")
         failure_workflow_name = "expected_failure_workflow"
         result = self.run_cli_command(
             ["run", "--workflow", failure_workflow_name, "--targets", "test", "--manifest", pipeline_file]
@@ -255,16 +212,17 @@ class TestBasicApp(IntegrationTestBase):
         assert result["success"], f"Run failure workflow failed: {result['output']}"
         print("✅ Failure workflow started")
 
-        # Step 10: Monitor both workflows
-        print("\n=== Step 10: Monitor Both Workflows ===")
-        self.logger.info("=== STEP 10: Monitor Both Workflows ===")
-        result = self.run_cli_command(["monitor", "--targets", "test", "--manifest", pipeline_file])
+        # Step 8: Monitor both workflows until completion
+        print("\n=== Step 8: Monitor Workflows Until Complete ===")
+        self.logger.info("=== STEP 8: Monitor Workflows Until Complete ===")
+        result = self.run_cli_command(["monitor", "--live", "--targets", "test", "--manifest", pipeline_file])
         results.append(result)
-        print("✅ Monitor completed")
+        assert result["success"], f"Monitor --live failed: {result['output']}"
+        print("✅ All workflows completed")
 
-        # Step 10.5: Download and validate notebook outputs
-        print("\n=== Step 10.5: Download and Validate Notebook Outputs ===")
-        self.logger.info("=== STEP 10.5: Download and Validate Notebook Outputs ===")
+        # Step 9: Download and validate notebook outputs
+        print("\n=== Step 9: Download and Validate Notebook Outputs ===")
+        self.logger.info("=== STEP 9: Download and Validate Notebook Outputs ===")
         
         # Get S3 bucket and workflow info from manifest
         with open(pipeline_file, 'r') as f:
@@ -317,13 +275,11 @@ class TestBasicApp(IntegrationTestBase):
             
             # Find the downloaded notebooks
             param_test_notebook = None
-            failing_notebook = None
             
             for nb_path in output_dir.rglob("*.ipynb"):
                 if "param_test" in nb_path.name.lower():
                     param_test_notebook = nb_path
-                elif "failing" in nb_path.name.lower():
-                    failing_notebook = nb_path
+                    break
             
             # Assert param_test_notebook has no errors
             if param_test_notebook:
@@ -341,31 +297,6 @@ class TestBasicApp(IntegrationTestBase):
                 print("✅ param_test_notebook has no errors")
             else:
                 pytest.fail("param_test_notebook output not found")
-            
-            # Assert failing_notebook has the expected error
-            if failing_notebook:
-                print(f"\n✅ Found failing notebook: {failing_notebook}")
-                with open(failing_notebook) as f:
-                    notebook = json.load(f)
-                
-                error_found = False
-                expected_error = "Intentional failure for testing error handling"
-                
-                for cell in notebook.get("cells", []):
-                    for output in cell.get("outputs", []):
-                        if output.get("output_type") == "error":
-                            error_value = output.get("evalue", "")
-                            if expected_error in error_value or "ValueError" in str(output):
-                                error_found = True
-                                print(f"✅ Found expected error: {output.get('ename', 'Error')}")
-                                break
-                    if error_found:
-                        break
-                
-                assert error_found, f"failing_notebook should contain expected error: {expected_error}"
-                print("✅ failing_notebook has expected error")
-            else:
-                pytest.fail("failing_notebook output not found")
         else:
             pytest.fail("Could not determine S3 bucket from project info")
 

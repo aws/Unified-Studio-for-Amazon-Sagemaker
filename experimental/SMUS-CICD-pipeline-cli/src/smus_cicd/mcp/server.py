@@ -342,26 +342,26 @@ targets:"""
       name: {project_name}"""
             if i > 0:
                 bundle_yaml += """
-    initialization:
-      project:
-        create: true"""
-            bundle_yaml += "\n"
+      create: true"""
+            bundle_yaml += """
+    bootstrap:
+      actions:
+        - type: mwaaserverless.start_workflow_run
+          workflowArn: "arn:aws:airflow-serverless:${{AWS_REGION}}:${{AWS_ACCOUNT_ID}}:workflow/"""
+            bundle_yaml += (
+                project_name
+                + """_workflow"
+          clientToken: "run-${{STAGE}}"
+"""
+            )
 
-        bundle_yaml += (
-            """
+        bundle_yaml += """
 bundle:
   storage:
     - name: code
       connectionName: default.s3_shared
       include: ['**/*.py', '**/*.sql']
-
-workflows:
-  - workflowName: """
-            + project_name
-            + """_workflow
-    connectionName: project.workflow_serverless
-    engine: airflow-serverless"""
-        )
+"""
 
         # Get Airflow workflow from templates
         airflow_workflow = self._get_airflow_template(project_name, use_case)
@@ -577,10 +577,13 @@ targets:
       region: ${AWS_REGION}
     project:
       name: test-project
-    initialization:
-      project:
-        create: true
-        profileName: 'All capabilities'
+      create: true
+      profileName: 'All capabilities'
+    bootstrap:
+      actions:
+        - type: mwaaserverless.start_workflow_run
+          workflowArn: "arn:aws:airflow-serverless:${AWS_REGION}:${AWS_ACCOUNT_ID}:workflow/execute_notebooks"
+          clientToken: "run-dev"
 
 bundle:
   storage:
@@ -588,12 +591,6 @@ bundle:
       connectionName: default.s3_shared
       include: ['notebooks/*.ipynb']
       exclude: ['.ipynb_checkpoints/']
-
-workflows:
-  - workflowName: execute_notebooks
-    connectionName: project.workflow_serverless
-    engine: airflow-serverless
-    triggerPostDeployment: false
 """,
             "etl": """
 # Example: ETL Pipeline
