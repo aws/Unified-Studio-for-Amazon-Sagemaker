@@ -6,6 +6,11 @@ import sys
 from pathlib import Path
 from typing import Any, Dict
 
+try:
+    from importlib.resources import files
+except ImportError:
+    from importlib_resources import files
+
 import yaml
 
 
@@ -22,11 +27,17 @@ class SMUSMCPServer:
         """Load MCP configuration file."""
         if config_path:
             config_file = Path(config_path)
+            if config_file.exists():
+                return yaml.safe_load(config_file.read_text())
         else:
-            config_file = self.base_path / "mcp-config.yaml"
-
-        if config_file.exists():
-            return yaml.safe_load(config_file.read_text())
+            # Load from package resources
+            try:
+                config_text = (
+                    files("smus_cicd.resources").joinpath("mcp-config.yaml").read_text()
+                )
+                return yaml.safe_load(config_text)
+            except Exception:
+                pass
         return {"docs": [], "templates": {}}
 
     def _load_knowledge_base(self):
