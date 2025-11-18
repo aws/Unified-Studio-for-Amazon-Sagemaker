@@ -146,7 +146,7 @@ jobs:
           echo "🔍 DEV_DOMAIN_REGION: $DEV_DOMAIN_REGION"
           echo "🔍 AWS_REGION: $AWS_REGION"
           cd experimental/SMUS-CICD-pipeline-cli
-          smus-cli describe --manifest ../../${{ inputs.manifest_path }} --connect
+          smus-cli describe --manifest ../../${{ inputs.manifest_path }}
 
   deploy-test:
     name: Deploy to Test
