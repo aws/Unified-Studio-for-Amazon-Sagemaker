@@ -61,6 +61,13 @@ stages:
       - name: dashboard-glue-quick
         connectionName: default.s3_shared
         targetDirectory: dashboard-glue-quick/bundle
+      - name: workflows
+        connectionName: default.s3_shared
+        include:
+        - "*.yaml"
+        exclude:
+        - manifest.yaml
+        targetDirectory: dashboard-glue-quick/bundle/workflows
       git:
       - name: covid-19-dataset
         connectionName: default.s3_shared
