@@ -489,16 +489,16 @@ def list_workflow_runs(
         for run in response.get("WorkflowRuns", []):
             # Handle nested RunDetailSummary structure
             run_detail = run.get("RunDetailSummary", {})
-            
+
             created_at = run_detail.get("CreatedAt")
             started_on = run_detail.get("StartedOn")
             completed_on = run_detail.get("CompletedOn")
-            
+
             # Calculate queue time if both timestamps available
             queue_time_seconds = None
             if created_at and started_on:
                 queue_time_seconds = (started_on - created_at).total_seconds()
-            
+
             runs.append(
                 {
                     "run_id": run["RunId"],
@@ -730,7 +730,7 @@ def wait_for_workflow_completion(
                 )
 
             logger.info(f"Workflow run {run_id} completed with status: {status}")
-            
+
             # Return with final_status and proper success flag
             return {
                 "final_status": status,
