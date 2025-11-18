@@ -63,13 +63,13 @@ def run_workflow(action: BootstrapAction, context: Dict[str, Any]) -> Dict[str, 
 
     run_id = result["run_id"]
     workflow_arn = result["workflow_arn"]
-    
+
     logger.info(f"Workflow triggered: {result['workflow_name']} (run_id: {run_id})")
 
     # If trailLogs or wait, monitor until completion
     if trail_logs or wait:
         region = region or target_config.domain.region
-        
+
         if trail_logs:
             logger.info("Streaming logs until completion...")
             # Monitor with log streaming
@@ -82,7 +82,7 @@ def run_workflow(action: BootstrapAction, context: Dict[str, Any]) -> Dict[str, 
             monitor_result = airflow_serverless.wait_for_workflow_completion(
                 workflow_arn, region, run_id=run_id
             )
-        
+
         return {
             "action": "workflow.run",
             "workflow_name": result["workflow_name"],

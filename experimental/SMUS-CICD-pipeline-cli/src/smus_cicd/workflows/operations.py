@@ -91,16 +91,16 @@ class WorkflowOperations:
         if live:
             # Use live monitoring - streams logs until completion
             logger.info("Starting live log monitoring...")
-            
+
             logs = []
-            
+
             def log_callback(event):
                 logs.append(event)
-            
+
             result = airflow_serverless.monitor_workflow_logs_live(
                 workflow_arn, region, callback=log_callback
             )
-            
+
             return {
                 "success": result["success"],
                 "run_id": result["run_id"],
@@ -108,7 +108,7 @@ class WorkflowOperations:
                 "logs": logs,
                 "workflow_arn": workflow_arn,
             }
-        
+
         # Static log fetch (original behavior)
         runs = airflow_serverless.list_workflow_runs(workflow_arn, region=region)
 
