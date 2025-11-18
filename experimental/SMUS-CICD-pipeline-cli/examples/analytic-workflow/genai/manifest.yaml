@@ -2,13 +2,11 @@ applicationName: IntegrationTestGenAIWorkflow
 content:
   storage:
   - name: agent-code
-    connectionName: default.s3_shared
     include:
-    - genai/job-code
+    - job-code
   - name: genai-workflows
-    connectionName: default.s3_shared
     include:
-    - genai/workflows
+    - workflows
   workflows:
   - workflowName: genai_dev_workflow
     connectionName: default.workflow_serverless
@@ -18,7 +16,7 @@ stages:
     domain:
       tags:
         purpose: smus-cicd-testing
-      region: ${DEV_DOMAIN_REGION:us-east-1}
+      region: ${DEV_DOMAIN_REGION:us-east-2}
     project:
       name: dev-marketing
     environment_variables:
@@ -28,7 +26,7 @@ stages:
     domain:
       tags:
         purpose: smus-cicd-testing
-      region: ${DEV_DOMAIN_REGION:us-east-1}
+      region: ${TEST_DOMAIN_REGION:us-east-1}
     project:
       name: test-marketing
       owners:
@@ -44,5 +42,16 @@ stages:
       - name: genai-workflows
         connectionName: default.s3_shared
         targetDirectory: genai/bundle/workflows
+    bootstrap:
+      actions:
+      - type: workflow.run
+        workflowName: genai_dev_workflow
+        trailLogs: true
 tests:
   folder: examples/analytic-workflow/genai/app_tests/
+
+
+
+
+
+

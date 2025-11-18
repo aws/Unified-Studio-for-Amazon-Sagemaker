@@ -2,7 +2,6 @@ applicationName: IntegrationTestNotebooks
 content:
   storage:
   - name: notebooks
-    connectionName: default.s3_shared
     include:
     - notebooks/
     - workflows/
@@ -28,7 +27,7 @@ stages:
     domain:
       tags:
         purpose: smus-cicd-testing
-      region: ${DEV_DOMAIN_REGION:us-east-1}
+      region: ${TEST_DOMAIN_REGION:us-east-1}
     project:
       name: test-marketing
       owners:
@@ -39,7 +38,6 @@ stages:
     deployment_configuration:
       storage:
       - name: notebooks
-        connectionName: default.s3_shared
         targetDirectory: notebooks/bundle/notebooks
     bootstrap:
       actions:
@@ -49,5 +47,10 @@ stages:
         properties:
           trackingServerArn: arn:aws:sagemaker:${STS_REGION}:${STS_ACCOUNT_ID}:mlflow-tracking-server/smus-integration-mlflow-use2
           trackingServerName: smus-integration-mlflow-use2
+      - type: workflow.run
+        workflowName: parallel_notebooks_execution
+        trailLogs: true
 tests:
   folder: examples/analytic-workflow/data-notebooks/app_tests/
+
+

@@ -26,14 +26,29 @@ bootstrap:
     - type: workflow.run
       workflowName: etl_pipeline
       wait: false  # optional, default: false
+      trailLogs: false  # optional, default: false
 ```
 
 **Properties:**
 - `workflowName` (required): Name of the workflow to trigger
-- `wait` (optional): Whether to wait for workflow completion (default: false)
+- `wait` (optional): Wait for workflow completion without streaming logs (default: false)
+- `trailLogs` (optional): Stream logs and wait for workflow completion (default: false)
+  - Note: `trailLogs: true` implies `wait: true`
 - `region` (optional): AWS region override (defaults to target's domain region)
 
-**Use Case:** Trigger data processing workflows immediately after deploying new code/configs, eliminating the need for separate GitHub Actions jobs to run workflows.
+**Use Cases:**
+- **Fire and forget**: No `wait` or `trailLogs` - trigger workflow and continue deployment
+- **Wait for completion**: `wait: true` - block until workflow completes, no log output
+- **Monitor execution**: `trailLogs: true` - stream logs and wait for completion (recommended for CI/CD)
+
+**Example - CI/CD with log monitoring:**
+```yaml
+bootstrap:
+  actions:
+    - type: workflow.run
+      workflowName: data_processing_pipeline
+      trailLogs: true
+```
 
 #### workflow.logs - Fetch Workflow Logs
 

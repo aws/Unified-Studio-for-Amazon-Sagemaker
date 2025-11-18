@@ -283,7 +283,6 @@ definitions:
   storageContent:
     type: object
     required: 
-      - connectionName
       - name
     properties:
       name:
@@ -295,7 +294,7 @@ definitions:
           - "notebooks"
       connectionName:
         type: string
-        description: "DataZone connection name"
+        description: "DataZone connection name (optional - if not provided, uses local filesystem)"
         examples: 
           - "default.s3_shared"
           - "project.s3_default_folder"

@@ -472,6 +472,11 @@ stages:
           connection_type: S3
           properties:
             s3Uri: "s3://my-data-bucket/data/"
+        
+        # Automatically run workflow after deployment
+        - type: workflow.run
+          workflowName: etl_pipeline
+          trailLogs: true  # Stream logs and wait for completion
 ```
 
 **Project Properties:**

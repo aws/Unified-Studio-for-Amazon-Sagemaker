@@ -79,8 +79,8 @@ class WorkflowOperations:
         Args:
             workflow_arn: Workflow ARN
             region: AWS region
-            live: Whether to stream logs continuously
-            lines: Number of log lines to fetch
+            live: Whether to stream logs continuously and wait for completion
+            lines: Number of log lines to fetch (ignored if live=True)
             run_id: Optional specific run ID
 
         Returns:
@@ -88,7 +88,28 @@ class WorkflowOperations:
         """
         logger.info(f"Fetching logs for workflow: {workflow_arn}")
 
-        # Get workflow runs
+        if live:
+            # Use live monitoring - streams logs until completion
+            logger.info("Starting live log monitoring...")
+
+            logs = []
+
+            def log_callback(event):
+                logs.append(event)
+
+            result = airflow_serverless.monitor_workflow_logs_live(
+                workflow_arn, region, callback=log_callback
+            )
+
+            return {
+                "success": result["success"],
+                "run_id": result["run_id"],
+                "status": result["final_status"],
+                "logs": logs,
+                "workflow_arn": workflow_arn,
+            }
+
+        # Static log fetch (original behavior)
         runs = airflow_serverless.list_workflow_runs(workflow_arn, region=region)
 
         if not runs:

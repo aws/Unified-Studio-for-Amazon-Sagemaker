@@ -90,7 +90,7 @@ bootstrap:
 → **[Admin Guide](docs/getting-started/admin-quickstart.md)** - Configure infrastructure and pipelines in 15 minutes  
 → **[GitHub Workflow Templates](git-templates/)** - Generic, reusable workflow templates for automated deployment
 
-**The CLI is your abstraction layer:** You just call `smus-cli deploy` - the CLI handles all AWS service interactions (DataZone, Glue, Athena, SageMaker, MWAA, S3, IAM, etc.). Your workflows stay simple and generic.
+**The CLI is your abstraction layer:** You just call `smus-cli deploy` - the CLI handles all AWS service interactions (DataZone, Glue, Athena, SageMaker, MWAA, S3, IAM, etc.) and executes bootstrap actions (workflow runs, log streaming, QuickSight refreshes, EventBridge events). Your workflows stay simple and generic.
 
 ---
 
@@ -122,12 +122,12 @@ bootstrap:
 - **Permission Management** - Control access and collaboration
 
 ### ⚡ Bootstrap Actions
-- **Automated Workflow Execution** - Trigger workflows automatically during deployment
-- **Log Retrieval** - Fetch workflow logs for validation and debugging
-- **QuickSight Dataset Refresh** - Automatically refresh dashboards after ETL deployment
-- **EventBridge Integration** - Emit custom events for downstream automation and CI/CD orchestration
+- **Automated Workflow Execution** - Trigger workflows automatically during deployment with `workflow.run` (use `trailLogs: true` to stream logs and wait for completion)
+- **Log Retrieval** - Fetch workflow logs for validation and debugging with `workflow.logs`
+- **QuickSight Dataset Refresh** - Automatically refresh dashboards after ETL deployment with `quicksight.refresh_dataset`
+- **EventBridge Integration** - Emit custom events for downstream automation and CI/CD orchestration with `eventbridge.put_events`
 - **DataZone Connections** - Provision MLflow and other service connections during deployment
-- **Sequential Execution** - Actions run in order before application deployment for reliable initialization
+- **Sequential Execution** - Actions run in order during `smus-cli deploy` for reliable initialization and validation
 
 ### 📊 Catalog Integration
 - **Asset Discovery** - Automatically find required catalog assets (Glue, Lake Formation, DataZone)

@@ -688,7 +688,13 @@ Deploys bundle files to target environments (auto-initializes if needed). The de
    - Verifies subscription grants are completed
    - Fails deployment if catalog access cannot be obtained
 3. **Workflow Validation**: Ensures deployed workflows are accessible by the target environment
-4. **Deployment Metrics**: Optionally emits deployment lifecycle events to EventBridge for monitoring and alerting (see [Bundle Deployment Metrics](pipeline-deployment-metrics.md))
+4. **Bootstrap Actions**: Executes post-deployment actions defined in the manifest (if configured):
+   - **Workflow Execution**: Automatically triggers workflows with `workflow.run` (with optional log streaming via `trailLogs: true`)
+   - **Log Retrieval**: Fetches workflow logs with `workflow.logs`
+   - **QuickSight Refresh**: Refreshes datasets with `quicksight.refresh_dataset`
+   - **EventBridge Events**: Emits custom events with `eventbridge.put_events`
+   - See [Bootstrap Actions](bootstrap-actions.md) for complete documentation
+5. **Deployment Metrics**: Optionally emits deployment lifecycle events to EventBridge for monitoring and alerting (see [Bundle Deployment Metrics](pipeline-deployment-metrics.md))
 
 ```bash
 smus-cli deploy [OPTIONS] [TARGET_POSITIONAL]

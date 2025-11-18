@@ -60,7 +60,7 @@ class StorageConfig:
     """Storage configuration."""
 
     name: str
-    connectionName: str
+    connectionName: Optional[str] = None
     include: List[str] = field(default_factory=list)
     exclude: List[str] = field(default_factory=list)
     targetDirectory: Optional[str] = None

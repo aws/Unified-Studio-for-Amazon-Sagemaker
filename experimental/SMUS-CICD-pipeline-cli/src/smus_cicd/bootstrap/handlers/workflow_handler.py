@@ -2,6 +2,7 @@
 
 from typing import Any, Dict
 
+from ...helpers import airflow_serverless
 from ...helpers.logger import get_logger
 from ...workflows import WorkflowOperations
 from ..models import BootstrapAction
@@ -31,7 +32,9 @@ def run_workflow(action: BootstrapAction, context: Dict[str, Any]) -> Dict[str, 
 
     Action parameters:
         workflowName: Name of workflow to trigger (required)
-        wait: Whether to wait for completion (optional, default: false)
+        wait: Wait for completion without streaming logs (optional, default: false)
+        trailLogs: Stream logs and wait for completion (optional, default: false)
+                   Note: trailLogs=true implies wait=true
         region: AWS region override (optional)
     """
     workflow_name = action.parameters.get("workflowName")
@@ -39,6 +42,7 @@ def run_workflow(action: BootstrapAction, context: Dict[str, Any]) -> Dict[str, 
         raise ValueError("workflowName is required for workflow.run action")
 
     wait = action.parameters.get("wait", False)
+    trail_logs = action.parameters.get("trailLogs", False)
     region = action.parameters.get("region")
 
     manifest = context.get("manifest")
@@ -49,24 +53,51 @@ def run_workflow(action: BootstrapAction, context: Dict[str, Any]) -> Dict[str, 
 
     logger.info(f"Bootstrap action: Triggering workflow '{workflow_name}'")
 
+    # Trigger workflow
     result = WorkflowOperations.trigger_workflow(
         manifest=manifest,
         target_config=target_config,
         workflow_name=workflow_name,
-        wait=wait,
         region=region,
     )
 
-    logger.info(
-        f"Workflow triggered: {result['workflow_name']} (run_id: {result['run_id']})"
-    )
+    run_id = result["run_id"]
+    workflow_arn = result["workflow_arn"]
+
+    logger.info(f"Workflow triggered: {result['workflow_name']} (run_id: {run_id})")
+
+    # If trailLogs or wait, monitor until completion
+    if trail_logs or wait:
+        region = region or target_config.domain.region
+
+        if trail_logs:
+            logger.info("Streaming logs until completion...")
+            # Monitor with log streaming
+            monitor_result = airflow_serverless.monitor_workflow_logs_live(
+                workflow_arn, region, run_id=run_id, callback=lambda event: None
+            )
+        else:
+            logger.info("Waiting for completion...")
+            # Wait without log streaming
+            monitor_result = airflow_serverless.wait_for_workflow_completion(
+                workflow_arn, region, run_id=run_id
+            )
+
+        return {
+            "action": "workflow.run",
+            "workflow_name": result["workflow_name"],
+            "run_id": run_id,
+            "status": monitor_result["final_status"],
+            "success": monitor_result["success"],
+            "workflow_arn": workflow_arn,
+        }
 
     return {
         "action": "workflow.run",
         "workflow_name": result["workflow_name"],
-        "run_id": result["run_id"],
+        "run_id": run_id,
         "status": result["status"],
-        "workflow_arn": result["workflow_arn"],
+        "workflow_arn": workflow_arn,
     }
 
 

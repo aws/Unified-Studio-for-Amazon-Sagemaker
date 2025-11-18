@@ -79,8 +79,8 @@ def upload_bundle(
         return final_path
 
 
-def download_bundle(bundle_path: str, region: str = None) -> str:
-    """Download bundle from storage location to a temporary file and return local path."""
+def ensure_bundle_local(bundle_path: str, region: str = None) -> str:
+    """Ensure bundle ZIP is available locally. Downloads from S3 if needed, returns local path."""
     if is_s3_url(bundle_path):
         # Download from S3 to temporary file
         bucket, key = parse_s3_url(bundle_path)

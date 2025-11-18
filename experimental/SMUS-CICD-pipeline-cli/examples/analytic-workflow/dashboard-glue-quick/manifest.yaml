@@ -37,7 +37,7 @@ stages:
     domain:
       tags:
         purpose: smus-cicd-testing
-      region: ${DEV_DOMAIN_REGION:us-east-2}
+      region: ${TEST_DOMAIN_REGION:us-east-1}
     project:
       name: test-marketing
       owners:
@@ -45,14 +45,13 @@ stages:
       - arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
     environment_variables:
       S3_PREFIX: test
-      AWS_REGION: ${DEV_DOMAIN_REGION:us-east-1}
+      AWS_REGION: ${TEST_DOMAIN_REGION:us-east-1}
       GRANT_TO: Admin,service-role/aws-quicksight-service-role-v0
     bootstrap:
       actions:
-      - type: workflow.logs
+      - type: workflow.run
         workflowName: covid_dashboard_glue_quick_pipeline
-        live: true
-        lines: 10000
+        trailLogs: true
       - type: quicksight.refresh_dataset
         refreshScope: IMPORTED
         ingestionType: FULL_REFRESH
