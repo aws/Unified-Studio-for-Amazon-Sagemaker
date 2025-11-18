@@ -46,3 +46,4 @@ stages:
         targetDirectory: genai/bundle/workflows
 tests:
   folder: examples/analytic-workflow/genai/app_tests/
+
