@@ -42,8 +42,6 @@ stages:
         targetDirectory: notebooks/bundle/notebooks
       - name: workflows
         connectionName: default.s3_shared
-        include:
-        - workflows/
         targetDirectory: notebooks/bundle/workflows
     bootstrap:
       actions:
