@@ -47,6 +47,9 @@ Resources:
                 'token.actions.githubusercontent.com:sub': 
                   - !Sub 'repo:${GitHubOrg}/${GitHubRepo}:environment:${GitHubEnvironment}'
                   - !Sub 'repo:${GitHubOrg}/${GitHubRepo}:environment:aws-env-amirbo-6778'
+                  - !Sub 'repo:${GitHubOrg}/${GitHubRepo}:environment:test-aws-account'
+                  - !Sub 'repo:${GitHubOrg}/${GitHubRepo}:environment:dev-aws-account'
+                  - !Sub 'repo:${GitHubOrg}/${GitHubRepo}:environment:prod-aws-account'
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/PowerUserAccess
       Policies:

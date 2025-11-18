@@ -62,7 +62,6 @@ jobs:
     name: Bundle Application
     runs-on: ubuntu-latest
     if: ${{ !inputs.skip_bundle }}
-    environment: dev-aws-account
     
     steps:
       - uses: actions/checkout@v4
@@ -81,7 +80,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
           aws-region: ${{ inputs.aws_region }}
           role-session-name: smus-bundle-session
       
@@ -111,7 +110,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: bundle
     if: always()
-    environment: test-aws-account
     
     steps:
       - uses: actions/checkout@v4
@@ -130,7 +128,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_TEST }}
           aws-region: ${{ inputs.aws_region }}
           role-session-name: smus-validate-session
       
@@ -169,7 +167,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_TEST }}
           aws-region: ${{ inputs.aws_region }}
           role-session-name: smus-deploy-test-session
       
@@ -211,7 +209,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_TEST }}
           aws-region: ${{ inputs.aws_region }}
           role-session-name: smus-test-session
       
@@ -260,7 +258,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
           aws-region: ${{ inputs.aws_region }}
           role-session-name: smus-deploy-prod-session
       
