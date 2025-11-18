@@ -17,3 +17,4 @@ jobs:
       test_target: 'test'
       prod_target: 'prod'
       deploy_to_prod: ${{ github.ref == 'refs/heads/main' }}
+      skip_bundle: true
