@@ -74,3 +74,4 @@ stages:
             Name: TotalDeathByCountry-{stage.name}
 tests:
   folder: examples/analytic-workflow/dashboard-glue-quick/app_tests/
+# Trigger workflow

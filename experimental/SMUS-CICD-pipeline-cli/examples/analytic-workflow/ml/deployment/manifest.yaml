@@ -60,3 +60,4 @@ stages:
       - type: workflow.run
         workflowName: ml_deployment_workflow
         trailLogs: true
+# Trigger workflow

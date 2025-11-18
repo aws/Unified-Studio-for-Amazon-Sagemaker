@@ -1,35 +1,34 @@
-"""Test GenAI workflow execution and notebook outputs."""
+"""Test GenAI workflow execution and agent creation."""
 
 import boto3
 
 
-def test_workflow_notebook_output_exists(smus_config):
-    """Verify that the workflow produced notebook output in S3."""
-    # Get S3 connection info from config
-    s3_conn = smus_config["connections"]["default.s3_shared"]
+def test_bedrock_agent_created(smus_config):
+    """Verify that the Bedrock agent was created successfully."""
     region = smus_config["region"]
     
-    s3_client = boto3.client("s3", region_name=region)
+    bedrock_agent = boto3.client("bedrock-agent", region_name=region)
     
-    # Parse S3 URI
-    s3_uri = s3_conn["s3Uri"]
-    bucket = s3_uri.split("/")[2]
-    prefix = "/".join(s3_uri.split("/")[3:])
+    # List agents to find our test agent
+    response = bedrock_agent.list_agents(maxResults=100)
     
-    # Expected output path from workflow
-    output_prefix = f"{prefix}genai/bundle/workflows/"
+    agents = response.get("agentSummaries", [])
+    test_agents = [a for a in agents if "mortgage_test_agent" in a.get("agentName", "")]
     
-    # List objects to find notebook output
-    response = s3_client.list_objects_v2(Bucket=bucket, Prefix=output_prefix)
+    assert len(test_agents) > 0, "Bedrock agent 'mortgage_test_agent' not found"
     
-    assert "Contents" in response, f"No files found in {output_prefix}"
+    agent = test_agents[0]
+    agent_id = agent["agentId"]
+    agent_status = agent["agentStatus"]
     
-    # Check for notebook file
-    files = [obj["Key"] for obj in response["Contents"]]
-    notebook_files = [f for f in files if f.endswith(".ipynb")]
+    print(f"✓ Found agent: {agent['agentName']} (ID: {agent_id}, Status: {agent_status})")
     
-    assert len(notebook_files) > 0, f"No notebook outputs found in {output_prefix}"
-    print(f"✓ Found {len(notebook_files)} notebook output(s)")
+    # Verify agent is in a valid state
+    assert agent_status in [
+        "CREATING",
+        "PREPARED",
+        "NOT_PREPARED",
+    ], f"Agent in unexpected status: {agent_status}"
 
 
 def test_workflow_completed_successfully(smus_config):
