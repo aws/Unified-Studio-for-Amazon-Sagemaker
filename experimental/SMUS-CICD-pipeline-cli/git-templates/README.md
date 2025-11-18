@@ -1,88 +1,238 @@
-# GitHub Actions Workflow Templates
+# Generic SMUS CI/CD Workflows
 
-Pre-built GitHub Actions workflows for automating SMUS application deployments.
+These workflows follow the **separation of concerns** principle where:
+- **SMUS CLI** handles all AWS complexity
+- **Workflows** enforce CI/CD best practices
+- **Application teams** only configure parameters
 
-## Why These Templates?
+## Available Workflows
 
-**The CLI is the Abstraction Layer:** These templates are designed to be **application-agnostic** because the SMUS CLI encapsulates all AWS complexity. DevOps teams provide them once, and they work for ANY SMUS application - whether it uses Glue, SageMaker, Bedrock, or any combination of AWS services.
+### 1. Simple Deployment (`smus-deploy-reusable.yml`)
 
-**What makes this possible:**
-- **DevOps teams** create workflows that just call `smus-cli deploy`
-- **SMUS CLI** handles all AWS service interactions (DataZone, Glue, Athena, SageMaker, MWAA, S3, IAM, etc.)
-- **Data teams** define what to deploy in `manifest.yaml`
+**Purpose:** Basic deployment to one or more targets
 
-**The workflow doesn't need to know:**
-- Which AWS services the application uses
-- How to configure DataZone projects
-- How to deploy to MWAA
-- How to manage S3 artifacts
-- How to handle IAM roles
+**Use when:**
+- Single environment deployment
+- Simple CI/CD pipeline
+- No approval gates needed
 
-**The workflow just needs to:**
-- Run `smus-cli deploy --manifest manifest.yaml`
-- Run `smus-cli test --manifest manifest.yaml`
-- Enforce approval gates and notifications
+**Example usage:**
+```yaml
+jobs:
+  deploy:
+    uses: ./.github/workflows/smus-deploy-reusable.yml
+    with:
+      manifest_path: 'manifest.yaml'
+      targets: 'test'
+      run_tests: true
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_TEST }}
+```
 
-**Result:** DevOps teams enforce best practices (testing, approvals, security) without calling a single AWS API. The CLI handles everything.
+### 2. Multi-Environment Deployment (`smus-multi-env-reusable.yml`)
 
----
+**Purpose:** Test → Prod pipeline with approval gates
 
-**Quick links:**
-- **Application teams:** [Setup Guide](../docs/github-workflow-application-guide.md) (~30 min)
-- **DevOps teams:** [Template Setup](../docs/github-workflow-devops-guide.md) (~15 min)
-- **Back to CLI docs:** [Main README](../README.md)
+**Use when:**
+- Multiple environments (test, prod)
+- Approval required for production
+- Automated testing between stages
 
----
+**Example usage:**
+```yaml
+jobs:
+  deploy:
+    uses: ./.github/workflows/smus-multi-env-reusable.yml
+    with:
+      manifest_path: 'manifest.yaml'
+      test_target: 'test'
+      prod_target: 'prod'
+      deploy_to_prod: true
+```
 
-## Available Templates
+## Setup Instructions
 
-### Direct Branch Deployment (Available Now)
+### 1. Configure GitHub Environments
 
-Deploy directly from git branches with automatic promotion.
+**Test Environment:**
+```
+Repository Settings → Environments → New environment: "test"
+- No protection rules needed
+```
 
-**Files:**
-- `direct-branch/org-template-workflow.yml` - Reusable workflow (for DevOps)
-- `direct-branch/org-application-workflow.yml` - Caller workflow (for app teams)
-- `direct-branch/example-config.yml` - Configuration example
+**Production Environment:**
+```
+Repository Settings → Environments → New environment: "production"
+- Required reviewers: Add at least 1 reviewer
+- Deployment branches: Limit to main/prod branches
+```
 
-**Setup:** [Application Guide](../docs/github-workflow-application-guide.md)
+### 2. Configure Secrets
 
-### Bundle-Based Deployment (Coming Q1 2026)
+**Environment Secrets (Recommended):**
+```
+Settings → Environments → test → Add secret
+  AWS_ROLE_ARN: arn:aws:iam::ACCOUNT:role/GitHubActions-SMUS-Test
 
-Create versioned artifacts for compliance and rollback.
+Settings → Environments → production → Add secret
+  AWS_ROLE_ARN: arn:aws:iam::ACCOUNT:role/GitHubActions-SMUS-Prod
+```
 
-**Files:** `bundle-based/` directory
+Each environment has its own `AWS_ROLE_ARN` secret, automatically used based on the environment.
 
-### Hybrid Deployment (Coming Q2 2026)
+### 3. Create Application Workflow
 
-Combine direct deployment for code with bundled artifacts for models.
+Copy `deploy-example.yml` and customize:
 
-**Files:** `hybrid-bundle-branch/` directory
+```yaml
+name: Deploy My Application
 
----
+on:
+  push:
+    branches: [main, test]
+  workflow_dispatch:
 
-## Quick Comparison
+jobs:
+  deploy:
+    uses: ./.github/workflows/smus-multi-env-reusable.yml
+    with:
+      manifest_path: 'my-app/manifest.yaml'  # Your manifest path
+      test_target: 'test'                     # Your test target
+      prod_target: 'prod'                     # Your prod target
+```
 
-| Approach | Speed | Rollback | Best For |
-|----------|-------|----------|----------|
-| Direct Branch | Fast | Git revert | Code-only apps |
-| Bundle-Based | Slower | Instant | Compliance needs |
-| Hybrid | Mixed | Mixed | ML/AI apps |
+## Key Features
 
-**Not sure which to use?** Start with Direct Branch (simplest).
+### ✅ Application-Agnostic
+- Works for Glue, SageMaker, Bedrock, or any AWS service
+- No AWS API calls in workflow
+- SMUS CLI handles all complexity
 
----
+### ✅ Reusable
+- One workflow serves all applications
+- Maintained by DevOps team
+- Application teams just configure parameters
 
-## Prerequisites
+### ✅ Secure
+- OIDC authentication (no long-lived credentials)
+- Separate roles for test and prod
+- Environment protection rules
 
-1. AWS account with SMUS domain
-2. GitHub repository with manifest.yaml
-3. AWS authentication configured (see [Admin Guide](../docs/getting-started/admin-quickstart.md#step-8-set-up-cicd-authentication-optional))
+### ✅ Automated
+- Validate → Deploy → Test → Approve → Deploy
+- Automatic infrastructure creation
+- Idempotent operations
 
----
+## Workflow Parameters
 
-## Platform Note
+### Common Inputs
 
-These templates are for GitHub Actions. The SMUS CLI commands work with any CI/CD platform - just adapt the workflow syntax.
+| Parameter | Description | Default | Required |
+|-----------|-------------|---------|----------|
+| `manifest_path` | Path to manifest file | `manifest.yaml` | No |
+| `python_version` | Python version | `3.12` | No |
+| `aws_region` | AWS region | `us-east-1` | No |
 
+### Simple Deployment Inputs
 
+| Parameter | Description | Default | Required |
+|-----------|-------------|---------|----------|
+| `targets` | Comma-separated targets | - | Yes |
+| `run_tests` | Run tests after deploy | `true` | No |
+
+### Multi-Environment Inputs
+
+| Parameter | Description | Default | Required |
+|-----------|-------------|---------|----------|
+| `test_target` | Test target name | `test` | No |
+| `prod_target` | Prod target name | `prod` | No |
+| `skip_tests` | Skip test execution | `false` | No |
+| `deploy_to_prod` | Deploy to prod | `true` | No |
+
+## Examples
+
+### Example 1: Deploy to Test Only
+
+```yaml
+jobs:
+  deploy-test:
+    uses: ./.github/workflows/smus-deploy-reusable.yml
+    with:
+      manifest_path: 'manifest.yaml'
+      targets: 'test'
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN_TEST }}
+```
+
+### Example 2: Test → Prod Pipeline
+
+```yaml
+jobs:
+  deploy:
+    uses: ./.github/workflows/smus-multi-env-reusable.yml
+    with:
+      manifest_path: 'manifest.yaml'
+```
+
+### Example 3: Multiple Targets at Once
+
+```yaml
+jobs:
+  deploy-all:
+    uses: ./.github/workflows/smus-deploy-reusable.yml
+    with:
+      manifest_path: 'manifest.yaml'
+      targets: 'dev,test,staging'
+    secrets:
+      AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+```
+
+## Troubleshooting
+
+### Workflow not found
+- Ensure workflow file is in `.github/workflows/`
+- Check file name matches the `uses:` reference
+
+### Permission denied
+- Verify AWS role ARN is correct
+- Check OIDC provider is configured
+- Ensure role trust policy allows GitHub Actions
+
+### Tests failing
+- Check application code and manifest
+- Review test logs in workflow output
+- Run `smus-cli test` locally to debug
+
+## Migration from Old Workflows
+
+If you have existing workflows that directly call AWS APIs:
+
+1. **Identify AWS API calls** in your workflow
+2. **Replace with SMUS CLI commands**:
+   - AWS API → `smus-cli deploy`
+   - Custom scripts → `smus-cli test`
+3. **Use reusable workflow** instead of custom logic
+4. **Configure parameters** for your application
+
+**Before:**
+```yaml
+- name: Deploy to MWAA
+  run: |
+    aws mwaa create-environment ...
+    aws s3 cp dags/ s3://...
+    # 50+ lines of AWS API calls
+```
+
+**After:**
+```yaml
+uses: ./.github/workflows/smus-deploy-reusable.yml
+with:
+  manifest_path: 'manifest.yaml'
+  targets: 'test'
+```
+
+## Support
+
+- **Documentation:** [GitHub Actions Integration](../../docs/github-actions-integration.md)
+- **Templates:** [git-templates/](../../git-templates/)
+- **Examples:** [examples/](../../examples/)
