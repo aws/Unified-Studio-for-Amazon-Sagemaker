@@ -24,3 +24,6 @@ experimental/SMUS-CICD-pipeline-cli/tests/reports/test-results.html
 experimental/SMUS-CICD-pipeline-cli/tests/reports/test-results.html
 q-tasks.txt
 smus-feedback.txt
+
+# Local integration test workflows (contain hardcoded credentials)
+.github/workflows/run-integration-local.yml
