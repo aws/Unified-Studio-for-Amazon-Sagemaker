@@ -62,6 +62,7 @@ jobs:
     name: Bundle Application
     runs-on: ubuntu-latest
     if: ${{ !inputs.skip_bundle }}
+    environment: dev-aws-account
     
     steps:
       - uses: actions/checkout@v4
@@ -80,7 +81,8 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
+          # TODO: Replace with secrets.AWS_ROLE_ARN_DEV once configured
+          role-to-assume: arn:aws:iam::198737698272:role/GitHubActionsRole-SMUS-CLI-Tests
           aws-region: ${{ inputs.aws_region }}
           role-session-name: smus-bundle-session
       
@@ -94,7 +96,7 @@ jobs:
       - name: Bundle application
         env:
           DOMAIN_REGION: ${{ inputs.aws_region }}
-          DEV_DOMAIN_REGION: ${{ inputs.aws_region }}
+          DEV_DOMAIN_REGION: us-east-1  # Dev account domain region
         run: |
           echo "🔍 DOMAIN_REGION: $DOMAIN_REGION"
           echo "🔍 DEV_DOMAIN_REGION: $DEV_DOMAIN_REGION"
@@ -115,6 +117,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: bundle
     if: always()
+    environment: test-aws-account
     
     steps:
       - uses: actions/checkout@v4
@@ -139,8 +142,8 @@ jobs:
       
       - name: Validate configuration
         env:
-          DOMAIN_REGION: ${{ inputs.aws_region }}
-          DEV_DOMAIN_REGION: ${{ inputs.aws_region }}
+          DOMAIN_REGION: us-east-1  # Test account domain region
+          DEV_DOMAIN_REGION: us-east-1  # Dev account domain region
         run: |
           echo "🔍 DOMAIN_REGION: $DOMAIN_REGION"
           echo "🔍 DEV_DOMAIN_REGION: $DEV_DOMAIN_REGION"
