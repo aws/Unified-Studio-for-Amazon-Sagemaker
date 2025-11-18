@@ -47,3 +47,4 @@ smus-cli deploy test --manifest genai/manifest.yaml
 smus-cli run --workflow genai_dev_workflow --targets test --manifest genai/manifest.yaml
 ```
 # Trigger workflow
+
