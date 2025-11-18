@@ -76,12 +76,14 @@ cd 5-testing-infrastructure && ./deploy.sh [config.yaml]
 ### Stage 3: Domain Configuration
 **What:** Environment blueprints, project profiles  
 **When:** After domain exists (Stage 2 or manual)  
+**Applies to:** IDC-login domains only (skip for IAM-login domains)  
 **Outputs:** Enabled blueprints list  
 **Docs:** [3-domain-configuration/README.md](3-domain-configuration/README.md)
 
 ### Stage 4: Project Setup
 **What:** Dev project, project memberships  
 **When:** After Stage 3  
+**Applies to:** IDC-login domains only (skip for IAM-login domains)  
 **Outputs:** Project ID, membership details  
 **Docs:** [4-project-setup/README.md](4-project-setup/README.md)
 
@@ -90,6 +92,12 @@ cd 5-testing-infrastructure && ./deploy.sh [config.yaml]
 **When:** Anytime (independent of other stages)  
 **Outputs:** MLflow ARN, role ARN, S3 bucket  
 **Docs:** [5-testing-infrastructure/README.md](5-testing-infrastructure/README.md)
+
+### Stage 6: Fix Project Roles (Optional)
+**What:** Update IAM trust policies for Airflow Serverless & Athena  
+**When:** Only if you encounter permission errors with Airflow or Athena  
+**Note:** Usually not required - only run if missing permissions  
+**Docs:** [6-fix-project-roles/README.md](6-fix-project-roles/README.md)
 
 ## 🔧 Configuration
 
@@ -116,12 +124,20 @@ github:
 
 ## 🎯 Common Scenarios
 
-### Scenario 1: Fresh Account Setup
+### Scenario 1: Fresh Account Setup (IDC-login domain)
 ```bash
 ./deploy-all.sh
 ```
 
-### Scenario 2: Domain Created Manually
+### Scenario 2: Fresh Account Setup (IAM-login domain)
+```bash
+cd 1-account-setup && ./deploy.sh
+cd ../2-domain-creation && ./deploy.sh
+# Skip stages 3-4 for IAM-login domains
+cd ../5-testing-infrastructure && ./deploy.sh
+```
+
+### Scenario 3: Domain Created Manually (IDC-login)
 ```bash
 cd 1-account-setup && ./deploy.sh
 cd ../3-domain-configuration && ./deploy.sh
@@ -129,19 +145,20 @@ cd ../4-project-setup && ./deploy.sh
 cd ../5-testing-infrastructure && ./deploy.sh
 ```
 
-### Scenario 3: Only Testing Infrastructure
+### Scenario 4: Domain Created Manually (IAM-login)
+```bash
+cd 1-account-setup && ./deploy.sh
+# Skip stages 3-4 for IAM-login domains
+cd ../5-testing-infrastructure && ./deploy.sh
+```
+
+### Scenario 5: Only Testing Infrastructure
 ```bash
 cd 5-testing-infrastructure
 ./deploy.sh
 ```
 
-### Scenario 4: Update Domain Configuration
-```bash
-cd 3-domain-configuration
-./deploy.sh
-```
-
-### Scenario 5: Multi-Region Deployment
+### Scenario 6: Multi-Region Deployment
 Enable regions in config.yaml, then run stages. Each stage deploys to all enabled regions.
 
 ## 📊 Resource Outputs
@@ -174,9 +191,12 @@ Each stage is designed to be independent:
 
 - **Stage 1** requires only AWS credentials
 - **Stage 2** requires VPC from Stage 1 (or existing VPC)
-- **Stage 3** requires domain (from Stage 2 or manual)
-- **Stage 4** requires domain configuration from Stage 3
+- **Stage 3** requires domain (from Stage 2 or manual) - **IDC-login domains only**
+- **Stage 4** requires domain configuration from Stage 3 - **IDC-login domains only**
 - **Stage 5** is completely independent - can run anytime
+- **Stage 6** is optional - only needed if you encounter permission errors
+
+**Note:** Stages 3 and 4 are only applicable for IDC-login domains. For IAM-login domains, skip these stages and proceed directly from Stage 2 to Stage 5. Stage 6 is usually not required unless you're missing Airflow or Athena permissions.
 
 Pass information between stages using:
 1. CloudFormation outputs (automatic)
