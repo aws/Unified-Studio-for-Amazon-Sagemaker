@@ -164,6 +164,14 @@ aws datazone create-project-membership \
 - Added TODO comments to migrate to secrets later
 - All jobs now use hardcoded role ARNs: dev (198737698272), test (019900059033)
 
+### Iteration 10: IAM Permissions for Project Initialization
+**Issue**: Deploy failed with "not authorized to perform: iam:TagRole"
+**Root Cause**: SMUS CLI creates project execution role (smus-test-marketing-role) during initialization
+**Fix**: 
+- Added IAM permissions to CloudFormation template: iam:TagRole, iam:PutRolePolicy, iam:UpdateAssumeRolePolicy
+- Updated stack smus-cli-github-integration in test account
+- Role now has permissions to create and configure IAM roles for projects
+
 ## Key Learnings
 
 ### IAM Trust Policy Requirements

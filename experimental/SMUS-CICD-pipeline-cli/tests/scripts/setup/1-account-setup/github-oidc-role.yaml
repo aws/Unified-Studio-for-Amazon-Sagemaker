@@ -65,6 +65,9 @@ Resources:
                   - iam:PassRole
                   - iam:GetRole
                   - iam:ListRoles
+                  - iam:TagRole
+                  - iam:PutRolePolicy
+                  - iam:UpdateAssumeRolePolicy
                   - cloudformation:*
                   - s3:*
                   - datazone:*
