@@ -1,23 +1,26 @@
 """Test GenAI workflow execution and notebook outputs."""
 
 import boto3
-import pytest
 
 
-def test_workflow_notebook_output_exists(s3_connection, project_id):
+def test_workflow_notebook_output_exists(smus_config):
     """Verify that the workflow produced notebook output in S3."""
-    s3_client = boto3.client("s3", region_name=s3_connection["region"])
-    bucket = s3_connection["bucket"]
-    prefix = s3_connection["prefix"]
+    # Get S3 connection info from config
+    s3_conn = smus_config["connections"]["default.s3_shared"]
+    region = smus_config["region"]
+    
+    s3_client = boto3.client("s3", region_name=region)
+    
+    # Parse S3 URI
+    s3_uri = s3_conn["s3Uri"]
+    bucket = s3_uri.split("/")[2]
+    prefix = "/".join(s3_uri.split("/")[3:])
     
     # Expected output path from workflow
     output_prefix = f"{prefix}genai/bundle/workflows/"
     
     # List objects to find notebook output
-    response = s3_client.list_objects_v2(
-        Bucket=bucket,
-        Prefix=output_prefix
-    )
+    response = s3_client.list_objects_v2(Bucket=bucket, Prefix=output_prefix)
     
     assert "Contents" in response, f"No files found in {output_prefix}"
     
@@ -29,11 +32,12 @@ def test_workflow_notebook_output_exists(s3_connection, project_id):
     print(f"✓ Found {len(notebook_files)} notebook output(s)")
 
 
-def test_workflow_completed_successfully(workflow_connection, project_id):
+def test_workflow_completed_successfully(smus_config):
     """Verify the workflow run completed successfully."""
     from smus_cicd.helpers.airflow_serverless import list_workflows, get_workflow_runs
     
-    region = workflow_connection["region"]
+    region = smus_config["region"]
+    project_name = smus_config["project_name"]
     
     # List workflows to find our workflow
     workflows = list_workflows(region=region)
@@ -41,8 +45,10 @@ def test_workflow_completed_successfully(workflow_connection, project_id):
     
     workflow_list = workflows.get("workflows", [])
     genai_workflows = [
-        w for w in workflow_list 
+        w
+        for w in workflow_list
         if "genai_dev_workflow" in w.get("Name", "")
+        and project_name in w.get("Name", "")
     ]
     
     assert len(genai_workflows) > 0, "GenAI workflow not found"
