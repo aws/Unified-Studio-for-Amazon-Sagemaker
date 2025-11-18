@@ -10,11 +10,39 @@ import yaml
 from . import datazone
 
 
+def build_domain_config(target_config) -> Dict[str, Any]:
+    """
+    Build domain configuration from target config.
+
+    Args:
+        target_config: Target configuration object with domain attribute
+
+    Returns:
+        Dictionary with domain configuration including region, name (if present), and tags (if present)
+    """
+    config = load_config()
+    config["domain"] = {
+        "region": target_config.domain.region,
+    }
+    if target_config.domain.name:
+        config["domain"]["name"] = target_config.domain.name
+        config["domain_name"] = target_config.domain.name
+    if target_config.domain.tags:
+        config["domain"]["tags"] = target_config.domain.tags
+    config["region"] = target_config.domain.region
+    return config
+
+
 def substitute_env_vars(data: Union[Dict, List, str]) -> Union[Dict, List, str]:
     """
     Recursively substitute environment variables in YAML data.
 
     Supports ${VAR_NAME} syntax for environment variable substitution.
+
+    Pseudo environment variables (auto-resolved from AWS credentials):
+    - AWS_ACCOUNT_ID: Current AWS account ID from STS
+    - STS_ACCOUNT_ID: Current AWS account ID from STS (alias for AWS_ACCOUNT_ID)
+    - STS_REGION: Current AWS region from boto3 session
 
     Args:
         data: YAML data (dict, list, or string)
@@ -33,6 +61,18 @@ def substitute_env_vars(data: Union[Dict, List, str]) -> Union[Dict, List, str]:
         def replace_var(match):
             var_name = match.group(1)
             default_value = match.group(2) if match.group(2) is not None else ""
+
+            # Handle pseudo environment variables
+            if var_name == "STS_ACCOUNT_ID" or var_name == "AWS_ACCOUNT_ID":
+                import boto3
+
+                return boto3.client("sts").get_caller_identity()["Account"]
+            elif var_name == "STS_REGION":
+                import boto3
+
+                return boto3.Session().region_name or default_value
+
+            # Regular environment variable lookup
             return os.getenv(var_name, default_value)
 
         return re.sub(pattern, replace_var, data)
@@ -56,8 +96,8 @@ def load_yaml(file_path: str) -> Dict[str, Any]:
     """
     if not os.path.exists(file_path):
         raise FileNotFoundError(
-            f"Pipeline manifest file not found: {file_path}\n"
-            f"Please create a pipeline manifest file or specify the correct path using --pipeline/-p option."
+            f"Application manifest file not found: {file_path}\n"
+            f"Please create an application manifest file or specify the correct path using --manifest/-m option."
         )
 
     try:
@@ -148,15 +188,26 @@ def get_datazone_project_info(
         domain_id = _resolve_domain_id(config, region)
 
         if not domain_id:
-            return {"error": "Domain not found"}
+            raise Exception(
+                "Domain not found - check domain name/tags in manifest or CloudFormation stack"
+            )
 
         project_id = _get_project_id(project_name, domain_id, region)
         if not project_id:
-            return {"error": f"Project {project_name} not found"}
+            # Project doesn't exist - return minimal info indicating this
+            return {
+                "projectId": None,
+                "status": "NOT_FOUND",
+                "name": project_name,
+                "owners": [],
+                "connections": {},
+            }
 
         project_details = _get_project_details(domain_id, project_id, region)
         project_owners = _get_project_owners(domain_id, project_id, region)
-        project_connections = _get_project_connections(project_name, config, region)
+        project_connections = _get_project_connections(
+            project_name, domain_id, project_id, region
+        )
 
         result = {
             "projectId": project_id,
@@ -168,6 +219,10 @@ def get_datazone_project_info(
         return result
 
     except Exception as e:
+        from .logger import get_logger
+
+        logger = get_logger("utils")
+        logger.error(f"Error getting DataZone project info for {project_name}: {e}")
         return {"error": str(e)}
 
 
@@ -195,15 +250,28 @@ def _get_region_from_config(config: Dict[str, Any]) -> str:
 
 
 def _resolve_domain_id(config: Dict[str, Any], region: str) -> Optional[str]:
-    """Resolve domain ID from configuration or by name lookup."""
+    """Resolve domain ID from configuration or by name/tags lookup."""
+    from .logger import get_logger
+
+    logger = get_logger("utils")
+
     # Try to get domain ID from CloudFormation exports first
     domain_id = get_domain_id(config)
 
     if not domain_id:
-        # Try to get domain ID by name
-        domain_name = config.get("domain", {}).get("name")
-        if domain_name:
-            domain_id = datazone.get_domain_id_by_name(domain_name, region)
+        # Try to resolve domain by name or tags
+        domain_config = config.get("domain", {})
+        domain_name = domain_config.get("name")
+        domain_tags = domain_config.get("tags")
+
+        if domain_name or domain_tags:
+            try:
+                domain_id, _ = datazone.resolve_domain_id(
+                    domain_name=domain_name, domain_tags=domain_tags, region=region
+                )
+            except Exception as e:
+                logger.error(f"Failed to resolve domain: {str(e)}")
+                raise Exception(f"Failed to resolve domain: {str(e)}")
 
     return domain_id
 
@@ -217,7 +285,7 @@ def _get_project_details(
     domain_id: str, project_id: str, region: str
 ) -> Dict[str, Any]:
     """Get basic project details from DataZone."""
-    datazone_client = boto3.client("datazone", region_name=region)
+    datazone_client = datazone._get_datazone_client(region)
     project_response = datazone_client.get_project(
         domainIdentifier=domain_id, identifier=project_id
     )
@@ -230,7 +298,7 @@ def _get_project_owners(domain_id: str, project_id: str, region: str) -> List[st
     owners = []
 
     try:
-        datazone_client = boto3.client("datazone", region_name=region)
+        datazone_client = datazone._get_datazone_client(region)
         memberships_response = datazone_client.list_project_memberships(
             domainIdentifier=domain_id, projectIdentifier=project_id
         )
@@ -241,8 +309,11 @@ def _get_project_owners(domain_id: str, project_id: str, region: str) -> List[st
                 if owner_name:
                     owners.append(owner_name)
 
-    except Exception:
-        pass  # Owners are optional
+    except Exception as e:
+        from .logger import get_logger
+
+        logger = get_logger("utils")
+        logger.warning(f"Failed to get project owners (non-critical): {e}")
 
     return owners
 
@@ -266,7 +337,13 @@ def _extract_owner_name(
 
         return _get_readable_user_name(user_profile, user_id)
 
-    except Exception:
+    except Exception as e:
+        from .logger import get_logger
+
+        logger = get_logger("utils")
+        logger.warning(
+            f"Failed to get user profile for {user_id}, using ID as fallback: {e}"
+        )
         return user_id
 
 
@@ -290,51 +367,90 @@ def _get_readable_user_name(user_profile: Dict[str, Any], fallback_id: str) -> s
 
 
 def _get_project_connections(
-    project_name: str, config: Dict[str, Any], region: str
+    project_name: str, domain_id: str, project_id: str, region: str
 ) -> Dict[str, Any]:
-    """Get project connections using centralized logic."""
+    """Get project connections using domain_id and project_id directly."""
+    from .logger import get_logger
+
+    logger = get_logger("utils")
+
     try:
-        from . import connections
+        datazone_client = datazone._get_datazone_client(region)
 
-        # Try different config structures for domain name
-        domain_name = config.get("domain", {}).get("name")
-        if not domain_name:
-            domain_name = config.get("test_environment", {}).get("domain_name")
+        connections_dict = {}
+        next_token = None
 
-        # DEBUG: Log the parameters being passed to connections
-        import sys
+        # Paginate through all connections
+        while True:
+            list_params = {
+                "domainIdentifier": domain_id,
+                "projectIdentifier": project_id,
+                "maxResults": 50,
+            }
+            if next_token:
+                list_params["nextToken"] = next_token
 
-        is_json_output = "--output" in sys.argv and "JSON" in sys.argv
-        if not is_json_output:
-            print(
-                f"🔍 DEBUG _get_project_connections: project_name={project_name}, domain_name={domain_name}, region={region}",
-                file=sys.stderr,
-            )
+            response = datazone_client.list_connections(**list_params)
 
-        if domain_name:
-            return connections.get_project_connections(
-                project_name, domain_name, region
-            )
-        else:
-            return {}
+            for conn in response.get("items", []):
+                conn_name = conn.get("name", "unknown")
+                conn_type = conn.get("type", "")
+
+                # Check if WORKFLOWS_MWAA is actually serverless
+                if conn_type == "WORKFLOWS_MWAA":
+                    props = conn.get("props", {})
+                    if "workflowsServerlessProperties" in props:
+                        conn_type = "WORKFLOWS_SERVERLESS"
+
+                connections_dict[conn_name] = {
+                    "connectionId": conn.get("connectionId", ""),
+                    "type": conn_type,
+                    "region": region,
+                }
+
+                # Add S3 URI if it's an S3 connection
+                if conn_type == "S3":
+                    props = conn.get("props", {}).get("s3Properties", {})
+                    if props.get("s3Uri"):
+                        connections_dict[conn_name]["s3Uri"] = props["s3Uri"]
+
+                # Add workgroup info for ATHENA connections
+                elif conn_type == "ATHENA":
+                    props = conn.get("props", {}).get("athenaProperties", {})
+                    if props.get("workgroupName"):
+                        connections_dict[conn_name]["workgroupName"] = props[
+                            "workgroupName"
+                        ]
+
+                # Add SPARK connection properties
+                elif conn_type == "SPARK":
+                    # Need to get full connection details for sparkGlueProperties and configurations
+                    try:
+                        detail_response = datazone_client.get_connection(
+                            domainIdentifier=domain_id,
+                            identifier=conn.get("connectionId", ""),
+                        )
+                        props = detail_response.get("props", {}).get(
+                            "sparkGlueProperties", {}
+                        )
+                        if props:
+                            connections_dict[conn_name]["sparkGlueProperties"] = props
+
+                        configurations = detail_response.get("configurations", [])
+                        if configurations:
+                            connections_dict[conn_name][
+                                "configurations"
+                            ] = configurations
+                    except Exception as e:
+                        logger.warning(f"Failed to get SPARK connection details: {e}")
+
+            # Check for next page
+            next_token = response.get("nextToken")
+            if not next_token:
+                break
+
+        return connections_dict
+
     except Exception as e:
-        # Check if this is a permission error
-        error_str = str(e)
-        if any(
-            perm_error in error_str.lower()
-            for perm_error in [
-                "accessdenied",
-                "access denied",
-                "unauthorized",
-                "forbidden",
-                "permission",
-                "not authorized",
-                "insufficient privileges",
-            ]
-        ):
-            print(f"❌ AWS Permission Error getting connections: {error_str}")
-            raise Exception(
-                f"AWS Permission Error: {error_str}. Check if the role has required permissions."
-            )
-        else:
-            return {}  # Connections are optional for non-permission errors
+        logger.error(f"Failed to get project connections for {project_name}: {e}")
+        return {}

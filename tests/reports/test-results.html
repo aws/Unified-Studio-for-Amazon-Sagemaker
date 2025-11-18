@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title id="head-title">test-results.html</title>
+      <style type="text/css">body {
+  font-family: Helvetica, Arial, sans-serif;
+  font-size: 12px;
+  /* do not increase min-width as some may use split screens */
+  min-width: 800px;
+  color: #999;
+}
+
+h1 {
+  font-size: 24px;
+  color: black;
+}
+
+h2 {
+  font-size: 16px;
+  color: black;
+}
+
+p {
+  color: black;
+}
+
+a {
+  color: #999;
+}
+
+table {
+  border-collapse: collapse;
+}
+
+/******************************
+ * SUMMARY INFORMATION
+ ******************************/
+#environment td {
+  padding: 5px;
+  border: 1px solid #e6e6e6;
+  vertical-align: top;
+}
+#environment tr:nth-child(odd) {
+  background-color: #f6f6f6;
+}
+#environment ul {
+  margin: 0;
+  padding: 0 20px;
+}
+
+/******************************
+ * TEST RESULT COLORS
+ ******************************/
+span.passed,
+.passed .col-result {
+  color: green;
+}
+
+span.skipped,
+span.xfailed,
+span.rerun,
+.skipped .col-result,
+.xfailed .col-result,
+.rerun .col-result {
+  color: orange;
+}
+
+span.error,
+span.failed,
+span.xpassed,
+.error .col-result,
+.failed .col-result,
+.xpassed .col-result {
+  color: red;
+}
+
+.col-links__extra {
+  margin-right: 3px;
+}
+
+/******************************
+ * RESULTS TABLE
+ *
+ * 1. Table Layout
+ * 2. Extra
+ * 3. Sorting items
+ *
+ ******************************/
+/*------------------
+ * 1. Table Layout
+ *------------------*/
+#results-table {
+  border: 1px solid #e6e6e6;
+  color: #999;
+  font-size: 12px;
+  width: 100%;
+}
+#results-table th,
+#results-table td {
+  padding: 5px;
+  border: 1px solid #e6e6e6;
+  text-align: left;
+}
+#results-table th {
+  font-weight: bold;
+}
+
+/*------------------
+ * 2. Extra
+ *------------------*/
+.logwrapper {
+  max-height: 230px;
+  overflow-y: scroll;
+  background-color: #e6e6e6;
+}
+.logwrapper.expanded {
+  max-height: none;
+}
+.logwrapper.expanded .logexpander:after {
+  content: "collapse [-]";
+}
+.logwrapper .logexpander {
+  z-index: 1;
+  position: sticky;
+  top: 10px;
+  width: max-content;
+  border: 1px solid;
+  border-radius: 3px;
+  padding: 5px 7px;
+  margin: 10px 0 10px calc(100% - 80px);
+  cursor: pointer;
+  background-color: #e6e6e6;
+}
+.logwrapper .logexpander:after {
+  content: "expand [+]";
+}
+.logwrapper .logexpander:hover {
+  color: #000;
+  border-color: #000;
+}
+.logwrapper .log {
+  min-height: 40px;
+  position: relative;
+  top: -50px;
+  height: calc(100% + 50px);
+  border: 1px solid #e6e6e6;
+  color: black;
+  display: block;
+  font-family: "Courier New", Courier, monospace;
+  padding: 5px;
+  padding-right: 80px;
+  white-space: pre-wrap;
+}
+
+div.media {
+  border: 1px solid #e6e6e6;
+  float: right;
+  height: 240px;
+  margin: 0 5px;
+  overflow: hidden;
+  width: 320px;
+}
+
+.media-container {
+  display: grid;
+  grid-template-columns: 25px auto 25px;
+  align-items: center;
+  flex: 1 1;
+  overflow: hidden;
+  height: 200px;
+}
+
+.media-container--fullscreen {
+  grid-template-columns: 0px auto 0px;
+}
+
+.media-container__nav--right,
+.media-container__nav--left {
+  text-align: center;
+  cursor: pointer;
+}
+
+.media-container__viewport {
+  cursor: pointer;
+  text-align: center;
+  height: inherit;
+}
+.media-container__viewport img,
+.media-container__viewport video {
+  object-fit: cover;
+  width: 100%;
+  max-height: 100%;
+}
+
+.media__name,
+.media__counter {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-around;
+  flex: 0 0 25px;
+  align-items: center;
+}
+
+.collapsible td:not(.col-links) {
+  cursor: pointer;
+}
+.collapsible td:not(.col-links):hover::after {
+  color: #bbb;
+  font-style: italic;
+  cursor: pointer;
+}
+
+.col-result {
+  width: 130px;
+}
+.col-result:hover::after {
+  content: " (hide details)";
+}
+
+.col-result.collapsed:hover::after {
+  content: " (show details)";
+}
+
+#environment-header h2:hover::after {
+  content: " (hide details)";
+  color: #bbb;
+  font-style: italic;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+#environment-header.collapsed h2:hover::after {
+  content: " (show details)";
+  color: #bbb;
+  font-style: italic;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+/*------------------
+ * 3. Sorting items
+ *------------------*/
+.sortable {
+  cursor: pointer;
+}
+.sortable.desc:after {
+  content: " ";
+  position: relative;
+  left: 5px;
+  bottom: -12.5px;
+  border: 10px solid #4caf50;
+  border-bottom: 0;
+  border-left-color: transparent;
+  border-right-color: transparent;
+}
+.sortable.asc:after {
+  content: " ";
+  position: relative;
+  left: 5px;
+  bottom: 12.5px;
+  border: 10px solid #4caf50;
+  border-top: 0;
+  border-left-color: transparent;
+  border-right-color: transparent;
+}
+
+.hidden, .summary__reload__button.hidden {
+  display: none;
+}
+
+.summary__data {
+  flex: 0 0 550px;
+}
+.summary__reload {
+  flex: 1 1;
+  display: flex;
+  justify-content: center;
+}
+.summary__reload__button {
+  flex: 0 0 300px;
+  display: flex;
+  color: white;
+  font-weight: bold;
+  background-color: #4caf50;
+  text-align: center;
+  justify-content: center;
+  align-items: center;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.summary__reload__button:hover {
+  background-color: #46a049;
+}
+.summary__spacer {
+  flex: 0 0 550px;
+}
+
+.controls {
+  display: flex;
+  justify-content: space-between;
+}
+
+.filters,
+.collapse {
+  display: flex;
+  align-items: center;
+}
+.filters button,
+.collapse button {
+  color: #999;
+  border: none;
+  background: none;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.filters button:hover,
+.collapse button:hover {
+  color: #ccc;
+}
+
+.filter__label {
+  margin-right: 10px;
+}
+
+      </style>
+    
+  </head>
+  <body>
+    <h1 id="title">test-results.html</h1>
+    <p>Report generated on 15-Nov-2025 at 23:16:11 by <a href="https://pypi.python.org/pypi/pytest-html">pytest-html</a>
+        v4.1.1</p>
+    <div id="environment-header">
+      <h2>Environment</h2>
+    </div>
+    <table id="environment"></table>
+    <!-- TEMPLATES -->
+      <template id="template_environment_row">
+      <tr>
+        <td></td>
+        <td></td>
+      </tr>
+    </template>
+    <template id="template_results-table__body--empty">
+      <tbody class="results-table-row">
+        <tr id="not-found-message">
+          <td colspan="4">No results found. Check the filters.</th>
+        </tr>
+    </template>
+    <template id="template_results-table__tbody">
+      <tbody class="results-table-row">
+        <tr class="collapsible">
+        </tr>
+        <tr class="extras-row">
+          <td class="extra" colspan="4">
+            <div class="extraHTML"></div>
+            <div class="media">
+              <div class="media-container">
+                  <div class="media-container__nav--left"><</div>
+                  <div class="media-container__viewport">
+                    <img src="" />
+                    <video controls>
+                      <source src="" type="video/mp4">
+                    </video>
+                  </div>
+                  <div class="media-container__nav--right">></div>
+                </div>
+                <div class="media__name"></div>
+                <div class="media__counter"></div>
+            </div>
+            <div class="logwrapper">
+              <div class="logexpander"></div>
+              <div class="log"></div>
+            </div>
+          </td>
+        </tr>
+      </tbody>
+    </template>
+    <!-- END TEMPLATES -->
+    <div class="summary">
+      <div class="summary__data">
+        <h2>Summary</h2>
+        <div class="additional-summary prefix">
+        </div>
+        <p class="run-count">1 test took 00:01:51.</p>
+        <p class="filter">(Un)check the boxes to filter the results.</p>
+        <div class="summary__reload">
+          <div class="summary__reload__button hidden" onclick="location.reload()">
+            <div>There are still tests running. <br />Reload this page to get the latest results!</div>
+          </div>
+        </div>
+        <div class="summary__spacer"></div>
+        <div class="controls">
+          <div class="filters">
+            <input checked="true" class="filter" name="filter_checkbox" type="checkbox" data-test-result="failed" />
+            <span class="failed">1 Failed,</span>
+            <input checked="true" class="filter" name="filter_checkbox" type="checkbox" data-test-result="passed" disabled/>
+            <span class="passed">0 Passed,</span>
+            <input checked="true" class="filter" name="filter_checkbox" type="checkbox" data-test-result="skipped" disabled/>
+            <span class="skipped">0 Skipped,</span>
+            <input checked="true" class="filter" name="filter_checkbox" type="checkbox" data-test-result="xfailed" disabled/>
+            <span class="xfailed">0 Expected failures,</span>
+            <input checked="true" class="filter" name="filter_checkbox" type="checkbox" data-test-result="xpassed" disabled/>
+            <span class="xpassed">0 Unexpected passes,</span>
+            <input checked="true" class="filter" name="filter_checkbox" type="checkbox" data-test-result="error" disabled/>
+            <span class="error">0 Errors,</span>
+            <input checked="true" class="filter" name="filter_checkbox" type="checkbox" data-test-result="rerun" disabled/>
+            <span class="rerun">0 Reruns</span>
+          </div>
+          <div class="collapse">
+            <button id="show_all_details">Show all details</button>&nbsp;/&nbsp;<button id="hide_all_details">Hide all details</button>
+          </div>
+        </div>
+      </div>
+      <div class="additional-summary summary">
+      </div>
+      <div class="additional-summary postfix">
+      </div>
+    </div>
+    <table id="results-table">
+      <thead id="results-table-head">
+        <tr>
+          <th class="sortable" data-column-type="result">Result</th>
+          <th class="sortable" data-column-type="testId">Test</th>
+          <th class="sortable" data-column-type="duration">Duration</th>
+          <th>Links</th>
+        </tr>
+      </thead>
+    </table>
+  </body>
+  <footer>
+    <div id="data-container" data-jsonblob="{&#34;environment&#34;: {&#34;Python&#34;: &#34;3.12.11&#34;, &#34;Platform&#34;: &#34;macOS-15.7.1-arm64-i386-64bit&#34;, &#34;Packages&#34;: {&#34;pytest&#34;: &#34;8.4.1&#34;, &#34;pluggy&#34;: &#34;1.6.0&#34;}, &#34;Plugins&#34;: {&#34;html&#34;: &#34;4.1.1&#34;, &#34;xdist&#34;: &#34;3.8.0&#34;, &#34;metadata&#34;: &#34;3.1.1&#34;, &#34;anyio&#34;: &#34;4.10.0&#34;, &#34;cov&#34;: &#34;6.2.1&#34;}}, &#34;tests&#34;: {&#34;tests/integration/basic_app/test_basic_app.py::TestBasicApp::test_basic_app_workflow&#34;: [{&#34;extras&#34;: [], &#34;result&#34;: &#34;Failed&#34;, &#34;testId&#34;: &#34;tests/integration/basic_app/test_basic_app.py::TestBasicApp::test_basic_app_workflow&#34;, &#34;duration&#34;: &#34;00:01:51&#34;, &#34;resultsTableRow&#34;: [&#34;&lt;td class=\&#34;col-result\&#34;&gt;Failed&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-testId\&#34;&gt;tests/integration/basic_app/test_basic_app.py::TestBasicApp::test_basic_app_workflow&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-duration\&#34;&gt;00:01:51&lt;/td&gt;&#34;, &#34;&lt;td class=\&#34;col-links\&#34;&gt;&lt;/td&gt;&#34;], &#34;log&#34;: &#34;experimental/SMUS-CICD-pipeline-cli/tests/integration/basic_app/test_basic_app.py:192: in test_basic_app_workflow\n    assert result[&amp;quot;success&amp;quot;], f&amp;quot;Run workflow failed: {result[&amp;#x27;output&amp;#x27;]}&amp;quot;\nE   AssertionError: Run workflow failed: \ud83c\udfaf Target: test (Serverless Airflow)\nE     \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\nE     \ud83d\ude80 Starting workflow run: BasicTestBundle_test_project_basic_basic_test_workflow\nE     \ud83d\udd17 ARN: arn:aws:airflow-serverless:us-east-2:198737698272:workflow/BasicTestBundle_test_project_basic_basic_test_workflow-oEi60Hn0AS\nE     \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\nE     2025-11-15 23:16:11,116 - smus_cicd.airflow_serverless - INFO - Starting workflow run for: arn:aws:airflow-serverless:us-east-2:198737698272:workflow/BasicTestBundle_test_project_basic_basic_test_workflow-oEi60Hn0AS\nE     2025-11-15 23:16:11,263 - smus_cicd.airflow_serverless - ERROR - Failed to start workflow run for arn:aws:airflow-serverless:us-east-2:198737698272:workflow/BasicTestBundle_test_project_basic_basic_test_workflow-oEi60Hn0AS: An error occurred (ValidationException) when calling the StartWorkflowRun operation: Workflow execution role could not be assumed by the airflow-serverless service\nE     \u274c Error executing Overdrive workflow: Failed to start workflow run for arn:aws:airflow-serverless:us-east-2:198737698272:workflow/BasicTestBundle_test_project_basic_basic_test_workflow-oEi60Hn0AS: An error occurred (ValidationException) when calling the StartWorkflowRun operation: Workflow execution role could not be assumed by the airflow-serverless service\nE     \u274c Error: executing workflow &amp;#x27;basic_test_workflow&amp;#x27; command &amp;#x27;trigger&amp;#x27;: 1\nE     \nE   assert False\n\n---------------------------- Captured stdout setup -----------------------------\n\u2705 AWS credentials verified: arn:aws:sts::198737698272:assumed-role/Admin/amirbo-Isengard\n\u2705 arn:aws:iam::198737698272:role/Admin is already a Lake Formation admin\n\ud83e\uddf9 Cleaning up existing test project...\n\u26a0\ufe0f Project cleanup had issues: Error: Manifest validation failed for \n/var/folders/g7/jvhxynrd55qbxdhmnq_76k1w0000gq/T/smus_integration_test_e5fm0xg0/\nmanifest.yaml:\n  - File not found: \n/var/folders/g7/jvhxynrd55qbxdhmnq_76k1w0000gq/T/smus_integration_test_e5fm0xg0/\nmanifest.yaml\n\n\n---------------------------- Captured stderr setup -----------------------------\n\ud83d\udd0d === Integration Test Debug Log Started ===\n\ud83d\udd0d Debug log file: tests/test-outputs/TestBasicApp__test_basic_app_workflow.log\n\ud83d\udd0d === Starting test: test_basic_app_workflow ===\n\ud83d\udd0d Test start time: 1763266460.588923\n\ud83d\udd0d EXECUTING CLI COMMAND: delete --targets test --manifest /var/folders/g7/jvhxynrd55qbxdhmnq_76k1w0000gq/T/smus_integration_test_e5fm0xg0/manifest.yaml --force\n\ud83d\udd0d   Error: Manifest validation failed for \n\ud83d\udd0d   /var/folders/g7/jvhxynrd55qbxdhmnq_76k1w0000gq/T/smus_integration_test_e5fm0xg0/\n\ud83d\udd0d   manifest.yaml:\n\ud83d\udd0d     - File not found: \n\ud83d\udd0d   /var/folders/g7/jvhxynrd55qbxdhmnq_76k1w0000gq/T/smus_integration_test_e5fm0xg0/\n\ud83d\udd0d   manifest.yaml\n\ud83d\udd0d COMMAND COMPLETED in 0.02s - Exit code: 1\n\ud83d\udd0d COMMAND FAILED - Expected exit code 0, got 1\n\n------------------------------ Captured log setup ------------------------------\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:66 === Integration Test Debug Log Started ===\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:67 Debug log file: tests/test-outputs/TestBasicApp__test_basic_app_workflow.log\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:91 === Starting test: test_basic_app_workflow ===\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:92 Test start time: 1763266460.588923\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:450 EXECUTING CLI COMMAND: delete --targets test --manifest /var/folders/g7/jvhxynrd55qbxdhmnq_76k1w0000gq/T/smus_integration_test_e5fm0xg0/manifest.yaml --force\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   Error: Manifest validation failed for \nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   /var/folders/g7/jvhxynrd55qbxdhmnq_76k1w0000gq/T/smus_integration_test_e5fm0xg0/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   manifest.yaml:\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     - File not found: \nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   /var/folders/g7/jvhxynrd55qbxdhmnq_76k1w0000gq/T/smus_integration_test_e5fm0xg0/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   manifest.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:464 COMMAND COMPLETED in 0.02s - Exit code: 1\nERROR    integration_test_TestBasicApp__test_basic_app_workflow:base.py:481 COMMAND FAILED - Expected exit code 0, got 1\n\n----------------------------- Captured stdout call -----------------------------\n\n=== Step 0: Setup EventBridge Monitoring ===\n  Cleaning up from previous runs...\n  Creating log group: /aws/events/smus-cicd-test\n  \u2713 Added resource policy for EventBridge\n  Creating EventBridge rule: smus-cicd-test-rule\n  \u2713 EventBridge monitoring ready to capture events\n\n=== Step 0: Cleanup Existing Workflow ===\n\n=== Step 1: Describe with Connections ===\n\u2705 Describe --connect successful\n\n=== Step 2: Upload Code and Workflows to S3 ===\n\ud83d\udd04 Syncing /Users/amirbo/code/smus/experimental/SMUS-CICD-pipeline-cli/tests/integration/basic_app/code to s3://amazon-sagemaker-198737698272-us-east-2-b1rdp2ugixo97t/shared/\n   Exclude patterns: [&amp;#x27;*.pyc&amp;#x27;, &amp;#x27;__pycache__/*&amp;#x27;]\n\u2705 Successfully synced to s3://amazon-sagemaker-198737698272-us-east-2-b1rdp2ugixo97t/shared/\n\ud83d\udd04 Syncing /Users/amirbo/code/smus/experimental/SMUS-CICD-pipeline-cli/tests/integration/basic_app/code/src to s3://amazon-sagemaker-198737698272-us-east-2-b1rdp2ugixo97t/shared/code/src/\n   Exclude patterns: [&amp;#x27;*.pyc&amp;#x27;, &amp;#x27;__pycache__/*&amp;#x27;]\n\u2705 Successfully synced to s3://amazon-sagemaker-198737698272-us-east-2-b1rdp2ugixo97t/shared/code/src/\n\n=== Step 3: Bundle ===\n\u2705 Bundle successful\n\n=== Step 4: Deploy Test Target ===\n\u2705 Deploy test successful\n\n=== Step 5: Monitor ===\n\u2705 Monitor successful\n\n=== Step 6: Start Basic Test Workflow ===\n\n----------------------------- Captured stderr call -----------------------------\n\ud83d\udd0d CHECKING AWS connectivity...\n\ud83d\udd0d AWS identity verified: arn:aws:sts::198737698272:assumed-role/Admin/amirbo-Isengard\n\ud83d\udd0d DataZone access verified\n\ud83d\udd0d === STEP 1: Describe with Connections ===\n\ud83d\udd0d EXECUTING CLI COMMAND: describe --manifest /Users/amirbo/code/smus/experimental/SMUS-CICD-pipeline-cli/tests/integration/basic_app/manifest.yaml --connect\n\ud83d\udd0d   Pipeline: BasicTestBundle\n\ud83d\udd0d   Domain: None (us-east-2)\n\ud83d\udd0d   \n\ud83d\udd0d   Targets:\n\ud83d\udd0d     - dev: dev-marketing\n\ud83d\udd0d       Project ID: b1rdp2ugixo97t\n\ud83d\udd0d       Status: ACTIVE\n\ud83d\udd0d       Connections: (7 total)\n\ud83d\udd0d         default.iam:\n\ud83d\udd0d           connectionId: 4kcc8d5otve5yh\n\ud83d\udd0d           type: IAM\n\ud83d\udd0d           region: us-east-2\n\ud83d\udd0d         default.spark:\n\ud83d\udd0d           connectionId: c2y6a519rmg5d5\n\ud83d\udd0d           type: SPARK\n\ud83d\udd0d           region: us-east-2\n\ud83d\udd0d           sparkGlueProperties: {&amp;#x27;glueVersion&amp;#x27;: &amp;#x27;5.0&amp;#x27;, &amp;#x27;idleTimeout&amp;#x27;: 60, &amp;#x27;numberOfWorkers&amp;#x27;: 10, &amp;#x27;workerType&amp;#x27;: &amp;#x27;G.1X&amp;#x27;}\n\ud83d\udd0d           configurations: [{&amp;#x27;classification&amp;#x27;: &amp;#x27;GlueDefaultArgument&amp;#x27;, &amp;#x27;properties&amp;#x27;: {&amp;#x27;--enable-lakeformation-fine-grained-access&amp;#x27;: &amp;#x27;false&amp;#x27;}}]\n\ud83d\udd0d         default.s3:\n\ud83d\udd0d           connectionId: 6ivypa4qae4fft\n\ud83d\udd0d           type: S3\n\ud83d\udd0d           region: us-east-2\n\ud83d\udd0d           s3Uri: s3://\n\ud83d\udd0d         default.s3_shared:\n\ud83d\udd0d           connectionId: brp8a14bawfei1\n\ud83d\udd0d           type: S3\n\ud83d\udd0d           region: us-east-2\n\ud83d\udd0d           s3Uri: s3://amazon-sagemaker-198737698272-us-east-2-b1rdp2ugixo97t/shared/\n\ud83d\udd0d         default.catalog:\n\ud83d\udd0d           connectionId: 5rtr9rjgjjfju1\n\ud83d\udd0d           type: LAKEHOUSE\n\ud83d\udd0d           region: us-east-2\n\ud83d\udd0d         default.workflow_serverless:\n\ud83d\udd0d           connectionId: 48vazsyvv0bzc9\n\ud83d\udd0d           type: WORKFLOWS_SERVERLESS\n\ud83d\udd0d           region: us-east-2\n\ud83d\udd0d         default.sql:\n\ud83d\udd0d           connectionId: axbgd7m64p48fd\n\ud83d\udd0d           type: ATHENA\n\ud83d\udd0d           region: us-east-2\n\ud83d\udd0d           workgroupName: sagemaker-studio-workgroup-b1rdp2ugixo97t\n\ud83d\udd0d     - test: test-project-basic\n\ud83d\udd0d       Project ID: d8hb3wb11hjdih\n\ud83d\udd0d       Status: ACTIVE\n\ud83d\udd0d       Connections: (9 total)\n\ud83d\udd0d         default.iam:\n\ud83d\udd0d           connectionId: akcvql30z6lsfd\n\ud83d\udd0d           type: IAM\n\ud83d\udd0d           region: us-east-2\n\ud83d\udd0d         default.s3:\n\ud83d\udd0d           connectionId: 3yvc64ic9k23hl\n\ud83d\udd0d           type: S3\n\ud83d\udd0d           region: us-east-2\n\ud83d\udd0d           s3Uri: s3://\n\ud83d\udd0d         default.spark:\n\ud83d\udd0d           connectionId: cjn381bt9jjt49\n\ud83d\udd0d           type: SPARK\n\ud83d\udd0d           region: us-east-2\n\ud83d\udd0d           sparkGlueProperties: {&amp;#x27;glueVersion&amp;#x27;: &amp;#x27;5.0&amp;#x27;, &amp;#x27;idleTimeout&amp;#x27;: 60, &amp;#x27;numberOfWorkers&amp;#x27;: 10, &amp;#x27;workerType&amp;#x27;: &amp;#x27;G.1X&amp;#x27;}\n\ud83d\udd0d           configurations: [{&amp;#x27;classification&amp;#x27;: &amp;#x27;GlueDefaultArgument&amp;#x27;, &amp;#x27;properties&amp;#x27;: {&amp;#x27;--enable-lakeformation-fine-grained-access&amp;#x27;: &amp;#x27;false&amp;#x27;}}]\n\ud83d\udd0d         default.s3_shared:\n\ud83d\udd0d           connectionId: 6l8qfywk09xnop\n\ud83d\udd0d           type: S3\n\ud83d\udd0d           region: us-east-2\n\ud83d\udd0d           s3Uri: s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/\n\ud83d\udd0d         default.catalog:\n\ud83d\udd0d           connectionId: 6nztw93oved2g9\n\ud83d\udd0d           type: LAKEHOUSE\n\ud83d\udd0d           region: us-east-2\n\ud83d\udd0d         default.workflow_serverless:\n\ud83d\udd0d           connectionId: blo78nks7e8xbd\n\ud83d\udd0d           type: WORKFLOWS_SERVERLESS\n\ud83d\udd0d           region: us-east-2\n\ud83d\udd0d         default.sql:\n\ud83d\udd0d           connectionId: bei6bdb7bsg59l\n\ud83d\udd0d           type: ATHENA\n\ud83d\udd0d           region: us-east-2\n\ud83d\udd0d           workgroupName: sagemaker-studio-workgroup-d8hb3wb11hjdih\n\ud83d\udd0d         serverless.spark:\n\ud83d\udd0d           connectionId: ah9hh5911fxvop\n\ud83d\udd0d           type: SPARK_CONNECT\n\ud83d\udd0d           region: us-east-2\n\ud83d\udd0d         mlflow-server:\n\ud83d\udd0d           connectionId: atjw1nav1lgr6x\n\ud83d\udd0d           type: MLFLOW\n\ud83d\udd0d           region: us-east-2\n\ud83d\udd0d   \n\ud83d\udd0d   Manifest Workflows:\n\ud83d\udd0d     - basic_test_workflow\n\ud83d\udd0d       Connection: project.workflow_serverless\n\ud83d\udd0d       Engine: airflow-serverless\n\ud83d\udd0d     - expected_failure_workflow\n\ud83d\udd0d       Connection: project.workflow_serverless\n\ud83d\udd0d       Engine: airflow-serverless\n\ud83d\udd0d   \n\ud83d\udd0d   Initialization Connections:\n\ud83d\udd0d     Target: test\n\ud83d\udd0d       - mlflow-server (MLFLOW)\n\ud83d\udd0d         trackingServerName: smus-integration-mlflow-use2\n\ud83d\udd0d         trackingServerArn: arn:aws:sagemaker:us-east-2:058264284947:mlflow-tracking-server/smus-integration-mlflow-use2\n\ud83d\udd0d COMMAND COMPLETED in 4.70s - Exit code: 0\n\ud83d\udd0d Syncing /Users/amirbo/code/smus/experimental/SMUS-CICD-pipeline-cli/tests/integration/basic_app/code to s3://amazon-sagemaker-198737698272-us-east-2-b1rdp2ugixo97t/shared/\n\ud83d\udd0d \u2705 Successfully synced to s3://amazon-sagemaker-198737698272-us-east-2-b1rdp2ugixo97t/shared/\n\ud83d\udd0d Syncing /Users/amirbo/code/smus/experimental/SMUS-CICD-pipeline-cli/tests/integration/basic_app/code/src to s3://amazon-sagemaker-198737698272-us-east-2-b1rdp2ugixo97t/shared/code/src/\n\ud83d\udd0d \u2705 Successfully synced to s3://amazon-sagemaker-198737698272-us-east-2-b1rdp2ugixo97t/shared/code/src/\n\ud83d\udd0d === STEP 3: Bundle ===\n\ud83d\udd0d EXECUTING CLI COMMAND: bundle --manifest /Users/amirbo/code/smus/experimental/SMUS-CICD-pipeline-cli/tests/integration/basic_app/manifest.yaml\n\ud83d\udd0d   \ud83d\udd0d Bundle source: dev target\n\ud83d\udd0d   \ud83d\udce6 Bundle destination: default\n\ud83d\udd0d   Creating bundle for target: dev\n\ud83d\udd0d   Project: dev-marketing\n\ud83d\udd0d   Downloading &amp;#x27;code&amp;#x27; from S3: default.s3_shared (append: False)\n\ud83d\udd0d   \n\ud83d\udd0d   \ud83d\udcc2 S3 Source Content (Storage[code]):\n\ud83d\udd0d   \ud83d\udccd Location: s3://amazon-sagemaker-198737698272-us-east-2-b1rdp2ugixo97t/shared/\n\ud83d\udd0d   ==================================================\n\ud83d\udd0d   \u251c\u2500\u2500 \ud83d\udcc1 .ipynb_checkpoints/\n\ud83d\udd0d   \u251c\u2500\u2500 \ud83d\udcc1 app_tests/\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 .coverage\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 test_notebooks_execution.py\n\ud83d\udd0d   \u2502   \u2514\u2500\u2500 \ud83d\udcc1 tests/\n\ud83d\udd0d   \u2502       \u2514\u2500\u2500 \ud83d\udcc1 reports/\n\ud83d\udd0d   \u2502           \u2514\u2500\u2500 \ud83d\udcc4 test-results.html\n\ud83d\udd0d   \u251c\u2500\u2500 \ud83d\udcc1 code/\n\ud83d\udd0d   \u2502   \u2514\u2500\u2500 \ud83d\udcc1 src/\n\ud83d\udd0d   \u2502       \u251c\u2500\u2500 \ud83d\udcc4 basic_test_workflow.yaml\n\ud83d\udd0d   \u2502       \u251c\u2500\u2500 \ud83d\udcc4 expected_failure_workflow.yaml\n\ud83d\udd0d   \u2502       \u251c\u2500\u2500 \ud83d\udcc4 failing_notebook.ipynb\n\ud83d\udd0d   \u2502       \u2514\u2500\u2500 \ud83d\udcc4 param_test_notebook.ipynb\n\ud83d\udd0d   \u251c\u2500\u2500 \ud83d\udcc1 etl/\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc1 app_tests/\n\ud83d\udd0d   \u2502   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 .coverage\n\ud83d\udd0d   \u2502   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 test_covid_data.py\n\ud83d\udd0d   \u2502   \u2502   \u2514\u2500\u2500 \ud83d\udcc1 tests/\n\ud83d\udd0d   \u2502   \u2502       \u2514\u2500\u2500 \ud83d\udcc1 reports/\n\ud83d\udd0d   \u2502   \u2502           \u2514\u2500\u2500 \ud83d\udcc4 test-results.html\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 covid_etl_workflow.yaml\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 etl_bundle.yaml\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 glue_covid_summary_job.py\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 glue_s3_list_job.py\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 glue_setup_covid_db.py\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 manifest.yaml\n\ud83d\udd0d   \u2502   \u2514\u2500\u2500 \ud83d\udcc1 pipeline_tests/\n\ud83d\udd0d   \u2502       \u251c\u2500\u2500 \ud83d\udcc4 .coverage\n\ud83d\udd0d   \u2502       \u251c\u2500\u2500 \ud83d\udcc4 test_covid_data.py\n\ud83d\udd0d   \u2502       \u2514\u2500\u2500 \ud83d\udcc1 tests/\n\ud83d\udd0d   \u2502           \u2514\u2500\u2500 \ud83d\udcc1 reports/\n\ud83d\udd0d   \u2502               \u2514\u2500\u2500 \ud83d\udcc4 test-results.html\n\ud83d\udd0d   \u251c\u2500\u2500 \ud83d\udcc1 genai/\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 README.md\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc1 app_tests/\n\ud83d\udd0d   \u2502   \u2502   \u2514\u2500\u2500 \ud83d\udcc4 .gitkeep\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 genai_bundle.yaml\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc1 job-code/\n\ud83d\udd0d   \u2502   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 lambda_mask_string.py\n\ud83d\udd0d   \u2502   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 requirements.txt\n\ud83d\udd0d   \u2502   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 test_agent.yaml\n\ud83d\udd0d   \u2502   \u2502   \u2514\u2500\u2500 \ud83d\udcc1 utils/\n\ud83d\udd0d   \u2502   \u2502       \u251c\u2500\u2500 \ud83d\udcc4 README.md\n\ud83d\udd0d   \u2502   \u2502       \u251c\u2500\u2500 \ud83d\udcc4 __init__.py\n\ud83d\udd0d   \u2502   \u2502       \u251c\u2500\u2500 \ud83d\udcc4 bedrock_agent.py\n\ud83d\udd0d   \u2502   \u2502       \u251c\u2500\u2500 \ud83d\udcc4 bedrock_agent_helper.py\n\ud83d\udd0d   \u2502   \u2502       \u2514\u2500\u2500 \ud83d\udcc4 knowledge_base_helper.py\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 manifest.yaml\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc1 pipeline_tests/\n\ud83d\udd0d   \u2502   \u2502   \u2514\u2500\u2500 \ud83d\udcc4 .gitkeep\n\ud83d\udd0d   \u2502   \u2514\u2500\u2500 \ud83d\udcc1 workflows/\n\ud83d\udd0d   \u2502       \u251c\u2500\u2500 \ud83d\udcc4 bedrock_agent_notebook.ipynb\n\ud83d\udd0d   \u2502       \u2514\u2500\u2500 \ud83d\udcc4 genai_dev_workflow.yaml\n\ud83d\udd0d   \u251c\u2500\u2500 \ud83d\udcc4 manifest.yaml\n\ud83d\udd0d   \u251c\u2500\u2500 \ud83d\udcc1 ml/\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 .DS_Store\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 README.md\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc1 deployment/\n\ud83d\udd0d   \u2502   \u2502   \u251c\u2500\u2500 \ud83d\udcc1 code/\n\ud83d\udd0d   \u2502   \u2502   \u2502   \u2514\u2500\u2500 \ud83d\udcc4 inference.py\n\ud83d\udd0d   \u2502   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 manifest.yaml\n\ud83d\udd0d   \u2502   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 ml_deployment_bundle.yaml\n\ud83d\udd0d   \u2502   \u2502   \u2514\u2500\u2500 \ud83d\udcc1 workflows/\n\ud83d\udd0d   \u2502   \u2502       \u251c\u2500\u2500 \ud83d\udcc4 ml_deployment_notebook.ipynb\n\ud83d\udd0d   \u2502   \u2502       \u2514\u2500\u2500 \ud83d\udcc4 ml_deployment_workflow.yaml\n\ud83d\udd0d   \u2502   \u2514\u2500\u2500 \ud83d\udcc1 training/\n\ud83d\udd0d   \u2502       \u251c\u2500\u2500 \ud83d\udcc1 code/\n\ud83d\udd0d   \u2502       \u2502   \u251c\u2500\u2500 \ud83d\udcc4 requirements.txt\n\ud83d\udd0d   \u2502       \u2502   \u2514\u2500\u2500 \ud83d\udcc4 sagemaker_training_script.py\n\ud83d\udd0d   \u2502       \u251c\u2500\u2500 \ud83d\udcc4 manifest.yaml\n\ud83d\udd0d   \u2502       \u251c\u2500\u2500 \ud83d\udcc4 ml_training_bundle.yaml\n\ud83d\udd0d   \u2502       \u2514\u2500\u2500 \ud83d\udcc1 workflows/\n\ud83d\udd0d   \u2502           \u251c\u2500\u2500 \ud83d\udcc1 .ipynb_checkpoints/\n\ud83d\udd0d   \u2502           \u251c\u2500\u2500 \ud83d\udcc4 ml_training_notebook.ipynb\n\ud83d\udd0d   \u2502           \u2514\u2500\u2500 \ud83d\udcc4 ml_training_workflow.yaml\n\ud83d\udd0d   \u251c\u2500\u2500 \ud83d\udcc1 notebooks/\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 00_basic_python_pandas.ipynb\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 04_gdc_athena.ipynb\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 05_customer_churn_spark.ipynb\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 06_purchase_analytics_duckdb.ipynb\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 08_genai_etl_pandas.ipynb\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 09_city_temperature_spark.ipynb\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 10_time_series_chronos.ipynb\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 11_movie_sales_dynamodb.ipynb\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 12_classification_mlflow.ipynb\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 City Temperature ETL and Data Prep with Spark.ipynb\n\ud83d\udd0d   \u2502   \u2514\u2500\u2500 \ud83d\udcc1 notebooks/\n\ud83d\udd0d   \u2502       \u2514\u2500\u2500 \ud83d\udcc1 .ipynb_checkpoints/\n\ud83d\udd0d   \u251c\u2500\u2500 \ud83d\udcc1 src/\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 basic_test_workflow.yaml\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 expected_failure_workflow.yaml\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 failing_notebook.ipynb\n\ud83d\udd0d   \u2502   \u2514\u2500\u2500 \ud83d\udcc4 param_test_notebook.ipynb\n\ud83d\udd0d   \u2514\u2500\u2500 \ud83d\udcc1 workflows/\n\ud83d\udd0d       \u2514\u2500\u2500 \ud83d\udcc4 parallel_notebooks_workflow.yaml\n\ud83d\udd0d   ==================================================\n\ud83d\udd0d   \ud83d\udcca Total files found: 66\n\ud83d\udd0d   \n\ud83d\udd0d     \ud83d\udd0d DEBUG download_s3_files: section_type=code, target_dir=/var/folders/g7/jvhxynrd55qbxdhmnq_76k1w0000gq/T/smus_bundle_5bkfdfzr/code\n\ud83d\udd0d     \ud83d\udd0d DEBUG download_s3_files: s3_uri=s3://amazon-sagemaker-198737698272-us-east-2-b1rdp2ugixo97t/shared/, patterns=[&amp;#x27;code/src/&amp;#x27;]\n\ud83d\udd0d     \ud83d\udd0d Running: aws s3 sync s3://amazon-sagemaker-198737698272-us-east-2-b1rdp2ugixo97t/shared/code/src/ /var/folders/g7/jvhxynrd55qbxdhmnq_76k1w0000gq/T/smus_bundle_5bkfdfzr/code --exclude *.pyc --exclude __pycache__/* --exclude .ipynb_checkpoints/*\n\ud83d\udd0d     Downloaded: param_test_notebook.ipynb\n\ud83d\udd0d     Downloaded: failing_notebook.ipynb\n\ud83d\udd0d     Downloaded: expected_failure_workflow.yaml\n\ud83d\udd0d     Downloaded: basic_test_workflow.yaml\n\ud83d\udd0d     Downloaded 4 files for &amp;#x27;code&amp;#x27;\n\ud83d\udd0d   Cloning Git repository: covid-19-dateset\n\ud83d\udd0d     Cloned 15 files from covid-19-dateset\n\ud83d\udd0d   Creating archive: BasicTestBundle.zip\n\ud83d\udd0d   \u2705 Bundle created: ./artifacts/BasicTestBundle.zip (37456323 bytes)\n\ud83d\udd0d   \n\ud83d\udd0d   \ud83d\udce6 Bundle Contents:\n\ud83d\udd0d   ==================================================\n\ud83d\udd0d   \u251c\u2500\u2500 code/\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 basic_test_workflow.yaml\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 expected_failure_workflow.yaml\n\ud83d\udd0d   \u2502   \u251c\u2500\u2500 failing_notebook.ipynb\n\ud83d\udd0d   \u2502   \u2514\u2500\u2500 param_test_notebook.ipynb\n\ud83d\udd0d   \u2514\u2500\u2500 repositories/\n\ud83d\udd0d       \u2514\u2500\u2500 covid-19-dateset/\n\ud83d\udd0d           \u251c\u2500\u2500 README.md\n\ud83d\udd0d           \u251c\u2500\u2500 data/\n\ud83d\udd0d           \u2502   \u251c\u2500\u2500 countries-aggregated.csv\n\ud83d\udd0d           \u2502   \u251c\u2500\u2500 key-countries-pivoted.csv\n\ud83d\udd0d           \u2502   \u251c\u2500\u2500 reference.csv\n\ud83d\udd0d           \u2502   \u251c\u2500\u2500 time-series-19-covid-combined.csv\n\ud83d\udd0d           \u2502   \u251c\u2500\u2500 us_confirmed.csv\n\ud83d\udd0d           \u2502   \u251c\u2500\u2500 us_deaths.csv\n\ud83d\udd0d           \u2502   \u251c\u2500\u2500 us_simplified.csv\n\ud83d\udd0d           \u2502   \u2514\u2500\u2500 worldwide-aggregate.csv\n\ud83d\udd0d           \u251c\u2500\u2500 datapackage.json\n\ud83d\udd0d           \u2514\u2500\u2500 scripts/\n\ud83d\udd0d               \u251c\u2500\u2500 process_us.py\n\ud83d\udd0d               \u251c\u2500\u2500 process_worldwide.py\n\ud83d\udd0d               \u251c\u2500\u2500 requirements.txt\n\ud83d\udd0d               \u2514\u2500\u2500 update_datapackage.py\n\ud83d\udd0d   ==================================================\n\ud83d\udd0d   \ud83d\udcca Total files: 18\n\ud83d\udd0d   Bundle creation complete for target: dev\n\ud83d\udd0d COMMAND COMPLETED in 33.12s - Exit code: 0\n\ud83d\udd0d === STEP 4: Deploy Test Target ===\n\ud83d\udd0d EXECUTING CLI COMMAND: deploy test --manifest /Users/amirbo/code/smus/experimental/SMUS-CICD-pipeline-cli/tests/integration/basic_app/manifest.yaml\n\ud83d\udd0d   Deploying to target: test\n\ud83d\udd0d   Project: test-project-basic\n\ud83d\udd0d   Domain: None\n\ud83d\udd0d   Region: us-east-2\n\ud83d\udd0d   \ud83d\udd0d EventEmitter initialized: enabled=True, bus=default, region=us-east-2\n\ud83d\udd0d   \ud83d\udd0d Metadata collected: True\n\ud83d\udd0d   \ud83d\udd0d Deploy started event emitted: True\n\ud83d\udd0d   \u2705 \u2705 Project &amp;#x27;test-project-basic&amp;#x27; already exists\n\ud83d\udd0d   Updating project stack tags...\n\ud83d\udd0d   \u26a0\ufe0f  Stack BasicTestBundle-test-test-project-basic not found - project was created outside CICD, skipping tag update\n\ud83d\udd0d   \u26a0\ufe0f Project memberships cannot be updated for existing projects - use CloudFormation console to modify memberships\n\ud83d\udd0d   \ud83d\udd0d DEBUG: _ensure_environments_exist called for target: test\n\ud83d\udd0d   \ud83d\udd0d DEBUG: target_config.initialization exists: True\n\ud83d\udd0d   \ud83d\udd0d DEBUG: target_config.initialization type: &amp;lt;class &amp;#x27;smus_cicd.application.application_manifest.InitializationConfig&amp;#x27;&amp;gt;\n\ud83d\udd0d   \ud83d\udd0d DEBUG: target_config.initialization attributes: [&amp;#x27;__annotations__&amp;#x27;, &amp;#x27;__class__&amp;#x27;, &amp;#x27;__dataclass_fields__&amp;#x27;, &amp;#x27;__dataclass_params__&amp;#x27;, &amp;#x27;__delattr__&amp;#x27;, &amp;#x27;__dict__&amp;#x27;, &amp;#x27;__dir__&amp;#x27;, &amp;#x27;__doc__&amp;#x27;, &amp;#x27;__eq__&amp;#x27;, &amp;#x27;__format__&amp;#x27;, &amp;#x27;__ge__&amp;#x27;, &amp;#x27;__getattribute__&amp;#x27;, &amp;#x27;__getstate__&amp;#x27;, &amp;#x27;__gt__&amp;#x27;, &amp;#x27;__hash__&amp;#x27;, &amp;#x27;__init__&amp;#x27;, &amp;#x27;__init_subclass__&amp;#x27;, &amp;#x27;__le__&amp;#x27;, &amp;#x27;__lt__&amp;#x27;, &amp;#x27;__match_args__&amp;#x27;, &amp;#x27;__module__&amp;#x27;, &amp;#x27;__ne__&amp;#x27;, &amp;#x27;__new__&amp;#x27;, &amp;#x27;__reduce__&amp;#x27;, &amp;#x27;__reduce_ex__&amp;#x27;, &amp;#x27;__repr__&amp;#x27;, &amp;#x27;__setattr__&amp;#x27;, &amp;#x27;__sizeof__&amp;#x27;, &amp;#x27;__str__&amp;#x27;, &amp;#x27;__subclasshook__&amp;#x27;, &amp;#x27;__weakref__&amp;#x27;, &amp;#x27;connections&amp;#x27;, &amp;#x27;domain&amp;#x27;, &amp;#x27;environments&amp;#x27;, &amp;#x27;project&amp;#x27;]\n\ud83d\udd0d   \ud83d\udd0d DEBUG: hasattr environments: True\n\ud83d\udd0d   \ud83d\udd0d DEBUG: environments value: []\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Resolved project_id: d8hb3wb11hjdih, domain_id: dzd-614fzsz5nulxm1\n\ud83d\udd0d   \ud83d\udd17 Creating connection: project.mlflow-server.mlflow (MLFLOW)\n\ud83d\udd0d   \ud83d\udd0d DEBUG: MLflow props being returned: {&amp;#x27;mlflowProperties&amp;#x27;: {&amp;#x27;trackingServerArn&amp;#x27;: &amp;#x27;arn:aws:sagemaker:us-east-2:058264284947:mlflow-tracking-server/smus-integration-mlflow-use2&amp;#x27;, &amp;#x27;trackingServerName&amp;#x27;: &amp;#x27;smus-integration-mlflow-use2&amp;#x27;}}\n\ud83d\udd0d   \u26a0\ufe0f  Failed to create connection project.mlflow-server.mlflow: Failed to create MLFLOW connection &amp;#x27;mlflow-server&amp;#x27;: An error occurred (ConflictException) when calling the CreateConnection operation: Conflict with connection atjw1nav1lgr6x\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Checking environments for project d8hb3wb11hjdih\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Existing environments: [&amp;#x27;ToolingLite&amp;#x27;]\n\ud83d\udd0d   Bundle file: ./artifacts/BasicTestBundle.zip\n\ud83d\udd0d   \ud83d\udd0d DEBUG _deploy_storage_item: name=&amp;#x27;code&amp;#x27;, has_targetDirectory=True\n\ud83d\udd0d   \ud83d\udd0d DEBUG _deploy_storage_item: targetDirectory=&amp;#x27;.&amp;#x27;\n\ud83d\udd0d   \ud83d\udd0d DEBUG _deploy_storage_item: target_dir=&amp;#x27;.&amp;#x27;\n\ud83d\udd0d   Deploying storage item &amp;#x27;code&amp;#x27; to ....\n\ud83d\udd0d     \ud83d\udd0d DEBUG deploy_files: target_directory=&amp;#x27;.&amp;#x27; (type: str)\n\ud83d\udd0d     \ud83d\udd0d DEBUG deploy_files: s3_uri=&amp;#x27;s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/&amp;#x27;\n\ud83d\udd0d     \ud83d\udd0d DEBUG deploy_files: target_directory normalized to empty (was: &amp;#x27;.&amp;#x27;)\n\ud83d\udd0d     \ud83d\udd0d DEBUG deploy_files: No target_directory, full_s3_path=&amp;#x27;s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/&amp;#x27;\n\ud83d\udd0d     S3 Location: s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/\n\ud83d\udd0d     \ud83d\udd0d DEBUG: temp_dir=/var/folders/g7/jvhxynrd55qbxdhmnq_76k1w0000gq/T/tmpl03cx4ql/code, source_folder=/var/folders/g7/jvhxynrd55qbxdhmnq_76k1w0000gq/T/tmpl03cx4ql/code\n\ud83d\udd0d     \ud83d\udd0d DEBUG: source_path=/var/folders/g7/jvhxynrd55qbxdhmnq_76k1w0000gq/T/tmpl03cx4ql/code, is_abs=True\n\ud83d\udd0d     \ud83d\udd0d DEBUG: full_s3_path=s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/\n\ud83d\udd0d       Synced: basic_test_workflow.yaml\n\ud83d\udd0d       Synced: failing_notebook.ipynb\n\ud83d\udd0d       Synced: param_test_notebook.ipynb\n\ud83d\udd0d       Synced: expected_failure_workflow.yaml\n\ud83d\udd0d   Deploying git repository to ...\n\ud83d\udd0d     \ud83d\udd0d DEBUG deploy_files: target_directory=&amp;#x27;&amp;#x27; (type: str)\n\ud83d\udd0d     \ud83d\udd0d DEBUG deploy_files: s3_uri=&amp;#x27;s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/&amp;#x27;\n\ud83d\udd0d     \ud83d\udd0d DEBUG deploy_files: target_directory normalized to empty (was: &amp;#x27;&amp;#x27;)\n\ud83d\udd0d     \ud83d\udd0d DEBUG deploy_files: No target_directory, full_s3_path=&amp;#x27;s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/&amp;#x27;\n\ud83d\udd0d     S3 Location: s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/\n\ud83d\udd0d     \ud83d\udd0d DEBUG: temp_dir=/var/folders/g7/jvhxynrd55qbxdhmnq_76k1w0000gq/T/tmpl0kpb6y9/repositories/covid-19-dateset, source_folder=/var/folders/g7/jvhxynrd55qbxdhmnq_76k1w0000gq/T/tmpl0kpb6y9/repositories/covid-19-dateset\n\ud83d\udd0d     \ud83d\udd0d DEBUG: source_path=/var/folders/g7/jvhxynrd55qbxdhmnq_76k1w0000gq/T/tmpl0kpb6y9/repositories/covid-19-dateset, is_abs=True\n\ud83d\udd0d     \ud83d\udd0d DEBUG: full_s3_path=s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/\n\ud83d\udd0d       Synced: .gitignore\n\ud83d\udd0d       Synced: README.md\n\ud83d\udd0d       Synced: key-countries-pivoted.csv\n\ud83d\udd0d       Synced: reference.csv\n\ud83d\udd0d       Synced: countries-aggregated.csv\n\ud83d\udd0d       Synced: us_deaths.csv\n\ud83d\udd0d       Synced: time-series-19-covid-combined.csv\n\ud83d\udd0d       Synced: worldwide-aggregate.csv\n\ud83d\udd0d       Synced: datapackage.json\n\ud83d\udd0d       Synced: process_us.py\n\ud83d\udd0d       Synced: process_worldwide.py\n\ud83d\udd0d       Synced: requirements.txt\n\ud83d\udd0d       Synced: update_datapackage.py\n\ud83d\udd0d       Synced: us_confirmed.csv\n\ud83d\udd0d       Synced: us_simplified.csv\n\ud83d\udd0d   \n\ud83d\udd0d   \ud83d\udce6 Deployment Summary:\n\ud83d\udd0d     \u2705 Storage item 1: 4 files \u2192 s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/\n\ud83d\udd0d     \u2705 Git item 1: 15 files \u2192 s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/\n\ud83d\udd0d   \ud83d\ude80 Creating serverless Airflow workflows...\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Downloading shared/basic_test_workflow.yaml from S3\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Original content length: 623\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Resolved content length: 666\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Content changed, uploading resolved version\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Uploading resolved content to s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/basic_test_workflow.yaml\n\ud83d\udd0d   \u2705 Resolved variables in shared/basic_test_workflow.yaml\n\ud83d\udd0d   \ud83d\udd0d DEBUG: About to call airflow_serverless.create_workflow with:\n\ud83d\udd0d   \ud83d\udd0d DEBUG: workflow_name=BasicTestBundle_test_project_basic_basic_test_workflow\n\ud83d\udd0d   \ud83d\udd0d DEBUG: dag_s3_location=s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/basic_test_workflow.yaml\n\ud83d\udd0d   \ud83d\udd0d DEBUG: role_arn=arn:aws:iam::198737698272:role/smus-test-project-basic-role\n\ud83d\udd0d   \ud83d\udd0d DEBUG: datazone_domain_id=dzd-614fzsz5nulxm1\n\ud83d\udd0d   \ud83d\udd0d DEBUG: datazone_project_id=d8hb3wb11hjdih\n\ud83d\udd0d   \ud83d\udd0d DEBUG ListConnections: region=us-east-2, domain_id=dzd-614fzsz5nulxm1, project_id=d8hb3wb11hjdih\n\ud83d\udd0d   \ud83d\udd0d DEBUG: get_project_connections called for project d8hb3wb11hjdih\n\ud83d\udd0d   \ud83d\udd0d DEBUG datazone.get_project_connections: region=us-east-2, domain_id=dzd-614fzsz5nulxm1, project_id=d8hb3wb11hjdih\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Page returned 9 connections\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing default.iam\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing default.s3\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing default.spark\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing default.s3_shared\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing default.catalog\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing default.workflow_serverless\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing default.sql\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing serverless.spark\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing mlflow-server\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Client region: us-east-2\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Client endpoint: default\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Create workflow request params: {&amp;#x27;Name&amp;#x27;: &amp;#x27;BasicTestBundle_test_project_basic_basic_test_workflow&amp;#x27;, &amp;#x27;DefinitionS3Location&amp;#x27;: {&amp;#x27;Bucket&amp;#x27;: &amp;#x27;amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih&amp;#x27;, &amp;#x27;ObjectKey&amp;#x27;: &amp;#x27;shared/basic_test_workflow.yaml&amp;#x27;}, &amp;#x27;RoleArn&amp;#x27;: &amp;#x27;arn:aws:iam::198737698272:role/smus-test-project-basic-role&amp;#x27;, &amp;#x27;Description&amp;#x27;: &amp;#x27;SMUS CI/CD workflow for BasicTestBundle&amp;#x27;, &amp;#x27;Tags&amp;#x27;: {&amp;#x27;Pipeline&amp;#x27;: &amp;#x27;BasicTestBundle&amp;#x27;, &amp;#x27;Target&amp;#x27;: &amp;#x27;test-project-basic&amp;#x27;, &amp;#x27;STAGE&amp;#x27;: &amp;#x27;TEST&amp;#x27;, &amp;#x27;CreatedBy&amp;#x27;: &amp;#x27;SMUS-CICD&amp;#x27;}, &amp;#x27;EnvironmentVariables&amp;#x27;: {&amp;#x27;DataZoneDomainRegion&amp;#x27;: &amp;#x27;us-east-2&amp;#x27;, &amp;#x27;DataZoneDomainId&amp;#x27;: &amp;#x27;dzd-614fzsz5nulxm1&amp;#x27;, &amp;#x27;DataZoneProjectId&amp;#x27;: &amp;#x27;d8hb3wb11hjdih&amp;#x27;, &amp;#x27;DataZoneEnvironmentId&amp;#x27;: &amp;#x27;co8wp5wvld1p2h&amp;#x27;}}\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Retrieved 9 total connections\n\ud83d\udd0d   \ud83d\udd0d DEBUG: get_project_connections called for project d8hb3wb11hjdih\n\ud83d\udd0d   \ud83d\udd0d DEBUG datazone.get_project_connections: region=us-east-2, domain_id=dzd-614fzsz5nulxm1, project_id=d8hb3wb11hjdih\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Page returned 9 connections\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing default.iam\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing default.s3\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing default.spark\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing default.s3_shared\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing default.catalog\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing default.workflow_serverless\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing default.sql\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing serverless.spark\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing mlflow-server\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\n\ud83d\udd0d   \ud83d\udd0d DEBUG: airflow_serverless.create_workflow returned: {&amp;#x27;workflow_arn&amp;#x27;: &amp;#x27;arn:aws:airflow-serverless:us-east-2:198737698272:workflow/BasicTestBundle_test_project_basic_basic_test_workflow-oEi60Hn0AS&amp;#x27;, &amp;#x27;workflow_version&amp;#x27;: &amp;#x27;cda3179b14fb64a49525d29928312a30&amp;#x27;, &amp;#x27;success&amp;#x27;: True, &amp;#x27;already_exists&amp;#x27;: True, &amp;#x27;updated&amp;#x27;: True}\n\ud83d\udd0d   \ud83d\udd0d DEBUG: result type: &amp;lt;class &amp;#x27;dict&amp;#x27;&amp;gt;\n\ud83d\udd0d   \ud83d\udd0d DEBUG: result keys: [&amp;#x27;workflow_arn&amp;#x27;, &amp;#x27;workflow_version&amp;#x27;, &amp;#x27;success&amp;#x27;, &amp;#x27;already_exists&amp;#x27;, &amp;#x27;updated&amp;#x27;]\n\ud83d\udd0d   \ud83d\udd0d DEBUG: result.get(&amp;#x27;success&amp;#x27;): True\n\ud83d\udd0d   \ud83d\udd0d DEBUG: result.get(&amp;#x27;error&amp;#x27;): None\n\ud83d\udd0d   \u2705 Created Overdrive workflow: BasicTestBundle_test_project_basic_basic_test_workflow\n\ud83d\udd0d      ARN: arn:aws:airflow-serverless:us-east-2:198737698272:workflow/BasicTestBundle_test_project_basic_basic_test_workflow-oEi60Hn0AS\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\n\ud83d\udd0d      Status: READY\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Downloading shared/expected_failure_workflow.yaml from S3\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Original content length: 590\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Resolved content length: 590\n\ud83d\udd0d   \ud83d\udd0d DEBUG: No variables found to resolve\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Uploading resolved content to s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/expected_failure_workflow.yaml\n\ud83d\udd0d   \u2705 Resolved variables in shared/expected_failure_workflow.yaml\n\ud83d\udd0d   \ud83d\udd0d DEBUG: About to call airflow_serverless.create_workflow with:\n\ud83d\udd0d   \ud83d\udd0d DEBUG: workflow_name=BasicTestBundle_test_project_basic_expected_failure_workflow\n\ud83d\udd0d   \ud83d\udd0d DEBUG: dag_s3_location=s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/expected_failure_workflow.yaml\n\ud83d\udd0d   \ud83d\udd0d DEBUG: role_arn=arn:aws:iam::198737698272:role/smus-test-project-basic-role\n\ud83d\udd0d   \ud83d\udd0d DEBUG: datazone_domain_id=dzd-614fzsz5nulxm1\n\ud83d\udd0d   \ud83d\udd0d DEBUG: datazone_project_id=d8hb3wb11hjdih\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Retrieved 9 total connections\n\ud83d\udd0d   \ud83d\udd0d DEBUG: get_project_connections called for project d8hb3wb11hjdih\n\ud83d\udd0d   \ud83d\udd0d DEBUG datazone.get_project_connections: region=us-east-2, domain_id=dzd-614fzsz5nulxm1, project_id=d8hb3wb11hjdih\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Page returned 9 connections\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing default.iam\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing default.s3\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing default.spark\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing default.s3_shared\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing default.catalog\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing default.workflow_serverless\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing default.sql\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing serverless.spark\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing mlflow-server\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Client region: us-east-2\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Client endpoint: default\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Create workflow request params: {&amp;#x27;Name&amp;#x27;: &amp;#x27;BasicTestBundle_test_project_basic_expected_failure_workflow&amp;#x27;, &amp;#x27;DefinitionS3Location&amp;#x27;: {&amp;#x27;Bucket&amp;#x27;: &amp;#x27;amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih&amp;#x27;, &amp;#x27;ObjectKey&amp;#x27;: &amp;#x27;shared/expected_failure_workflow.yaml&amp;#x27;}, &amp;#x27;RoleArn&amp;#x27;: &amp;#x27;arn:aws:iam::198737698272:role/smus-test-project-basic-role&amp;#x27;, &amp;#x27;Description&amp;#x27;: &amp;#x27;SMUS CI/CD workflow for BasicTestBundle&amp;#x27;, &amp;#x27;Tags&amp;#x27;: {&amp;#x27;Pipeline&amp;#x27;: &amp;#x27;BasicTestBundle&amp;#x27;, &amp;#x27;Target&amp;#x27;: &amp;#x27;test-project-basic&amp;#x27;, &amp;#x27;STAGE&amp;#x27;: &amp;#x27;TEST&amp;#x27;, &amp;#x27;CreatedBy&amp;#x27;: &amp;#x27;SMUS-CICD&amp;#x27;}, &amp;#x27;EnvironmentVariables&amp;#x27;: {&amp;#x27;DataZoneDomainRegion&amp;#x27;: &amp;#x27;us-east-2&amp;#x27;, &amp;#x27;DataZoneDomainId&amp;#x27;: &amp;#x27;dzd-614fzsz5nulxm1&amp;#x27;, &amp;#x27;DataZoneProjectId&amp;#x27;: &amp;#x27;d8hb3wb11hjdih&amp;#x27;, &amp;#x27;DataZoneEnvironmentId&amp;#x27;: &amp;#x27;co8wp5wvld1p2h&amp;#x27;}}\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Retrieved 9 total connections\n\ud83d\udd0d   \ud83d\udd0d DEBUG: get_project_connections called for project d8hb3wb11hjdih\n\ud83d\udd0d   \ud83d\udd0d DEBUG datazone.get_project_connections: region=us-east-2, domain_id=dzd-614fzsz5nulxm1, project_id=d8hb3wb11hjdih\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Page returned 9 connections\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing default.iam\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing default.s3\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing default.spark\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing default.s3_shared\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing default.catalog\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing default.workflow_serverless\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing default.sql\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing serverless.spark\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Processing mlflow-server\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\n\ud83d\udd0d   \ud83d\udd0d DEBUG: airflow_serverless.create_workflow returned: {&amp;#x27;workflow_arn&amp;#x27;: &amp;#x27;arn:aws:airflow-serverless:us-east-2:198737698272:workflow/BasicTestBundle_test_project_basic_expected_failure_workflow-cu19f7RUZJ&amp;#x27;, &amp;#x27;workflow_version&amp;#x27;: &amp;#x27;479e740e3413f5026c8900cf578b1358&amp;#x27;, &amp;#x27;success&amp;#x27;: True, &amp;#x27;already_exists&amp;#x27;: True, &amp;#x27;updated&amp;#x27;: True}\n\ud83d\udd0d   \ud83d\udd0d DEBUG: result type: &amp;lt;class &amp;#x27;dict&amp;#x27;&amp;gt;\n\ud83d\udd0d   \ud83d\udd0d DEBUG: result keys: [&amp;#x27;workflow_arn&amp;#x27;, &amp;#x27;workflow_version&amp;#x27;, &amp;#x27;success&amp;#x27;, &amp;#x27;already_exists&amp;#x27;, &amp;#x27;updated&amp;#x27;]\n\ud83d\udd0d   \ud83d\udd0d DEBUG: result.get(&amp;#x27;success&amp;#x27;): True\n\ud83d\udd0d   \ud83d\udd0d DEBUG: result.get(&amp;#x27;error&amp;#x27;): None\n\ud83d\udd0d   \u2705 Created Overdrive workflow: BasicTestBundle_test_project_basic_expected_failure_workflow\n\ud83d\udd0d      ARN: arn:aws:airflow-serverless:us-east-2:198737698272:workflow/BasicTestBundle_test_project_basic_expected_failure_workflow-cu19f7RUZJ\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\n\ud83d\udd0d      Status: READY\n\ud83d\udd0d   \n\ud83d\udd0d   \ud83c\udf89 Successfully created 2 Overdrive workflows\n\ud83d\udd0d   \ud83d\udccb No catalog assets configured\n\ud83d\udd0d   \u2705 Deployment completed successfully!\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Retrieved 9 total connections\n\ud83d\udd0d COMMAND COMPLETED in 49.95s - Exit code: 0\n\ud83d\udd0d === STEP 5: Monitor ===\n\ud83d\udd0d EXECUTING CLI COMMAND: monitor --targets test --manifest /Users/amirbo/code/smus/experimental/SMUS-CICD-pipeline-cli/tests/integration/basic_app/manifest.yaml\n\ud83d\udd0d   Pipeline: BasicTestBundle\n\ud83d\udd0d   \n\ud83d\udd0d   \ud83d\udccb Target: test (Project: test-project-basic)\n\ud83d\udd0d      Domain: None (us-east-2)\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\n\ud83d\udd0d      \ud83d\ude80 Serverless Airflow service is healthy\n\ud83d\udd0d   \n\ud83d\udd0d   \ud83c\udfaf Target: test\n\ud83d\udd0d      Project: test-project-basic\n\ud83d\udd0d      Project ID: d8hb3wb11hjdih\n\ud83d\udd0d      Status: ACTIVE\n\ud83d\udd0d   \n\ud83d\udd0d      \ud83d\ude80 Serverless Airflow Workflows:\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\n\ud83d\udd0d   \n\ud83d\udd0d         Workflow                                 Status     Trigger      Run ID       Run Status   Start Time           Duration  \n\ud83d\udd0d         ---------------------------------------- ---------- ------------ ------------ ------------ -------------------- ----------\n\ud83d\udd0d         BasicTestBundle_test_project_basic_ba... READY      scheduled    RPHJCBt3...  INITIALIZING 2025-11-16 04:04:07  1m        \n\ud83d\udd0d         BasicTestBundle_test_project_basic_ex... READY      scheduled    FwbKgGLi...  INITIALIZING 2025-11-16 04:04:11  1m        \n\ud83d\udd0d   \n\ud83d\udd0d   \ud83d\udccb Manifest Workflows:\n\ud83d\udd0d      - basic_test_workflow (Connection: project.workflow_serverless)\n\ud83d\udd0d      - expected_failure_workflow (Connection: project.workflow_serverless)\n\ud83d\udd0d COMMAND COMPLETED in 11.09s - Exit code: 0\n\ud83d\udd0d === STEP 6: Start Basic Test Workflow ===\n\ud83d\udd0d EXECUTING CLI COMMAND: run --workflow basic_test_workflow --targets test --manifest /Users/amirbo/code/smus/experimental/SMUS-CICD-pipeline-cli/tests/integration/basic_app/manifest.yaml\n\ud83d\udd0d   \ud83c\udfaf Target: test (Serverless Airflow)\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\n\ud83d\udd0d   \ud83d\ude80 Starting workflow run: BasicTestBundle_test_project_basic_basic_test_workflow\n\ud83d\udd0d   \ud83d\udd17 ARN: arn:aws:airflow-serverless:us-east-2:198737698272:workflow/BasicTestBundle_test_project_basic_basic_test_workflow-oEi60Hn0AS\n\ud83d\udd0d   \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\n\ud83d\udd0d   2025-11-15 23:16:11,116 - smus_cicd.airflow_serverless - INFO - Starting workflow run for: arn:aws:airflow-serverless:us-east-2:198737698272:workflow/BasicTestBundle_test_project_basic_basic_test_workflow-oEi60Hn0AS\n\ud83d\udd0d   2025-11-15 23:16:11,263 - smus_cicd.airflow_serverless - ERROR - Failed to start workflow run for arn:aws:airflow-serverless:us-east-2:198737698272:workflow/BasicTestBundle_test_project_basic_basic_test_workflow-oEi60Hn0AS: An error occurred (ValidationException) when calling the StartWorkflowRun operation: Workflow execution role could not be assumed by the airflow-serverless service\n\ud83d\udd0d   \u274c Error executing Overdrive workflow: Failed to start workflow run for arn:aws:airflow-serverless:us-east-2:198737698272:workflow/BasicTestBundle_test_project_basic_basic_test_workflow-oEi60Hn0AS: An error occurred (ValidationException) when calling the StartWorkflowRun operation: Workflow execution role could not be assumed by the airflow-serverless service\n\ud83d\udd0d   \u274c Error: executing workflow &amp;#x27;basic_test_workflow&amp;#x27; command &amp;#x27;trigger&amp;#x27;: 1\n\ud83d\udd0d COMMAND COMPLETED in 2.92s - Exit code: 1\n\ud83d\udd0d COMMAND FAILED - Expected exit code 0, got 1\n\n------------------------------ Captured log call -------------------------------\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:546 CHECKING AWS connectivity...\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:551 AWS identity verified: arn:aws:sts::198737698272:assumed-role/Admin/amirbo-Isengard\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:562 DataZone access verified\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:test_basic_app.py:111 === STEP 1: Describe with Connections ===\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:450 EXECUTING CLI COMMAND: describe --manifest /Users/amirbo/code/smus/experimental/SMUS-CICD-pipeline-cli/tests/integration/basic_app/manifest.yaml --connect\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   Pipeline: BasicTestBundle\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   Domain: None (us-east-2)\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   Targets:\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     - dev: dev-marketing\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       Project ID: b1rdp2ugixo97t\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       Status: ACTIVE\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       Connections: (7 total)\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462         default.iam:\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           connectionId: 4kcc8d5otve5yh\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           type: IAM\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           region: us-east-2\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462         default.spark:\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           connectionId: c2y6a519rmg5d5\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           type: SPARK\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           region: us-east-2\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           sparkGlueProperties: {&amp;#x27;glueVersion&amp;#x27;: &amp;#x27;5.0&amp;#x27;, &amp;#x27;idleTimeout&amp;#x27;: 60, &amp;#x27;numberOfWorkers&amp;#x27;: 10, &amp;#x27;workerType&amp;#x27;: &amp;#x27;G.1X&amp;#x27;}\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           configurations: [{&amp;#x27;classification&amp;#x27;: &amp;#x27;GlueDefaultArgument&amp;#x27;, &amp;#x27;properties&amp;#x27;: {&amp;#x27;--enable-lakeformation-fine-grained-access&amp;#x27;: &amp;#x27;false&amp;#x27;}}]\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462         default.s3:\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           connectionId: 6ivypa4qae4fft\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           type: S3\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           region: us-east-2\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           s3Uri: s3://\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462         default.s3_shared:\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           connectionId: brp8a14bawfei1\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           type: S3\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           region: us-east-2\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           s3Uri: s3://amazon-sagemaker-198737698272-us-east-2-b1rdp2ugixo97t/shared/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462         default.catalog:\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           connectionId: 5rtr9rjgjjfju1\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           type: LAKEHOUSE\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           region: us-east-2\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462         default.workflow_serverless:\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           connectionId: 48vazsyvv0bzc9\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           type: WORKFLOWS_SERVERLESS\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           region: us-east-2\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462         default.sql:\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           connectionId: axbgd7m64p48fd\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           type: ATHENA\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           region: us-east-2\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           workgroupName: sagemaker-studio-workgroup-b1rdp2ugixo97t\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     - test: test-project-basic\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       Project ID: d8hb3wb11hjdih\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       Status: ACTIVE\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       Connections: (9 total)\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462         default.iam:\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           connectionId: akcvql30z6lsfd\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           type: IAM\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           region: us-east-2\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462         default.s3:\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           connectionId: 3yvc64ic9k23hl\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           type: S3\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           region: us-east-2\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           s3Uri: s3://\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462         default.spark:\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           connectionId: cjn381bt9jjt49\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           type: SPARK\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           region: us-east-2\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           sparkGlueProperties: {&amp;#x27;glueVersion&amp;#x27;: &amp;#x27;5.0&amp;#x27;, &amp;#x27;idleTimeout&amp;#x27;: 60, &amp;#x27;numberOfWorkers&amp;#x27;: 10, &amp;#x27;workerType&amp;#x27;: &amp;#x27;G.1X&amp;#x27;}\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           configurations: [{&amp;#x27;classification&amp;#x27;: &amp;#x27;GlueDefaultArgument&amp;#x27;, &amp;#x27;properties&amp;#x27;: {&amp;#x27;--enable-lakeformation-fine-grained-access&amp;#x27;: &amp;#x27;false&amp;#x27;}}]\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462         default.s3_shared:\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           connectionId: 6l8qfywk09xnop\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           type: S3\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           region: us-east-2\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           s3Uri: s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462         default.catalog:\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           connectionId: 6nztw93oved2g9\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           type: LAKEHOUSE\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           region: us-east-2\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462         default.workflow_serverless:\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           connectionId: blo78nks7e8xbd\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           type: WORKFLOWS_SERVERLESS\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           region: us-east-2\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462         default.sql:\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           connectionId: bei6bdb7bsg59l\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           type: ATHENA\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           region: us-east-2\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           workgroupName: sagemaker-studio-workgroup-d8hb3wb11hjdih\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462         serverless.spark:\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           connectionId: ah9hh5911fxvop\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           type: SPARK_CONNECT\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           region: us-east-2\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462         mlflow-server:\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           connectionId: atjw1nav1lgr6x\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           type: MLFLOW\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           region: us-east-2\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   Manifest Workflows:\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     - basic_test_workflow\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       Connection: project.workflow_serverless\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       Engine: airflow-serverless\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     - expected_failure_workflow\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       Connection: project.workflow_serverless\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       Engine: airflow-serverless\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   Initialization Connections:\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     Target: test\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       - mlflow-server (MLFLOW)\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462         trackingServerName: smus-integration-mlflow-use2\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462         trackingServerArn: arn:aws:sagemaker:us-east-2:058264284947:mlflow-tracking-server/smus-integration-mlflow-use2\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:464 COMMAND COMPLETED in 4.70s - Exit code: 0\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:426 Syncing /Users/amirbo/code/smus/experimental/SMUS-CICD-pipeline-cli/tests/integration/basic_app/code to s3://amazon-sagemaker-198737698272-us-east-2-b1rdp2ugixo97t/shared/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:443 \u2705 Successfully synced to s3://amazon-sagemaker-198737698272-us-east-2-b1rdp2ugixo97t/shared/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:426 Syncing /Users/amirbo/code/smus/experimental/SMUS-CICD-pipeline-cli/tests/integration/basic_app/code/src to s3://amazon-sagemaker-198737698272-us-east-2-b1rdp2ugixo97t/shared/code/src/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:443 \u2705 Successfully synced to s3://amazon-sagemaker-198737698272-us-east-2-b1rdp2ugixo97t/shared/code/src/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:test_basic_app.py:160 === STEP 3: Bundle ===\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:450 EXECUTING CLI COMMAND: bundle --manifest /Users/amirbo/code/smus/experimental/SMUS-CICD-pipeline-cli/tests/integration/basic_app/manifest.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d Bundle source: dev target\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udce6 Bundle destination: default\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   Creating bundle for target: dev\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   Project: dev-marketing\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   Downloading &amp;#x27;code&amp;#x27; from S3: default.s3_shared (append: False)\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udcc2 S3 Source Content (Storage[code]):\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udccd Location: s3://amazon-sagemaker-198737698272-us-east-2-b1rdp2ugixo97t/shared/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   ==================================================\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u251c\u2500\u2500 \ud83d\udcc1 .ipynb_checkpoints/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u251c\u2500\u2500 \ud83d\udcc1 app_tests/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 .coverage\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 test_notebooks_execution.py\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2514\u2500\u2500 \ud83d\udcc1 tests/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502       \u2514\u2500\u2500 \ud83d\udcc1 reports/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502           \u2514\u2500\u2500 \ud83d\udcc4 test-results.html\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u251c\u2500\u2500 \ud83d\udcc1 code/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2514\u2500\u2500 \ud83d\udcc1 src/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502       \u251c\u2500\u2500 \ud83d\udcc4 basic_test_workflow.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502       \u251c\u2500\u2500 \ud83d\udcc4 expected_failure_workflow.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502       \u251c\u2500\u2500 \ud83d\udcc4 failing_notebook.ipynb\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502       \u2514\u2500\u2500 \ud83d\udcc4 param_test_notebook.ipynb\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u251c\u2500\u2500 \ud83d\udcc1 etl/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc1 app_tests/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 .coverage\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 test_covid_data.py\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2502   \u2514\u2500\u2500 \ud83d\udcc1 tests/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2502       \u2514\u2500\u2500 \ud83d\udcc1 reports/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2502           \u2514\u2500\u2500 \ud83d\udcc4 test-results.html\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 covid_etl_workflow.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 etl_bundle.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 glue_covid_summary_job.py\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 glue_s3_list_job.py\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 glue_setup_covid_db.py\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 manifest.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2514\u2500\u2500 \ud83d\udcc1 pipeline_tests/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502       \u251c\u2500\u2500 \ud83d\udcc4 .coverage\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502       \u251c\u2500\u2500 \ud83d\udcc4 test_covid_data.py\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502       \u2514\u2500\u2500 \ud83d\udcc1 tests/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502           \u2514\u2500\u2500 \ud83d\udcc1 reports/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502               \u2514\u2500\u2500 \ud83d\udcc4 test-results.html\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u251c\u2500\u2500 \ud83d\udcc1 genai/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 README.md\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc1 app_tests/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2502   \u2514\u2500\u2500 \ud83d\udcc4 .gitkeep\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 genai_bundle.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc1 job-code/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 lambda_mask_string.py\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 requirements.txt\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 test_agent.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2502   \u2514\u2500\u2500 \ud83d\udcc1 utils/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2502       \u251c\u2500\u2500 \ud83d\udcc4 README.md\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2502       \u251c\u2500\u2500 \ud83d\udcc4 __init__.py\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2502       \u251c\u2500\u2500 \ud83d\udcc4 bedrock_agent.py\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2502       \u251c\u2500\u2500 \ud83d\udcc4 bedrock_agent_helper.py\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2502       \u2514\u2500\u2500 \ud83d\udcc4 knowledge_base_helper.py\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 manifest.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc1 pipeline_tests/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2502   \u2514\u2500\u2500 \ud83d\udcc4 .gitkeep\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2514\u2500\u2500 \ud83d\udcc1 workflows/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502       \u251c\u2500\u2500 \ud83d\udcc4 bedrock_agent_notebook.ipynb\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502       \u2514\u2500\u2500 \ud83d\udcc4 genai_dev_workflow.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u251c\u2500\u2500 \ud83d\udcc4 manifest.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u251c\u2500\u2500 \ud83d\udcc1 ml/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 .DS_Store\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 README.md\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc1 deployment/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2502   \u251c\u2500\u2500 \ud83d\udcc1 code/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2502   \u2502   \u2514\u2500\u2500 \ud83d\udcc4 inference.py\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 manifest.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 ml_deployment_bundle.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2502   \u2514\u2500\u2500 \ud83d\udcc1 workflows/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2502       \u251c\u2500\u2500 \ud83d\udcc4 ml_deployment_notebook.ipynb\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2502       \u2514\u2500\u2500 \ud83d\udcc4 ml_deployment_workflow.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2514\u2500\u2500 \ud83d\udcc1 training/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502       \u251c\u2500\u2500 \ud83d\udcc1 code/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502       \u2502   \u251c\u2500\u2500 \ud83d\udcc4 requirements.txt\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502       \u2502   \u2514\u2500\u2500 \ud83d\udcc4 sagemaker_training_script.py\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502       \u251c\u2500\u2500 \ud83d\udcc4 manifest.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502       \u251c\u2500\u2500 \ud83d\udcc4 ml_training_bundle.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502       \u2514\u2500\u2500 \ud83d\udcc1 workflows/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502           \u251c\u2500\u2500 \ud83d\udcc1 .ipynb_checkpoints/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502           \u251c\u2500\u2500 \ud83d\udcc4 ml_training_notebook.ipynb\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502           \u2514\u2500\u2500 \ud83d\udcc4 ml_training_workflow.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u251c\u2500\u2500 \ud83d\udcc1 notebooks/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 00_basic_python_pandas.ipynb\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 04_gdc_athena.ipynb\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 05_customer_churn_spark.ipynb\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 06_purchase_analytics_duckdb.ipynb\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 08_genai_etl_pandas.ipynb\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 09_city_temperature_spark.ipynb\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 10_time_series_chronos.ipynb\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 11_movie_sales_dynamodb.ipynb\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 12_classification_mlflow.ipynb\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 City Temperature ETL and Data Prep with Spark.ipynb\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2514\u2500\u2500 \ud83d\udcc1 notebooks/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502       \u2514\u2500\u2500 \ud83d\udcc1 .ipynb_checkpoints/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u251c\u2500\u2500 \ud83d\udcc1 src/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 basic_test_workflow.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 expected_failure_workflow.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 \ud83d\udcc4 failing_notebook.ipynb\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2514\u2500\u2500 \ud83d\udcc4 param_test_notebook.ipynb\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2514\u2500\u2500 \ud83d\udcc1 workflows/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       \u2514\u2500\u2500 \ud83d\udcc4 parallel_notebooks_workflow.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   ==================================================\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udcca Total files found: 66\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     \ud83d\udd0d DEBUG download_s3_files: section_type=code, target_dir=/var/folders/g7/jvhxynrd55qbxdhmnq_76k1w0000gq/T/smus_bundle_5bkfdfzr/code\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     \ud83d\udd0d DEBUG download_s3_files: s3_uri=s3://amazon-sagemaker-198737698272-us-east-2-b1rdp2ugixo97t/shared/, patterns=[&amp;#x27;code/src/&amp;#x27;]\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     \ud83d\udd0d Running: aws s3 sync s3://amazon-sagemaker-198737698272-us-east-2-b1rdp2ugixo97t/shared/code/src/ /var/folders/g7/jvhxynrd55qbxdhmnq_76k1w0000gq/T/smus_bundle_5bkfdfzr/code --exclude *.pyc --exclude __pycache__/* --exclude .ipynb_checkpoints/*\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     Downloaded: param_test_notebook.ipynb\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     Downloaded: failing_notebook.ipynb\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     Downloaded: expected_failure_workflow.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     Downloaded: basic_test_workflow.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     Downloaded 4 files for &amp;#x27;code&amp;#x27;\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   Cloning Git repository: covid-19-dateset\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     Cloned 15 files from covid-19-dateset\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   Creating archive: BasicTestBundle.zip\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2705 Bundle created: ./artifacts/BasicTestBundle.zip (37456323 bytes)\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udce6 Bundle Contents:\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   ==================================================\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u251c\u2500\u2500 code/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 basic_test_workflow.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 expected_failure_workflow.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u251c\u2500\u2500 failing_notebook.ipynb\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2502   \u2514\u2500\u2500 param_test_notebook.ipynb\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2514\u2500\u2500 repositories/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       \u2514\u2500\u2500 covid-19-dateset/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           \u251c\u2500\u2500 README.md\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           \u251c\u2500\u2500 data/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           \u2502   \u251c\u2500\u2500 countries-aggregated.csv\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           \u2502   \u251c\u2500\u2500 key-countries-pivoted.csv\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           \u2502   \u251c\u2500\u2500 reference.csv\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           \u2502   \u251c\u2500\u2500 time-series-19-covid-combined.csv\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           \u2502   \u251c\u2500\u2500 us_confirmed.csv\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           \u2502   \u251c\u2500\u2500 us_deaths.csv\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           \u2502   \u251c\u2500\u2500 us_simplified.csv\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           \u2502   \u2514\u2500\u2500 worldwide-aggregate.csv\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           \u251c\u2500\u2500 datapackage.json\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462           \u2514\u2500\u2500 scripts/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462               \u251c\u2500\u2500 process_us.py\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462               \u251c\u2500\u2500 process_worldwide.py\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462               \u251c\u2500\u2500 requirements.txt\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462               \u2514\u2500\u2500 update_datapackage.py\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   ==================================================\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udcca Total files: 18\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   Bundle creation complete for target: dev\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:464 COMMAND COMPLETED in 33.12s - Exit code: 0\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:test_basic_app.py:169 === STEP 4: Deploy Test Target ===\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:450 EXECUTING CLI COMMAND: deploy test --manifest /Users/amirbo/code/smus/experimental/SMUS-CICD-pipeline-cli/tests/integration/basic_app/manifest.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   Deploying to target: test\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   Project: test-project-basic\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   Domain: None\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   Region: us-east-2\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d EventEmitter initialized: enabled=True, bus=default, region=us-east-2\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d Metadata collected: True\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d Deploy started event emitted: True\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2705 \u2705 Project &amp;#x27;test-project-basic&amp;#x27; already exists\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   Updating project stack tags...\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u26a0\ufe0f  Stack BasicTestBundle-test-test-project-basic not found - project was created outside CICD, skipping tag update\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u26a0\ufe0f Project memberships cannot be updated for existing projects - use CloudFormation console to modify memberships\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: _ensure_environments_exist called for target: test\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: target_config.initialization exists: True\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: target_config.initialization type: &amp;lt;class &amp;#x27;smus_cicd.application.application_manifest.InitializationConfig&amp;#x27;&amp;gt;\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: target_config.initialization attributes: [&amp;#x27;__annotations__&amp;#x27;, &amp;#x27;__class__&amp;#x27;, &amp;#x27;__dataclass_fields__&amp;#x27;, &amp;#x27;__dataclass_params__&amp;#x27;, &amp;#x27;__delattr__&amp;#x27;, &amp;#x27;__dict__&amp;#x27;, &amp;#x27;__dir__&amp;#x27;, &amp;#x27;__doc__&amp;#x27;, &amp;#x27;__eq__&amp;#x27;, &amp;#x27;__format__&amp;#x27;, &amp;#x27;__ge__&amp;#x27;, &amp;#x27;__getattribute__&amp;#x27;, &amp;#x27;__getstate__&amp;#x27;, &amp;#x27;__gt__&amp;#x27;, &amp;#x27;__hash__&amp;#x27;, &amp;#x27;__init__&amp;#x27;, &amp;#x27;__init_subclass__&amp;#x27;, &amp;#x27;__le__&amp;#x27;, &amp;#x27;__lt__&amp;#x27;, &amp;#x27;__match_args__&amp;#x27;, &amp;#x27;__module__&amp;#x27;, &amp;#x27;__ne__&amp;#x27;, &amp;#x27;__new__&amp;#x27;, &amp;#x27;__reduce__&amp;#x27;, &amp;#x27;__reduce_ex__&amp;#x27;, &amp;#x27;__repr__&amp;#x27;, &amp;#x27;__setattr__&amp;#x27;, &amp;#x27;__sizeof__&amp;#x27;, &amp;#x27;__str__&amp;#x27;, &amp;#x27;__subclasshook__&amp;#x27;, &amp;#x27;__weakref__&amp;#x27;, &amp;#x27;connections&amp;#x27;, &amp;#x27;domain&amp;#x27;, &amp;#x27;environments&amp;#x27;, &amp;#x27;project&amp;#x27;]\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: hasattr environments: True\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: environments value: []\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Resolved project_id: d8hb3wb11hjdih, domain_id: dzd-614fzsz5nulxm1\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd17 Creating connection: project.mlflow-server.mlflow (MLFLOW)\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: MLflow props being returned: {&amp;#x27;mlflowProperties&amp;#x27;: {&amp;#x27;trackingServerArn&amp;#x27;: &amp;#x27;arn:aws:sagemaker:us-east-2:058264284947:mlflow-tracking-server/smus-integration-mlflow-use2&amp;#x27;, &amp;#x27;trackingServerName&amp;#x27;: &amp;#x27;smus-integration-mlflow-use2&amp;#x27;}}\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u26a0\ufe0f  Failed to create connection project.mlflow-server.mlflow: Failed to create MLFLOW connection &amp;#x27;mlflow-server&amp;#x27;: An error occurred (ConflictException) when calling the CreateConnection operation: Conflict with connection atjw1nav1lgr6x\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Checking environments for project d8hb3wb11hjdih\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Existing environments: [&amp;#x27;ToolingLite&amp;#x27;]\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   Bundle file: ./artifacts/BasicTestBundle.zip\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG _deploy_storage_item: name=&amp;#x27;code&amp;#x27;, has_targetDirectory=True\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG _deploy_storage_item: targetDirectory=&amp;#x27;.&amp;#x27;\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG _deploy_storage_item: target_dir=&amp;#x27;.&amp;#x27;\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   Deploying storage item &amp;#x27;code&amp;#x27; to ....\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     \ud83d\udd0d DEBUG deploy_files: target_directory=&amp;#x27;.&amp;#x27; (type: str)\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     \ud83d\udd0d DEBUG deploy_files: s3_uri=&amp;#x27;s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/&amp;#x27;\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     \ud83d\udd0d DEBUG deploy_files: target_directory normalized to empty (was: &amp;#x27;.&amp;#x27;)\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     \ud83d\udd0d DEBUG deploy_files: No target_directory, full_s3_path=&amp;#x27;s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/&amp;#x27;\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     S3 Location: s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     \ud83d\udd0d DEBUG: temp_dir=/var/folders/g7/jvhxynrd55qbxdhmnq_76k1w0000gq/T/tmpl03cx4ql/code, source_folder=/var/folders/g7/jvhxynrd55qbxdhmnq_76k1w0000gq/T/tmpl03cx4ql/code\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     \ud83d\udd0d DEBUG: source_path=/var/folders/g7/jvhxynrd55qbxdhmnq_76k1w0000gq/T/tmpl03cx4ql/code, is_abs=True\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     \ud83d\udd0d DEBUG: full_s3_path=s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       Synced: basic_test_workflow.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       Synced: failing_notebook.ipynb\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       Synced: param_test_notebook.ipynb\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       Synced: expected_failure_workflow.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   Deploying git repository to ...\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     \ud83d\udd0d DEBUG deploy_files: target_directory=&amp;#x27;&amp;#x27; (type: str)\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     \ud83d\udd0d DEBUG deploy_files: s3_uri=&amp;#x27;s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/&amp;#x27;\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     \ud83d\udd0d DEBUG deploy_files: target_directory normalized to empty (was: &amp;#x27;&amp;#x27;)\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     \ud83d\udd0d DEBUG deploy_files: No target_directory, full_s3_path=&amp;#x27;s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/&amp;#x27;\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     S3 Location: s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     \ud83d\udd0d DEBUG: temp_dir=/var/folders/g7/jvhxynrd55qbxdhmnq_76k1w0000gq/T/tmpl0kpb6y9/repositories/covid-19-dateset, source_folder=/var/folders/g7/jvhxynrd55qbxdhmnq_76k1w0000gq/T/tmpl0kpb6y9/repositories/covid-19-dateset\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     \ud83d\udd0d DEBUG: source_path=/var/folders/g7/jvhxynrd55qbxdhmnq_76k1w0000gq/T/tmpl0kpb6y9/repositories/covid-19-dateset, is_abs=True\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     \ud83d\udd0d DEBUG: full_s3_path=s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       Synced: .gitignore\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       Synced: README.md\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       Synced: key-countries-pivoted.csv\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       Synced: reference.csv\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       Synced: countries-aggregated.csv\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       Synced: us_deaths.csv\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       Synced: time-series-19-covid-combined.csv\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       Synced: worldwide-aggregate.csv\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       Synced: datapackage.json\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       Synced: process_us.py\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       Synced: process_worldwide.py\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       Synced: requirements.txt\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       Synced: update_datapackage.py\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       Synced: us_confirmed.csv\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462       Synced: us_simplified.csv\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udce6 Deployment Summary:\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     \u2705 Storage item 1: 4 files \u2192 s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462     \u2705 Git item 1: 15 files \u2192 s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\ude80 Creating serverless Airflow workflows...\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Downloading shared/basic_test_workflow.yaml from S3\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Original content length: 623\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Resolved content length: 666\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Content changed, uploading resolved version\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Uploading resolved content to s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/basic_test_workflow.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2705 Resolved variables in shared/basic_test_workflow.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: About to call airflow_serverless.create_workflow with:\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: workflow_name=BasicTestBundle_test_project_basic_basic_test_workflow\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: dag_s3_location=s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/basic_test_workflow.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: role_arn=arn:aws:iam::198737698272:role/smus-test-project-basic-role\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: datazone_domain_id=dzd-614fzsz5nulxm1\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: datazone_project_id=d8hb3wb11hjdih\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG ListConnections: region=us-east-2, domain_id=dzd-614fzsz5nulxm1, project_id=d8hb3wb11hjdih\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: get_project_connections called for project d8hb3wb11hjdih\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG datazone.get_project_connections: region=us-east-2, domain_id=dzd-614fzsz5nulxm1, project_id=d8hb3wb11hjdih\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Page returned 9 connections\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing default.iam\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing default.s3\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing default.spark\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing default.s3_shared\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing default.catalog\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing default.workflow_serverless\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing default.sql\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing serverless.spark\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing mlflow-server\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Client region: us-east-2\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Client endpoint: default\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Create workflow request params: {&amp;#x27;Name&amp;#x27;: &amp;#x27;BasicTestBundle_test_project_basic_basic_test_workflow&amp;#x27;, &amp;#x27;DefinitionS3Location&amp;#x27;: {&amp;#x27;Bucket&amp;#x27;: &amp;#x27;amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih&amp;#x27;, &amp;#x27;ObjectKey&amp;#x27;: &amp;#x27;shared/basic_test_workflow.yaml&amp;#x27;}, &amp;#x27;RoleArn&amp;#x27;: &amp;#x27;arn:aws:iam::198737698272:role/smus-test-project-basic-role&amp;#x27;, &amp;#x27;Description&amp;#x27;: &amp;#x27;SMUS CI/CD workflow for BasicTestBundle&amp;#x27;, &amp;#x27;Tags&amp;#x27;: {&amp;#x27;Pipeline&amp;#x27;: &amp;#x27;BasicTestBundle&amp;#x27;, &amp;#x27;Target&amp;#x27;: &amp;#x27;test-project-basic&amp;#x27;, &amp;#x27;STAGE&amp;#x27;: &amp;#x27;TEST&amp;#x27;, &amp;#x27;CreatedBy&amp;#x27;: &amp;#x27;SMUS-CICD&amp;#x27;}, &amp;#x27;EnvironmentVariables&amp;#x27;: {&amp;#x27;DataZoneDomainRegion&amp;#x27;: &amp;#x27;us-east-2&amp;#x27;, &amp;#x27;DataZoneDomainId&amp;#x27;: &amp;#x27;dzd-614fzsz5nulxm1&amp;#x27;, &amp;#x27;DataZoneProjectId&amp;#x27;: &amp;#x27;d8hb3wb11hjdih&amp;#x27;, &amp;#x27;DataZoneEnvironmentId&amp;#x27;: &amp;#x27;co8wp5wvld1p2h&amp;#x27;}}\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Retrieved 9 total connections\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: get_project_connections called for project d8hb3wb11hjdih\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG datazone.get_project_connections: region=us-east-2, domain_id=dzd-614fzsz5nulxm1, project_id=d8hb3wb11hjdih\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Page returned 9 connections\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing default.iam\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing default.s3\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing default.spark\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing default.s3_shared\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing default.catalog\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing default.workflow_serverless\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing default.sql\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing serverless.spark\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing mlflow-server\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: airflow_serverless.create_workflow returned: {&amp;#x27;workflow_arn&amp;#x27;: &amp;#x27;arn:aws:airflow-serverless:us-east-2:198737698272:workflow/BasicTestBundle_test_project_basic_basic_test_workflow-oEi60Hn0AS&amp;#x27;, &amp;#x27;workflow_version&amp;#x27;: &amp;#x27;cda3179b14fb64a49525d29928312a30&amp;#x27;, &amp;#x27;success&amp;#x27;: True, &amp;#x27;already_exists&amp;#x27;: True, &amp;#x27;updated&amp;#x27;: True}\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: result type: &amp;lt;class &amp;#x27;dict&amp;#x27;&amp;gt;\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: result keys: [&amp;#x27;workflow_arn&amp;#x27;, &amp;#x27;workflow_version&amp;#x27;, &amp;#x27;success&amp;#x27;, &amp;#x27;already_exists&amp;#x27;, &amp;#x27;updated&amp;#x27;]\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: result.get(&amp;#x27;success&amp;#x27;): True\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: result.get(&amp;#x27;error&amp;#x27;): None\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2705 Created Overdrive workflow: BasicTestBundle_test_project_basic_basic_test_workflow\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462      ARN: arn:aws:airflow-serverless:us-east-2:198737698272:workflow/BasicTestBundle_test_project_basic_basic_test_workflow-oEi60Hn0AS\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462      Status: READY\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Downloading shared/expected_failure_workflow.yaml from S3\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Original content length: 590\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Resolved content length: 590\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: No variables found to resolve\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Uploading resolved content to s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/expected_failure_workflow.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2705 Resolved variables in shared/expected_failure_workflow.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: About to call airflow_serverless.create_workflow with:\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: workflow_name=BasicTestBundle_test_project_basic_expected_failure_workflow\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: dag_s3_location=s3://amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih/shared/expected_failure_workflow.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: role_arn=arn:aws:iam::198737698272:role/smus-test-project-basic-role\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: datazone_domain_id=dzd-614fzsz5nulxm1\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: datazone_project_id=d8hb3wb11hjdih\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Retrieved 9 total connections\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: get_project_connections called for project d8hb3wb11hjdih\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG datazone.get_project_connections: region=us-east-2, domain_id=dzd-614fzsz5nulxm1, project_id=d8hb3wb11hjdih\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Page returned 9 connections\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing default.iam\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing default.s3\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing default.spark\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing default.s3_shared\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing default.catalog\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing default.workflow_serverless\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing default.sql\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing serverless.spark\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing mlflow-server\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Client region: us-east-2\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Client endpoint: default\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Create workflow request params: {&amp;#x27;Name&amp;#x27;: &amp;#x27;BasicTestBundle_test_project_basic_expected_failure_workflow&amp;#x27;, &amp;#x27;DefinitionS3Location&amp;#x27;: {&amp;#x27;Bucket&amp;#x27;: &amp;#x27;amazon-sagemaker-198737698272-us-east-2-d8hb3wb11hjdih&amp;#x27;, &amp;#x27;ObjectKey&amp;#x27;: &amp;#x27;shared/expected_failure_workflow.yaml&amp;#x27;}, &amp;#x27;RoleArn&amp;#x27;: &amp;#x27;arn:aws:iam::198737698272:role/smus-test-project-basic-role&amp;#x27;, &amp;#x27;Description&amp;#x27;: &amp;#x27;SMUS CI/CD workflow for BasicTestBundle&amp;#x27;, &amp;#x27;Tags&amp;#x27;: {&amp;#x27;Pipeline&amp;#x27;: &amp;#x27;BasicTestBundle&amp;#x27;, &amp;#x27;Target&amp;#x27;: &amp;#x27;test-project-basic&amp;#x27;, &amp;#x27;STAGE&amp;#x27;: &amp;#x27;TEST&amp;#x27;, &amp;#x27;CreatedBy&amp;#x27;: &amp;#x27;SMUS-CICD&amp;#x27;}, &amp;#x27;EnvironmentVariables&amp;#x27;: {&amp;#x27;DataZoneDomainRegion&amp;#x27;: &amp;#x27;us-east-2&amp;#x27;, &amp;#x27;DataZoneDomainId&amp;#x27;: &amp;#x27;dzd-614fzsz5nulxm1&amp;#x27;, &amp;#x27;DataZoneProjectId&amp;#x27;: &amp;#x27;d8hb3wb11hjdih&amp;#x27;, &amp;#x27;DataZoneEnvironmentId&amp;#x27;: &amp;#x27;co8wp5wvld1p2h&amp;#x27;}}\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Retrieved 9 total connections\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: get_project_connections called for project d8hb3wb11hjdih\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG datazone.get_project_connections: region=us-east-2, domain_id=dzd-614fzsz5nulxm1, project_id=d8hb3wb11hjdih\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Page returned 9 connections\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing default.iam\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing default.s3\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing default.spark\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing default.s3_shared\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing default.catalog\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing default.workflow_serverless\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing default.sql\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing serverless.spark\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Processing mlflow-server\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: airflow_serverless.create_workflow returned: {&amp;#x27;workflow_arn&amp;#x27;: &amp;#x27;arn:aws:airflow-serverless:us-east-2:198737698272:workflow/BasicTestBundle_test_project_basic_expected_failure_workflow-cu19f7RUZJ&amp;#x27;, &amp;#x27;workflow_version&amp;#x27;: &amp;#x27;479e740e3413f5026c8900cf578b1358&amp;#x27;, &amp;#x27;success&amp;#x27;: True, &amp;#x27;already_exists&amp;#x27;: True, &amp;#x27;updated&amp;#x27;: True}\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: result type: &amp;lt;class &amp;#x27;dict&amp;#x27;&amp;gt;\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: result keys: [&amp;#x27;workflow_arn&amp;#x27;, &amp;#x27;workflow_version&amp;#x27;, &amp;#x27;success&amp;#x27;, &amp;#x27;already_exists&amp;#x27;, &amp;#x27;updated&amp;#x27;]\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: result.get(&amp;#x27;success&amp;#x27;): True\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: result.get(&amp;#x27;error&amp;#x27;): None\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2705 Created Overdrive workflow: BasicTestBundle_test_project_basic_expected_failure_workflow\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462      ARN: arn:aws:airflow-serverless:us-east-2:198737698272:workflow/BasicTestBundle_test_project_basic_expected_failure_workflow-cu19f7RUZJ\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462      Status: READY\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83c\udf89 Successfully created 2 Overdrive workflows\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udccb No catalog assets configured\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u2705 Deployment completed successfully!\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Retrieved 9 total connections\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:464 COMMAND COMPLETED in 49.95s - Exit code: 0\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:test_basic_app.py:177 === STEP 5: Monitor ===\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:450 EXECUTING CLI COMMAND: monitor --targets test --manifest /Users/amirbo/code/smus/experimental/SMUS-CICD-pipeline-cli/tests/integration/basic_app/manifest.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   Pipeline: BasicTestBundle\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udccb Target: test (Project: test-project-basic)\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462      Domain: None (us-east-2)\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462      \ud83d\ude80 Serverless Airflow service is healthy\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83c\udfaf Target: test\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462      Project: test-project-basic\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462      Project ID: d8hb3wb11hjdih\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462      Status: ACTIVE\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462      \ud83d\ude80 Serverless Airflow Workflows:\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462         Workflow                                 Status     Trigger      Run ID       Run Status   Start Time           Duration  \nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462         ---------------------------------------- ---------- ------------ ------------ ------------ -------------------- ----------\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462         BasicTestBundle_test_project_basic_ba... READY      scheduled    RPHJCBt3...  INITIALIZING 2025-11-16 04:04:07  1m        \nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462         BasicTestBundle_test_project_basic_ex... READY      scheduled    FwbKgGLi...  INITIALIZING 2025-11-16 04:04:11  1m        \nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udccb Manifest Workflows:\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462      - basic_test_workflow (Connection: project.workflow_serverless)\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462      - expected_failure_workflow (Connection: project.workflow_serverless)\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:464 COMMAND COMPLETED in 11.09s - Exit code: 0\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:test_basic_app.py:187 === STEP 6: Start Basic Test Workflow ===\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:450 EXECUTING CLI COMMAND: run --workflow basic_test_workflow --targets test --manifest /Users/amirbo/code/smus/experimental/SMUS-CICD-pipeline-cli/tests/integration/basic_app/manifest.yaml\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83c\udfaf Target: test (Serverless Airflow)\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\ude80 Starting workflow run: BasicTestBundle_test_project_basic_basic_test_workflow\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd17 ARN: arn:aws:airflow-serverless:us-east-2:198737698272:workflow/BasicTestBundle_test_project_basic_basic_test_workflow-oEi60Hn0AS\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \ud83d\udd0d DEBUG: Creating Airflow Serverless client with region=us-east-2, endpoint=https://airflow-serverless.us-east-2.api.aws/\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   2025-11-15 23:16:11,116 - smus_cicd.airflow_serverless - INFO - Starting workflow run for: arn:aws:airflow-serverless:us-east-2:198737698272:workflow/BasicTestBundle_test_project_basic_basic_test_workflow-oEi60Hn0AS\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   2025-11-15 23:16:11,263 - smus_cicd.airflow_serverless - ERROR - Failed to start workflow run for arn:aws:airflow-serverless:us-east-2:198737698272:workflow/BasicTestBundle_test_project_basic_basic_test_workflow-oEi60Hn0AS: An error occurred (ValidationException) when calling the StartWorkflowRun operation: Workflow execution role could not be assumed by the airflow-serverless service\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u274c Error executing Overdrive workflow: Failed to start workflow run for arn:aws:airflow-serverless:us-east-2:198737698272:workflow/BasicTestBundle_test_project_basic_basic_test_workflow-oEi60Hn0AS: An error occurred (ValidationException) when calling the StartWorkflowRun operation: Workflow execution role could not be assumed by the airflow-serverless service\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:462   \u274c Error: executing workflow &amp;#x27;basic_test_workflow&amp;#x27; command &amp;#x27;trigger&amp;#x27;: 1\nINFO     integration_test_TestBasicApp__test_basic_app_workflow:base.py:464 COMMAND COMPLETED in 2.92s - Exit code: 1\nERROR    integration_test_TestBasicApp__test_basic_app_workflow:base.py:481 COMMAND FAILED - Expected exit code 0, got 1\n\n&#34;}]}, &#34;renderCollapsed&#34;: [&#34;passed&#34;], &#34;initialSort&#34;: &#34;result&#34;, &#34;title&#34;: &#34;test-results.html&#34;}"></div>
+    <script>
+      (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
+const { getCollapsedCategory, setCollapsedIds } = require('./storage.js')
+
+class DataManager {
+    setManager(data) {
+        const collapsedCategories = [...getCollapsedCategory(data.renderCollapsed)]
+        const collapsedIds = []
+        const tests = Object.values(data.tests).flat().map((test, index) => {
+            const collapsed = collapsedCategories.includes(test.result.toLowerCase())
+            const id = `test_${index}`
+            if (collapsed) {
+                collapsedIds.push(id)
+            }
+            return {
+                ...test,
+                id,
+                collapsed,
+            }
+        })
+        const dataBlob = { ...data, tests }
+        this.data = { ...dataBlob }
+        this.renderData = { ...dataBlob }
+        setCollapsedIds(collapsedIds)
+    }
+
+    get allData() {
+        return { ...this.data }
+    }
+
+    resetRender() {
+        this.renderData = { ...this.data }
+    }
+
+    setRender(data) {
+        this.renderData.tests = [...data]
+    }
+
+    toggleCollapsedItem(id) {
+        this.renderData.tests = this.renderData.tests.map((test) =>
+            test.id === id ? { ...test, collapsed: !test.collapsed } : test,
+        )
+    }
+
+    set allCollapsed(collapsed) {
+        this.renderData = { ...this.renderData, tests: [...this.renderData.tests.map((test) => (
+            { ...test, collapsed }
+        ))] }
+    }
+
+    get testSubset() {
+        return [...this.renderData.tests]
+    }
+
+    get environment() {
+        return this.renderData.environment
+    }
+
+    get initialSort() {
+        return this.data.initialSort
+    }
+}
+
+module.exports = {
+    manager: new DataManager(),
+}
+
+},{"./storage.js":8}],2:[function(require,module,exports){
+const mediaViewer = require('./mediaviewer.js')
+const templateEnvRow = document.getElementById('template_environment_row')
+const templateResult = document.getElementById('template_results-table__tbody')
+
+function htmlToElements(html) {
+    const temp = document.createElement('template')
+    temp.innerHTML = html
+    return temp.content.childNodes
+}
+
+const find = (selector, elem) => {
+    if (!elem) {
+        elem = document
+    }
+    return elem.querySelector(selector)
+}
+
+const findAll = (selector, elem) => {
+    if (!elem) {
+        elem = document
+    }
+    return [...elem.querySelectorAll(selector)]
+}
+
+const dom = {
+    getStaticRow: (key, value) => {
+        const envRow = templateEnvRow.content.cloneNode(true)
+        const isObj = typeof value === 'object' && value !== null
+        const values = isObj ? Object.keys(value).map((k) => `${k}: ${value[k]}`) : null
+
+        const valuesElement = htmlToElements(
+            values ? `<ul>${values.map((val) => `<li>${val}</li>`).join('')}<ul>` : `<div>${value}</div>`)[0]
+        const td = findAll('td', envRow)
+        td[0].textContent = key
+        td[1].appendChild(valuesElement)
+
+        return envRow
+    },
+    getResultTBody: ({ testId, id, log, extras, resultsTableRow, tableHtml, result, collapsed }) => {
+        const resultBody = templateResult.content.cloneNode(true)
+        resultBody.querySelector('tbody').classList.add(result.toLowerCase())
+        resultBody.querySelector('tbody').id = testId
+        resultBody.querySelector('.collapsible').dataset.id = id
+
+        resultsTableRow.forEach((html) => {
+            const t = document.createElement('template')
+            t.innerHTML = html
+            resultBody.querySelector('.collapsible').appendChild(t.content)
+        })
+
+        if (log) {
+            // Wrap lines starting with "E" with span.error to color those lines red
+            const wrappedLog = log.replace(/^E.*$/gm, (match) => `<span class="error">${match}</span>`)
+            resultBody.querySelector('.log').innerHTML = wrappedLog
+        } else {
+            resultBody.querySelector('.log').remove()
+        }
+
+        if (collapsed) {
+            resultBody.querySelector('.collapsible > td')?.classList.add('collapsed')
+            resultBody.querySelector('.extras-row').classList.add('hidden')
+        } else {
+            resultBody.querySelector('.collapsible > td')?.classList.remove('collapsed')
+        }
+
+        const media = []
+        extras?.forEach(({ name, format_type, content }) => {
+            if (['image', 'video'].includes(format_type)) {
+                media.push({ path: content, name, format_type })
+            }
+
+            if (format_type === 'html') {
+                resultBody.querySelector('.extraHTML').insertAdjacentHTML('beforeend', `<div>${content}</div>`)
+            }
+        })
+        mediaViewer.setup(resultBody, media)
+
+        // Add custom html from the pytest_html_results_table_html hook
+        tableHtml?.forEach((item) => {
+            resultBody.querySelector('td[class="extra"]').insertAdjacentHTML('beforeend', item)
+        })
+
+        return resultBody
+    },
+}
+
+module.exports = {
+    dom,
+    htmlToElements,
+    find,
+    findAll,
+}
+
+},{"./mediaviewer.js":6}],3:[function(require,module,exports){
+const { manager } = require('./datamanager.js')
+const { doSort } = require('./sort.js')
+const storageModule = require('./storage.js')
+
+const getFilteredSubSet = (filter) =>
+    manager.allData.tests.filter(({ result }) => filter.includes(result.toLowerCase()))
+
+const doInitFilter = () => {
+    const currentFilter = storageModule.getVisible()
+    const filteredSubset = getFilteredSubSet(currentFilter)
+    manager.setRender(filteredSubset)
+}
+
+const doFilter = (type, show) => {
+    if (show) {
+        storageModule.showCategory(type)
+    } else {
+        storageModule.hideCategory(type)
+    }
+
+    const currentFilter = storageModule.getVisible()
+    const filteredSubset = getFilteredSubSet(currentFilter)
+    manager.setRender(filteredSubset)
+
+    const sortColumn = storageModule.getSort()
+    doSort(sortColumn, true)
+}
+
+module.exports = {
+    doFilter,
+    doInitFilter,
+}
+
+},{"./datamanager.js":1,"./sort.js":7,"./storage.js":8}],4:[function(require,module,exports){
+const { redraw, bindEvents, renderStatic } = require('./main.js')
+const { doInitFilter } = require('./filter.js')
+const { doInitSort } = require('./sort.js')
+const { manager } = require('./datamanager.js')
+const data = JSON.parse(document.getElementById('data-container').dataset.jsonblob)
+
+function init() {
+    manager.setManager(data)
+    doInitFilter()
+    doInitSort()
+    renderStatic()
+    redraw()
+    bindEvents()
+}
+
+init()
+
+},{"./datamanager.js":1,"./filter.js":3,"./main.js":5,"./sort.js":7}],5:[function(require,module,exports){
+const { dom, find, findAll } = require('./dom.js')
+const { manager } = require('./datamanager.js')
+const { doSort } = require('./sort.js')
+const { doFilter } = require('./filter.js')
+const {
+    getVisible,
+    getCollapsedIds,
+    setCollapsedIds,
+    getSort,
+    getSortDirection,
+    possibleFilters,
+} = require('./storage.js')
+
+const removeChildren = (node) => {
+    while (node.firstChild) {
+        node.removeChild(node.firstChild)
+    }
+}
+
+const renderStatic = () => {
+    const renderEnvironmentTable = () => {
+        const environment = manager.environment
+        const rows = Object.keys(environment).map((key) => dom.getStaticRow(key, environment[key]))
+        const table = document.getElementById('environment')
+        removeChildren(table)
+        rows.forEach((row) => table.appendChild(row))
+    }
+    renderEnvironmentTable()
+}
+
+const addItemToggleListener = (elem) => {
+    elem.addEventListener('click', ({ target }) => {
+        const id = target.parentElement.dataset.id
+        manager.toggleCollapsedItem(id)
+
+        const collapsedIds = getCollapsedIds()
+        if (collapsedIds.includes(id)) {
+            const updated = collapsedIds.filter((item) => item !== id)
+            setCollapsedIds(updated)
+        } else {
+            collapsedIds.push(id)
+            setCollapsedIds(collapsedIds)
+        }
+        redraw()
+    })
+}
+
+const renderContent = (tests) => {
+    const sortAttr = getSort(manager.initialSort)
+    const sortAsc = JSON.parse(getSortDirection())
+    const rows = tests.map(dom.getResultTBody)
+    const table = document.getElementById('results-table')
+    const tableHeader = document.getElementById('results-table-head')
+
+    const newTable = document.createElement('table')
+    newTable.id = 'results-table'
+
+    // remove all sorting classes and set the relevant
+    findAll('.sortable', tableHeader).forEach((elem) => elem.classList.remove('asc', 'desc'))
+    tableHeader.querySelector(`.sortable[data-column-type="${sortAttr}"]`)?.classList.add(sortAsc ? 'desc' : 'asc')
+    newTable.appendChild(tableHeader)
+
+    if (!rows.length) {
+        const emptyTable = document.getElementById('template_results-table__body--empty').content.cloneNode(true)
+        newTable.appendChild(emptyTable)
+    } else {
+        rows.forEach((row) => {
+            if (!!row) {
+                findAll('.collapsible td:not(.col-links', row).forEach(addItemToggleListener)
+                find('.logexpander', row).addEventListener('click',
+                    (evt) => evt.target.parentNode.classList.toggle('expanded'),
+                )
+                newTable.appendChild(row)
+            }
+        })
+    }
+
+    table.replaceWith(newTable)
+}
+
+const renderDerived = () => {
+    const currentFilter = getVisible()
+    possibleFilters.forEach((result) => {
+        const input = document.querySelector(`input[data-test-result="${result}"]`)
+        input.checked = currentFilter.includes(result)
+    })
+}
+
+const bindEvents = () => {
+    const filterColumn = (evt) => {
+        const { target: element } = evt
+        const { testResult } = element.dataset
+
+        doFilter(testResult, element.checked)
+        const collapsedIds = getCollapsedIds()
+        const updated = manager.renderData.tests.map((test) => {
+            return {
+                ...test,
+                collapsed: collapsedIds.includes(test.id),
+            }
+        })
+        manager.setRender(updated)
+        redraw()
+    }
+
+    const header = document.getElementById('environment-header')
+    header.addEventListener('click', () => {
+        const table = document.getElementById('environment')
+        table.classList.toggle('hidden')
+        header.classList.toggle('collapsed')
+    })
+
+    findAll('input[name="filter_checkbox"]').forEach((elem) => {
+        elem.addEventListener('click', filterColumn)
+    })
+
+    findAll('.sortable').forEach((elem) => {
+        elem.addEventListener('click', (evt) => {
+            const { target: element } = evt
+            const { columnType } = element.dataset
+            doSort(columnType)
+            redraw()
+        })
+    })
+
+    document.getElementById('show_all_details').addEventListener('click', () => {
+        manager.allCollapsed = false
+        setCollapsedIds([])
+        redraw()
+    })
+    document.getElementById('hide_all_details').addEventListener('click', () => {
+        manager.allCollapsed = true
+        const allIds = manager.renderData.tests.map((test) => test.id)
+        setCollapsedIds(allIds)
+        redraw()
+    })
+}
+
+const redraw = () => {
+    const { testSubset } = manager
+
+    renderContent(testSubset)
+    renderDerived()
+}
+
+module.exports = {
+    redraw,
+    bindEvents,
+    renderStatic,
+}
+
+},{"./datamanager.js":1,"./dom.js":2,"./filter.js":3,"./sort.js":7,"./storage.js":8}],6:[function(require,module,exports){
+class MediaViewer {
+    constructor(assets) {
+        this.assets = assets
+        this.index = 0
+    }
+
+    nextActive() {
+        this.index = this.index === this.assets.length - 1 ? 0 : this.index + 1
+        return [this.activeFile, this.index]
+    }
+
+    prevActive() {
+        this.index = this.index === 0 ? this.assets.length - 1 : this.index -1
+        return [this.activeFile, this.index]
+    }
+
+    get currentIndex() {
+        return this.index
+    }
+
+    get activeFile() {
+        return this.assets[this.index]
+    }
+}
+
+
+const setup = (resultBody, assets) => {
+    if (!assets.length) {
+        resultBody.querySelector('.media').classList.add('hidden')
+        return
+    }
+
+    const mediaViewer = new MediaViewer(assets)
+    const container = resultBody.querySelector('.media-container')
+    const leftArrow = resultBody.querySelector('.media-container__nav--left')
+    const rightArrow = resultBody.querySelector('.media-container__nav--right')
+    const mediaName = resultBody.querySelector('.media__name')
+    const counter = resultBody.querySelector('.media__counter')
+    const imageEl = resultBody.querySelector('img')
+    const sourceEl = resultBody.querySelector('source')
+    const videoEl = resultBody.querySelector('video')
+
+    const setImg = (media, index) => {
+        if (media?.format_type === 'image') {
+            imageEl.src = media.path
+
+            imageEl.classList.remove('hidden')
+            videoEl.classList.add('hidden')
+        } else if (media?.format_type === 'video') {
+            sourceEl.src = media.path
+
+            videoEl.classList.remove('hidden')
+            imageEl.classList.add('hidden')
+        }
+
+        mediaName.innerText = media?.name
+        counter.innerText = `${index + 1} / ${assets.length}`
+    }
+    setImg(mediaViewer.activeFile, mediaViewer.currentIndex)
+
+    const moveLeft = () => {
+        const [media, index] = mediaViewer.prevActive()
+        setImg(media, index)
+    }
+    const doRight = () => {
+        const [media, index] = mediaViewer.nextActive()
+        setImg(media, index)
+    }
+    const openImg = () => {
+        window.open(mediaViewer.activeFile.path, '_blank')
+    }
+    if (assets.length === 1) {
+        container.classList.add('media-container--fullscreen')
+    } else {
+        leftArrow.addEventListener('click', moveLeft)
+        rightArrow.addEventListener('click', doRight)
+    }
+    imageEl.addEventListener('click', openImg)
+}
+
+module.exports = {
+    setup,
+}
+
+},{}],7:[function(require,module,exports){
+const { manager } = require('./datamanager.js')
+const storageModule = require('./storage.js')
+
+const genericSort = (list, key, ascending, customOrder) => {
+    let sorted
+    if (customOrder) {
+        sorted = list.sort((a, b) => {
+            const aValue = a.result.toLowerCase()
+            const bValue = b.result.toLowerCase()
+
+            const aIndex = customOrder.findIndex((item) => item.toLowerCase() === aValue)
+            const bIndex = customOrder.findIndex((item) => item.toLowerCase() === bValue)
+
+            // Compare the indices to determine the sort order
+            return aIndex - bIndex
+        })
+    } else {
+        sorted = list.sort((a, b) => a[key] === b[key] ? 0 : a[key] > b[key] ? 1 : -1)
+    }
+
+    if (ascending) {
+        sorted.reverse()
+    }
+    return sorted
+}
+
+const durationSort = (list, ascending) => {
+    const parseDuration = (duration) => {
+        if (duration.includes(':')) {
+            // If it's in the format "HH:mm:ss"
+            const [hours, minutes, seconds] = duration.split(':').map(Number)
+            return (hours * 3600 + minutes * 60 + seconds) * 1000
+        } else {
+            // If it's in the format "nnn ms"
+            return parseInt(duration)
+        }
+    }
+    const sorted = list.sort((a, b) => parseDuration(a['duration']) - parseDuration(b['duration']))
+    if (ascending) {
+        sorted.reverse()
+    }
+    return sorted
+}
+
+const doInitSort = () => {
+    const type = storageModule.getSort(manager.initialSort)
+    const ascending = storageModule.getSortDirection()
+    const list = manager.testSubset
+    const initialOrder = ['Error', 'Failed', 'Rerun', 'XFailed', 'XPassed', 'Skipped', 'Passed']
+
+    storageModule.setSort(type)
+    storageModule.setSortDirection(ascending)
+
+    if (type?.toLowerCase() === 'original') {
+        manager.setRender(list)
+    } else {
+        let sortedList
+        switch (type) {
+        case 'duration':
+            sortedList = durationSort(list, ascending)
+            break
+        case 'result':
+            sortedList = genericSort(list, type, ascending, initialOrder)
+            break
+        default:
+            sortedList = genericSort(list, type, ascending)
+            break
+        }
+        manager.setRender(sortedList)
+    }
+}
+
+const doSort = (type, skipDirection) => {
+    const newSortType = storageModule.getSort(manager.initialSort) !== type
+    const currentAsc = storageModule.getSortDirection()
+    let ascending
+    if (skipDirection) {
+        ascending = currentAsc
+    } else {
+        ascending = newSortType ? false : !currentAsc
+    }
+    storageModule.setSort(type)
+    storageModule.setSortDirection(ascending)
+
+    const list = manager.testSubset
+    const sortedList = type === 'duration' ? durationSort(list, ascending) : genericSort(list, type, ascending)
+    manager.setRender(sortedList)
+}
+
+module.exports = {
+    doInitSort,
+    doSort,
+}
+
+},{"./datamanager.js":1,"./storage.js":8}],8:[function(require,module,exports){
+const possibleFilters = [
+    'passed',
+    'skipped',
+    'failed',
+    'error',
+    'xfailed',
+    'xpassed',
+    'rerun',
+]
+
+const getVisible = () => {
+    const url = new URL(window.location.href)
+    const settings = new URLSearchParams(url.search).get('visible')
+    const lower = (item) => {
+        const lowerItem = item.toLowerCase()
+        if (possibleFilters.includes(lowerItem)) {
+            return lowerItem
+        }
+        return null
+    }
+    return settings === null ?
+        possibleFilters :
+        [...new Set(settings?.split(',').map(lower).filter((item) => item))]
+}
+
+const hideCategory = (categoryToHide) => {
+    const url = new URL(window.location.href)
+    const visibleParams = new URLSearchParams(url.search).get('visible')
+    const currentVisible = visibleParams ? visibleParams.split(',') : [...possibleFilters]
+    const settings = [...new Set(currentVisible)].filter((f) => f !== categoryToHide).join(',')
+
+    url.searchParams.set('visible', settings)
+    window.history.pushState({}, null, unescape(url.href))
+}
+
+const showCategory = (categoryToShow) => {
+    if (typeof window === 'undefined') {
+        return
+    }
+    const url = new URL(window.location.href)
+    const currentVisible = new URLSearchParams(url.search).get('visible')?.split(',').filter(Boolean) ||
+        [...possibleFilters]
+    const settings = [...new Set([categoryToShow, ...currentVisible])]
+    const noFilter = possibleFilters.length === settings.length || !settings.length
+
+    noFilter ? url.searchParams.delete('visible') : url.searchParams.set('visible', settings.join(','))
+    window.history.pushState({}, null, unescape(url.href))
+}
+
+const getSort = (initialSort) => {
+    const url = new URL(window.location.href)
+    let sort = new URLSearchParams(url.search).get('sort')
+    if (!sort) {
+        sort = initialSort || 'result'
+    }
+    return sort
+}
+
+const setSort = (type) => {
+    const url = new URL(window.location.href)
+    url.searchParams.set('sort', type)
+    window.history.pushState({}, null, unescape(url.href))
+}
+
+const getCollapsedCategory = (renderCollapsed) => {
+    let categories
+    if (typeof window !== 'undefined') {
+        const url = new URL(window.location.href)
+        const collapsedItems = new URLSearchParams(url.search).get('collapsed')
+        switch (true) {
+        case !renderCollapsed && collapsedItems === null:
+            categories = ['passed']
+            break
+        case collapsedItems?.length === 0 || /^["']{2}$/.test(collapsedItems):
+            categories = []
+            break
+        case /^all$/.test(collapsedItems) || collapsedItems === null && /^all$/.test(renderCollapsed):
+            categories = [...possibleFilters]
+            break
+        default:
+            categories = collapsedItems?.split(',').map((item) => item.toLowerCase()) || renderCollapsed
+            break
+        }
+    } else {
+        categories = []
+    }
+    return categories
+}
+
+const getSortDirection = () => JSON.parse(sessionStorage.getItem('sortAsc')) || false
+const setSortDirection = (ascending) => sessionStorage.setItem('sortAsc', ascending)
+
+const getCollapsedIds = () => JSON.parse(sessionStorage.getItem('collapsedIds')) || []
+const setCollapsedIds = (list) => sessionStorage.setItem('collapsedIds', JSON.stringify(list))
+
+module.exports = {
+    getVisible,
+    hideCategory,
+    showCategory,
+    getCollapsedIds,
+    setCollapsedIds,
+    getSort,
+    setSort,
+    getSortDirection,
+    setSortDirection,
+    getCollapsedCategory,
+    possibleFilters,
+}
+
+},{}]},{},[4]);
+    </script>
+  </footer>
+</html>

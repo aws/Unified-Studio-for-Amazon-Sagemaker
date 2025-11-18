@@ -4,6 +4,7 @@ import tempfile
 import json
 import pytest
 from typer.testing import CliRunner
+from unittest.mock import patch
 from smus_cicd.cli import app
 
 
@@ -13,8 +14,10 @@ class TestDescribeNewFeatures:
     def create_test_manifest(self):
         """Create a test manifest file."""
         manifest_content = """
-pipelineName: TestPipeline
-targets:
+applicationName: TestPipeline
+content:
+  storage: []
+stages:
   dev:
     domain:
       name: test-domain
@@ -39,9 +42,6 @@ targets:
     project:
       name: prod-project
       create: false
-workflows:
-  - workflowName: test_workflow
-    connectionName: project.workflow_mwaa
 """
         f = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False)
         f.write(manifest_content)
@@ -55,17 +55,17 @@ workflows:
 
         try:
             result = runner.invoke(
-                app, ["describe", "--pipeline", manifest_file, "--output", "JSON"]
+                app, ["describe", "--manifest", manifest_file, "--output", "JSON"]
             )
 
             assert result.exit_code == 0
 
             # Should be valid JSON
             output_data = json.loads(result.stdout)
-            assert "pipeline" in output_data
+            assert "bundle" in output_data
             assert "domain" in output_data
             assert "targets" in output_data
-            assert output_data["pipeline"] == "TestPipeline"
+            assert output_data["bundle"] == "TestPipeline"
             assert output_data["domain"]["name"] == "test-domain"
             assert output_data["domain"]["region"] == "us-east-1"
             assert "dev" in output_data["targets"]
@@ -83,7 +83,7 @@ workflows:
 
         try:
             result = runner.invoke(
-                app, ["describe", "--pipeline", manifest_file, "--output", "TEXT"]
+                app, ["describe", "--manifest", manifest_file, "--output", "TEXT"]
             )
 
             assert result.exit_code == 0
@@ -105,7 +105,7 @@ workflows:
 
         try:
             result = runner.invoke(
-                app, ["describe", "--pipeline", manifest_file, "--targets", "dev"]
+                app, ["describe", "--manifest", manifest_file, "--targets", "dev"]
             )
 
             assert result.exit_code == 0
@@ -129,7 +129,7 @@ workflows:
                 app,
                 [
                     "describe",
-                    "--pipeline",
+                    "--manifest",
                     manifest_file,
                     "--targets",
                     "dev",
@@ -158,7 +158,7 @@ workflows:
 
         try:
             result = runner.invoke(
-                app, ["describe", "--pipeline", manifest_file, "--targets", "invalid"]
+                app, ["describe", "--manifest", manifest_file, "--targets", "invalid"]
             )
 
             assert result.exit_code == 1
@@ -186,7 +186,7 @@ workflows:
                 app,
                 [
                     "describe",
-                    "--pipeline",
+                    "--manifest",
                     manifest_file,
                     "--targets",
                     "invalid",
@@ -223,9 +223,13 @@ workflows:
         manifest_file = self.create_test_manifest()
 
         try:
-            result = runner.invoke(
-                app, ["describe", "--pipeline", manifest_file, "--connections"]
-            )
+            with patch("smus_cicd.commands.describe.get_datazone_project_info") as mock_project:
+                with patch("smus_cicd.commands.describe.load_config") as mock_config:
+                    mock_project.return_value = {"connections": {}, "status": "ACTIVE", "project_id": "test-id"}
+                    mock_config.return_value = {"region": "us-east-1"}
+                    result = runner.invoke(
+                        app, ["describe", "--manifest", manifest_file, "--connections"]
+                    )
 
             assert result.exit_code == 0
             assert "Pipeline: TestPipeline" in result.stdout
@@ -242,9 +246,13 @@ workflows:
         manifest_file = self.create_test_manifest()
 
         try:
-            result = runner.invoke(
-                app, ["describe", "--pipeline", manifest_file, "--connections"]
-            )
+            with patch("smus_cicd.commands.describe.get_datazone_project_info") as mock_project:
+                with patch("smus_cicd.commands.describe.load_config") as mock_config:
+                    mock_project.return_value = {"connections": {}, "status": "ACTIVE", "project_id": "test-id"}
+                    mock_config.return_value = {"region": "us-east-1"}
+                    result = runner.invoke(
+                        app, ["describe", "--manifest", manifest_file, "--connections"]
+                    )
 
             assert result.exit_code == 0
             assert "Pipeline: TestPipeline" in result.stdout
@@ -265,7 +273,7 @@ workflows:
                 app,
                 [
                     "describe",
-                    "--pipeline",
+                    "--manifest",
                     manifest_file,
                     "--targets",
                     "dev",
@@ -278,11 +286,24 @@ workflows:
             # The command should return JSON output regardless of exit code
             assert result.stdout.strip(), "Expected JSON output but got empty stdout"
 
-            output_data = json.loads(result.stdout)
+            # Extract JSON from output (may have log messages before it)
+            stdout_lines = result.stdout.strip().split('\n')
+            json_start = -1
+            for i, line in enumerate(stdout_lines):
+                if line.strip().startswith('{'):
+                    json_start = i
+                    break
+            
+            if json_start >= 0:
+                json_output = '\n'.join(stdout_lines[json_start:])
+                output_data = json.loads(json_output)
+            else:
+                # No JSON found, might be an error
+                pytest.fail(f"No JSON output found in: {result.stdout}")
 
             # If successful, check for expected structure
             if result.exit_code == 0:
-                assert "pipeline" in output_data
+                assert "bundle" in output_data
                 assert "targets" in output_data
                 assert "dev" in output_data["targets"]
             else:

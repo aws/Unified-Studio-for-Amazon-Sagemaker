@@ -478,19 +478,30 @@ def validate_mwaa_health(project_name: str, config: Dict[str, Any]) -> bool:
             # Look for MWAA workflow connection
             mwaa_connection = None
             for conn_name, conn_info in connections.items():
-                if conn_info.get("type") in ["MWAA", "WORKFLOWS_MWAA"]:
-                    mwaa_connection = conn_info
-                    logger.debug(
-                        f"Found MWAA connection '{conn_name}': {conn_info.get('type')}"
-                    )
-                    break
+                conn_type = conn_info.get("type")
+                # Check if it's a WORKFLOWS_MWAA connection with actual MWAA environment
+                # (not serverless Airflow which also uses WORKFLOWS_MWAA type)
+                if conn_type in ["MWAA", "WORKFLOWS_MWAA"]:
+                    # Must have mwaaEnvironmentName to be actual MWAA (not serverless)
+                    if conn_info.get("mwaaEnvironmentName"):
+                        mwaa_connection = conn_info
+                        logger.debug(
+                            f"Found MWAA connection '{conn_name}' with environment: {conn_info.get('mwaaEnvironmentName')}"
+                        )
+                        break
+                    else:
+                        logger.debug(
+                            f"Skipping '{conn_name}' - WORKFLOWS_MWAA type but no mwaaEnvironmentName (likely serverless Airflow)"
+                        )
 
             if mwaa_connection:
                 logger.info("MWAA environment is available")
                 return True
             else:
                 logger.warning("MWAA environment connection not found")
-                logger.debug("Looking for connection types: ['MWAA', 'WORKFLOWS_MWAA']")
+                logger.debug(
+                    "Looking for WORKFLOWS_MWAA connection with mwaaEnvironmentName"
+                )
                 return False
         else:
             logger.warning("MWAA environment connection not found")

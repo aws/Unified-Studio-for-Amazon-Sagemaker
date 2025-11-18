@@ -1,3 +1,4 @@
+import os
 import time
 from time import sleep
 from typing import Dict, List, Optional, Tuple
@@ -10,21 +11,187 @@ import boto3
 import typer
 
 
-def get_domain_id_by_name(domain_name, region):
-    """Get DataZone domain ID by searching domains by name. Returns None if not found."""
+def _get_datazone_client(region: str):
+    """Create DataZone client with optional custom endpoint from environment."""
+    endpoint_url = os.environ.get("DATAZONE_ENDPOINT_URL")
+    if endpoint_url:
+        return boto3.client("datazone", region_name=region, endpoint_url=endpoint_url)
+    return boto3.client("datazone", region_name=region)
+
+
+def resolve_domain_id(
+    domain_name: Optional[str] = None,
+    domain_tags: Optional[Dict[str, str]] = None,
+    region: str = None,
+) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Resolve domain ID by name, tags, or auto-detect if only one domain exists.
+
+    Args:
+        domain_name: Optional domain name to search for
+        domain_tags: Optional dict with tag key-value pairs (e.g., {"purpose": "smus-cicd-testing", "STAGE": "DEV"})
+                     All tags must match for a domain to be selected
+        region: AWS region
+
+    Returns:
+        Tuple of (domain_id, domain_name) or (None, None) if not found
+
+    Raises:
+        Exception: If multiple domains found without specific criteria
+    """
     try:
-        datazone_client = boto3.client("datazone", region_name=region)
-
-        # List all domains and find by name
+        datazone_client = _get_datazone_client(region)
         response = datazone_client.list_domains()
+        domains = response.get("items", [])
 
-        for domain in response.get("items", []):
-            if domain.get("name") == domain_name:
-                return domain.get("id")
+        if not domains:
+            return None, None
 
-        # Domain not found - return None for idempotent checks
+        # Filter by name if provided
+        if domain_name:
+            for domain in domains:
+                if domain.get("name") == domain_name:
+                    return domain.get("id"), domain.get("name")
+            return None, None
+
+        # Filter by tags if provided - ALL tags must match
+        if domain_tags:
+            matching_domains = []
+            for domain in domains:
+                domain_arn = domain.get("arn")
+                tags_response = datazone_client.list_tags_for_resource(
+                    resourceArn=domain_arn
+                )
+                tags = tags_response.get("tags", {})
+
+                # Check if all provided tags match
+                if all(tags.get(k) == v for k, v in domain_tags.items()):
+                    matching_domains.append(domain)
+
+            if len(matching_domains) == 0:
+                return None, None
+            elif len(matching_domains) == 1:
+                return matching_domains[0].get("id"), matching_domains[0].get("name")
+            else:
+                tag_str = ", ".join(f"{k}={v}" for k, v in domain_tags.items())
+                raise Exception(
+                    f"Multiple domains found with tags {tag_str}. Please specify domain name or add more specific tags."
+                )
+
+        # Auto-detect: only one domain exists
+        if len(domains) == 1:
+            return domains[0].get("id"), domains[0].get("name")
+        else:
+            raise Exception(
+                f"Multiple domains found in region {region}. Please specify domain name or tags."
+            )
+
+    except Exception as e:
+        if "Multiple domains" in str(e):
+            raise
+        # Log the actual error before re-raising
+        from .logger import get_logger
+
+        logger = get_logger("datazone")
+        logger.error(f"Error resolving domain: {e}")
+        raise
+
+
+def get_project_user_role_arn(project_name: str, domain_name: str, region: str) -> str:
+    """Get the user role ARN for a DataZone project from its tooling environment."""
+    try:
+        # Get domain and project IDs
+        domain_id = get_domain_id_by_name(domain_name, region)
+        if not domain_id:
+            return None
+
+        project_id = get_project_id_by_name(project_name, domain_id, region)
+        if not project_id:
+            return None
+
+        # List environments to find tooling environment
+        datazone_client = _get_datazone_client(region)
+        environments_response = datazone_client.list_environments(
+            domainIdentifier=domain_id, projectIdentifier=project_id
+        )
+
+        # Find tooling environment
+        for env in environments_response.get("items", []):
+            if "tooling" in env.get("name", "").lower():
+                # Get environment details
+                env_detail = datazone_client.get_environment(
+                    domainIdentifier=domain_id, identifier=env.get("id")
+                )
+
+                # Look for userRoleArn in provisioned resources
+                for resource in env_detail.get("provisionedResources", []):
+                    if resource.get("name") == "userRoleArn":
+                        return resource.get("value")
+
         return None
 
+    except Exception as e:
+        from .logger import get_logger
+
+        logger = get_logger("datazone")
+        logger.error(f"Failed to get project user role ARN for {project_name}: {e}")
+        return None
+
+
+def get_domain_id_by_name(domain_name, region):
+    """Get DataZone domain ID by searching domains by name. Returns None if not found."""
+    domain_id, _ = resolve_domain_id(domain_name=domain_name, region=region)
+    return domain_id
+
+
+def get_default_project_profile(domain_id, region):
+    """Get the default project profile for a domain. Returns first available profile."""
+    try:
+        datazone_client = _get_datazone_client(region)
+        response = datazone_client.list_project_profiles(domainIdentifier=domain_id)
+        profiles = response.get("items", [])
+
+        if not profiles:
+            return None
+
+        # Return first profile as default
+        return profiles[0]["name"]
+    except Exception as e:
+        typer.echo(f"⚠️ Could not get project profiles: {e}", err=True)
+        return None
+
+
+def list_all_projects(domain_id, region):
+    """List all projects in a domain with proper pagination handling."""
+    datazone_client = _get_datazone_client(region)
+    all_projects = []
+    next_token = None
+
+    while True:
+        params = {"domainIdentifier": domain_id}
+        if next_token:
+            params["nextToken"] = next_token
+
+        response = datazone_client.list_projects(**params)
+        all_projects.extend(response.get("items", []))
+
+        next_token = response.get("nextToken")
+        if not next_token:
+            break
+
+    return all_projects
+
+
+def get_project_by_name(project_name, domain_id, region):
+    """Get DataZone project by name with proper pagination handling. Returns None if not found."""
+    try:
+        projects = list_all_projects(domain_id, region)
+
+        for project in projects:
+            if project.get("name") == project_name:
+                return project
+
+        return None
     except Exception as e:
         # Check if this is a permission error
         error_str = str(e)
@@ -40,32 +207,20 @@ def get_domain_id_by_name(domain_name, region):
                 "insufficient privileges",
             ]
         ):
-            typer.echo(f"❌ AWS Permission Error: {error_str}", err=True)
             typer.echo(
-                "Check if the role has DataZone permissions to find domains.", err=True
+                f"❌ Error: Insufficient permissions to list projects in domain {domain_id}: {str(e)}",
+                err=True,
             )
         else:
-            typer.echo(
-                f"❌ Error finding domain by name {domain_name}: {str(e)}", err=True
-            )
-        # Re-raise permission/API errors, but not "not found" errors
-        raise Exception(f"Failed to lookup domain {domain_name}: {e}")
+            typer.echo(f"❌ Error finding project {project_name}: {str(e)}", err=True)
+        raise Exception(f"Failed to lookup project {project_name}: {e}")
 
 
 def get_project_id_by_name(project_name, domain_id, region):
     """Get DataZone project ID by searching projects by name. Returns None if not found."""
     try:
-        datazone_client = boto3.client("datazone", region_name=region)
-
-        # List all projects in the domain and find by name
-        response = datazone_client.list_projects(domainIdentifier=domain_id)
-
-        for project in response.get("items", []):
-            if project.get("name") == project_name:
-                return project.get("id")
-
-        # Project not found - return None for idempotent checks
-        return None
+        project = get_project_by_name(project_name, domain_id, region)
+        return project.get("id") if project else None
 
     except Exception as e:
         # Check if this is a permission error
@@ -97,7 +252,7 @@ def get_project_id_by_name(project_name, domain_id, region):
 def create_environment_and_wait(domain_id, project_id, env_name, target_name, region):
     """Create DataZone environment and wait for it to be ACTIVE."""
     try:
-        datazone_client = boto3.client("datazone", region_name=region)
+        datazone_client = _get_datazone_client(region)
 
         # Check if environment already exists
         try:
@@ -244,7 +399,7 @@ def wait_for_data_source_runs_completion(
         if not domain_id:
             return
 
-        datazone_client = boto3.client("datazone", region_name=region)
+        datazone_client = _get_datazone_client(region)
 
         # List data sources in the project
         data_sources_response = datazone_client.list_data_sources(
@@ -291,7 +446,7 @@ def delete_project_custom_form_types(domain_name, project_id, region):
         if not domain_id:
             raise Exception(f"Domain '{domain_name}' not found")
 
-        datazone_client = boto3.client("datazone", region_name=region)
+        datazone_client = _get_datazone_client(region)
 
         # Search for custom form types owned by this project
         response = datazone_client.search(
@@ -338,7 +493,7 @@ def delete_project_data_sources(domain_name, project_id, region):
         if not domain_id:
             return []
 
-        datazone_client = boto3.client("datazone", region_name=region)
+        datazone_client = _get_datazone_client(region)
 
         # List data sources in the project
         data_sources_response = datazone_client.list_data_sources(
@@ -377,7 +532,7 @@ def delete_project_environments(domain_name, project_id, region):
         if not domain_id:
             return []
 
-        datazone_client = boto3.client("datazone", region_name=region)
+        datazone_client = _get_datazone_client(region)
 
         # List environments in the project
         environments_response = datazone_client.list_environments(
@@ -464,7 +619,7 @@ def delete_project(domain_name, project_id, region):
         if deleted_forms:
             print(f"Deleted custom form types: {', '.join(deleted_forms)}")
 
-        datazone_client = boto3.client("datazone", region_name=region)
+        datazone_client = _get_datazone_client(region)
 
         # FIXME: This is a workaround for DataZone API bug where enabled form types
         # cannot be deleted programmatically, preventing project deletion.
@@ -504,7 +659,7 @@ def get_project_status(domain_name, project_id, region):
         if not domain_id:
             return None
 
-        datazone_client = boto3.client("datazone", region_name=region)
+        datazone_client = _get_datazone_client(region)
         response = datazone_client.get_project(
             domainIdentifier=domain_id, identifier=project_id
         )
@@ -539,7 +694,7 @@ def get_project_details(project_name, region, domain_name):
             }
 
         # Get project details from DataZone
-        datazone_client = boto3.client("datazone", region_name=region)
+        datazone_client = _get_datazone_client(region)
 
         try:
             response = datazone_client.get_project(
@@ -578,8 +733,11 @@ def get_project_details(project_name, region, domain_name):
 
 def get_project_connections(project_id, domain_id, region):
     """Get project connections from DataZone."""
+    typer.echo(
+        f"🔍 DEBUG: get_project_connections called for project {project_id}", err=True
+    )
     try:
-        datazone_client = boto3.client("datazone", region_name=region)
+        datazone_client = _get_datazone_client(region)
 
         # DEBUG: Log the exact parameters being used for the ListConnections call
         import sys
@@ -591,55 +749,82 @@ def get_project_connections(project_id, domain_id, region):
                 file=sys.stderr,
             )
 
-        # List connections for the project
-        response = datazone_client.list_connections(
-            domainIdentifier=domain_id, projectIdentifier=project_id
-        )
-
+        # List connections for the project with pagination
         connections = {}
-        for connection in response.get("items", []):
-            connection_name = connection.get("name", "unknown")
-            connection_id = connection.get("connectionId", "")
+        next_token = None
 
-            # Get detailed connection information
-            try:
-                detail_response = datazone_client.get_connection(
-                    domainIdentifier=domain_id, identifier=connection_id
+        while True:
+            list_params = {
+                "domainIdentifier": domain_id,
+                "projectIdentifier": project_id,
+                "maxResults": 50,
+            }
+            if next_token:
+                list_params["nextToken"] = next_token
+
+            response = datazone_client.list_connections(**list_params)
+
+            if not is_json_output:
+                print(
+                    f"🔍 DEBUG: Page returned {len(response.get('items', []))} connections",
+                    file=sys.stderr,
                 )
 
-                connection_detail = detail_response.get("connection", {})
-                connection_type = connection_detail.get("type", "UNKNOWN")
+            for connection in response.get("items", []):
+                connection_name = connection.get("name", "unknown")
+                connection_id = connection.get("connectionId", "")
 
-                conn_info = {
-                    "connectionId": connection_id,
-                    "type": connection_type,
-                    "description": connection_detail.get("description", ""),
-                    "status": connection_detail.get("status", "UNKNOWN"),
-                }
+                typer.echo(f"🔍 DEBUG: Processing {connection_name}", err=True)
 
-                # Add type-specific properties
-                props = connection_detail.get("props", {})
-                if connection_type == "S3":
-                    s3_props = props.get("s3Properties", {})
-                    conn_info["s3Uri"] = s3_props.get("s3Uri", "")
-                elif connection_type == "WORKFLOWS_MWAA":
-                    mwaa_props = props.get("mwaaProperties", {})
-                    env_name = mwaa_props.get("environmentName")
+                # Get detailed connection information
+                try:
+                    detail_response = datazone_client.get_connection(
+                        domainIdentifier=domain_id, identifier=connection_id
+                    )
 
-                    # If no environment name in properties, infer it from project structure
-                    if not env_name:
-                        env_name = f"DataZoneMWAAEnv-{domain_id}-{project_id}-dev"
+                    connection_type = detail_response.get("type", "UNKNOWN")
 
-                    conn_info["environmentName"] = env_name
+                    conn_info = {
+                        "connectionId": connection_id,
+                        "type": connection_type,
+                        "description": detail_response.get("description", ""),
+                        "environmentId": detail_response.get("environmentId"),
+                    }
 
-                connections[connection_name] = conn_info
+                    # Add type-specific properties
+                    props = detail_response.get("props", {})
+                    if connection_type == "S3":
+                        s3_props = props.get("s3Properties", {})
+                        conn_info["s3Uri"] = s3_props.get("s3Uri", "")
+                    elif connection_type == "WORKFLOWS_MWAA":
+                        mwaa_props = props.get("mwaaProperties", {})
+                        env_name = mwaa_props.get("environmentName")
 
-            except Exception as e:
-                connections[connection_name] = {
-                    "connectionId": connection_id,
-                    "type": "UNKNOWN",
-                    "error": str(e),
-                }
+                        # If no environment name in properties, infer it from project structure
+                        if not env_name:
+                            env_name = f"DataZoneMWAAEnv-{domain_id}-{project_id}-dev"
+
+                        conn_info["environmentName"] = env_name
+
+                    connections[connection_name] = conn_info
+
+                except Exception as e:
+                    connections[connection_name] = {
+                        "connectionId": connection_id,
+                        "type": "UNKNOWN",
+                        "error": str(e),
+                    }
+
+            # Check if there are more pages
+            next_token = response.get("nextToken")
+            if not next_token:
+                break
+
+        if not is_json_output:
+            print(
+                f"🔍 DEBUG: Retrieved {len(connections)} total connections",
+                file=sys.stderr,
+            )
 
         return connections
 
@@ -698,7 +883,7 @@ def resolve_connection_details(connection_name, target_config, region, domain_na
 def get_user_id_by_username(username, domain_id, region):
     """Get user identifier by username or IAM role ARN using DataZone and Identity Center APIs."""
     try:
-        datazone_client = boto3.client("datazone", region_name=region)
+        datazone_client = _get_datazone_client(region)
 
         # Check if username is an IAM role ARN
         if username.startswith("arn:aws:iam::") and ":role/" in username:
@@ -783,7 +968,7 @@ def resolve_usernames_to_ids(usernames, domain_id, region):
 def get_project_environments(project_id, domain_id, region):
     """Get all environments for a project."""
     try:
-        datazone_client = boto3.client("datazone", region_name=region)
+        datazone_client = _get_datazone_client(region)
         response = datazone_client.list_environments(
             domainIdentifier=domain_id, projectIdentifier=project_id
         )
@@ -798,7 +983,7 @@ def manage_project_memberships(
 ):
     """Idempotently manage project memberships via DataZone API."""
     try:
-        datazone_client = boto3.client("datazone", region_name=region)
+        datazone_client = _get_datazone_client(region)
 
         # Get existing memberships
         response = datazone_client.list_project_memberships(
@@ -892,7 +1077,7 @@ def search_asset_listing(
 ) -> Optional[Tuple[str, str]]:
     """Search for asset listing and return (asset_id, listing_id)."""
     try:
-        datazone_client = boto3.client("datazone", region_name=region)
+        datazone_client = _get_datazone_client(region)
 
         response = datazone_client.search_listings(
             domainIdentifier=domain_id, searchText=identifier
@@ -920,7 +1105,7 @@ def check_existing_subscription(
 ) -> Optional[str]:
     """Check if subscription request already exists for the asset."""
     try:
-        datazone_client = boto3.client("datazone", region_name=region)
+        datazone_client = _get_datazone_client(region)
 
         # Check subscription requests
         response = datazone_client.list_subscription_requests(
@@ -962,7 +1147,7 @@ def create_subscription_request(
 ) -> Optional[str]:
     """Create subscription request for asset."""
     try:
-        datazone_client = boto3.client("datazone", region_name=region)
+        datazone_client = _get_datazone_client(region)
 
         response = datazone_client.create_subscription_request(
             domainIdentifier=domain_id,
@@ -986,7 +1171,7 @@ def wait_for_subscription_approval(
     """Wait for subscription approval with timeout."""
     typer.echo(f"⏳ Waiting for subscription approval (timeout: {timeout}s)...")
 
-    datazone_client = boto3.client("datazone", region_name=region)
+    datazone_client = _get_datazone_client(region)
     start_time = time.time()
 
     while time.time() - start_time < timeout:
@@ -1021,7 +1206,7 @@ def check_subscription_grants(
 ) -> bool:
     """Check subscription grant status with retry logic."""
     try:
-        datazone_client = boto3.client("datazone", region_name=region)
+        datazone_client = _get_datazone_client(region)
 
         # Wait up to 60 seconds for grants to be created after subscription approval
         max_wait_time = 60
@@ -1133,7 +1318,7 @@ def get_subscription_id_from_request(
 ) -> str:
     """Get actual subscription ID from request ID after approval."""
     try:
-        datazone_client = boto3.client("datazone", region_name=region)
+        datazone_client = _get_datazone_client(region)
 
         # First try to get subscription ID from request details
         try:
@@ -1163,7 +1348,7 @@ def find_subscription_by_listing(
 ) -> Optional[str]:
     """Find subscription ID by matching listing ID."""
     try:
-        datazone_client = boto3.client("datazone", region_name=region)
+        datazone_client = _get_datazone_client(region)
 
         response = datazone_client.list_subscriptions(
             domainIdentifier=domain_id, owningProjectId=project_id
@@ -1246,3 +1431,109 @@ def process_catalog_assets(
         )
 
     return True
+
+
+# Shared workflow helper functions
+def is_connection_serverless_airflow(
+    connection_name: str, domain_id: str, project_id: str, region: str
+) -> bool:
+    """
+    Check if a DataZone connection is serverless Airflow.
+
+    This handles the DataZone bug where both serverless and MWAA
+    connections have type WORKFLOWS_MWAA. We distinguish by checking
+    if physicalEndpoints contains a MWAA ARN.
+
+    Args:
+        connection_name: Connection name to check
+        domain_id: DataZone domain ID
+        project_id: DataZone project ID
+        region: AWS region
+
+    Returns:
+        True if connection is serverless Airflow, False otherwise
+    """
+    try:
+        client = _get_datazone_client(region)
+        response = client.list_connections(
+            domainIdentifier=domain_id, projectIdentifier=project_id
+        )
+
+        for conn in response.get("items", []):
+            if conn["name"] == connection_name:
+                # Check if it's a workflow connection
+                if conn["type"] == "WORKFLOWS_MWAA":
+                    # CRITICAL: Check physicalEndpoints for MWAA ARN
+                    # Serverless: type=WORKFLOWS_MWAA WITHOUT MWAA ARN
+                    # MWAA: type=WORKFLOWS_MWAA WITH MWAA ARN
+                    physical_endpoints = conn.get("physicalEndpoints", [])
+                    has_mwaa_arn = any(
+                        "glueConnection" in ep
+                        and "arn:aws:airflow" in str(ep.get("glueConnection", ""))
+                        for ep in physical_endpoints
+                    )
+                    # If no MWAA ARN, it's serverless
+                    return not has_mwaa_arn
+
+        return False
+
+    except Exception:
+        return False
+
+
+def target_uses_serverless_airflow(manifest, target_config) -> bool:
+    """
+    Check if a target uses serverless Airflow workflows.
+
+    This is the tested logic from monitor.py that properly detects
+    serverless Airflow by querying DataZone at runtime.
+
+    Args:
+        manifest: Application manifest
+        target_config: Target configuration
+
+    Returns:
+        True if target uses serverless Airflow, False otherwise
+    """
+    if not hasattr(manifest.content, "workflows") or not manifest.content.workflows:
+        return False
+
+    region = target_config.domain.region
+    project_name = target_config.project.name
+
+    try:
+        # Resolve domain and project IDs
+        domain_id, _ = resolve_domain_id(
+            target_config.domain.name,
+            (
+                target_config.domain.tags
+                if hasattr(target_config.domain, "tags")
+                else None
+            ),
+            region,
+        )
+
+        if not domain_id:
+            return False
+
+        project_id = get_project_id_by_name(project_name, domain_id, region)
+        if not project_id:
+            return False
+
+        # Check each workflow's connection
+        for workflow in manifest.content.workflows:
+            conn_name = workflow.get("connectionName", "")
+            if conn_name:
+                # Resolve project. prefix to default.
+                if conn_name.startswith("project."):
+                    conn_name = conn_name.replace("project.", "default.", 1)
+
+                if is_connection_serverless_airflow(
+                    conn_name, domain_id, project_id, region
+                ):
+                    return True
+
+        return False
+
+    except Exception:
+        return False

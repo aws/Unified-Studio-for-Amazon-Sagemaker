@@ -1,0 +1,23 @@
+scenario: validate_existing_pipeline
+description: User validates an existing pipeline.yaml file
+
+turns:
+  # Turn 1: User asks to validate pipeline
+  - type: user_input
+    message: "Can you validate my pipeline.yaml file?"
+
+  # Turn 2: Q gets an example pipeline to validate
+  - type: tool_call
+    tool: get_pipeline_example
+    arguments:
+      use_case: "notebooks"
+    save_as: pipeline_yaml
+
+  # Turn 3: Verify pipeline example was returned
+  - type: assertion
+    check: contains
+    target: pipeline_yaml
+    value: "bundleName"
+
+expected_outcome:
+  pipeline_example_retrieved: true

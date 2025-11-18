@@ -337,25 +337,4 @@ For local installation:
 pip install .
 ```
 
-## Troubleshooting
 
-### Common Issues
-
-1. **IDC not enabled**: Ensure AWS Identity Center is enabled in your account
-2. **Region not supported**: Some regions don't support DataZone - use supported regions like us-east-1, us-east-2, us-west-2
-3. **VPC not found**: Ensure VPC deployment completed successfully before running domain deployment
-4. **User not found**: Verify the admin_username exists in IDC and matches the configuration
-
-### Debug Mode
-
-Run scripts with debug output:
-```bash
-set -x  # Enable debug mode
-./deploy-all.sh config-6778.yaml
-```
-
-### Log Files
-
-Integration test results are saved to:
-- `tests/reports/test-results.html` - HTML test report
-- Console output with detailed progress information

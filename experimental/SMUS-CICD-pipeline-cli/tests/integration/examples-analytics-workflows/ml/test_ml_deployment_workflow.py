@@ -1,0 +1,168 @@
+"""Integration test for ML deployment workflow."""
+
+import pytest
+import os
+import subprocess
+import re
+import boto3
+from tests.integration.base import IntegrationTestBase
+
+
+class TestMLDeploymentWorkflow(IntegrationTestBase):
+    """Test ML deployment workflow."""
+
+    def setup_method(self, method):
+        """Set up test environment."""
+        super().setup_method(method)
+        self.setup_test_directory()
+
+    def get_pipeline_file(self):
+        return os.path.join(
+            os.path.dirname(__file__),
+            "../../../../examples/analytic-workflow/ml/deployment/manifest.yaml"
+        )
+
+    def get_latest_training_job(self):
+        """Get the most recent completed training job."""
+        region = os.environ.get('DEV_DOMAIN_REGION', 'us-east-2')
+        sm_client = boto3.client('sagemaker', region_name=region)
+        
+        response = sm_client.list_training_jobs(
+            SortBy='CreationTime',
+            SortOrder='Descending',
+            MaxResults=10,
+            StatusEquals='Completed'
+        )
+        
+        for job in response['TrainingJobSummaries']:
+            job_name = job['TrainingJobName']
+            if 'orchestrated-training' in job_name or 'ml-training' in job_name:
+                self.logger.info(f"✅ Found training job: {job_name}")
+                return job_name
+        
+        pytest.skip("No completed training job found")
+
+    @pytest.mark.integration
+    def test_ml_deployment_workflow(self):
+        """Test ML deployment workflow using model from 'latest' S3 location."""
+        if not self.verify_aws_connectivity():
+            pytest.skip("AWS connectivity not available")
+
+        pipeline_file = self.get_pipeline_file()
+        workflow_name = "ml_deployment_workflow"
+
+        # Step 1: Describe --connect
+        self.logger.info("\n=== Step 1: Describe with Connections ===")
+        result = self.run_cli_command(["describe", "--manifest", pipeline_file, "--connect"])
+        assert result["success"], f"Describe --connect failed: {result['output']}"
+        self.logger.info("✅ Describe --connect successful")
+
+        # Step 2: Upload ML code to S3
+        self.logger.info("\n=== Step 2: Upload ML Code to S3 ===")
+        ml_dir = os.path.abspath(os.path.join(
+            os.path.dirname(__file__),
+            "../../../../examples/analytic-workflow/ml"
+        ))
+        self.upload_code_to_dev_project(
+            pipeline_file=pipeline_file,
+            source_dir=ml_dir,
+            target_prefix="ml/"
+        )
+
+        # Step 3: Bundle from dev
+        self.logger.info("\n=== Step 3: Bundle from dev ===")
+        result = self.run_cli_command(["bundle", "--manifest", pipeline_file, "--target", "dev"])
+        assert result["success"], f"Bundle failed: {result['output']}"
+        self.logger.info("✅ Bundle successful")
+
+        # Step 4: Deploy to test
+        self.logger.info("\n=== Step 4: Deploy to test ===")
+        result = self.run_cli_command(["deploy", "test", "--manifest", pipeline_file])
+        assert result["success"], f"Deploy failed: {result['output']}"
+        self.logger.info("✅ Deploy successful")
+
+        # Step 5: Run workflow
+        self.logger.info("\n=== Step 5: Run Workflow ===")
+        result = self.run_cli_command(
+            ["run", "--workflow", workflow_name, "--targets", "test", "--manifest", pipeline_file]
+        )
+        assert result["success"], f"Run workflow failed: {result['output']}"
+        self.logger.info("✅ Workflow started")
+
+        # Step 6: Get workflow ARN
+        self.logger.info("\n=== Step 6: Get Workflow ARN ===")
+        region = os.environ.get('DEV_DOMAIN_REGION', 'us-east-2')
+        endpoint = os.environ.get('AIRFLOW_SERVERLESS_ENDPOINT', f'https://airflow-serverless.{region}.api.aws/')
+        client = boto3.client('mwaaserverless-internal', region_name=region, endpoint_url=endpoint)
+        response = client.list_workflows()
+        workflow_arn = None
+        expected_name = 'IntegrationTestMLDeployment_test_marketing_ml_deployment_workflow'
+        for wf in response.get('Workflows', []):
+            if wf.get('Name') == expected_name:
+                workflow_arn = wf.get('WorkflowArn')
+                break
+        assert workflow_arn, "Could not find workflow ARN"
+        self.logger.info(f"✅ Workflow ARN: {workflow_arn}")
+
+        # Step 7: Wait for completion
+        self.logger.info("\n=== Step 7: Wait for Completion ===")
+        result = self.run_cli_command(
+            ["logs", "--live", "--workflow", workflow_arn]
+        )
+        workflow_succeeded = result["success"]
+        
+        # Extract run_id from logs output - match pattern like "Run: dyo4EXeWXjVP4nd"
+        run_id_match = re.search(r"Run:\s+([a-zA-Z0-9]+)", result["output"])
+        run_id = run_id_match.group(1) if run_id_match else None
+        
+        # Assert workflow run started after test began
+        if run_id and workflow_arn:
+            self.assert_workflow_run_after_test_start(run_id, workflow_arn)
+        
+        if workflow_succeeded:
+            self.logger.info("✅ Deployment workflow completed successfully")
+        else:
+            self.logger.info(f"⚠️ Workflow failed: {result['output']}")
+        
+        # Step 8: Download and validate output notebooks (always run, even if workflow failed)
+        self.logger.info("\n=== Step 8: Download and Validate Output Notebooks ===")
+        
+        # Extract S3 bucket from test project (not dev)
+        test_s3_uri_match = re.search(
+            r"test: test-[\w-]+.*?default\.s3_shared:.*?s3Uri: (s3://[^\s]+)",
+            result["output"] if not workflow_succeeded else "",
+            re.DOTALL
+        )
+        # Fallback to describe output from Step 1
+        if not test_s3_uri_match:
+            describe_result = self.run_cli_command(["describe", "--manifest", pipeline_file, "--connect"])
+            test_s3_uri_match = re.search(
+                r"test: test-[\w-]+.*?default\.s3_shared:.*?s3Uri: (s3://[^\s]+)",
+                describe_result["output"],
+                re.DOTALL
+            )
+        
+        s3_bucket_match = test_s3_uri_match
+        if s3_bucket_match and run_id:
+            test_s3_uri = s3_bucket_match.group(1)
+            s3_bucket = re.search(r"s3://([^/]+)", test_s3_uri).group(1)
+            
+            # Wait for S3 propagation
+            import time
+            self.logger.info("⏳ Waiting 10s for S3 propagation...")
+            time.sleep(10)
+            
+            notebooks_valid = self.download_and_validate_notebooks(
+                
+                workflow_arn=workflow_arn,
+                run_id=run_id
+            )
+            
+            assert notebooks_valid, "Output notebooks contain errors or were not found"
+            self.logger.info("✅ All output notebooks validated successfully")
+        else:
+            self.logger.info("❌ Could not determine S3 bucket or run_id")
+            assert False, "Could not determine S3 bucket or run_id for notebook validation"
+        
+        # Final assertion - workflow must succeed
+        assert workflow_succeeded, "Workflow execution failed"

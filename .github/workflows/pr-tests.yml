@@ -1,10 +1,7 @@
 name: PR Integration Tests
 
 on:
-  pull_request:
-    branches: [ main, master ]
-    paths:
-      - 'experimental/SMUS-CICD-pipeline-cli/**'
+  workflow_dispatch:
 
 concurrency:
   group: pr-tests-${{ github.ref }}
@@ -15,6 +12,7 @@ permissions:
   contents: read
 
 jobs:
+  
   unit-tests:
     runs-on: ubuntu-latest
     

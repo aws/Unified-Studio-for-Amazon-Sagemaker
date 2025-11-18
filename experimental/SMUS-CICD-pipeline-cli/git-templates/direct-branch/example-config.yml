@@ -1,0 +1,64 @@
+name: Deploy My Application
+
+# Example configuration for direct branch-based deployment
+# Copy this to .github/workflows/deploy.yml and customize
+
+on:
+  push:
+    branches:
+      - myapp-test-branch      # Your test branch name
+      - myapp-prod-branch      # Your prod branch name
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: 'Stage to deploy'
+        required: true
+        type: choice
+        options:
+          - test
+          - prod
+
+jobs:
+  deploy:
+    uses: your-org/workflows/.github/workflows/smus-direct-branch.yml@v1
+    
+    with:
+      # ========================================================================
+      # REQUIRED PARAMETERS
+      # ========================================================================
+      
+      manifest_path: 'manifest.yaml'
+      test_branch: 'myapp-test-branch'
+      prod_branch: 'myapp-prod-branch'
+      
+      # ========================================================================
+      # OPTIONAL PARAMETERS (with defaults)
+      # ========================================================================
+      
+      smus_cli_path: 'experimental/SMUS-CICD-pipeline-cli'  # default
+      python_version: '3.12'                                 # default
+      aws_region: 'us-east-1'                                # default
+      test_environment: 'aws-test'                           # default
+      prod_environment: 'aws-prod'                           # default
+      stage: ${{ inputs.stage || '' }}                       # for manual dispatch
+    
+    secrets:
+      # ========================================================================
+      # REQUIRED SECRETS (configure in GitHub repository settings)
+      # ========================================================================
+      
+      AWS_ROLE_ARN_TEST: ${{ secrets.AWS_ROLE_ARN_TEST }}
+      # Example: arn:aws:iam::123456789012:role/GitHubActions-SMUS-Test
+      
+      AWS_ROLE_ARN_PROD: ${{ secrets.AWS_ROLE_ARN_PROD }}
+      # Example: arn:aws:iam::123456789012:role/GitHubActions-SMUS-Prod
+      
+      # ========================================================================
+      # OPTIONAL SECRETS (can use environment variables instead)
+      # ========================================================================
+      
+      TEST_DOMAIN_REGION: ${{ vars.TEST_DOMAIN_REGION }}
+      # Example: us-east-1
+      
+      PROD_DOMAIN_REGION: ${{ vars.PROD_DOMAIN_REGION }}
+      # Example: us-east-1

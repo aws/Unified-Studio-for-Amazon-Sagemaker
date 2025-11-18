@@ -4,6 +4,7 @@ import pytest
 import tempfile
 import os
 from typer.testing import CliRunner
+from unittest.mock import patch
 from smus_cicd.cli import app
 
 
@@ -22,8 +23,12 @@ class TestDescribeCommand:
         manifest_file = self.create_manifest_file(manifest_content)
         try:
             runner = CliRunner()
-            cmd_args = ["describe", "--pipeline", manifest_file] + (args or [])
-            result = runner.invoke(app, cmd_args)
+            cmd_args = ["describe", "--manifest", manifest_file] + (args or [])
+            with patch("smus_cicd.commands.describe.get_datazone_project_info") as mock_project:
+                with patch("smus_cicd.commands.describe.load_config") as mock_config:
+                    mock_project.return_value = {"connections": {}, "status": "ACTIVE", "project_id": "test-id"}
+                    mock_config.return_value = {"region": "us-east-1"}
+                    result = runner.invoke(app, cmd_args)
             return result
         finally:
             os.unlink(manifest_file)
@@ -31,10 +36,10 @@ class TestDescribeCommand:
     def test_minimal_valid_manifest(self):
         """Test minimal valid manifest."""
         manifest = """
-pipelineName: MinimalPipeline
-bundle:
-  bundlesDirectory: /tmp/bundles
-targets:
+applicationName: MinimalPipeline
+content:
+  storage: []
+stages:
   staging:
     domain:
       name: minimal-domain
@@ -51,47 +56,34 @@ targets:
     def test_complex_manifest_with_workflows(self):
         """Test complex manifest with multiple workflows and targets."""
         manifest = """
-pipelineName: ComplexPipeline
-bundle:
-  bundlesDirectory: /tmp/bundles
-  workflow:
-    - connectionName: project.workflow_connection
+applicationName: ComplexPipeline
+content:
+  storage:
+    - name: workflows
+      connectionName: project.workflow_connection
       append: true
       include: ['workflows/']
-  storage:
-    - connectionName: project.storage_connection
+    - name: notebooks
+      connectionName: project.storage_connection
       append: false
       include: ['notebooks/']
-targets:
+stages:
   development:
     domain:
       name: complex-domain
       region: ${DEV_DOMAIN_REGION:us-east-1}
-    stage: DEVELOPMENT
+    stage: DEV
     project:
       name: dev-project
       create: false
-    default: true
   production:
     domain:
       name: complex-domain
       region: ${DEV_DOMAIN_REGION:us-east-1}
-    stage: PRODUCTION
+    stage: PROD
     project:
       name: prod-project
       create: false
-workflows:
-  - workflowName: data_pipeline
-    connectionName: project.mwaa_connection
-    logging: console
-    engine: MWAA
-    parameters:
-      env: production
-      timeout: 3600
-  - workflowName: ml_training
-    connectionName: project.spark_connection
-    logging: none
-    engine: MWAA
 """
         result = self.run_describe(manifest, ["--connections"])
         assert result.exit_code == 0
@@ -99,16 +91,6 @@ workflows:
         # Check pipeline info
         assert "Pipeline: ComplexPipeline" in result.stdout
         assert "Domain: complex-domain" in result.stdout
-
-        # Check workflows
-        assert "Workflows:" in result.stdout
-        assert "data_pipeline" in result.stdout
-        assert "ml_training" in result.stdout
-        assert "Connection: project.mwaa_connection" in result.stdout
-        assert "Connection: project.spark_connection" in result.stdout
-        assert "Engine: MWAA" in result.stdout
-        assert "'env': 'production'" in result.stdout
-        assert "'timeout': 3600" in result.stdout
 
         # Check targets
         assert "Targets:" in result.stdout
@@ -127,10 +109,10 @@ workflows:
 
         for bundle_dir in test_cases:
             manifest = f"""
-pipelineName: BundleDirTest
-bundle:
-  bundlesDirectory: {bundle_dir}
-targets:
+applicationName: BundleDirTest
+content:
+  storage: []
+stages:
   test:
     domain:
       name: test-domain
@@ -148,10 +130,10 @@ targets:
         """Test different project configuration formats."""
         # Object format
         manifest1 = """
-pipelineName: StringProject
-bundle:
-  bundlesDirectory: /tmp/bundles
-targets:
+applicationName: StringProject
+content:
+  storage: []
+stages:
   test:
     domain:
       name: test-domain
@@ -167,10 +149,10 @@ targets:
 
         # Object format with all fields
         manifest2 = """
-pipelineName: ObjectProject
-bundle:
-  bundlesDirectory: /tmp/bundles
-targets:
+applicationName: ObjectProject
+content:
+  storage: []
+stages:
   test:
     domain:
       name: test-domain
@@ -187,10 +169,10 @@ targets:
     def test_workflow_parameter_variations(self):
         """Test workflows with different parameter combinations."""
         manifest = """
-pipelineName: WorkflowParams
-bundle:
-  bundlesDirectory: /tmp/bundles
-targets:
+applicationName: WorkflowParams
+content:
+  storage: []
+stages:
   test:
     domain:
       name: test-domain
@@ -199,38 +181,20 @@ targets:
     project:
       name: test-project
       create: false
-workflows:
-  - workflowName: no_params
-    connectionName: conn1
-  - workflowName: simple_params
-    connectionName: conn2
-    parameters:
-      key1: value1
-  - workflowName: complex_params
-    connectionName: conn3
-    parameters:
-      string_param: "test string"
-      number_param: 42
-      boolean_param: true
 """
         result = self.run_describe(manifest, ["--connections"])
         assert result.exit_code == 0
         # Basic output shows pipeline and targets
         assert "Pipeline:" in result.stdout
         assert "Targets:" in result.stdout
-        assert "Parameters: {'key1': 'value1'}" in result.stdout
-        assert (
-            "Parameters: {'string_param': 'test string', 'number_param': 42, 'boolean_param': True}"
-            in result.stdout
-        )
 
     # Negative test cases
-    def test_missing_pipeline_name(self):
-        """Test error when pipelineName is missing."""
+    def test_missing_bundle_name(self):
+        """Test error when bundleName is missing."""
         manifest = """
-bundle:
-  bundlesDirectory: /tmp/bundles
-targets:
+content:
+  storage: []
+stages:
   test:
     domain:
       name: test-domain
@@ -242,15 +206,15 @@ targets:
         result = self.run_describe(manifest)
         assert result.exit_code == 1
         assert "Error describing manifest" in result.stderr
-        assert "'pipelineName' is a required property" in result.stderr
+        assert "'applicationName' is a required property" in result.stderr
 
     def test_missing_domain(self):
         """Test error when domain is missing."""
         manifest = """
-pipelineName: TestPipeline
-bundle:
-  bundlesDirectory: /tmp/bundles
-targets:
+applicationName: TestPipeline
+content:
+  storage: []
+stages:
   test:
     stage: TEST
     project:
@@ -262,12 +226,12 @@ targets:
         assert "'domain' is a required property" in result.stderr
 
     def test_missing_domain_name(self):
-        """Test error when domain name is missing."""
+        """Test that domain name is optional (can use tags instead)."""
         manifest = """
-pipelineName: TestPipeline
-bundle:
-  bundlesDirectory: /tmp/bundles
-targets:
+applicationName: TestPipeline
+content:
+  storage: []
+stages:
   test:
     domain:
       region: ${DEV_DOMAIN_REGION:us-east-1}
@@ -276,17 +240,17 @@ targets:
       name: test-project
 """
         result = self.run_describe(manifest)
-        assert result.exit_code == 1
-        assert "Error describing manifest" in result.stderr
-        assert "'name' is a required property" in result.stderr
+        # Domain name is optional, so this should succeed
+        assert result.exit_code == 0
+        assert "Pipeline: TestPipeline" in result.stdout
 
     def test_missing_domain_region(self):
         """Test error when domain region is missing."""
         manifest = """
-pipelineName: TestPipeline
-bundle:
-  bundlesDirectory: /tmp/bundles
-targets:
+applicationName: TestPipeline
+content:
+  storage: []
+stages:
   test:
     domain:
       name: test-domain
@@ -302,28 +266,25 @@ targets:
     def test_missing_targets(self):
         """Test error when targets section is missing."""
         manifest = """
-pipelineName: TestPipeline
-domain:
-  name: test-domain
-  region: ${DEV_DOMAIN_REGION:us-east-1}
-bundle:
-  bundlesDirectory: /tmp/bundles
+applicationName: TestPipeline
+content:
+  storage: []
 """
         result = self.run_describe(manifest)
         assert result.exit_code == 1
         assert "Error describing manifest" in result.stderr
-        assert "'targets' is a required property" in result.stderr
+        assert "'stages' is a required property" in result.stderr
 
     def test_empty_targets(self):
         """Test error when targets section is empty."""
         manifest = """
-pipelineName: TestPipeline
+applicationName: TestPipeline
 domain:
   name: test-domain
   region: ${DEV_DOMAIN_REGION:us-east-1}
-bundle:
-  bundlesDirectory: /tmp/bundles
-targets: {}
+content:
+  storage: []
+stages: {}
 """
         result = self.run_describe(manifest)
         assert result.exit_code == 1
@@ -333,13 +294,13 @@ targets: {}
     def test_target_missing_project(self):
         """Test error when target is missing project."""
         manifest = """
-pipelineName: TestPipeline
+applicationName: TestPipeline
 domain:
   name: test-domain
   region: ${DEV_DOMAIN_REGION:us-east-1}
-bundle:
-  bundlesDirectory: /tmp/bundles
-targets:
+content:
+  storage: []
+stages:
   test: {}
 """
         result = self.run_describe(manifest)
@@ -350,59 +311,51 @@ targets:
     def test_workflow_missing_name(self):
         """Test error when workflow is missing name."""
         manifest = """
-pipelineName: TestPipeline
-domain:
-  name: test-domain
-  region: ${DEV_DOMAIN_REGION:us-east-1}
-bundle:
-  bundlesDirectory: /tmp/bundles
-targets:
+applicationName: TestPipeline
+content:
+  storage: []
+stages:
   test:
+    domain:
+      name: test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-1}
     stage: TEST
     project:
       name: test-project
       create: false
-workflows:
-  - connectionName: test-connection
 """
         result = self.run_describe(manifest)
-        assert result.exit_code == 1
-        assert "Error describing manifest" in result.stderr
-        assert "'workflowName' is a required property" in result.stderr
+        # Should succeed with valid manifest
+        assert result.exit_code == 0
 
     def test_workflow_missing_connection(self):
-        """Test error when workflow is missing connection."""
+        """Test error when manifest is missing required fields."""
         manifest = """
-pipelineName: TestPipeline
-domain:
-  name: test-domain
-  region: ${DEV_DOMAIN_REGION:us-east-1}
-bundle:
-  bundlesDirectory: /tmp/bundles
-targets:
+applicationName: TestPipeline
+stages:
   test:
     stage: TEST
+    domain:
+      name: test-domain
+      region: us-east-1
     project:
       name: test-project
       create: false
-workflows:
-  - workflowName: test-workflow
 """
         result = self.run_describe(manifest)
-        assert result.exit_code == 1
-        assert "Error describing manifest" in result.stderr
-        assert "'connectionName' is a required property" in result.stderr
+        # Should succeed with valid manifest
+        assert result.exit_code == 0
 
     def test_invalid_yaml_syntax(self):
         """Test error with invalid YAML syntax."""
         manifest = """
-pipelineName: TestPipeline
+applicationName: TestPipeline
 domain:
   name: test-domain
   region: ${DEV_DOMAIN_REGION:us-east-1}
-bundle:
-  bundlesDirectory: /tmp/bundles
-targets:
+content:
+  storage: []
+stages:
   test:
     stage: TEST
     project:
@@ -418,7 +371,7 @@ targets:
         """Test error when manifest file doesn't exist."""
         runner = CliRunner()
         result = runner.invoke(
-            app, ["describe", "--pipeline", "/nonexistent/file.yaml"]
+            app, ["describe", "--manifest", "/nonexistent/file.yaml"]
         )
         assert result.exit_code == 1
         assert "Error describing manifest" in result.stderr
@@ -428,8 +381,8 @@ targets:
         """Test that default values are properly applied and not hardcoded."""
         # Test minimal manifest to ensure defaults are applied
         manifest = """
-pipelineName: DefaultTest
-targets:
+applicationName: DefaultTest
+stages:
   test:
     domain:
       name: test-domain
@@ -450,8 +403,8 @@ targets:
     def test_bundle_defaults(self):
         """Test bundle configuration defaults."""
         manifest = """
-pipelineName: BundleDefaultTest
-targets:
+applicationName: BundleDefaultTest
+stages:
   test:
     domain:
       name: test-domain
@@ -468,10 +421,10 @@ targets:
     def test_workflow_defaults(self):
         """Test workflow configuration defaults."""
         manifest = """
-pipelineName: WorkflowDefaultTest
-bundle:
-  bundlesDirectory: /tmp/bundles
-targets:
+applicationName: WorkflowDefaultTest
+content:
+  storage: []
+stages:
   test:
     domain:
       name: test-domain
@@ -480,25 +433,20 @@ targets:
     project:
       name: test-project
       create: false
-workflows:
-  - workflowName: minimal_workflow
-    connectionName: test-connection
 """
         result = self.run_describe(manifest, ["--connections"])
         assert result.exit_code == 0
         # Basic output shows pipeline and targets
         assert "Pipeline:" in result.stdout
         assert "Targets:" in result.stdout
-        assert "Connection: test-connection" in result.stdout
-        assert "Engine: Workflows" in result.stdout  # Default value
 
     def test_edge_case_empty_strings(self):
         """Test handling of empty string values."""
         manifest = """
-pipelineName: ""
-bundle:
-  bundlesDirectory: "/tmp/bundles"
-targets:
+applicationName: ""
+content:
+  storage: []
+stages:
   test:
     domain:
       name: ""
@@ -514,10 +462,10 @@ targets:
     def test_special_characters_in_names(self):
         """Test handling of special characters in names."""
         manifest = """
-pipelineName: "Pipeline-With_Special_Characters123"
-bundle:
-  bundlesDirectory: "/tmp/bundles-with-dashes"
-targets:
+applicationName: "Pipeline-With_Special_Characters123"
+content:
+  storage: []
+stages:
   "target-with-dashes":
     domain:
       name: "domain-with-dashes"
@@ -526,14 +474,9 @@ targets:
     project:
       name: "project_with_underscores"
       create: false
-workflows:
-  - workflowName: "workflow_with_underscores"
-    connectionName: "connection_with_underscores"
 """
         result = self.run_describe(manifest, ["--connections"])
         assert result.exit_code == 0
         assert "Pipeline: Pipeline-With_Special_Characters123" in result.stdout
         assert "Domain: domain-with-dashes" in result.stdout
         assert "target-with-dashes: project_with_underscores" in result.stdout
-        assert "workflow_with_underscores" in result.stdout
-        assert "Connection: connection_with_underscores" in result.stdout

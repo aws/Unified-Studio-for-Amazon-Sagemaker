@@ -1,0 +1,77 @@
+applicationName: IntegrationTestETLWorkflow
+content:
+  storage:
+  - name: dashboard-glue-quick
+    connectionName: default.s3_shared
+    include:
+    - dashboard-glue-quick
+    exclude:
+    - .ipynb_checkpoints/
+    - __pycache__/
+    - '*.pyc'
+    - test_*.sh
+  git:
+  - repository: covid-19-dataset
+    url: https://github.com/datasets/covid-19.git
+  quicksight:
+  - dashboardId: sample-dashboard
+    assetBundle: quicksight/sample-dashboard.qs
+    owners:
+    - arn:aws:quicksight:${DEV_DOMAIN_REGION:us-east-2}:*:user/default/Admin/*
+    viewers:
+    - arn:aws:quicksight:${DEV_DOMAIN_REGION:us-east-2}:*:user/default/Admin/*
+  workflows:
+  - workflowName: covid_dashboard_glue_quick_pipeline
+    connectionName: default.workflow_serverless
+stages:
+  dev:
+    stage: DEV
+    domain:
+      tags:
+        purpose: smus-cicd-testing
+      region: ${DEV_DOMAIN_REGION:us-east-2}
+    project:
+      name: dev-marketing
+  test:
+    stage: TEST
+    domain:
+      tags:
+        purpose: smus-cicd-testing
+      region: ${DEV_DOMAIN_REGION:us-east-2}
+    project:
+      name: test-marketing
+      owners:
+      - Eng1
+      - arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
+    environment_variables:
+      S3_PREFIX: test
+      AWS_REGION: ${DEV_DOMAIN_REGION:us-east-1}
+      GRANT_TO: Admin,service-role/aws-quicksight-service-role-v0
+    bootstrap:
+      actions:
+      - type: workflow.logs
+        workflowName: covid_dashboard_glue_quick_pipeline
+        live: true
+        lines: 10000
+      - type: quicksight.refresh_dataset
+        refreshScope: IMPORTED
+        ingestionType: FULL_REFRESH
+        wait: false
+    deployment_configuration:
+      storage:
+      - name: dashboard-glue-quick
+        connectionName: default.s3_shared
+        targetDirectory: dashboard-glue-quick/bundle
+      git:
+      - name: covid-19-dataset
+        connectionName: default.s3_shared
+        targetDirectory: repos
+      quicksight:
+        overrideParameters:
+          ResourceIdOverrideConfiguration:
+            PrefixForAllResources: deployed-{stage.name}-covid-
+          Dashboards:
+          - DashboardId: e0772d4e-bd69-444e-a421-cb3f165dbad8
+            Name: TotalDeathByCountry-{stage.name}
+tests:
+  folder: examples/analytic-workflow/dashboard-glue-quick/app_tests/

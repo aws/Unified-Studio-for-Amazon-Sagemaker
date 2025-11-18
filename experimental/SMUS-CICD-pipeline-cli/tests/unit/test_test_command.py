@@ -13,25 +13,22 @@ class TestTestCommand:
     def create_test_manifest_with_tests(self):
         """Create a test manifest with tests configuration."""
         manifest_content = """
-pipelineName: TestPipeline
-bundle:
+applicationName: TestPipeline
+content:
   storage:
-    - connectionName: default.s3_shared
+    - name: code
+      connectionName: default.s3_shared
       include: ["src/"]
-targets:
+stages:
   dev:
     domain:
       name: test-domain
       region: us-east-1
     project:
       name: test-project-dev
-    stage: dev
-    tests:
-      folder: tests/
-workflows:
-  - workflowName: test_dag
-    connectionName: project.workflow_mwaa
-    engine: MWAA
+    stage: DEV
+tests:
+  folder: tests/
 """
         fd, path = tempfile.mkstemp(suffix=".yaml")
         with os.fdopen(fd, "w") as f:
@@ -41,23 +38,20 @@ workflows:
     def create_test_manifest_without_tests(self):
         """Create a test manifest without tests configuration."""
         manifest_content = """
-pipelineName: TestPipeline
-bundle:
+applicationName: TestPipeline
+content:
   storage:
-    - connectionName: default.s3_shared
+    - name: code
+      connectionName: default.s3_shared
       include: ["src/"]
-targets:
+stages:
   dev:
     domain:
       name: test-domain
       region: us-east-1
     project:
       name: test-project-dev
-    stage: dev
-workflows:
-  - workflowName: test_dag
-    connectionName: project.workflow_mwaa
-    engine: MWAA
+    stage: DEV
 """
         fd, path = tempfile.mkstemp(suffix=".yaml")
         with os.fdopen(fd, "w") as f:
@@ -73,7 +67,7 @@ workflows:
             with tempfile.TemporaryDirectory() as temp_dir:
                 os.chdir(temp_dir)
 
-                result = runner.invoke(app, ["test", "--pipeline", manifest_file])
+                result = runner.invoke(app, ["test", "--manifest", manifest_file])
 
                 assert result.exit_code == 1  # Should fail when no tests configured
                 assert "No tests configured" in result.stdout
@@ -91,7 +85,7 @@ workflows:
                 os.chdir(temp_dir)
 
                 result = runner.invoke(
-                    app, ["test", "--pipeline", manifest_file, "--targets", "dev"]
+                    app, ["test", "--manifest", manifest_file, "--targets", "dev"]
                 )
 
                 assert result.exit_code == 1
@@ -125,7 +119,7 @@ def test_simple():
                     )
 
                 result = runner.invoke(
-                    app, ["test", "--pipeline", manifest_file, "--targets", "dev"]
+                    app, ["test", "--manifest", manifest_file, "--targets", "dev"]
                 )
 
                 # Should show test folder found (even if AWS connection fails)
@@ -148,11 +142,11 @@ def test_simple():
                 os.chdir(temp_dir)
 
                 result = runner.invoke(
-                    app, ["test", "--pipeline", manifest_file, "--output", "JSON"]
+                    app, ["test", "--manifest", manifest_file, "--output", "JSON"]
                 )
 
                 assert result.exit_code == 1  # Should fail when no tests configured
-                assert '"pipeline": "TestPipeline"' in result.stdout
+                assert '"bundle": "TestPipeline"' in result.stdout
                 assert '"status": "error"' in result.stdout
         finally:
             os.unlink(manifest_file)
@@ -167,7 +161,7 @@ def test_simple():
                 os.chdir(temp_dir)
 
                 result = runner.invoke(
-                    app, ["test", "--pipeline", manifest_file, "--targets", "dev"]
+                    app, ["test", "--manifest", manifest_file, "--targets", "dev"]
                 )
 
                 assert result.exit_code == 1  # Should fail when no tests configured
@@ -185,7 +179,7 @@ def test_simple():
                 os.chdir(temp_dir)
 
                 result = runner.invoke(
-                    app, ["test", "--pipeline", manifest_file, "--targets", "invalid"]
+                    app, ["test", "--manifest", manifest_file, "--targets", "invalid"]
                 )
 
                 assert result.exit_code == 1
@@ -203,7 +197,7 @@ def test_simple():
                 os.chdir(temp_dir)
 
                 result = runner.invoke(
-                    app, ["test", "--pipeline", manifest_file, "--verbose"]
+                    app, ["test", "--manifest", manifest_file, "--verbose"]
                 )
 
                 assert result.exit_code == 1  # Should fail when no tests configured

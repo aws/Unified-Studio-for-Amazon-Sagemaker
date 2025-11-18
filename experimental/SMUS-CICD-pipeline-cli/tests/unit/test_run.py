@@ -20,8 +20,10 @@ class TestRunCommand:
     def create_test_manifest(self):
         """Create a test manifest file."""
         manifest_content = """
-pipelineName: TestPipeline
-targets:
+applicationName: TestPipeline
+content:
+  storage: []
+stages:
   dev:
     domain:
       name: test-domain
@@ -30,9 +32,6 @@ targets:
     project:
       name: test-project
       create: false
-workflows:
-  - workflowName: test_workflow
-    connectionName: project.workflow_mwaa
 """
         f = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False)
         f.write(manifest_content)
@@ -46,7 +45,7 @@ workflows:
 
         try:
             result = runner.invoke(
-                app, ["run", "--pipeline", manifest_file, "--command", "dags list"]
+                app, ["run", "--manifest", manifest_file, "--command", "dags list"]
             )
             assert result.exit_code == 1
             # Error messages go to stderr in typer
@@ -66,7 +65,7 @@ workflows:
 
         try:
             result = runner.invoke(
-                app, ["run", "--pipeline", manifest_file, "--workflow", "test_workflow"]
+                app, ["run", "--manifest", manifest_file, "--workflow", "test_workflow"]
             )
             assert result.exit_code == 1
             # Error messages go to stderr in typer
@@ -89,7 +88,7 @@ workflows:
                 app,
                 [
                     "run",
-                    "--pipeline",
+                    "--manifest",
                     manifest_file,
                     "--workflow",
                     "test_workflow",
@@ -110,7 +109,7 @@ workflows:
 
             os.unlink(manifest_file)
 
-    @patch("smus_cicd.commands.run.PipelineManifest.from_file")
+    @patch("smus_cicd.commands.run.ApplicationManifest.from_file")
     @patch("smus_cicd.helpers.mwaa.validate_mwaa_health")
     @patch("smus_cicd.commands.run.load_config")
     @patch("smus_cicd.commands.run.get_datazone_project_info")
@@ -135,7 +134,7 @@ workflows:
         mock_target = MagicMock()
         mock_target.project.name = "test-project"
         mock_manifest_obj = MagicMock()
-        mock_manifest_obj.targets = {"dev": mock_target}
+        mock_manifest_obj.stages = {"dev": mock_target}
         mock_manifest_obj.get_target_config.return_value = mock_target
         mock_manifest.return_value = mock_manifest_obj
 
@@ -160,7 +159,7 @@ workflows:
                 app,
                 [
                     "run",
-                    "--pipeline",
+                    "--manifest",
                     manifest_file,
                     "--workflow",
                     "test_workflow",
@@ -180,7 +179,7 @@ workflows:
 
             os.unlink(manifest_file)
 
-    @patch("smus_cicd.commands.run.PipelineManifest.from_file")
+    @patch("smus_cicd.commands.run.ApplicationManifest.from_file")
     @patch("smus_cicd.helpers.mwaa.validate_mwaa_health")
     @patch("smus_cicd.commands.run.load_config")
     @patch("smus_cicd.commands.run.get_datazone_project_info")
@@ -205,7 +204,7 @@ workflows:
         mock_target = MagicMock()
         mock_target.project.name = "test-project"
         mock_manifest_obj = MagicMock()
-        mock_manifest_obj.targets = {"dev": mock_target}
+        mock_manifest_obj.stages = {"dev": mock_target}
         mock_manifest_obj.get_target_config.return_value = mock_target
         mock_manifest.return_value = mock_manifest_obj
 
@@ -230,7 +229,7 @@ workflows:
                 app,
                 [
                     "run",
-                    "--pipeline",
+                    "--manifest",
                     manifest_file,
                     "--workflow",
                     "test_workflow",
@@ -266,7 +265,7 @@ workflows:
 
             os.unlink(manifest_file)
 
-    @patch("smus_cicd.commands.run.PipelineManifest.from_file")
+    @patch("smus_cicd.commands.run.ApplicationManifest.from_file")
     @patch("smus_cicd.helpers.mwaa.validate_mwaa_health")
     @patch("smus_cicd.commands.run.load_config")
     @patch("smus_cicd.commands.run.get_datazone_project_info")
@@ -284,7 +283,7 @@ workflows:
         mock_target = MagicMock()
         mock_target.project.name = "test-project"
         mock_manifest_obj = MagicMock()
-        mock_manifest_obj.targets = {"dev": mock_target}
+        mock_manifest_obj.stages = {"dev": mock_target}
         mock_manifest_obj.get_target_config.return_value = mock_target
         mock_manifest.return_value = mock_manifest_obj
 
@@ -295,7 +294,7 @@ workflows:
                 app,
                 [
                     "run",
-                    "--pipeline",
+                    "--manifest",
                     manifest_file,
                     "--workflow",
                     "test_workflow",

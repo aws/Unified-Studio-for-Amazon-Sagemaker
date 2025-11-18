@@ -1,5 +1,13 @@
 # Code Assist Script
 
+## Q Task Tracking
+
+Task progress and context are tracked in the `q-tasks/` folder:
+- Location: `experimental/SMUS-CICD-pipeline-cli/q-tasks/`
+- Files: `q-task-*.txt` (e.g., `q-task-build-ml-workflow.txt`)
+- Purpose: Track progress, environment setup, debugging steps, and next actions
+- Note: This folder is git-ignored for local development tracking only
+
 ## Automated Workflow for Code Changes
 
 When making any code changes to the SMUS CI/CD CLI, follow this automated workflow to ensure consistency and quality:
@@ -26,6 +34,11 @@ git status
 ### 2. Make Code Changes
 - Implement the requested feature/fix
 - Update relevant docstrings and comments
+- **Follow PEP 8 style guide**: https://peps.python.org/pep-0008/
+  - Imports should be at the top of the file (after docstrings, before code)
+  - Use proper whitespace around operators
+  - Avoid unused imports and variables
+  - Use regular strings instead of f-strings when no placeholders are needed
 - **For DataZone catalog asset features**: Ensure proper exception handling - DataZone helper functions should raise exceptions instead of returning None/False to ensure proper CLI exit codes
 - **Always run linting checks after code changes:**
   ```bash
@@ -65,11 +78,42 @@ python tests/run_tests.py --type all
 
 ### 5. Integration Test Validation
 ```bash
-# Run integration tests
+# Run with detailed logging (creates logs in tests/test-outputs/)
+python run_integration_tests_with_logs.py
+
+# Or without logging
 python tests/run_tests.py --type integration
 
-# For faster iteration, skip slow tests:
+# Skip slow tests
 python tests/run_tests.py --type integration --skip-slow
+```
+
+**IMPORTANT: Verifying Test Results**
+- NEVER re-run test to check if it passed
+- ALWAYS check logs first: `tests/test-outputs/{test_name}.log`
+- ALWAYS check notebooks: `tests/test-outputs/notebooks/` (underscore-prefixed = actual outputs)
+
+```bash
+# Check logs and notebooks
+cat tests/test-outputs/TestMLWorkflow__test_ml_workflow_deployment.log
+ls tests/test-outputs/notebooks/_*.ipynb
+grep -i "error\|failed\|exception" tests/test-outputs/*.log
+```
+
+**CRITICAL: Integration Tests Are Slow (10-15 min) - Test Fixes Quickly First**
+
+1. Identify issue from logs/notebooks
+2. Create small test script (30 sec - 1 min)
+3. Iterate on fix with small script
+4. Only then run full integration test
+
+```bash
+# Quick test examples:
+# Notebook: python -c "import papermill as pm; pm.execute_notebook('nb.ipynb', '/tmp/out.ipynb', parameters={'p': 'v'})"
+# Manifest: python -c "from smus_cicd.application.application_manifest import ApplicationManifest; m = ApplicationManifest.from_file('manifest.yaml'); print(m.initialization)"
+# CLI: smus-cli describe --manifest manifest.yaml
+
+# Run full integration test only after fix confirmed working
 ```
 
 ### 6. Final Validation and Commit
@@ -115,32 +159,6 @@ gh run view <RUN-ID> --job <JOB-NAME> --log
 # - Ensure all stakeholders understand the impact
 ```
 
-## Key Features Implemented
-
-### DataZone Catalog Asset Access Integration
-The CLI now supports automated access to DataZone catalog assets during deployment:
-
-- **Pipeline Manifest Configuration**: Add catalog assets under `bundle.catalog.assets` section
-- **Automated Subscription Management**: Creates subscription requests for required data access
-- **Approval Workflow**: Waits for subscription approval with configurable timeout
-- **Grant Verification**: Ensures subscription grants are completed before proceeding
-- **Proper Error Handling**: CLI exits with error codes when catalog access fails
-
-Example pipeline manifest configuration:
-```yaml
-bundle:
-  catalog:
-    assets:
-      - selector:
-          search:
-            assetType: GlueTable
-            identifier: covid19_db.countries_aggregated
-        permission: READ
-        requestReason: Required access for pipeline deployment
-```
-
-**Testing DataZone Features**: Integration tests validate the complete workflow including asset search, subscription creation, approval monitoring, and grant verification.
-
 ## Test Runner Options
 
 ```bash
@@ -160,29 +178,159 @@ pytest tests/unit/                          # Unit tests
 pytest tests/integration/ -m "not slow"     # Integration tests (skip slow)
 ```
 
-## Direct Test Execution (without run_tests.py)
+## Integration Test Execution Guide (GenAI Reference)
 
-### Running Tests Directly
-For running tests directly without using the run_tests.py script:
+### Test Structure Overview
+Integration tests validate end-to-end CICD workflows in real AWS environments. Each test follows a standard pattern:
+1. Cleanup existing resources
+2. Describe pipeline configuration
+3. Upload code to S3
+4. Bundle deployment artifacts
+5. Deploy to target environment
+6. Run workflow
+7. Monitor execution
+8. Validate results
 
-#### Unit Tests
+### Running Specific Integration Tests
+
+#### ML Training Workflow Test
+**Purpose**: Tests ML training orchestrator with SageMaker and MLflow integration
+**Location**: `tests/integration/examples-analytics-workflows/ml/test_ml_workflow.py`
+**Duration**: ~11 minutes
+**Environment**: Account 198737698272, us-east-1, test-marketing project
+
+```bash
+cd experimental/SMUS-CICD-pipeline-cli
+pytest tests/integration/examples-analytics-workflows/ml/test_ml_workflow.py::TestMLWorkflow::test_ml_workflow_deployment -v -s
+```
+
+**What it validates**:
+- MLflow ARN parameter injection via Papermill
+- Dynamic connection fetching (S3, IAM, MLflow)
+- SageMaker training job execution
+- Model logging to MLflow tracking server
+- Workflow completes with exit_code=0
+
+**Key files**:
+- Notebook: `examples/analytic-workflow/ml/workflows/ml_orchestrator_notebook.ipynb`
+- Workflow: `examples/analytic-workflow/ml/workflows/ml_dev_workflow_v3.yaml`
+- Pipeline: `examples/analytic-workflow/ml/ml_pipeline.yaml`
+
+**Check notebooks (ALWAYS CHECK HERE FIRST)**:
+```bash
+# Check local test outputs (underscore-prefixed = actual outputs)
+ls tests/test-outputs/notebooks/_*.ipynb
+grep '"output_type": "error"' tests/test-outputs/notebooks/_*.ipynb
+
+# If not local, download from S3
+aws s3 ls s3://amazon-sagemaker-ACCOUNT-REGION-ID/shared/workflows/output/ --recursive | grep output.tar.gz
+```
+
+#### ETL Workflow Test
+**Purpose**: Tests Glue ETL jobs with parameter passing and database creation
+**Location**: `tests/integration/examples-analytics-workflows/etl/test_etl_workflow.py`
+**Duration**: ~10 minutes
+**Environment**: Account 198737698272, us-east-1, test-marketing project
+
+```bash
+cd experimental/SMUS-CICD-pipeline-cli
+pytest tests/integration/examples-analytics-workflows/etl/test_etl_workflow.py -v -s
+```
+
+**What it validates**:
+- Glue job parameter passing via `run_job_kwargs.Arguments`
+- S3 data cleanup before execution
+- Database creation in Glue catalog
+- Workflow completion polling (30s intervals, 10min timeout)
+- All 4 parameters received by Glue job
+
+**Key fix**: Use `run_job_kwargs.Arguments` instead of `script_args` in workflow YAML
+
+**Key files**:
+- Workflow: `examples/analytic-workflow/etl/s3_analytics_workflow.yaml`
+- Glue scripts: `examples/analytic-workflow/etl/*.py`
+- Pipeline: `examples/analytic-workflow/etl/etl_pipeline.yaml`
+
+#### Basic Pipeline Test
+**Purpose**: Tests parameter passing from workflow to notebook via Papermill
+**Location**: `tests/integration/basic_pipeline/test_basic_app.py`
+**Duration**: ~15 minutes
+
+```bash
+cd experimental/SMUS-CICD-pipeline-cli
+pytest tests/integration/basic_pipeline/test_basic_app.py -v -s
+```
+
+**What it validates**:
+- Variable substitution: `{proj.connection.mlflow-server.trackingServerArn}`
+- Papermill parameter injection to notebooks
+- Parameters cell tagging and injection
+- Workflow execution and completion
+
+### Unit Tests
 ```bash
 cd experimental/SMUS-CICD-pipeline-cli
 python -m pytest tests/unit -v
 ```
 
-#### Integration Tests
+### All Integration Tests
 ```bash
 cd experimental/SMUS-CICD-pipeline-cli
 python -m pytest tests/integration -v
 ```
 
-Integration tests are located in `tests/integration/` and include:
-- Basic pipeline tests
-- Multi-target pipeline tests
-- Bundle deploy pipeline tests
-- Test pipeline creation/deletion
-- End-to-end pipeline tests
+### Test Output Locations
+- **Logs**: `tests/test-outputs/{TestClass}__{test_method}.log`
+- **Notebooks**: `tests/test-outputs/notebooks/_*.ipynb` (underscore = actual outputs)
+- **Reports**: `tests/reports/test-results.html`
+- **Coverage**: `tests/reports/coverage/`
+
+### Common Test Patterns
+
+**Parameter Injection Pattern** (ML/Basic tests):
+1. Workflow YAML defines `input_params` with variable substitution
+2. Papermill injects parameters into tagged cell
+3. Notebook receives parameters as variables
+4. Verify in executed notebook's "injected-parameters" cell
+
+**Workflow Monitoring Pattern** (All tests):
+1. Start workflow with `run` command
+2. Poll status with `monitor` command
+3. Fetch logs with `logs --live` command
+4. Wait for "Task finished" with exit_code=0
+
+**S3 Artifact Pattern** (ML/ETL tests):
+1. Bundle creates compressed archives
+2. Deploy uploads to `s3://{bucket}/shared/{path}/`
+3. Workflow references S3 paths
+4. Download outputs from `s3://{bucket}/shared/workflows/output/`
+
+### Debugging Failed Tests
+
+**Check workflow status**:
+```bash
+# List workflows
+aws mwaaserverless list-workflows --region us-east-2 --endpoint-url https://airflow-serverless.us-east-2.api.aws/
+
+# Check runs
+aws mwaaserverless list-workflow-runs --workflow-arn ARN --region us-east-2 --endpoint-url https://airflow-serverless.us-east-2.api.aws/
+```
+
+**Check notebooks (ALWAYS CHECK HERE FIRST)**:
+```bash
+# Check local (underscore-prefixed = actual outputs)
+ls tests/test-outputs/notebooks/_*.ipynb
+grep '"output_type": "error"' tests/test-outputs/notebooks/_*.ipynb
+
+# If not local, use download script
+python tests/scripts/download_workflow_outputs.py --workflow-arn <ARN>
+# Downloads to /tmp/workflow_outputs/
+```
+
+**Check Glue job parameters**:
+```bash
+aws glue get-job-run --job-name JOB_NAME --run-id RUN_ID --query 'JobRun.Arguments'
+```
 
 Important Note: These are pytest-based integration tests, NOT Hydra tests. Do not attempt to run them using the Hydra test platform.
 
@@ -202,6 +350,26 @@ Important Note: These are pytest-based integration tests, NOT Hydra tests. Do no
 - [ ] CLI parameter usage is consistent
 - [ ] Documentation reflects actual behavior
 - [ ] Check that the code and markdown files don't contain aws account ids, web addresses, or host names. Mask all of these before committing.
+  ```bash
+  # Run automated check for hardcoded values
+  ./tests/scripts/check-hardcoded-values.sh
+  
+  # This checks for:
+  # - AWS Account IDs (12-digit numbers)
+  # - Hardcoded AWS regions in code
+  # - Hardcoded AWS endpoints
+  # - IP addresses
+  # - IAM role ARNs with account IDs
+  # - S3 bucket names with account IDs
+  # - Internal hostnames
+  # - Email addresses
+  
+  # If issues found, fix them:
+  # - Account IDs: Use boto3.client('sts').get_caller_identity()['Account']
+  # - Regions: Use os.environ.get('AWS_DEFAULT_REGION', 'us-east-1')
+  # - Endpoints: Use environment variables or dynamic lookup
+  # - Emails: Use placeholders like user@example.com
+  ```
 - [ ] Check that lint is passing
 - [ ] Don't swallow exceptions, if an error is thrown, it must be logged or handled
 - [ ] All changes are committed
@@ -304,3 +472,119 @@ gh run download <RUN-ID>
 ```
 
 Note: Replace `<PR-NUMBER>` with the actual PR number and `<RUN-ID>` with the actual run ID from the GitHub Actions workflow.
+
+## Airflow Serverless (Overdrive) Environment Configuration
+
+When working with airflow-serverless workflows, always determine the current environment configuration dynamically:
+
+### AWS Service Name (Pre-GA)
+**IMPORTANT**: Until the service is fully GA, use the internal service name:
+- **Service Name**: `mwaaserverless-internal` (NOT `airflow-serverless`)
+- **Endpoint**: `https://airflow-serverless.{region}.api.aws/`
+- This is already configured in `src/smus_cicd/helpers/airflow_serverless.py`
+
+### AWS CLI Commands
+```bash
+# List available commands
+aws mwaaserverless-internal help
+
+# Get workflow run status
+aws mwaaserverless-internal get-workflow-run \
+  --workflow-arn "arn:aws:airflow-serverless:REGION:ACCOUNT:workflow/NAME" \
+  --run-id "RUN_ID" \
+  --region REGION \
+  --endpoint-url "https://airflow-serverless.REGION.api.aws/"
+
+# List workflows
+aws mwaaserverless-internal list-workflows \
+  --region REGION \
+  --endpoint-url "https://airflow-serverless.REGION.api.aws/"
+
+# List workflow runs
+aws mwaaserverless-internal list-workflow-runs \
+  --workflow-arn "ARN" \
+  --region REGION \
+  --endpoint-url "https://airflow-serverless.REGION.api.aws/"
+```
+
+### API Response Structure
+The `get-workflow-run` API returns status in `RunDetail.RunState`, not `Status`:
+```json
+{
+  "Status": null,
+  "RunDetail": {
+    "RunState": "SUCCESS",  // Actual status field
+    "StartedOn": "...",
+    "CompletedOn": "...",
+    "Duration": 751
+  }
+}
+```
+
+### Environment Variables Check
+```bash
+# Check current airflow-serverless endpoint
+echo $AIRFLOW_SERVERLESS_ENDPOINT
+
+# Check current AWS region
+echo $AWS_DEFAULT_REGION
+
+# Check current AWS account
+aws sts get-caller-identity --query Account --output text
+
+# Get all relevant environment variables
+env | grep -E "(AWS_REGION|AWS_DEFAULT_REGION|AWS_ACCOUNT|AIRFLOW_SERVERLESS|OVERDRIVE)" | sort
+```
+
+### Dynamic Configuration Pattern
+When updating documentation or code, use this approach to get current values:
+- **Service Name**: `mwaaserverless-internal` (hardcoded until GA)
+- **Endpoint**: Read from `$AIRFLOW_SERVERLESS_ENDPOINT` or default to `https://airflow-serverless.{region}.api.aws/`
+- **Region**: Read from `$AWS_DEFAULT_REGION` or `$AWS_REGION` environment variable  
+- **Account**: Get from `aws sts get-caller-identity --query Account --output text`
+- **IAM Role Pattern**: `arn:aws:iam::{account}:role/datazone_usr_role_{project_id}_{environment_id}`
+
+### Important Notes
+- Never hardcode account IDs, regions, or endpoints in permanent documentation
+- Always reference environment variables or provide commands to determine current values
+- The airflow-serverless service may use different endpoints/regions across environments
+- Use `aws sts get-caller-identity` to verify you're working with the correct AWS account
+- **Pre-GA**: Service name is `mwaaserverless-internal` - this will change to `airflow-serverless` at GA
+
+### Verify No Hardcoded Values
+Before committing code, run the automated check:
+```bash
+./tests/scripts/check-hardcoded-values.sh
+```
+
+This script checks for:
+- AWS Account IDs (12-digit numbers)
+- Hardcoded AWS regions in code (not in config files)
+- Hardcoded AWS endpoints
+- IP addresses
+- IAM role ARNs with account IDs
+- S3 bucket names with account IDs
+- Internal hostnames
+- Email addresses (potential PII)
+
+**How to fix issues:**
+```python
+# ❌ Bad - Hardcoded account ID
+account_id = "123456789012"
+
+# ✅ Good - Dynamic lookup
+account_id = boto3.client('sts').get_caller_identity()['Account']
+
+# ❌ Bad - Hardcoded region
+region = "us-east-1"
+
+# ✅ Good - Environment variable with default
+region = os.environ.get('AWS_DEFAULT_REGION', 'us-east-1')
+
+# ❌ Bad - Hardcoded endpoint
+endpoint = "https://airflow-serverless.us-east-1.api.aws/"
+
+# ✅ Good - Environment variable
+endpoint = os.environ.get('AIRFLOW_SERVERLESS_ENDPOINT', 
+                         f'https://airflow-serverless.{region}.api.aws/')
+```

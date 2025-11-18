@@ -1,0 +1,67 @@
+scenario: create_glue_job_pipeline
+description: User creates CICD pipeline for AWS Glue job with GitHub Actions
+
+turns:
+  # Turn 1: User asks about Glue job pipelines
+  - type: user_input
+    message: "I want to create CICD for my Glue job in this project"
+
+  # Turn 2: Q searches for Glue/ETL pipeline information
+  - type: tool_call
+    tool: query_smus_kb
+    arguments:
+      query: "glue etl pipeline"
+      max_results: 3
+    save_as: search_result
+
+  # Turn 3: Verify search found relevant content
+  - type: assertion
+    check: contains
+    target: search_result
+    value: "etl"
+
+  # Turn 4: Q generates ETL pipeline example
+  - type: tool_call
+    tool: get_pipeline_example
+    arguments:
+      use_case: "etl"
+    save_as: pipeline_example
+
+  # Turn 5: Verify pipeline contains required fields
+  - type: assertion
+    check: contains
+    target: pipeline_example
+    value: "bundleName"
+
+  - type: assertion
+    check: contains
+    target: pipeline_example
+    value: "targets"
+
+  - type: assertion
+    check: contains
+    target: pipeline_example
+    value: "bundle"
+
+  # Turn 6: User asks about GitHub Actions
+  - type: user_input
+    message: "Can you also generate GitHub Actions workflow for this?"
+
+  # Turn 7: Q searches for GitHub Actions templates
+  - type: tool_call
+    tool: query_smus_kb
+    arguments:
+      query: "github actions workflow"
+      max_results: 3
+    save_as: github_search
+
+  # Turn 8: Verify GitHub Actions info found
+  - type: assertion
+    check: contains
+    target: github_search
+    value: "github"
+
+expected_outcome:
+  pipeline_generated: true
+  github_workflow_info: true
+  user_satisfied: true

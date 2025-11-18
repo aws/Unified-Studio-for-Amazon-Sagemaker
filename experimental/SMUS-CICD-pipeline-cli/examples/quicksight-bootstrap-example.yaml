@@ -1,0 +1,77 @@
+applicationName: QuickSightBootstrapExample
+
+content:
+  storage:
+    - name: etl-code
+      connectionName: default.s3_shared
+      include:
+        - etl/scripts/
+  
+  workflows:
+    - workflowName: data_processing_dag
+      connectionName: default.workflow_serverless
+  
+  # QuickSight dashboards (datasets are imported automatically)
+  quicksight:
+    - dashboardId: sample-dashboard
+      assetBundle: quicksight/sample-dashboard.qs
+
+stages:
+  dev:
+    stage: DEV
+    domain:
+      tags:
+        purpose: smus-cicd-testing
+      region: us-east-2
+    project:
+      name: dev-analytics
+    # No bootstrap actions in dev - just deploy
+    
+  test:
+    stage: TEST
+    domain:
+      tags:
+        purpose: smus-cicd-testing
+      region: us-east-2
+    project:
+      name: test-analytics
+    # Trigger workflow and refresh imported datasets
+    bootstrap:
+      actions:
+        - type: workflow.run
+          workflowName: data_processing_dag
+          wait: false
+        - type: quicksight.refresh_dataset
+          refreshScope: IMPORTED  # Refresh datasets imported during deployment
+          wait: false
+    
+  prod:
+    stage: PROD
+    domain:
+      tags:
+        purpose: smus-cicd-production
+      region: us-east-2
+    project:
+      name: prod-analytics
+    # Complete workflow: run ETL, wait, then refresh specific datasets
+    bootstrap:
+      actions:
+        # Step 1: Trigger ETL workflow and wait for completion
+        - type: workflow.run
+          workflowName: data_processing_dag
+          wait: true
+        
+        # Step 2: Refresh specific QuickSight datasets
+        - type: quicksight.refresh_dataset
+          refreshScope: SPECIFIC
+          datasetIds:
+            - my-sales-dataset-id
+            - my-inventory-dataset-id
+          ingestionType: FULL_REFRESH
+          wait: true
+          timeout: 600
+        
+        # Step 3: Verify workflow logs
+        - type: workflow.logs
+          workflowName: data_processing_dag
+          lines: 50

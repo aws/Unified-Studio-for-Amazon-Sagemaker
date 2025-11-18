@@ -1,54 +1,20 @@
-# SMUS CI/CD Pipeline Manifest
-# Generated template with required fields and optional field examples
-
-pipelineName: YourPipelineName
-
-# Bundle configuration (optional)
-bundle:
-  bundlesDirectory: /tmp/bundles
-  # workflow:
-  #   - connectionName: project.workflow_connection
-  #     append: true
-  #     include: ['workflows/']
-  # storage:
-  #   - connectionName: project.storage_connection
-  #     append: false
-  #     include: ['notebooks/', 'data/']
-
-targets:
+applicationName: TestBundle
+stages:
   dev:
+    stage: DEV
     domain:
-      name: your-domain-name  # PLACEHOLDER: Replace with your SageMaker Unified Studio domain name
-      region: us-east-1       # PLACEHOLDER: Replace with your AWS region
+      region: us-east-1
     project:
-      name: dev-project-name  # PLACEHOLDER: Replace with your dev project name
-    # default: true  # Uncomment to make this the default target
-  
+      name: dev-project-name
   test:
+    stage: TEST
     domain:
-      name: your-domain-name  # PLACEHOLDER: Replace with your SageMaker Unified Studio domain name
-      region: us-east-1       # PLACEHOLDER: Replace with your AWS region
+      region: us-east-1
     project:
-      name: test-project-name  # PLACEHOLDER: Replace with your test project name
-  
+      name: test-project-name
   prod:
+    stage: PROD
     domain:
-      name: your-domain-name  # PLACEHOLDER: Replace with your SageMaker Unified Studio domain name
-      region: us-east-1       # PLACEHOLDER: Replace with your AWS region
+      region: us-east-1
     project:
-      name: prod-project-name  # PLACEHOLDER: Replace with your prod project name
-
-# Workflows configuration (optional)
-# workflows:
-#   - workflowName: your_workflow_name
-#     connectionName: project.workflow_mwaa
-#     logging: console
-#     engine: MWAA
-#     # parameters:
-#     #   env: production
-#     #   timeout: 3600
-#   
-#   - workflowName: another_workflow
-#     connectionName: project.workflow_mwaa
-#     logging: none
-#     engine: MWAA
+      name: prod-project-name

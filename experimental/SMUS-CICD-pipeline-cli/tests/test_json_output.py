@@ -15,7 +15,7 @@ class TestJSONOutput:
         """Create a test manifest file."""
         manifest_content = """
 pipelineName: TestPipeline
-targets:
+stages:
   dev:
     domain:
       name: test-domain
@@ -47,15 +47,15 @@ workflows:
 
             # Should be valid JSON
             output_data = json.loads(result.stdout)
-            assert "pipeline" in output_data
+            assert "bundle" in output_data
             assert "targets" in output_data
-            assert output_data["pipeline"] == "TestPipeline"
+            assert output_data["bundle"] == "TestPipeline"
             assert "domain" in output_data["targets"]["dev"]
         finally:
             import os
             os.unlink(manifest_file)
 
-    @patch("smus_cicd.commands.run.PipelineManifest.from_file")
+    @patch("smus_cicd.commands.run.ApplicationManifest.from_file")
     @patch("smus_cicd.helpers.mwaa.validate_mwaa_health")
     @patch("smus_cicd.commands.run.load_config")
     @patch("smus_cicd.commands.run.get_datazone_project_info")
@@ -91,7 +91,7 @@ workflows:
         mock_target.domain.name = "test-domain"
         mock_target.domain.region = "us-east-1"
         mock_manifest_obj = MagicMock()
-        mock_manifest_obj.targets = {"dev": mock_target}
+        mock_manifest_obj.stages = {"dev": mock_target}
         mock_manifest_obj.get_target_config.return_value = mock_target
         mock_manifest.return_value = mock_manifest_obj
 

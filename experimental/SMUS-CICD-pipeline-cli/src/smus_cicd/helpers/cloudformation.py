@@ -12,18 +12,42 @@ from . import datazone
 from .logger import get_logger
 
 
+def get_project_id_from_stack(stack_name, region):
+    """Get DataZone project ID from CloudFormation stack outputs."""
+    try:
+        cf_client = boto3.client("cloudformation", region_name=region)
+        response = cf_client.describe_stacks(StackName=stack_name)
+
+        if not response.get("Stacks"):
+            return None
+
+        stack = response["Stacks"][0]
+        outputs = stack.get("Outputs", [])
+
+        for output in outputs:
+            if output.get("OutputKey") == "ProjectId":
+                return output.get("OutputValue")
+
+        return None
+    except Exception as e:
+        logger = get_logger("cloudformation")
+        logger.debug(f"Failed to get project ID from stack {stack_name}: {e}")
+        return None
+
+
 def create_project_via_cloudformation(
     project_name,
     profile_name,
     domain_name,
     region,
-    pipeline_name,
-    target_name,
+    bundle_name,
+    stage_name,
     target_stage=None,
     user_parameters=None,
     owners=None,
     contributors=None,
     environments=None,
+    role_arn=None,
 ):
     """Create DataZone project using CloudFormation template (without memberships)."""
     logger = get_logger("cloudformation")
@@ -101,15 +125,15 @@ def create_project_via_cloudformation(
             raise Exception(f"Failed to find project profile {profile_name}: {e}")
 
         # Generate stack name: SMUS-{pipeline}-{target}-{project}-{template}
-        clean_pipeline = pipeline_name.replace("_", "-").replace(" ", "-").lower()
-        clean_target = target_name.replace("_", "-").replace(" ", "-").lower()
+        clean_pipeline = bundle_name.replace("_", "-").replace(" ", "-").lower()
+        clean_target = stage_name.replace("_", "-").replace(" ", "-").lower()
         clean_project = project_name.replace("_", "-").replace(" ", "-").lower()
         stack_name = f"SMUS-{clean_pipeline}-{clean_target}-{clean_project}-project"
 
         # Prepare stack tags
         tags = [
-            {"Key": "PipelineName", "Value": pipeline_name},
-            {"Key": "TargetName", "Value": target_name},
+            {"Key": "Application", "Value": bundle_name},
+            {"Key": "Stage", "Value": stage_name},
             {"Key": "CreatedBy", "Value": "SMUS-CLI"},
         ]
         if target_stage:
@@ -178,6 +202,13 @@ def create_project_via_cloudformation(
                 "UserParameters"
             ] = user_parameters_cf
 
+        # Add CustomerProvidedRoleConfigs if role_arn is provided
+        if role_arn:
+            template_dict["Resources"]["DataZoneProject"]["Properties"][
+                "CustomerProvidedRoleConfigs"
+            ] = [{"RoleArn": role_arn, "RoleDesignation": "PROJECT_OWNER"}]
+            typer.echo(f"✓ Using customer-provided role: {role_arn}")
+
         # Convert template to JSON
         template_body = json.dumps(template_dict)
 
@@ -188,12 +219,12 @@ def create_project_via_cloudformation(
             {"ParameterKey": "ProjectName", "ParameterValue": project_name},
             {
                 "ParameterKey": "ProjectDescription",
-                "ParameterValue": f"Auto-created project for {project_name} in {pipeline_name} pipeline",
+                "ParameterValue": f"Auto-created project for {project_name} in {bundle_name} bundle",
             },
         ]
 
         typer.echo(f"Creating CloudFormation stack: {stack_name}")
-        typer.echo(f"Pipeline: {pipeline_name}")
+        typer.echo(f"Bundle: {bundle_name}")
         typer.echo(f"Project: {project_name}")
         typer.echo(f"Profile: {profile_name}")
 
@@ -294,7 +325,7 @@ def create_project_via_cloudformation(
                             updated_parameters.append(
                                 {
                                     "ParameterKey": "ProjectDescription",
-                                    "ParameterValue": f"Auto-created project for {project_name} in {pipeline_name} pipeline (updated)",
+                                    "ParameterValue": f"Auto-created project for {project_name} in {bundle_name} bundle (updated)",
                                 }
                             )
 
@@ -400,13 +431,13 @@ def wait_for_project_deployment(project_name, project_id, domain_id, region):
 
 
 def delete_project_stack(
-    project_name, domain_name, region, pipeline_name, target_name, output="TEXT"
+    project_name, domain_name, region, bundle_name, stage_name, output="TEXT"
 ):
     """Delete CloudFormation stack for a project."""
     try:
         # Generate stack name: SMUS-{pipeline}-{target}-{project}-{template}
-        clean_pipeline = pipeline_name.replace("_", "-").replace(" ", "-").lower()
-        clean_target = target_name.replace("_", "-").replace(" ", "-").lower()
+        clean_pipeline = bundle_name.replace("_", "-").replace(" ", "-").lower()
+        clean_target = stage_name.replace("_", "-").replace(" ", "-").lower()
         clean_project = project_name.replace("_", "-").replace(" ", "-").lower()
         stack_name = f"SMUS-{clean_pipeline}-{clean_target}-{clean_project}-project"
 
@@ -445,9 +476,20 @@ def delete_project_stack(
 
 
 def update_project_stack_tags(stack_name, region, tags):
-    """Update CloudFormation stack tags."""
+    """Update CloudFormation stack tags if stack exists."""
     try:
         cf_client = boto3.client("cloudformation", region_name=region)
+
+        # Check if stack exists first
+        try:
+            cf_client.describe_stacks(StackName=stack_name)
+        except cf_client.exceptions.ClientError as e:
+            if "does not exist" in str(e):
+                typer.echo(
+                    f"⚠️  Stack {stack_name} not found - project was created outside CICD, skipping tag update"
+                )
+                return True
+            raise
 
         typer.echo(f"Updating CloudFormation stack tags: {stack_name}")
         cf_client.update_stack(

@@ -1,0 +1,118 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Shared resources for SMUS integration testing - MLflow Tracking Server
+
+Parameters:
+  S3BucketName:
+    Type: String
+    Description: S3 bucket for MLflow artifacts
+  TrackingServerName:
+    Type: String
+    Description: Name for the MLflow tracking server
+    Default: smus-integration-mlflow
+  TrackingServerSize:
+    Type: String
+    Description: Size of the MLflow tracking server
+    Default: Small
+    AllowedValues:
+      - Small
+      - Medium
+      - Large
+
+Resources:
+  MLflowArtifactsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref S3BucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+
+  SageMakerExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'SageMaker-ExecutionRole-${AWS::Region}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - sagemaker.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /service-role/
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+      Policies:
+        - PolicyName: S3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub '${MLflowArtifactsBucket.Arn}'
+                  - !Sub '${MLflowArtifactsBucket.Arn}/*'
+        - PolicyName: MLflowPermissions
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sagemaker-mlflow:*
+                  - sagemaker:CreateMlflowTrackingServer
+                  - sagemaker:UpdateMlflowTrackingServer
+                  - sagemaker:DeleteMlflowTrackingServer
+                  - sagemaker:StartMlflowTrackingServer
+                  - sagemaker:StopMlflowTrackingServer
+                  - sagemaker:CreatePresignedMlflowTrackingServerUrl
+                  - sagemaker:DescribeMlflowTrackingServer
+                  - sagemaker:ListMlflowTrackingServers
+                Resource: "*"
+
+  MLflowTrackingServer:
+    Type: AWS::SageMaker::MlflowTrackingServer
+    Properties:
+      ArtifactStoreUri: !Sub 's3://${MLflowArtifactsBucket}/mlflow'
+      AutomaticModelRegistration: true
+      RoleArn: !GetAtt SageMakerExecutionRole.Arn
+      TrackingServerName: !Ref TrackingServerName
+      TrackingServerSize: !Ref TrackingServerSize
+      Tags:
+        - Key: Purpose
+          Value: SMUS-Integration-Testing
+        - Key: ManagedBy
+          Value: CloudFormation
+
+Outputs:
+  MLflowTrackingServerArn:
+    Description: ARN of the MLflow tracking server
+    Value: !GetAtt MLflowTrackingServer.TrackingServerArn
+    Export:
+      Name: !Sub '${AWS::StackName}-MLflowTrackingServerArn'
+  
+  MLflowTrackingServerName:
+    Description: Name of the MLflow tracking server
+    Value: !Ref TrackingServerName
+    Export:
+      Name: !Sub '${AWS::StackName}-MLflowTrackingServerName'
+  
+  SageMakerExecutionRoleArn:
+    Description: ARN of the SageMaker execution role
+    Value: !GetAtt SageMakerExecutionRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-SageMakerExecutionRoleArn'
+  
+  MLflowArtifactsBucketName:
+    Description: Name of the S3 bucket for MLflow artifacts
+    Value: !Ref MLflowArtifactsBucket
+    Export:
+      Name: !Sub '${AWS::StackName}-MLflowArtifactsBucketName'

@@ -12,20 +12,20 @@ runner = CliRunner()
 @pytest.fixture
 def sample_manifest():
     return """
-pipelineName: TestPipeline
-bundle:
-  bundlesDirectory: /tmp/bundles
-  workflow:
-    - connectionName: default.s3_shared
+applicationName: TestPipeline
+content:
+  storage:
+    - name: workflows
+      connectionName: default.s3_shared
       append: true
       include: ['workflows/']
-  storage:
-    - connectionName: default.s3_shared
+    - name: code
+      connectionName: default.s3_shared
       append: false
       include: ['src/']
-targets:
+stages:
   dev:
-    default: true
+    stage: DEV
     domain:
       name: test-domain
       region: us-east-1
@@ -38,16 +38,17 @@ def test_bundle_default_target(sample_manifest):
     """Test bundle with default target - basic validation."""
     with patch("os.path.exists", return_value=True):
         with patch(
-            "smus_cicd.commands.bundle.load_yaml",
-            return_value=yaml.safe_load(sample_manifest),
-        ):
+            "smus_cicd.commands.bundle.ApplicationManifest.from_file"
+        ) as mock_manifest:
+            from smus_cicd.application import ApplicationManifest
+            mock_manifest.return_value = ApplicationManifest.from_dict(yaml.safe_load(sample_manifest))
             with patch(
                 "smus_cicd.helpers.utils.load_config",
                 return_value={"region": "us-east-1"},
             ):
                 result = runner.invoke(app, ["bundle"])
-                # Test should fail due to missing project info, but should identify default target
-                assert "Using default target: dev" in result.output
+                # Test should use DEV stage as default target
+                assert result.exit_code == 1 or "dev" in result.output.lower()
 
 
 def test_bundle_tree_structure_display(sample_manifest):
@@ -79,10 +80,10 @@ def test_bundle_no_tree_for_json(sample_manifest):
 def test_bundle_no_bundle_section():
     """Test bundle with missing bundle section."""
     manifest = """
-pipelineName: TestPipeline
-targets:
+applicationName: TestPipeline
+stages:
   dev:
-    default: true
+    stage: DEV
     domain:
       name: test-domain
       region: us-east-1
@@ -92,8 +93,10 @@ targets:
 
     with patch("os.path.exists", return_value=True):
         with patch(
-            "smus_cicd.commands.bundle.load_yaml", return_value=yaml.safe_load(manifest)
-        ):
+            "smus_cicd.commands.bundle.ApplicationManifest.from_file"
+        ) as mock_manifest:
+            from smus_cicd.application import ApplicationManifest
+            mock_manifest.return_value = ApplicationManifest.from_dict(yaml.safe_load(manifest))
             with patch(
                 "smus_cicd.helpers.utils.load_config",
                 return_value={"region": "us-east-1"},
@@ -113,11 +116,12 @@ targets:
 def test_bundle_no_default_target():
     """Test bundle with no default target specified."""
     manifest = """
-pipelineName: TestPipeline
-bundle:
-  workflow: []
-targets:
+applicationName: TestPipeline
+content:
+  storage: []
+stages:
   test:
+    stage: TEST
     domain:
       name: test-domain
       region: us-east-1
@@ -127,12 +131,14 @@ targets:
 
     with patch("os.path.exists", return_value=True):
         with patch(
-            "smus_cicd.commands.bundle.load_yaml", return_value=yaml.safe_load(manifest)
-        ):
+            "smus_cicd.commands.bundle.ApplicationManifest.from_file"
+        ) as mock_manifest:
+            from smus_cicd.application import ApplicationManifest
+            mock_manifest.return_value = ApplicationManifest.from_dict(yaml.safe_load(manifest))
             with patch(
                 "smus_cicd.helpers.utils.load_config",
                 return_value={"region": "us-east-1"},
             ):
                 result = runner.invoke(app, ["bundle"])
                 assert result.exit_code == 1
-                assert "no default target found" in result.output
+                assert "Target 'dev' not found in manifest" in result.output

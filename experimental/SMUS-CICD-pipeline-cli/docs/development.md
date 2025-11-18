@@ -1,15 +1,38 @@
 # Development Guide
 
+← [Back to Main README](../README.md)
+
 This guide covers development workflows, testing, and contribution guidelines for the SMUS CI/CD CLI.
+
+## Testing
+
+### Running Tests
+
+**Unit Tests:**
+```bash
+python tests/run_tests.py --type unit
+```
+
+**Integration Tests:**
+```bash
+python tests/run_tests.py --type integration
+```
+
+**All Tests:**
+```bash
+python tests/run_tests.py --type all
+```
+
+For detailed information about integration tests and example pipelines, see [Examples Testing Guide](../examples/README.md).
 
 ## Development Workflow
 
 ### Local Development
 1. **Update code** in dev environment S3 location
 2. **Create bundle**: `smus-cli bundle` (downloads latest from dev)
-3. **Deploy to test**: `smus-cli deploy --targets test` (deploys and triggers workflows)
+3. **Deploy to test**: `smus-cli deploy --stages test` (deploys and triggers workflows)
 4. **Verify execution**: Check workflow runs in SageMaker Unified Studio console
-5. **Deploy to prod**: `smus-cli deploy --targets prod` (when ready)
+5. **Deploy to prod**: `smus-cli deploy --stages prod` (when ready)
 
 ### GitHub Actions Integration
 The repository includes automated workflows for development:
@@ -60,7 +83,7 @@ The repository includes automated workflows for development:
 
 ### Environment Variable Configuration
 
-The CLI supports environment variable parameterization in pipeline manifests for flexible multi-environment development:
+The CLI supports environment variable parameterization in bundle manifests for flexible multi-environment development:
 
 **Local Development**:
 ```bash
@@ -81,7 +104,7 @@ export AWS_ROLE_ARN_DEV=arn:aws:iam::ACCOUNT:role/GitHubActionsRole-SMUS-CLI-Tes
 ```
 
 **Integration Test Manifests**:
-All integration test pipeline manifests use environment variables:
+All integration test bundle manifests use environment variables:
 ```yaml
 domain:
   name: cicd-test-domain
@@ -210,31 +233,8 @@ smus_cicd/
 
 ### Key Components
 - **CLI Commands**: Create, describe, bundle, deploy, test, monitor, run, delete
-- **Pipeline Manifest**: YAML configuration for multi-environment deployments
+- **Bundle Manifest**: YAML configuration for multi-environment deployments
 - **AWS Integrations**: DataZone, MWAA, S3, CloudFormation
 - **Bundle Management**: S3-based artifact storage and deployment
 
-## Troubleshooting
 
-### Common Issues
-- **AWS Credentials**: Ensure proper IAM permissions for DataZone and MWAA
-- **Domain/Project IDs**: Use `aws datazone list-domains` and `list-projects`
-- **S3 Permissions**: Verify access to bundle storage locations
-- **MWAA Connectivity**: Check VPC and security group configurations
-
-### Debug Mode
-```bash
-# Enable verbose logging
-export SMUS_CLI_DEBUG=1
-smus-cli <command> --verbose
-```
-
-### Integration Test Setup
-```bash
-# Deploy GitHub OIDC integration
-cd tests/integration/github
-./deploy-github-integration.sh
-
-# Run integration tests locally
-python scripts/validate.py --integration
-```

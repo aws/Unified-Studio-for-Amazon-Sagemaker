@@ -1,0 +1,92 @@
+applicationName: DemoMarketingBundle
+content:
+  storage:
+  - name: code
+    connectionName: default.s3_shared
+    include:
+    - '*'
+    exclude:
+    - .ipynb_checkpoints/
+    - __pycache__/
+    - '*.pyc'
+    - .libs.json
+  - name: workflows
+    connectionName: default.s3_shared
+    append: true
+    include:
+    - workflows
+    exclude:
+    - .ipynb_checkpoints/
+    - __pycache__/
+    - '*.pyc'
+    - .libs.json
+  catalog:
+    assets:
+    - selector:
+        search:
+          assetType: GlueTable
+          identifier: covid19_db.countries_aggregated
+      permission: READ
+      requestReason: Required access for DemoMarketingPipeline analytics
+    - selector:
+        search:
+          assetType: GlueTable
+          identifier: covid19_db.worldwide_aggregate
+      permission: READ
+      requestReason: Global data access for marketing insights
+
+tests:
+  folder: ./tests
+stages:
+  dev:
+    domain:
+      name: cicd-test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-1}
+    stage: DEV
+    project:
+      name: dev-marketing
+      create: false
+    deployment_configuration:
+      storage:
+      - name: code
+        connectionName: default.s3_shared
+        targetDirectory: src
+      - name: workflows
+        connectionName: default.s3_shared
+        targetDirectory: workflows
+  test:
+    domain:
+      name: cicd-test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-1}
+    stage: TEST
+    project:
+      name: dev-marketing-test
+      create: true
+
+    deployment_configuration:
+      storage:
+      - name: code
+        connectionName: default.s3_shared
+        targetDirectory: src
+      - name: workflows
+        connectionName: default.s3_shared
+        targetDirectory: workflows
+  prod:
+    domain:
+      name: cicd-test-domain
+      region: ${PROD_DOMAIN_REGION:us-east-1}
+    stage: PROD
+    project:
+      name: prod-marketing
+      create: true
+
+    deployment_configuration:
+      storage:
+      - name: code
+        connectionName: default.s3_shared
+        targetDirectory: src
+      - name: workflows
+        connectionName: default.s3_shared
+        targetDirectory: workflows
+      catalog:
+        disable: true

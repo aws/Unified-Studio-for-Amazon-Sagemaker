@@ -1,11 +1,6 @@
 # Configuration file for DataZone CI/CD deployment
 # Update these values for your specific AWS account and requirements
 
-# AWS Configuration
-region: us-east-1
-region2: us-west-2
-region3: us-east-2 
-
 # Multi-region configuration
 regions:
   primary:
@@ -39,8 +34,9 @@ users:
   admin_username: eng1
   owners:
     - Eng1
-    - "arn:aws:iam::058264284947:role/Admin"
-    - "arn:aws:iam::058264284947:role/GitHubActionsRole-SMUS-CLI-Tests"
+  owner_roles:
+    - Admin
+    - GitHubActionsRole-SMUS-CLI-Tests
 
 VPC:
   VpcId: 'vpc-062f261a970d7c476'

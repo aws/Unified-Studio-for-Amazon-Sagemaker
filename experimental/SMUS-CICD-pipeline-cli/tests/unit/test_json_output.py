@@ -14,8 +14,10 @@ class TestJSONOutput:
     def create_test_manifest(self):
         """Create a test manifest file."""
         manifest_content = """
-pipelineName: TestPipeline
-targets:
+applicationName: TestPipeline
+content:
+  storage: []
+stages:
   dev:
     domain:
       name: test-domain
@@ -24,9 +26,6 @@ targets:
     project:
       name: test-project
       create: false
-workflows:
-  - workflowName: test_workflow
-    connectionName: project.workflow_mwaa
 """
         f = tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False)
         f.write(manifest_content)
@@ -40,23 +39,23 @@ workflows:
 
         try:
             result = runner.invoke(
-                app, ["describe", "--pipeline", manifest_file, "--output", "JSON"]
+                app, ["describe", "--manifest", manifest_file, "--output", "JSON"]
             )
 
             assert result.exit_code == 0
 
             # Should be valid JSON
             output_data = json.loads(result.stdout)
-            assert "pipeline" in output_data
+            assert "bundle" in output_data
             assert "targets" in output_data
-            assert output_data["pipeline"] == "TestPipeline"
+            assert output_data["bundle"] == "TestPipeline"
             assert "domain" in output_data["targets"]["dev"]
         finally:
             import os
 
             os.unlink(manifest_file)
 
-    @patch("smus_cicd.commands.run.PipelineManifest.from_file")
+    @patch("smus_cicd.commands.run.ApplicationManifest.from_file")
     @patch("smus_cicd.helpers.mwaa.validate_mwaa_health")
     @patch("smus_cicd.commands.run.load_config")
     @patch("smus_cicd.commands.run.get_datazone_project_info")
@@ -90,7 +89,7 @@ workflows:
         mock_target = MagicMock()
         mock_target.project.name = "test-project"
         mock_manifest_obj = MagicMock()
-        mock_manifest_obj.targets = {"dev": mock_target}
+        mock_manifest_obj.stages = {"dev": mock_target}
         mock_manifest_obj.get_target_config.return_value = mock_target
         mock_manifest.return_value = mock_manifest_obj
 
@@ -107,7 +106,7 @@ workflows:
                 app,
                 [
                     "run",
-                    "--pipeline",
+                    "--manifest",
                     manifest_file,
                     "--workflow",
                     "test_workflow",
@@ -182,9 +181,19 @@ workflows:
 
                 # May succeed or fail, but should return valid JSON
                 if result.stdout.strip():
-                    output_data = json.loads(result.stdout)
-                    assert "target" in output_data
-                    assert "success" in output_data
+                    # Extract JSON from output (may have log messages before it)
+                    stdout_lines = result.stdout.strip().split('\n')
+                    json_start = -1
+                    for i, line in enumerate(stdout_lines):
+                        if line.strip().startswith('{'):
+                            json_start = i
+                            break
+                    
+                    if json_start >= 0:
+                        json_output = '\n'.join(stdout_lines[json_start:])
+                        output_data = json.loads(json_output)
+                        assert "target" in output_data
+                        assert "success" in output_data
 
         finally:
             import os
@@ -199,7 +208,7 @@ workflows:
             import os
 
             os.chdir(temp_dir)
-            output_file = "tests/fixtures/test-pipeline.yaml"
+            output_file = "tests/fixtures/test-manifest.yaml"
 
             result = runner.invoke(
                 app,
@@ -218,7 +227,7 @@ workflows:
             # This test will be updated when we add it
             assert result.exit_code in [0, 2]  # May not have --format option yet
 
-    @patch("smus_cicd.commands.run.PipelineManifest.from_file")
+    @patch("smus_cicd.commands.run.ApplicationManifest.from_file")
     @patch("smus_cicd.helpers.mwaa.validate_mwaa_health")
     @patch("smus_cicd.commands.run.load_config")
     @patch("smus_cicd.commands.run.get_datazone_project_info")
@@ -252,7 +261,7 @@ workflows:
         mock_target = MagicMock()
         mock_target.project.name = "test-project"
         mock_manifest_obj = MagicMock()
-        mock_manifest_obj.targets = {"dev": mock_target}
+        mock_manifest_obj.stages = {"dev": mock_target}
         mock_manifest_obj.get_target_config.return_value = mock_target
         mock_manifest.return_value = mock_manifest_obj
 
@@ -269,7 +278,7 @@ workflows:
                 app,
                 [
                     "run",
-                    "--pipeline",
+                    "--manifest",
                     manifest_file,
                     "--workflow",
                     "test_workflow",
@@ -305,7 +314,7 @@ workflows:
 
             os.unlink(manifest_file)
 
-    @patch("smus_cicd.commands.run.PipelineManifest.from_file")
+    @patch("smus_cicd.commands.run.ApplicationManifest.from_file")
     @patch("smus_cicd.helpers.mwaa.validate_mwaa_health")
     @patch("smus_cicd.commands.run.load_config")
     @patch("smus_cicd.commands.run.get_datazone_project_info")
@@ -339,7 +348,7 @@ workflows:
         mock_target = MagicMock()
         mock_target.project.name = "test-project"
         mock_manifest_obj = MagicMock()
-        mock_manifest_obj.targets = {"dev": mock_target}
+        mock_manifest_obj.stages = {"dev": mock_target}
         mock_manifest_obj.get_target_config.return_value = mock_target
         mock_manifest.return_value = mock_manifest_obj
 
@@ -356,7 +365,7 @@ workflows:
                 app,
                 [
                     "run",
-                    "--pipeline",
+                    "--manifest",
                     manifest_file,
                     "--workflow",
                     "test_workflow",
@@ -398,7 +407,7 @@ workflows:
 
         # Test with non-existent manifest file
         result = runner.invoke(
-            app, ["describe", "--pipeline", "nonexistent.yaml", "--output", "JSON"]
+            app, ["describe", "--manifest", "nonexistent.yaml", "--output", "JSON"]
         )
 
         assert result.exit_code == 1

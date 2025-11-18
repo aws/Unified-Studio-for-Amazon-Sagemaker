@@ -23,7 +23,7 @@ class TestCreateCommand:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as temp_dir:
             os.chdir(temp_dir)
-            output_file = "tests/fixtures/test-pipeline.yaml"
+            output_file = "tests/fixtures/test-manifest.yaml"
 
             result = runner.invoke(app, ["create", "--output", output_file])
 
@@ -35,9 +35,9 @@ class TestCreateCommand:
             # Verify file content
             with open(output_file, "r") as f:
                 content = f.read()
-                assert "pipelineName: YourPipelineName" in content
+                assert "applicationName: YourPipelineName" in content
                 assert "domain:" in content
-                assert "targets:" in content
+                assert "stages:" in content
                 assert "dev:" in content
                 assert "test:" in content
                 assert "prod:" in content
@@ -47,21 +47,21 @@ class TestCreateCommand:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as temp_dir:
             os.chdir(temp_dir)
-            output_file = "custom-pipeline.yaml"
-            pipeline_name = "MyCustomPipeline"
+            output_file = "custom-bundle.yaml"
+            bundle_name = "MyCustomPipeline"
 
             result = runner.invoke(
-                app, ["create", "--output", output_file, "--name", pipeline_name]
+                app, ["create", "--output", output_file, "--name", bundle_name]
             )
 
             assert result.exit_code == 0
-            assert f"Pipeline name: {pipeline_name}" in result.stdout
+            assert f"Bundle name: {bundle_name}" in result.stdout
             assert os.path.exists(output_file)
 
             # Verify custom name in file
             with open(output_file, "r") as f:
                 content = f.read()
-                assert f"pipelineName: {pipeline_name}" in content
+                assert f"applicationName: {bundle_name}" in content
 
     def test_create_with_custom_stages(self):
         """Test creating manifest with custom stages."""
@@ -118,7 +118,7 @@ class TestCreateCommand:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as temp_dir:
             os.chdir(temp_dir)
-            output_file = "aws-pipeline.yaml"
+            output_file = "aws-bundle.yaml"
 
             result = runner.invoke(
                 app,
@@ -176,7 +176,7 @@ class TestCreateCommand:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as temp_dir:
             os.chdir(temp_dir)
-            output_file = "test-pipeline.yaml"
+            output_file = "test-manifest.yaml"
 
             result = runner.invoke(
                 app,
@@ -204,13 +204,13 @@ class TestCreateCommand:
             # Verify file content has target-level domain configuration
             with open(output_file, "r") as f:
                 content = f.read()
-                assert "targets:" in content
+                assert "stages:" in content
                 # Check no top-level domain configuration
                 lines = content.split("\n")
                 in_targets = False
                 for line in lines:
                     stripped = line.strip()
-                    if stripped == "targets:":
+                    if stripped == "stages:":
                         in_targets = True
                     elif not line.startswith(" ") and stripped and stripped != "---":  # New top-level key
                         in_targets = False
@@ -243,7 +243,7 @@ class TestCreateCommand:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as temp_dir:
             os.chdir(temp_dir)
-            output_file = "error-pipeline.yaml"
+            output_file = "error-bundle.yaml"
 
             result = runner.invoke(
                 app,
@@ -288,7 +288,7 @@ class TestCreateCommand:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as temp_dir:
             os.chdir(temp_dir)
-            output_file = "error-pipeline.yaml"
+            output_file = "error-bundle.yaml"
 
             result = runner.invoke(
                 app,
@@ -314,7 +314,7 @@ class TestCreateCommand:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as temp_dir:
             os.chdir(temp_dir)
-            output_file = "nested/dir/pipeline.yaml"
+            output_file = "nested/dir/bundle.yaml"
 
             result = runner.invoke(app, ["create", "--output", output_file])
 
@@ -326,7 +326,7 @@ class TestCreateCommand:
         runner = CliRunner()
         with tempfile.TemporaryDirectory() as temp_dir:
             os.chdir(temp_dir)
-            output_file = "valid-pipeline.yaml"
+            output_file = "valid-bundle.yaml"
 
             # Create manifest
             create_result = runner.invoke(app, ["create", "--output", output_file])
@@ -334,7 +334,7 @@ class TestCreateCommand:
 
             # Verify it can be described
             describe_result = runner.invoke(
-                app, ["describe", "--pipeline", output_file]
+                app, ["describe", "--manifest", output_file]
             )
             assert describe_result.exit_code == 0
             assert "Pipeline:" in describe_result.stdout
@@ -352,15 +352,15 @@ class TestCreateCommand:
             with open(output_file, "r") as f:
                 content = f.read()
                 # Required fields
-                assert "pipelineName:" in content
+                assert "applicationName:" in content
                 assert "domain:" in content
                 assert "name:" in content  # domain name
                 assert "${DEV_DOMAIN_REGION:" in content  # parameterized region
-                assert "targets:" in content
+                assert "stages:" in content
 
                 # Optional fields (commented)
-                assert "# Bundle configuration" in content
-                assert "# workflows:" in content
+                assert "# Application content configuration" in content
+                assert "# Bootstrap actions" in content
 
                 # Placeholder indicators
                 assert "PLACEHOLDER" in content
@@ -419,4 +419,4 @@ class TestCreateCommand:
                 assert "dev:" in content
                 assert "test:" in content
                 assert "prod:" in content
-                assert "default: true  # Default target for operations" in content
+                assert "stage: DEV" in content  # DEV stage is the default target

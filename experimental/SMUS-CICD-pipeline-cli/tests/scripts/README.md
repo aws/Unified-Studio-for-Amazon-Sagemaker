@@ -1,43 +1,107 @@
-# SMUS CLI Deployment Scripts
+# Documentation Validation Scripts
 
-This directory contains deployment scripts for setting up the AWS infrastructure required by the SMUS CLI.
+Scripts to ensure documentation examples remain consistent with the codebase.
 
-## Quick Start
+## Scripts
 
-Deploy all infrastructure in the correct order:
+### validate_doc_manifests.py
 
+Extracts and validates all complete YAML manifests from documentation files.
+
+**Usage:**
 ```bash
-./deploy-all.sh [config-file]
+python tests/scripts/validate_doc_manifests.py
 ```
 
-## Individual Scripts
+**What it checks:**
+- ✅ Uses `applicationName` (not outdated `bundleName`)
+- ✅ Uses `stages` (not outdated `targets`)
+- ✅ Uses `content` section (not outdated `bundle`)
+- ✅ Workflows in `content.workflows` (not deprecated `activation`)
+- ✅ Stage structure has required `domain.region` and `project.name`
 
-- `deploy-github-integration.sh` - GitHub OIDC integration for CI/CD
-- `deploy-vpc.sh` - Multi-region VPC infrastructure  
-- `deploy-domain.sh` - DataZone domain and IAM roles
-- `deploy-blueprints-profiles.sh` - Environment blueprints and profiles
-- `deploy-projects.sh` - Dev project with user membership
-- `deploy-memberships.sh` - Additional project memberships
+**Exit codes:**
+- `0` - All manifests valid
+- `1` - Validation errors found
 
-## Configuration
+### fix_doc_manifests.py
 
-All scripts support config file override:
+Auto-fixes common manifest issues in documentation files.
+
+**Usage:**
 ```bash
-./script-name.sh config-6778.yaml
+python tests/scripts/fix_doc_manifests.py
 ```
 
-Default configuration file: `config.yaml`
+**What it fixes:**
+- `bundleName:` → `applicationName:`
+- `bundle:` → `content:`
+- `activation: workflows:` → `content: workflows:`
 
-## Prerequisites
+### validate_doc_backlinks.py
 
-- AWS CLI configured with appropriate permissions
-- AWS Identity Center (IDC) enabled
-- `yq` YAML processor installed
+Validates that all documentation files have back links to main README.
 
-## For Complete Setup Instructions
+**Usage:**
+```bash
+python tests/scripts/validate_doc_backlinks.py
+```
 
-See [development.md](../../development.md) for:
-- Detailed deployment progression
-- Integration testing setup
-- GitHub workflow configuration
-- Troubleshooting guide
+**Exit codes:**
+- `0` - All docs have back links
+- `1` - Missing back links
+
+### add_doc_backlinks.py
+
+Adds back links to main README in all documentation files that are missing them.
+
+**Usage:**
+```bash
+python tests/scripts/add_doc_backlinks.py
+```
+
+**What it does:**
+- Scans all `.md` files in `docs/`
+- Adds `← [Back to Main README](../README.md)` after first heading
+- Calculates correct relative path based on file location
+
+## CI Integration
+
+The validation scripts run automatically in CI on every PR and push to main:
+
+```yaml
+validate-docs:
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    - name: Validate documentation manifests
+      run: python tests/scripts/validate_doc_manifests.py
+    - name: Validate documentation back links
+      run: python tests/scripts/validate_doc_backlinks.py
+```
+
+## Development Workflow
+
+1. **Make documentation changes**
+2. **Run auto-fix** (optional): 
+   ```bash
+   python tests/scripts/fix_doc_manifests.py
+   python tests/scripts/add_doc_backlinks.py
+   ```
+3. **Validate**: 
+   ```bash
+   python tests/scripts/validate_doc_manifests.py
+   python tests/scripts/validate_doc_backlinks.py
+   ```
+4. **Commit** if validation passes
+
+## Notes
+
+- Only validates **complete manifests** (must have both `applicationName` and `stages`)
+- Partial YAML snippets are ignored (e.g., showing only a `content:` section)
+- Validation focuses on structure, not AWS-specific values
+- Back links use relative paths calculated from file location

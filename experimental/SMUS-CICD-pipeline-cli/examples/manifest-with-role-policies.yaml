@@ -1,0 +1,38 @@
+# NOTE: This is a documentation example demonstrating role policy configuration
+
+applicationName: my-data-pipeline
+
+stages:
+  dev:
+    stage: DEV
+    domain:
+      name: my-dev-domain
+      region: us-east-1
+    
+    project:
+      name: dev-project
+      profile_name: DataAnalyticsProfile
+      
+      # Option 1: Create new role with policies
+      role:
+        policies:
+          - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+          - arn:aws:iam::aws:policy/AmazonAthenaFullAccess
+          - arn:aws:iam::123456789012:policy/MyCustomPolicy
+    
+  prod:
+    stage: PROD
+    domain:
+      name: my-prod-domain
+      region: us-east-1
+    
+    project:
+      name: prod-project
+      profile_name: DataAnalyticsProfile
+      
+      # Option 2: Use existing role and attach additional policies
+      role:
+        arn: arn:aws:iam::123456789012:role/existing-project-role
+        policies:
+          - arn:aws:iam::aws:policy/AmazonS3FullAccess
+          - arn:aws:iam::123456789012:policy/ProdAccessPolicy

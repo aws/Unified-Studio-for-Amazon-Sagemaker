@@ -2,6 +2,13 @@
 
 ← [Back to Main README](../README.md)
 
+> **Looking for GitHub Actions workflows?**
+> - **Application teams:** [Setup Guide](github-workflow-application-guide.md) (~30 min)
+> - **DevOps teams:** [Template Setup](github-workflow-devops-guide.md) (~15 min)
+> - **Workflow templates:** [git-templates/](../git-templates/)
+> 
+> **This document** covers general CI/CD concepts and implementation details.
+
 This guide explains how to integrate the SMUS CLI with CI/CD platforms like GitHub Actions and GitLab CI for automated pipeline management across multiple environments with proper security boundaries and approval workflows.
 
 ## Overview: CI/CD with SMUS CLI
@@ -71,12 +78,11 @@ Create IAM roles for CI/CD with these minimum permissions:
 
 #### 3. OIDC Provider Setup (GitHub Actions)
 
-For GitHub Actions, create an OIDC identity provider:
+Use the provided CloudFormation template:
 
 ```bash
-# Deploy OIDC integration stack
 aws cloudformation deploy \
-  --template-file github-oidc-role.yaml \
+  --template-file tests/scripts/setup/1-account-setup/github-oidc-role.yaml \
   --stack-name smus-cli-github-integration \
   --capabilities CAPABILITY_NAMED_IAM \
   --parameter-overrides \
@@ -84,6 +90,10 @@ aws cloudformation deploy \
     GitHubRepo=your-repo \
     GitHubEnvironment=aws-env
 ```
+
+**For detailed setup:** See [Admin Quick Start](getting-started/admin-quickstart.md#step-8-set-up-cicd-authentication-optional)
+
+> **⚠️ TODO:** Document minimum required IAM permissions.
 
 ### Environment Separation
 
@@ -108,12 +118,12 @@ The SMUS CLI intelligently manages infrastructure creation and updates:
 #### **Idempotent Operations**
 - **Safe Re-runs**: CLI detects existing resources and skips creation
 - **No Duplicates**: Won't create domains, projects, or environments that already exist
-- **Consistent State**: Ensures infrastructure matches pipeline configuration
+- **Consistent State**: Ensures infrastructure matches bundle configuration
 
 #### **Domain Management**
 ```bash
 # CLI automatically creates DataZone domain if missing
-smus-cli deploy --pipeline pipeline.yaml --targets test
+smus-cli deploy --manifest manifest.yaml --stages test
 # Creates domain "my-studio-domain" if it doesn't exist
 # Uses existing domain if already present
 ```
@@ -121,7 +131,7 @@ smus-cli deploy --pipeline pipeline.yaml --targets test
 #### **Project Creation**
 ```bash
 # CLI creates SageMaker projects as needed
-smus-cli deploy --pipeline pipeline.yaml --targets test,prod
+smus-cli deploy --manifest manifest.yaml --stages test,prod
 # Creates "my-project-test" and "my-project-prod" projects
 # Skips creation if projects already exist
 ```
@@ -134,7 +144,7 @@ smus-cli deploy --pipeline pipeline.yaml --targets test,prod
 
 #### **Benefits of Automatic Infrastructure**
 - **Reduced Setup Time**: No manual infrastructure preparation required
-- **Consistency**: Infrastructure matches pipeline configuration exactly
+- **Consistency**: Infrastructure matches bundle configuration exactly
 - **Error Prevention**: Eliminates manual configuration mistakes
 - **Team Onboarding**: New team members can deploy immediately
 
@@ -230,7 +240,7 @@ graph TD
 #### **Bundle Creation Process**
 ```bash
 # CLI packages all deployment artifacts
-smus-cli bundle --pipeline pipeline.yaml --targets test
+smus-cli bundle --manifest manifest.yaml --stages test
 ```
 
 **What gets bundled:**
@@ -254,7 +264,7 @@ The CLI handles infrastructure creation during deployment:
 
 ```bash
 # Single command creates all required infrastructure
-smus-cli deploy --pipeline pipeline.yaml --targets test
+smus-cli deploy --manifest manifest.yaml --stages test
 
 # CLI automatically:
 # 1. Creates DataZone domain if missing
@@ -272,7 +282,7 @@ smus-cli deploy --pipeline pipeline.yaml --targets test
 
 #### **Idempotent Operations**
 - **Safe Re-runs**: Multiple deployments won't create duplicate resources
-- **State Consistency**: Infrastructure matches pipeline configuration
+- **State Consistency**: Infrastructure matches bundle configuration
 - **Error Recovery**: Failed deployments can be safely retried
 
 ### Catalog Asset Integration
@@ -282,8 +292,8 @@ smus-cli deploy --pipeline pipeline.yaml --targets test
 The CLI handles DataZone catalog asset access throughout the pipeline:
 
 ```yaml
-# In pipeline.yaml - catalog assets are automatically managed
-bundle:
+# In manifest.yaml - catalog assets are automatically managed
+content:
   catalog:
     assets:
       - selector:
@@ -317,7 +327,7 @@ deploy-production:
   steps:
     - name: Deploy to Production
       run: |
-        smus-cli deploy --pipeline pipeline.yaml --targets prod
+        smus-cli deploy --manifest manifest.yaml --stages prod
 ```
 
 **GitLab CI Example:**
@@ -329,7 +339,7 @@ deploy-production:
     action: start
   when: manual  # Requires manual trigger
   script:
-    - smus-cli deploy --pipeline pipeline.yaml --targets prod
+    - smus-cli deploy --manifest manifest.yaml --stages prod
 ```
 
 #### **Approval Workflow Process**
@@ -347,38 +357,38 @@ deploy-production:
 
 #### **1. Configuration Validation**
 ```bash
-# Validates pipeline configuration and connectivity
-smus-cli describe --pipeline pipeline.yaml --connect
+# Validates bundle configuration and connectivity
+smus-cli describe --manifest manifest.yaml --connect
 ```
 
 #### **2. Bundle Creation**
 ```bash
 # Creates deployment bundle from source environment
-smus-cli bundle --pipeline pipeline.yaml --targets test
+smus-cli bundle --manifest manifest.yaml --stages test
 ```
 
 #### **3. Infrastructure-Aware Deployment**
 ```bash
 # Deploys with automatic infrastructure creation
-smus-cli deploy --pipeline pipeline.yaml --targets test
+smus-cli deploy --manifest manifest.yaml --stages test
 ```
 
 #### **4. Test Execution**
 ```bash
 # Runs validation tests on deployed environment
-smus-cli test --pipeline pipeline.yaml --targets test
+smus-cli test --manifest manifest.yaml --stages test
 ```
 
 #### **5. Production Deployment**
 ```bash
 # Deploys to production with approval gates
-smus-cli deploy --pipeline pipeline.yaml --targets prod
+smus-cli deploy --manifest manifest.yaml --stages prod
 ```
 
 #### **6. Monitoring and Status**
 ```bash
 # Monitors deployment status and health
-smus-cli monitor --pipeline pipeline.yaml --targets prod
+smus-cli monitor --manifest manifest.yaml --stages prod
 ```
 
 ## Manual Reviewers and Approval Process
@@ -421,7 +431,7 @@ deploy-production:
       when: manual
       allow_failure: false
   script:
-    - smus-cli deploy --pipeline pipeline.yaml --targets prod
+    - smus-cli deploy --manifest manifest.yaml --stages prod
 ```
 
 ### Approval Workflow Mechanics
@@ -521,7 +531,7 @@ create-bundle:
 ```
 
 **Purpose**: Packages deployment artifacts including DAGs, notebooks, and catalog assets
-**CLI Command**: `smus-cli bundle --pipeline pipeline.yaml --targets test`
+**CLI Command**: `smus-cli bundle --manifest manifest.yaml --stages test`
 **Infrastructure Impact**: Creates S3 storage for bundles if not present
 
 #### **Job 3: Test Environment Deployment**
@@ -534,7 +544,7 @@ deploy-test:
 ```
 
 **Purpose**: Deploys to test environment with automatic infrastructure provisioning
-**CLI Command**: `smus-cli deploy --pipeline pipeline.yaml --targets test`
+**CLI Command**: `smus-cli deploy --manifest manifest.yaml --stages test`
 **Infrastructure Created**:
 - SageMaker project (if missing)
 - Lakehouse environment (if missing)
@@ -551,7 +561,7 @@ run-tests:
 ```
 
 **Purpose**: Validates deployment through automated testing
-**CLI Command**: `smus-cli test --pipeline pipeline.yaml --targets test`
+**CLI Command**: `smus-cli test --manifest manifest.yaml --stages test`
 
 #### **Job 5: Production Deployment (Manual Approval)**
 ```yaml
@@ -563,7 +573,7 @@ deploy-prod:
 ```
 
 **Manual Approval Gate**: Uses GitHub environment `aws-env-amirbo-6778` with protection rules
-**CLI Command**: `smus-cli deploy --pipeline pipeline.yaml --targets prod`
+**CLI Command**: `smus-cli deploy --manifest manifest.yaml --stages prod`
 **Infrastructure Management**: Creates production infrastructure idempotently
 
 ### Repository-Specific Features
@@ -597,11 +607,11 @@ env:
 
 #### **Artifact Management**
 ```yaml
-- name: Upload Pipeline Manifest
+- name: Upload Bundle Manifest
   uses: actions/upload-artifact@v4
   with:
     name: pipeline-manifest
-    path: pipeline.yaml
+    path: manifest.yaml
     retention-days: 30
 ```
 
@@ -631,7 +641,7 @@ The workflow demonstrates automatic catalog asset management:
 # CLI automatically handles catalog asset subscriptions
 - name: Deploy with Catalog Assets
   run: |
-    smus-cli deploy --pipeline pipeline.yaml --targets prod
+    smus-cli deploy --manifest manifest.yaml --stages prod
     # CLI automatically:
     # 1. Identifies catalog assets in bundle
     # 2. Requests subscriptions for production project
@@ -664,8 +674,8 @@ cleanup:
 #### **Required Secrets**
 ```bash
 # Repository Settings → Secrets and Variables → Actions
-AWS_ROLE_ARN_DEV = arn:aws:iam::588738596778:role/GitHubActions-Dev
-AWS_ROLE_ARN_PROD = arn:aws:iam::588738596778:role/GitHubActions-Prod
+AWS_ROLE_ARN_DEV = arn:aws:iam::123456789012:role/GitHubActions-Dev
+AWS_ROLE_ARN_PROD = arn:aws:iam::123456789012:role/GitHubActions-Prod
 ```
 
 #### **Environment Variables**
@@ -688,7 +698,7 @@ PROD_DOMAIN_REGION = us-east-2
 
 This implementation showcases how the SMUS CLI's infrastructure management capabilities work in practice, automatically creating and managing AWS resources while providing secure, auditable deployments with proper approval workflows.
 
-For more detailed information about CLI commands and pipeline configuration, see:
+For more detailed information about CLI commands and bundle configuration, see:
 - [CLI Commands Documentation](cli-commands.md)
-- [Pipeline Manifest Guide](pipeline-manifest.md)
+- [Bundle Manifest Guide](bundle-manifest.md)
 - [Development Guide](development.md)
