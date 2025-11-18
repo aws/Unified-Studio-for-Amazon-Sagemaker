@@ -1988,16 +1988,15 @@ def _process_bootstrap_actions(
         "target_config": target_config,  # Add target_config to context
     }
 
-    # Execute bootstrap actions
-    results = executor.execute_actions(target_config.bootstrap.actions, context)
+    # Execute bootstrap actions (will raise on failure)
+    try:
+        results = executor.execute_actions(target_config.bootstrap.actions, context)
 
-    # Log results
-    success_count = sum(1 for r in results if r["status"] == "success")
-    failed_count = sum(1 for r in results if r["status"] == "failed")
-
-    typer.echo(f"  ✓ Processed {success_count} actions successfully")
-    if failed_count > 0:
-        typer.echo(f"  ✗ {failed_count} actions failed", err=True)
+        # Log results
+        success_count = sum(1 for r in results if r["status"] == "success")
+        typer.echo(f"  ✓ Processed {success_count} actions successfully")
+    except Exception as e:
+        handle_error(f"Bootstrap action failed: {e}")
 
 
 def _deploy_quicksight_dashboards(

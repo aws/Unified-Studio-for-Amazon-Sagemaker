@@ -440,14 +440,25 @@ def get_workflow_run_status(
         run_detail = response.get("RunDetail", {})
         status = run_detail.get("RunState") or response.get("Status", "UNKNOWN")
 
+        created_at = run_detail.get("CreatedAt")
+        started_on = run_detail.get("StartedOn")
+        completed_on = run_detail.get("CompletedOn")
+
+        # Calculate queue time if both timestamps available
+        queue_time_seconds = None
+        if created_at and started_on:
+            queue_time_seconds = (started_on - created_at).total_seconds()
+
         return {
             "run_id": response["RunId"],
             "workflow_arn": response.get(
                 "WorkflowArn", workflow_arn
             ),  # Use provided if not in response
             "status": status,
-            "started_at": run_detail.get("StartedAt"),
-            "ended_at": run_detail.get("EndedAt"),
+            "created_at": created_at,
+            "started_at": started_on,
+            "ended_at": completed_on,
+            "queue_time_seconds": queue_time_seconds,
             "success": True,
         }
 
@@ -478,13 +489,25 @@ def list_workflow_runs(
         for run in response.get("WorkflowRuns", []):
             # Handle nested RunDetailSummary structure
             run_detail = run.get("RunDetailSummary", {})
+            
+            created_at = run_detail.get("CreatedAt")
+            started_on = run_detail.get("StartedOn")
+            completed_on = run_detail.get("CompletedOn")
+            
+            # Calculate queue time if both timestamps available
+            queue_time_seconds = None
+            if created_at and started_on:
+                queue_time_seconds = (started_on - created_at).total_seconds()
+            
             runs.append(
                 {
                     "run_id": run["RunId"],
                     "workflow_arn": run.get("WorkflowArn", workflow_arn),
                     "status": run_detail.get("Status", "UNKNOWN"),
-                    "started_at": run_detail.get("StartedAt"),
-                    "ended_at": run_detail.get("EndedAt"),
+                    "created_at": created_at,
+                    "started_at": started_on,
+                    "ended_at": completed_on,
+                    "queue_time_seconds": queue_time_seconds,
                 }
             )
 
@@ -707,7 +730,14 @@ def wait_for_workflow_completion(
                 )
 
             logger.info(f"Workflow run {run_id} completed with status: {status}")
-            return status_result
+            
+            # Return with final_status and proper success flag
+            return {
+                "final_status": status,
+                "run_id": run_id,
+                "success": status in ["SUCCEEDED", "SUCCESS"],
+                "workflow_arn": workflow_arn,
+            }
 
         logger.info(f"Workflow run {run_id} status: {status}, waiting...")
         time.sleep(30)  # Wait 30 seconds before checking again

@@ -111,7 +111,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.event.repository.name }}-bundle
-          path: experimental/SMUS-CICD-pipeline-cli/examples/**/bundles/*.zip
+          path: experimental/SMUS-CICD-pipeline-cli/artifacts/*.zip
           if-no-files-found: error
 
   validate:

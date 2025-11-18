@@ -88,6 +88,12 @@ def run_workflow(action: BootstrapAction, context: Dict[str, Any]) -> Dict[str, 
                 workflow_arn, region, run_id=run_id
             )
 
+        # Check if workflow failed and raise exception
+        if not monitor_result["success"]:
+            raise Exception(
+                f"Workflow '{workflow_name}' failed with status: {monitor_result['final_status']}"
+            )
+        
         return {
             "action": "workflow.run",
             "workflow_name": result["workflow_name"],

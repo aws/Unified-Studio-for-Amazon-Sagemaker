@@ -38,6 +38,7 @@ stages:
     deployment_configuration:
       storage:
       - name: notebooks
+        connectionName: default.s3_shared
         targetDirectory: notebooks/bundle/notebooks
     bootstrap:
       actions:
