@@ -149,6 +149,14 @@ aws datazone create-project-membership \
 - Each job gets region from GitHub environment variable `vars.aws_region`
 - Manifests use `${DEV_DOMAIN_REGION:us-east-2}` and `${TEST_DOMAIN_REGION:us-east-1}`
 
+### Iteration 8: GitHub Environment Variables
+**Issue**: Workflows failed with "aws-region required"
+**Fix**: 
+- Changed from `vars.aws_region` to `vars.DOMAIN_REGION` (already set in GitHub environments)
+- Validate job now only validates test target with `--targets test`, not all targets
+- Removed need for DEV_DOMAIN_REGION in validate job since it only checks test target
+- Each job gets region from its environment's `vars.DOMAIN_REGION`
+
 ## Key Learnings
 
 ### IAM Trust Policy Requirements
