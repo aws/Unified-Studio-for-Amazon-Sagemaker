@@ -40,6 +40,9 @@ stages:
       - name: notebooks
         connectionName: default.s3_shared
         targetDirectory: notebooks/bundle/notebooks
+      - name: workflows
+        connectionName: default.s3_shared
+        targetDirectory: notebooks/bundle/workflows
     bootstrap:
       actions:
       - type: datazone.create_connection
