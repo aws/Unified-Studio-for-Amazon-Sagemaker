@@ -7,7 +7,7 @@ This guide walks through real-world example applications showing how to deploy d
 ## Available Examples
 
 ### 📊 Data Engineering - Notebooks
-**Path:** `examples/analytic-workflow/data-notebooks/`
+**Path:** [`examples/analytic-workflow/data-notebooks/`](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/tree/main/experimental/SMUS-CICD-pipeline-cli/examples/analytic-workflow/data-notebooks)
 
 Deploy Jupyter notebooks with Airflow orchestration for data analysis and ETL workflows.
 
@@ -53,7 +53,7 @@ stages:
 ---
 
 ### 🤖 Machine Learning - Training
-**Path:** `examples/analytic-workflow/ml/training/`
+**Path:** [`examples/analytic-workflow/ml/training/`](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/tree/main/experimental/SMUS-CICD-pipeline-cli/examples/analytic-workflow/ml/training)
 
 Train ML models with SageMaker and track experiments with MLflow.
 
@@ -98,7 +98,7 @@ stages:
 ---
 
 ### 🤖 Machine Learning - Deployment
-**Path:** `examples/analytic-workflow/ml/deployment/`
+**Path:** [`examples/analytic-workflow/ml/deployment/`](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/tree/main/experimental/SMUS-CICD-pipeline-cli/examples/analytic-workflow/ml/deployment)
 
 Deploy trained ML models as SageMaker endpoints for real-time inference.
 
@@ -140,7 +140,7 @@ stages:
 ---
 
 ### 📊 Analytics - QuickSight Dashboard
-**Path:** `examples/analytic-workflow/dashboard-glue-quick/`
+**Path:** [`examples/analytic-workflow/dashboard-glue-quick/`](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/tree/main/experimental/SMUS-CICD-pipeline-cli/examples/analytic-workflow/dashboard-glue-quick)
 
 Deploy QuickSight dashboards with Glue ETL pipelines for business intelligence.
 
@@ -189,7 +189,7 @@ stages:
 ---
 
 ### 🧠 Generative AI
-**Path:** `examples/analytic-workflow/genai/`
+**Path:** [`examples/analytic-workflow/genai/`](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/tree/main/experimental/SMUS-CICD-pipeline-cli/examples/analytic-workflow/genai)
 
 Deploy GenAI applications with Bedrock agents and knowledge bases.
 

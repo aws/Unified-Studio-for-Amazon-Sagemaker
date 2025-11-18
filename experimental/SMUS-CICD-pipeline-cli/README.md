@@ -62,6 +62,26 @@ smus-cli test --manifest manifest.yaml --targets test
 - ML Workflows (SageMaker, Notebooks)
 - GenAI Applications (Bedrock, Notebooks)
 
+**Bootstrap Actions - Automate Post-Deployment Tasks:**
+
+Define actions in your manifest that run automatically after deployment:
+- Trigger workflows immediately (no manual execution needed)
+- Refresh QuickSight dashboards with latest data
+- Provision MLflow connections for experiment tracking
+- Fetch logs for validation
+- Emit events to trigger downstream processes
+
+Example:
+```yaml
+bootstrap:
+  actions:
+    - type: workflow.run
+      workflowName: etl_pipeline
+      wait: true
+    - type: quicksight.refresh_dataset
+      refreshScope: IMPORTED
+```
+
 ### 🔧 DevOps Teams
 **You focus on:** CI/CD best practices, security, compliance, and deployment automation  
 **You define:** Workflow templates that enforce testing, approvals, and promotion policies  
@@ -100,7 +120,14 @@ smus-cli test --manifest manifest.yaml --targets test
 - **Connection Setup** - Configure S3, Airflow, Athena, and Lakehouse connections
 - **Resource Mapping** - Link AWS resources to project connections
 - **Permission Management** - Control access and collaboration
-- **Event Initialization** - Emit EventBridge events during deployment for downstream automation
+
+### ⚡ Bootstrap Actions
+- **Automated Workflow Execution** - Trigger workflows automatically during deployment
+- **Log Retrieval** - Fetch workflow logs for validation and debugging
+- **QuickSight Dataset Refresh** - Automatically refresh dashboards after ETL deployment
+- **EventBridge Integration** - Emit custom events for downstream automation and CI/CD orchestration
+- **DataZone Connections** - Provision MLflow and other service connections during deployment
+- **Sequential Execution** - Actions run in order before application deployment for reliable initialization
 
 ### 📊 Catalog Integration
 - **Asset Discovery** - Automatically find required catalog assets (Glue, Lake Formation, DataZone)
@@ -305,99 +332,453 @@ Creates manifest.yaml          Creates generic workflow       Workflow calls:
 
 ---
 
-## Complete Example
+## Example Applications
 
-Here's a minimal working example showing all three components:
+Real-world examples showing how to deploy different workloads with SMUS CI/CD.
 
-### 1. Application Manifest (`manifest.yaml`)
+### 📊 Analytics - QuickSight Dashboard
+Deploy interactive BI dashboards with automated Glue ETL pipelines for data preparation. Uses QuickSight asset bundles, Athena queries, and GitHub dataset integration with environment-specific configurations.
+
+**AWS Services:** QuickSight • Glue • Athena • S3 • MWAA Serverless
+
+**What happens during deployment:** Application code is deployed to S3, Glue jobs and Airflow workflows are created and executed, QuickSight dashboard/data source/dataset are created, and QuickSight ingestion is initiated to refresh the dashboard with latest data.
+
+<details>
+<summary><b>View Manifest</b></summary>
+
 ```yaml
-applicationName: my-data-app
+applicationName: IntegrationTestETLWorkflow
 
 content:
   storage:
-    - name: code
+    - name: dashboard-glue-quick
       connectionName: default.s3_shared
-      include: [scripts/]
+      include: [dashboard-glue-quick]
+  
+  git:
+    - repository: covid-19-dataset
+      url: https://github.com/datasets/covid-19.git
+  
+  quicksight:
+    - dashboardId: sample-dashboard
+      assetBundle: quicksight/sample-dashboard.qs
+      owners:
+        - arn:aws:quicksight:${DEV_DOMAIN_REGION:us-east-2}:*:user/default/Admin/*
+  
   workflows:
-    - workflowName: daily_etl
-      connectionName: project.workflow_serverless
+    - workflowName: covid_dashboard_glue_quick_pipeline
+      connectionName: default.workflow_serverless
+
+stages:
+  test:
+    domain:
+      region: us-east-2
+    project:
+      name: test-marketing
+      owners:
+        - Eng1
+        - arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
+    environment_variables:
+      S3_PREFIX: test
+      GRANT_TO: Admin,service-role/aws-quicksight-service-role-v0
+    bootstrap:
+      actions:
+        - type: workflow.logs
+          workflowName: covid_dashboard_glue_quick_pipeline
+          live: true
+          lines: 10000
+        - type: quicksight.refresh_dataset
+          refreshScope: IMPORTED
+          ingestionType: FULL_REFRESH
+          wait: false
+    deployment_configuration:
+      quicksight:
+        overrideParameters:
+          ResourceIdOverrideConfiguration:
+            PrefixForAllResources: deployed-{stage.name}-covid-
+```
+
+</details>
+
+**[View Full Example →](docs/examples-guide.md#-analytics---quicksight-dashboard)**
+
+---
+
+### 📓 Data Engineering - Notebooks
+Deploy Jupyter notebooks with parallel execution orchestration for data analysis and ETL workflows. Demonstrates notebook deployment with MLflow integration for experiment tracking.
+
+**AWS Services:** SageMaker Notebooks • MLflow • S3 • MWAA Serverless
+
+**What happens during deployment:** Notebooks and workflow definitions are uploaded to S3, Airflow DAG is created for parallel notebook execution, MLflow connection is provisioned for experiment tracking, and notebooks are ready to run on-demand or scheduled.
+
+<details>
+<summary><b>View Manifest</b></summary>
+
+```yaml
+applicationName: IntegrationTestNotebooks
+
+content:
+  storage:
+    - name: notebooks
+      connectionName: default.s3_shared
+      include:
+        - notebooks/
+        - workflows/
+      exclude:
+        - .ipynb_checkpoints/
+        - __pycache__/
+  
+  workflows:
+    - workflowName: parallel_notebooks_execution
+      connectionName: default.workflow_serverless
 
 stages:
   test:
     domain:
       region: us-east-1
     project:
-      name: test-analytics
+      name: test-marketing
+      owners:
+        - Eng1
+        - arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
+    environment_variables:
+      S3_PREFIX: test
+    deployment_configuration:
+      storage:
+        - name: notebooks
+          connectionName: default.s3_shared
+          targetDirectory: notebooks/bundle/notebooks
+    bootstrap:
+      actions:
+        - type: datazone.create_connection
+          name: mlflow-server
+          connection_type: MLFLOW
+          properties:
+            trackingServerArn: arn:aws:sagemaker:${STS_REGION}:${STS_ACCOUNT_ID}:mlflow-tracking-server/smus-integration-mlflow-use2
+            trackingServerName: smus-integration-mlflow-use2
 ```
 
-### 2. Airflow Workflow (`scripts/daily_etl.yaml`)
+</details>
+
+**[View Full Example →](docs/examples-guide.md#-data-engineering---notebooks)**
+
+---
+
+### 🤖 Machine Learning - Training
+Train ML models with SageMaker using the [SageMaker SDK](https://sagemaker.readthedocs.io/) and [SageMaker Distribution](https://github.com/aws/sagemaker-distribution/tree/main/src) images. Track experiments with MLflow and automate training pipelines with environment-specific configurations.
+
+**AWS Services:** SageMaker Training • MLflow • S3 • MWAA Serverless
+
+**What happens during deployment:** Training code and workflow definitions are uploaded to S3 with compression, Airflow DAG is created for training orchestration, MLflow connection is provisioned for experiment tracking, and SageMaker training jobs are created and executed using SageMaker Distribution images.
+
+<details>
+<summary><b>View Manifest</b></summary>
+
 ```yaml
-dag:
-  dag_id: daily_etl
-  schedule: "0 2 * * *"  # Daily at 2 AM
+applicationName: IntegrationTestMLTraining
+
+content:
+  storage:
+    - name: training-code
+      connectionName: default.s3_shared
+      include: [ml/training/code]
+    
+    - name: training-workflows
+      connectionName: default.s3_shared
+      include: [ml/training/workflows]
   
-tasks:
-  extract_data:
-    operator: airflow.providers.amazon.aws.operators.glue.GlueJobOperator
-    job_name: extract_s3_data
-    script_location: '{proj.connection.default.s3_shared.s3Uri}scripts/extract.py'
-    iam_role_name: '{proj.iam_role_name}'
-    region_name: '{env.AWS_REGION}'
+  workflows:
+    - workflowName: ml_training_workflow
+      connectionName: default.workflow_serverless
+
+stages:
+  test:
+    domain:
+      region: us-east-1
+    project:
+      name: test-ml-training
+      create: true
+      owners:
+        - Eng1
+        - arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
+      role:
+        arn: arn:aws:iam::${AWS_ACCOUNT_ID}:role/SMUSCICDTestRole
+    environment_variables:
+      S3_PREFIX: test
+    deployment_configuration:
+      storage:
+        - name: training-code
+          connectionName: default.s3_shared
+          targetDirectory: ml/bundle/training-code
+          compression: gz
+        - name: training-workflows
+          connectionName: default.s3_shared
+          targetDirectory: ml/bundle/training-workflows
+    bootstrap:
+      actions:
+        - type: datazone.create_connection
+          name: mlflow-server
+          connection_type: MLFLOW
+          properties:
+            trackingServerArn: arn:aws:sagemaker:${STS_REGION}:${STS_ACCOUNT_ID}:mlflow-tracking-server/smus-integration-mlflow-use2
 ```
 
-### 3. GitHub Actions (`.github/workflows/deploy.yml`)
+</details>
+
+**[View Full Example →](docs/examples-guide.md#-machine-learning---training)**
+
+---
+
+### 🤖 Machine Learning - Deployment
+Deploy trained ML models as SageMaker real-time inference endpoints. Uses SageMaker SDK for endpoint configuration and [SageMaker Distribution](https://github.com/aws/sagemaker-distribution/tree/main/src) images for serving.
+
+**AWS Services:** SageMaker Endpoints • S3 • MWAA Serverless
+
+**What happens during deployment:** Model artifacts, deployment code, and workflow definitions are uploaded to S3, Airflow DAG is created for endpoint deployment orchestration, SageMaker endpoint configuration and model are created, and the inference endpoint is deployed and ready to serve predictions.
+
+<details>
+<summary><b>View Manifest</b></summary>
+
 ```yaml
-name: Deploy Data App
+applicationName: IntegrationTestMLDeployment
 
-on:
-  push:
-    branches: [main]
+content:
+  storage:
+    - name: deployment-code
+      connectionName: default.s3_shared
+      include: [ml/deployment/code]
+    
+    - name: deployment-workflows
+      connectionName: default.s3_shared
+      include: [ml/deployment/workflows]
+    
+    - name: model-artifacts
+      connectionName: default.s3_shared
+      include: [ml/output/model-artifacts/latest]
+  
+  workflows:
+    - workflowName: ml_deployment_workflow
+      connectionName: default.workflow_serverless
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Configure AWS
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: us-east-1
-      
-      - name: Install SMUS CLI
-        run: |
-          git clone https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker.git
-          pip install -e Unified-Studio-for-Amazon-Sagemaker/experimental/SMUS-CICD-pipeline-cli
-      
-      - name: Deploy to Test
-        run: smus-cli deploy --targets test --manifest manifest.yaml
-      
-      - name: Run Tests
-        run: smus-cli test --targets test --manifest manifest.yaml
+stages:
+  test:
+    domain:
+      region: us-east-1
+    project:
+      name: test-ml-deployment
+      create: true
+      owners:
+        - Eng1
+        - arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
+      role:
+        arn: arn:aws:iam::${AWS_ACCOUNT_ID}:role/SMUSCICDTestRole
+    environment_variables:
+      S3_PREFIX: test
+    deployment_configuration:
+      storage:
+        - name: deployment-code
+          connectionName: default.s3_shared
+          targetDirectory: ml/bundle/deployment-code
+        - name: deployment-workflows
+          connectionName: default.s3_shared
+          targetDirectory: ml/bundle/deployment-workflows
+        - name: model-artifacts
+          connectionName: default.s3_shared
+          targetDirectory: ml/bundle/model-artifacts
 ```
 
-```mermaid
-graph LR
-    subgraph "Development"
-        A[Write Code] --> B[Test Locally]
-    end
+</details>
+
+**[View Full Example →](docs/examples-guide.md#-machine-learning---deployment)**
+
+---
+
+### 🧠 Generative AI
+Deploy GenAI applications with Bedrock agents and knowledge bases. Demonstrates RAG (Retrieval Augmented Generation) workflows with automated agent deployment and testing.
+
+**AWS Services:** Amazon Bedrock • S3 • MWAA Serverless
+
+**What happens during deployment:** Agent configuration and workflow definitions are uploaded to S3, Airflow DAG is created for agent deployment orchestration, Bedrock agents and knowledge bases are configured, and the GenAI application is ready for inference and testing.
+
+<details>
+<summary><b>View Manifest</b></summary>
+
+```yaml
+applicationName: IntegrationTestGenAIWorkflow
+
+content:
+  storage:
+    - name: agent-code
+      connectionName: default.s3_shared
+      include: [genai/job-code]
     
-    subgraph "CI/CD Automation"
-        B --> C[Create Archive<br/>optional]
-        C --> D[Deploy to Test]
-        D --> E[Run Tests]
-        E --> F{Tests Pass?}
-        F -->|Yes| G[Deploy to Prod]
-        F -->|No| H[Block Deployment]
-    end
-    
-    subgraph "Production"
-        G --> I[Monitor]
-    end
+    - name: genai-workflows
+      connectionName: default.s3_shared
+      include: [genai/workflows]
+  
+  workflows:
+    - workflowName: genai_dev_workflow
+      connectionName: default.workflow_serverless
+
+stages:
+  test:
+    domain:
+      region: us-east-1
+    project:
+      name: test-marketing
+      owners:
+        - Eng1
+        - arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
+    environment_variables:
+      S3_PREFIX: test
+    deployment_configuration:
+      storage:
+        - name: agent-code
+          connectionName: default.s3_shared
+          targetDirectory: genai/bundle/agent-code
+        - name: genai-workflows
+          connectionName: default.s3_shared
+          targetDirectory: genai/bundle/workflows
 ```
 
-**See more examples:** [GitHub Workflows Guide](.github/workflows/README.md) | [Example Applications](examples/)
+</details>
+
+**[View Full Example →](docs/examples-guide.md#-generative-ai)**
+
+---
+
+**[See All Examples with Detailed Walkthroughs →](docs/examples-guide.md)**
+
+---
+
+---
+
+<details>
+<summary><h2>📋 Feature Checklist</h2></summary>
+
+**Legend:** ✅ Supported | 🔄 Planned | 🔮 Future
+
+### Core Infrastructure
+| Feature | Status | Notes |
+|---------|--------|-------|
+| YAML configuration | ✅ | [Manifest Guide](docs/manifest.md) |
+| Infrastructure as Code | ✅ | [Deploy Command](docs/cli-commands.md#deploy) |
+| Multi-environment deployment | ✅ | [Stages](docs/manifest-schema.md#stages) |
+| CLI tool | ✅ | [CLI Commands](docs/cli-commands.md) |
+| Version control integration | ✅ | [GitHub Actions](docs/github-actions-integration.md) |
+
+### Deployment & Bundling
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Artifact bundling | ✅ | [Bundle Command](docs/cli-commands.md#bundle) |
+| Bundle-based deployment | ✅ | [Deploy Command](docs/cli-commands.md#deploy) |
+| Direct deployment | ✅ | [Deploy Command](docs/cli-commands.md#deploy) |
+| Deployment validation | ✅ | [Describe Command](docs/cli-commands.md#describe) |
+| Incremental deployment | 🔄 | Upload only changed files |
+| Rollback support | 🔮 | Automated rollback |
+| Blue-green deployment | 🔮 | Zero-downtime deployments |
+
+### Developer Experience
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Project templates | 🔄 | `smus-cli init` with templates |
+| Manifest initialization | ✅ | [Create Command](docs/cli-commands.md#create) |
+| Interactive setup | 🔄 | Guided configuration prompts |
+| Local development | ✅ | [CLI Commands](docs/cli-commands.md) |
+| VS Code extension | 🔮 | IntelliSense and validation |
+
+### Configuration
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Variable substitution | ✅ | [Substitutions Guide](docs/substitutions-and-variables.md) |
+| Environment-specific config | ✅ | [Stages](docs/manifest-schema.md#stages) |
+| Secrets management | 🔮 | AWS Secrets Manager integration |
+| Config validation | ✅ | [Manifest Schema](docs/manifest-schema.md) |
+| Connection management | ✅ | [Connections Guide](docs/connections.md) |
+
+### Resources & Workloads
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Airflow DAGs | ✅ | [Workflows](docs/manifest-schema.md#workflows) |
+| Jupyter notebooks | ✅ | [SageMakerNotebookOperator](docs/airflow-aws-operators.md#amazon-sagemaker) |
+| Glue ETL jobs | ✅ | [GlueJobOperator](docs/airflow-aws-operators.md#aws-glue) |
+| Athena queries | ✅ | [AthenaOperator](docs/airflow-aws-operators.md#amazon-athena) |
+| SageMaker training | ✅ | [SageMakerTrainingOperator](docs/airflow-aws-operators.md#amazon-sagemaker) |
+| SageMaker endpoints | ✅ | [SageMakerEndpointOperator](docs/airflow-aws-operators.md#amazon-sagemaker) |
+| QuickSight dashboards | ✅ | [QuickSight Deployment](docs/quicksight-deployment.md) |
+| Bedrock agents | ✅ | [BedrockInvokeModelOperator](docs/airflow-aws-operators.md#amazon-bedrock) |
+| Lambda functions | 🔄 | [LambdaInvokeFunctionOperator](docs/airflow-aws-operators.md#aws-lambda) |
+| EMR jobs | ✅ | [EmrAddStepsOperator](docs/airflow-aws-operators.md#amazon-emr) |
+| Redshift queries | ✅ | [RedshiftDataOperator](docs/airflow-aws-operators.md#amazon-redshift) |
+
+### Bootstrap Actions
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Workflow execution | ✅ | [workflow.run](docs/bootstrap-actions.md#workflowrun---trigger-workflow-execution) |
+| Log retrieval | ✅ | [workflow.logs](docs/bootstrap-actions.md#workflowlogs---fetch-workflow-logs) |
+| QuickSight refresh | ✅ | [quicksight.refresh_dataset](docs/bootstrap-actions.md#quicksightrefresh_dataset---trigger-dataset-ingestion) |
+| EventBridge events | ✅ | [eventbridge.put_events](docs/bootstrap-actions.md#customput_events---emit-custom-events) |
+| DataZone connections | ✅ | [datazone.create_connection](docs/bootstrap-actions.md) |
+| Sequential execution | ✅ | [Execution Flow](docs/bootstrap-actions.md#execution-flow) |
+
+### CI/CD Integration
+| Feature | Status | Notes |
+|---------|--------|-------|
+| GitHub Actions | ✅ | [GitHub Actions Guide](docs/github-actions-integration.md) |
+| GitLab CI | ✅ | [CLI Commands](docs/cli-commands.md) |
+| Azure DevOps | ✅ | [CLI Commands](docs/cli-commands.md) |
+| Jenkins | ✅ | [CLI Commands](docs/cli-commands.md) |
+| Service principals | ✅ | [GitHub Actions Guide](docs/github-actions-integration.md) |
+| OIDC federation | ✅ | [GitHub Actions Guide](docs/github-actions-integration.md) |
+
+### Testing & Validation
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Unit testing | ✅ | [Test Command](docs/cli-commands.md#test) |
+| Integration testing | ✅ | [Test Command](docs/cli-commands.md#test) |
+| Automated tests | ✅ | [Test Command](docs/cli-commands.md#test) |
+| Quality gates | ✅ | [Test Command](docs/cli-commands.md#test) |
+| Workflow monitoring | ✅ | [Monitor Command](docs/cli-commands.md#monitor) |
+
+### Monitoring & Observability
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Deployment monitoring | ✅ | [Deploy Command](docs/cli-commands.md#deploy) |
+| Workflow monitoring | ✅ | [Monitor Command](docs/cli-commands.md#monitor) |
+| Custom alerts | ✅ | [Deployment Metrics](docs/pipeline-deployment-metrics.md) |
+| Metrics collection | ✅ | [Deployment Metrics](docs/pipeline-deployment-metrics.md) |
+| Deployment history | ✅ | [Bundle Command](docs/cli-commands.md#bundle) |
+
+### AWS Service Integration
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Amazon MWAA | ✅ | [Workflows](docs/manifest-schema.md#workflows) |
+| MWAA Serverless | ✅ | [Workflows](docs/manifest-schema.md#workflows) |
+| AWS Glue | ✅ | [Airflow Operators](docs/airflow-aws-operators.md#aws-glue) |
+| Amazon Athena | ✅ | [Airflow Operators](docs/airflow-aws-operators.md#amazon-athena) |
+| SageMaker | ✅ | [Airflow Operators](docs/airflow-aws-operators.md#amazon-sagemaker) |
+| Amazon Bedrock | ✅ | [Airflow Operators](docs/airflow-aws-operators.md#amazon-bedrock) |
+| Amazon QuickSight | ✅ | [QuickSight Deployment](docs/quicksight-deployment.md) |
+| DataZone | ✅ | [Manifest Schema](docs/manifest-schema.md) |
+| EventBridge | ✅ | [Deployment Metrics](docs/pipeline-deployment-metrics.md) |
+| Lake Formation | ✅ | [Connections Guide](docs/connections.md) |
+| Amazon S3 | ✅ | [Storage](docs/manifest-schema.md#storage) |
+| AWS Lambda | 🔄 | [Airflow Operators](docs/airflow-aws-operators.md#aws-lambda) |
+| Amazon EMR | ✅ | [Airflow Operators](docs/airflow-aws-operators.md#amazon-emr) |
+| Amazon Redshift | ✅ | [Airflow Operators](docs/airflow-aws-operators.md#amazon-redshift) |
+
+### Advanced Features
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Multi-region deployment | ✅ | [Stages](docs/manifest-schema.md#stages) |
+| Cross-project deployment | ✅ | [Stages](docs/manifest-schema.md#stages) |
+| Dependency management | ✅ | [Airflow Operators](docs/airflow-aws-operators.md) |
+| Catalog subscriptions | ✅ | [Manifest Schema](docs/manifest-schema.md) |
+| Multi-service orchestration | ✅ | [Airflow Operators](docs/airflow-aws-operators.md) |
+| Drift detection | 🔮 | Detect configuration drift |
+| State management | 🔄 | Comprehensive state tracking |
+
+</details>
 
 ---
 
@@ -410,6 +791,7 @@ graph LR
 ### Guides
 - **[Application Manifest](docs/manifest.md)** - Complete YAML configuration reference
 - **[CLI Commands](docs/cli-commands.md)** - All available commands and options
+- **[Bootstrap Actions](docs/bootstrap-actions.md)** - Automated deployment actions and event-driven workflows
 - **[Substitutions & Variables](docs/substitutions-and-variables.md)** - Dynamic configuration
 - **[Connections Guide](docs/connections.md)** - Configure AWS service integrations
 - **[GitHub Actions Integration](docs/github-actions-integration.md)** - CI/CD automation setup
@@ -421,11 +803,11 @@ graph LR
 
 ### Examples
 - **[Examples Guide](docs/examples-guide.md)** - Walkthrough of example applications
-- **[Data Notebooks](examples/analytic-workflow/data-notebooks/)** - Jupyter notebooks with Airflow
-- **[ML Training](examples/analytic-workflow/ml/training/)** - SageMaker training with MLflow
-- **[ML Deployment](examples/analytic-workflow/ml/deployment/)** - SageMaker endpoint deployment
-- **[QuickSight Dashboard](examples/analytic-workflow/dashboard-glue-quick/)** - BI dashboards with Glue
-- **[GenAI Application](examples/analytic-workflow/genai/)** - Bedrock agents and knowledge bases
+- **[Data Notebooks](docs/examples-guide.md#-data-engineering---notebooks)** - Jupyter notebooks with Airflow
+- **[ML Training](docs/examples-guide.md#-machine-learning---training)** - SageMaker training with MLflow
+- **[ML Deployment](docs/examples-guide.md#-machine-learning---deployment)** - SageMaker endpoint deployment
+- **[QuickSight Dashboard](docs/examples-guide.md#-analytics---quicksight-dashboard)** - BI dashboards with Glue
+- **[GenAI Application](docs/examples-guide.md#-generative-ai)** - Bedrock agents and knowledge bases
 
 ### Development
 - **[Development Guide](docs/development.md)** - Contributing and testing

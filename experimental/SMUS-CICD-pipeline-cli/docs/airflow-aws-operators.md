@@ -196,6 +196,7 @@ This document provides a comprehensive list of AWS operators available for Apach
 - **[SageMakerTransformOperator](https://airflow.apache.org/docs/apache-airflow-providers-amazon/stable/_api/airflow/providers/amazon/aws/operators/sagemaker/index.html#airflow.providers.amazon.aws.operators.sagemaker.SageMakerTransformOperator)** - `airflow.providers.amazon.aws.operators.sagemaker.SageMakerTransformOperator` - SageMaker Transform operations
 - **[SageMakerTuningOperator](https://airflow.apache.org/docs/apache-airflow-providers-amazon/stable/_api/airflow/providers/amazon/aws/operators/sagemaker/index.html#airflow.providers.amazon.aws.operators.sagemaker.SageMakerTuningOperator)** - `airflow.providers.amazon.aws.operators.sagemaker.SageMakerTuningOperator` - SageMaker Tuning operations
 - **[SageMakerUnifiedStudioOperator](https://airflow.apache.org/docs/apache-airflow-providers-amazon/9.5.0/_api/airflow/providers/amazon/aws/operators/sagemaker_unified_studio/index.html)** - `airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerUnifiedStudioOperator` - SageMaker Unified Studio operations
+- **[SageMakerNotebookOperator (Unified Studio)](https://airflow.apache.org/docs/apache-airflow-providers-amazon/9.5.0/_api/airflow/providers/amazon/aws/operators/sagemaker_unified_studio/index.html)** - `airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator` - Execute Jupyter notebooks in SageMaker Unified Studio
 
 ## Sensors
 

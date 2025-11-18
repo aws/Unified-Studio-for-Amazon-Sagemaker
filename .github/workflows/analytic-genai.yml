@@ -3,7 +3,7 @@ name: Deploy GenAI
 on:
   push:
     branches:
-      - prod
+      - main
       - test
     paths:
       - 'experimental/SMUS-CICD-pipeline-cli/examples/analytic-workflow/genai/**'
@@ -16,4 +16,5 @@ jobs:
       manifest_path: 'experimental/SMUS-CICD-pipeline-cli/examples/analytic-workflow/genai/manifest.yaml'
       test_target: 'test'
       prod_target: 'prod'
-      deploy_to_prod: ${{ github.ref == 'refs/heads/prod' }}
+      deploy_to_prod: ${{ github.ref == 'refs/heads/main' }}
+      skip_bundle: true
