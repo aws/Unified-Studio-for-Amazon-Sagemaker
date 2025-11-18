@@ -14,6 +14,24 @@ AIRFLOW_SERVERLESS_ENDPOINT = os.environ.get("AIRFLOW_SERVERLESS_ENDPOINT")
 AIRFLOW_SERVERLESS_SERVICE = "mwaaserverless-internal"
 
 
+def format_log_event(event: dict) -> str:
+    """
+    Format a CloudWatch log event for display.
+
+    Args:
+        event: Log event dict with timestamp, log_stream_name, and message
+
+    Returns:
+        Formatted log line string
+    """
+    timestamp = time.strftime(
+        "%Y-%m-%d %H:%M:%S", time.localtime(event["timestamp"] / 1000)
+    )
+    stream = event.get("log_stream_name", "unknown")
+    message = event["message"]
+    return f"[{timestamp}] [{stream}] {message}"
+
+
 def create_airflow_serverless_client(
     connection_info: Dict[str, Any] = None, region: str = None
 ):
@@ -958,6 +976,7 @@ def monitor_workflow_logs_live(
     last_timestamp = None
     final_status = None
     final_run_id = run_id
+    first_fetch = True
 
     while True:
         try:
@@ -981,13 +1000,24 @@ def monitor_workflow_logs_live(
             # Check if target run is still active
             is_active = is_workflow_run_active(target_run)
 
-            # Fetch new logs
-            log_events = get_cloudwatch_logs(
-                log_group,
-                start_time=last_timestamp + 1 if last_timestamp else None,
-                region=region,
-                limit=50,
-            )
+            # Fetch logs - on first fetch, get all logs; afterwards get incremental
+            if first_fetch:
+                # Get all logs from the beginning
+                log_events = get_cloudwatch_logs(
+                    log_group,
+                    start_time=None,
+                    region=region,
+                    limit=10000,  # Large limit to get all logs
+                )
+                first_fetch = False
+            else:
+                # Get only new logs since last timestamp
+                log_events = get_cloudwatch_logs(
+                    log_group,
+                    start_time=last_timestamp + 1 if last_timestamp else None,
+                    region=region,
+                    limit=1000,  # Increased from 50 to handle bursts
+                )
 
             # Process logs
             if log_events:
