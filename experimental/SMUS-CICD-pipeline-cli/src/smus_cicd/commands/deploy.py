@@ -211,11 +211,6 @@ def deploy_command(
         if imported_dataset_ids:
             config["imported_quicksight_datasets"] = imported_dataset_ids
 
-        # Process bootstrap actions (after QuickSight deployment)
-        if target_config.bootstrap:
-            typer.echo("Processing bootstrap actions...")
-            _process_bootstrap_actions(target_config, stage_name, config, manifest)
-
         # Deploy bundle and track errors
         deployment_success = _deploy_bundle_to_target(
             target_config,
@@ -229,6 +224,10 @@ def deploy_command(
         )
 
         if deployment_success:
+            # Process bootstrap actions (after deployment completes)
+            if target_config.bootstrap:
+                typer.echo("Processing bootstrap actions...")
+                _process_bootstrap_actions(target_config, stage_name, config, manifest)
             # Emit deploy completed
             emitter.deploy_completed(
                 manifest.application_name,
