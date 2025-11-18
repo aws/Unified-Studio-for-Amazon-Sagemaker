@@ -55,3 +55,8 @@ stages:
       - name: model-artifacts
         connectionName: default.s3_shared
         targetDirectory: ml/bundle/model-artifacts
+    bootstrap:
+      actions:
+      - type: workflow.run
+        workflowName: ml_deployment_workflow
+        trailLogs: true

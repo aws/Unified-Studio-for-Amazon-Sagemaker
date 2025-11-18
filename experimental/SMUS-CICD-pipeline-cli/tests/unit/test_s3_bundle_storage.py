@@ -10,7 +10,7 @@ from src.smus_cicd.helpers.bundle_storage import (
     get_bundle_path,
     ensure_bundle_directory_exists,
     upload_bundle,
-    download_bundle,
+    ensure_bundle_local,
     find_bundle_file,
 )
 
@@ -116,21 +116,21 @@ class TestS3BundleStorage:
                 temp_file.name, "test-bucket", "bundles/TestPipeline.zip"
             )
 
-    def test_download_bundle_local(self):
-        """Test local bundle download (no-op)."""
+    def test_ensure_bundle_local_local(self):
+        """Test local bundle (no-op)."""
         with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as temp_file:
             temp_file.write(b"test content")
             temp_file.flush()
 
             try:
-                result_path = download_bundle(temp_file.name)
+                result_path = ensure_bundle_local(temp_file.name)
                 assert result_path == temp_file.name
             finally:
                 os.unlink(temp_file.name)
 
     @patch("src.smus_cicd.helpers.bundle_storage.create_s3_client")
     @patch("tempfile.mkstemp")
-    def test_download_bundle_s3(self, mock_mkstemp, mock_create_client):
+    def test_ensure_bundle_local_s3(self, mock_mkstemp, mock_create_client):
         """Test S3 bundle download."""
         mock_s3 = Mock()
         mock_create_client.return_value = mock_s3
@@ -141,7 +141,7 @@ class TestS3BundleStorage:
         mock_mkstemp.return_value = (temp_fd, temp_path)
 
         with patch("os.close") as mock_close:
-            result_path = download_bundle(
+            result_path = ensure_bundle_local(
                 "s3://test-bucket/bundles/TestPipeline.zip", "us-east-1"
             )
 

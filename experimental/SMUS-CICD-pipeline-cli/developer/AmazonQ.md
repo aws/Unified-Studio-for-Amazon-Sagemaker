@@ -1,5 +1,11 @@
 # Code Assist Script
 
+## AI Assistant Rules
+
+**CRITICAL: Never commit code or push changes without explicit request from user.**
+
+**CRITICAL: For non-trivial changes (beyond syntax errors or simple fixes), request approval before making significant flow or architectural changes.**
+
 ## Q Task Tracking
 
 Task progress and context are tracked in the `q-tasks/` folder:

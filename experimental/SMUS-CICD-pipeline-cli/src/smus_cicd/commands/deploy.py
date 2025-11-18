@@ -218,7 +218,14 @@ def deploy_command(
 
         # Deploy bundle and track errors
         deployment_success = _deploy_bundle_to_target(
-            target_config, manifest, config, bundle, stage_name, emitter, metadata
+            target_config,
+            manifest,
+            config,
+            bundle,
+            stage_name,
+            emitter,
+            metadata,
+            manifest_file,
         )
 
         if deployment_success:
@@ -348,6 +355,7 @@ def _deploy_bundle_to_target(
     stage_name: Optional[str] = None,
     emitter=None,
     metadata: Optional[Dict[str, Any]] = None,
+    manifest_file: Optional[str] = None,
 ) -> bool:
     """
     Deploy bundle files to the target environment.
@@ -360,6 +368,7 @@ def _deploy_bundle_to_target(
         stage_name: Optional target name for workflow tagging
         emitter: Optional EventEmitter for monitoring
         metadata: Optional metadata for events
+        manifest_file: Optional path to manifest file for local content resolution
 
     Returns:
         True if deployment succeeded, False otherwise
@@ -379,49 +388,97 @@ def _deploy_bundle_to_target(
     # Update config with domain info
     config = build_domain_config(target_config)
 
-    # Get bundle file
-    if bundle_file:
-        bundle_path = bundle_file
-    else:
-        bundle_path = _find_bundle_file(manifest, config)
-        if not bundle_path:
-            handle_error("No bundle file found in ./artifacts directory")
-            return False
-
-    typer.echo(f"Bundle file: {bundle_path}")
-
-    # Emit bundle upload started
-    if emitter:
-        from ..helpers.monitoring import build_bundle_info
-
-        target_info = build_target_info(stage_name, target_config)
-        bundle_info = build_bundle_info(bundle_path)
-        emitter.bundle_upload_started(
-            manifest.application_name, target_info, bundle_info, metadata
+    # Determine if we need a bundle (check if any storage items have connectionName)
+    has_bundle_items = any(
+        s.connectionName
+        for s in (
+            manifest.content.storage
+            if manifest.content and manifest.content.storage
+            else []
         )
+    )
 
-    # Deploy storage items (includes workflows)
+    bundle_path = None
+    if has_bundle_items:
+        # Get bundle file only if needed
+        if bundle_file:
+            bundle_path = bundle_file
+        else:
+            bundle_path = _find_bundle_file(manifest, config)
+            if not bundle_path:
+                handle_error("No bundle file found in ./artifacts directory")
+                return False
+
+        typer.echo(f"Bundle file: {bundle_path}")
+
+        # Emit bundle upload started
+        if emitter:
+            from ..helpers.monitoring import build_bundle_info
+
+            target_info = build_target_info(stage_name, target_config)
+            bundle_info = build_bundle_info(bundle_path)
+            emitter.bundle_upload_started(
+                manifest.application_name, target_info, bundle_info, metadata
+            )
+
+    # Get manifest directory for local path resolution
+    manifest_dir = (
+        os.path.dirname(os.path.abspath(manifest_file)) if manifest_file else None
+    )
+
+    # Map storage names to content items
+    content_map = {}
+    if manifest.content and manifest.content.storage:
+        for item in manifest.content.storage:
+            content_map[item.name] = item
+
+    # Deploy storage items (mixed local and bundle)
     storage_results = []
     try:
         for storage_config in storage_configs:
-            result = _deploy_storage_item(
-                bundle_path, storage_config, target_config.project.name, config
-            )
+            # Get source content item
+            content_item = content_map.get(storage_config.name)
+
+            # Determine deployment method
+            if content_item and not content_item.connectionName and manifest_dir:
+                # Deploy from local filesystem
+                typer.echo(
+                    f"📁 Deploying '{storage_config.name}' from local filesystem"
+                )
+                result = _deploy_local_storage_item(
+                    manifest_dir,
+                    content_item,
+                    storage_config,
+                    target_config.project.name,
+                    config,
+                )
+            elif bundle_path:
+                # Deploy from bundle
+                result = _deploy_storage_item(
+                    bundle_path, storage_config, target_config.project.name, config
+                )
+            else:
+                typer.echo(f"⚠️ Skipping '{storage_config.name}' - no source available")
+                continue
+
             storage_results.append(result)
 
         # Deploy git items
         git_results = []
         for git_config in git_configs:
-            result = _deploy_git_item(
-                bundle_path, git_config, target_config.project.name, config
-            )
-            git_results.append(result)
+            if bundle_path:
+                result = _deploy_git_item(
+                    bundle_path, git_config, target_config.project.name, config
+                )
+                git_results.append(result)
 
         # Display deployment summary
-        _display_deployment_summary_new(bundle_path, storage_results, git_results)
+        _display_deployment_summary_new(
+            bundle_path or "local", storage_results, git_results
+        )
 
         # Emit bundle upload completed
-        if emitter:
+        if emitter and bundle_path:
             deployment_results = {
                 "storageDeployments": [
                     {
@@ -488,6 +545,85 @@ def _deploy_bundle_to_target(
     return (
         storage_success and git_success and asset_success and airflow_serverless_success
     )
+
+
+def _deploy_local_storage_item(
+    manifest_dir: str,
+    content_item,
+    storage_config,
+    project_name: str,
+    config: Dict[str, Any],
+) -> Tuple[Optional[List[str]], Optional[str]]:
+    """Deploy a storage item from local filesystem."""
+    import glob
+
+    name = storage_config.name
+    target_dir = (
+        storage_config.targetDirectory
+        if hasattr(storage_config, "targetDirectory")
+        else ""
+    )
+
+    typer.echo(f"Deploying local storage item '{name}' to {target_dir}...")
+
+    # Collect files from include patterns
+    all_files = []
+    for pattern in content_item.include:
+        # Resolve pattern relative to manifest directory
+        full_pattern = os.path.join(manifest_dir, pattern)
+        typer.echo(f"  Pattern: {pattern} → {full_pattern}")
+
+        # Handle both file and directory patterns
+        if os.path.isdir(full_pattern):
+            # Directory - add all files recursively
+            for root, dirs, files in os.walk(full_pattern):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    all_files.append(file_path)
+        else:
+            # Glob pattern
+            matched_files = glob.glob(full_pattern, recursive=True)
+            all_files.extend([f for f in matched_files if os.path.isfile(f)])
+
+    if not all_files:
+        typer.echo("  ⚠️ No files found for pattern(s)")
+        return [], None
+
+    typer.echo(f"  Found {len(all_files)} files")
+
+    # Get connection and deploy
+    connection = _get_project_connection(project_name, storage_config, config)
+    region = config.get("region", "us-east-1")
+
+    # Create temp directory with files
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Copy files maintaining relative structure
+        for file_path in all_files:
+            # Get relative path from first include pattern base
+            base_pattern = content_item.include[0]
+            base_path = os.path.join(manifest_dir, base_pattern)
+            if os.path.isdir(base_path):
+                rel_path = os.path.relpath(file_path, base_path)
+            else:
+                rel_path = os.path.basename(file_path)
+
+            dest_path = os.path.join(temp_dir, rel_path)
+            os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+
+            import shutil
+
+            shutil.copy2(file_path, dest_path)
+
+        # Deploy to S3
+        success = deployment.deploy_files(
+            temp_dir, connection, target_dir, region, temp_dir
+        )
+
+        s3_uri = connection.get("s3Uri", "")
+        deployed_files = (
+            [os.path.relpath(f, temp_dir) for f in all_files] if success else None
+        )
+        return deployed_files, s3_uri
 
 
 def _find_bundle_file(
@@ -657,10 +793,10 @@ def _deploy_files_from_bundle(
     Returns:
         Tuple of (deployed_files_list, s3_uri) or (None, None) if failed
     """
-    from ..helpers.bundle_storage import download_bundle, is_s3_url
+    from ..helpers.bundle_storage import ensure_bundle_local, is_s3_url
 
-    # Download bundle to local temp file if it's on S3
-    local_bundle_path = download_bundle(bundle_file, config["region"])
+    # Ensure bundle ZIP is available locally
+    local_bundle_path = ensure_bundle_local(bundle_file, config["region"])
 
     try:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -724,9 +860,9 @@ def _deploy_named_item_from_bundle(
     """Deploy a named item from bundle to target directory."""
     import tarfile
 
-    from ..helpers.bundle_storage import download_bundle, is_s3_url
+    from ..helpers.bundle_storage import ensure_bundle_local, is_s3_url
 
-    local_bundle_path = download_bundle(bundle_file, config["region"])
+    local_bundle_path = ensure_bundle_local(bundle_file, config["region"])
 
     try:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -806,9 +942,9 @@ def _deploy_git_from_bundle(
     target_dir: str,
 ) -> Tuple[Optional[List[str]], Optional[str]]:
     """Deploy git repository from bundle to target directory."""
-    from ..helpers.bundle_storage import download_bundle, is_s3_url
+    from ..helpers.bundle_storage import ensure_bundle_local, is_s3_url
 
-    local_bundle_path = download_bundle(bundle_file, config["region"])
+    local_bundle_path = ensure_bundle_local(bundle_file, config["region"])
 
     try:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1162,7 +1298,7 @@ def _process_catalog_assets(
 
 
 def _create_airflow_serverless_workflows(
-    bundle_path: str,
+    bundle_path: Optional[str],
     manifest: ApplicationManifest,
     target_config,
     config: Dict[str, Any],
@@ -1176,7 +1312,7 @@ def _create_airflow_serverless_workflows(
     Create serverless Airflow workflows if airflow-serverless flag is enabled.
 
     Args:
-        bundle_path: Path to the bundle file
+        bundle_path: Path to the bundle file (None for local deployment)
         manifest: Pipeline manifest object
         target_config: Target configuration object
         config: Configuration dictionary
@@ -1236,11 +1372,12 @@ def _create_airflow_serverless_workflows(
 
     try:
         from ..helpers import airflow_serverless
-        from ..helpers.bundle_storage import download_bundle
+        from ..helpers.bundle_storage import ensure_bundle_local
         from ..helpers.datazone import resolve_domain_id
 
-        # Download bundle to local temp file if it's on S3
-        download_bundle(bundle_path, config["region"])
+        # Ensure bundle ZIP is available locally if we have a bundle
+        if bundle_path:
+            ensure_bundle_local(bundle_path, config["region"])
 
         # Get project user role ARN for serverless Airflow execution
         project_name = target_config.project.name

@@ -2,13 +2,11 @@ applicationName: IntegrationTestGenAIWorkflow
 content:
   storage:
   - name: agent-code
-    connectionName: default.s3_shared
     include:
-    - genai/job-code
+    - job-code
   - name: genai-workflows
-    connectionName: default.s3_shared
     include:
-    - genai/workflows
+    - workflows
   workflows:
   - workflowName: genai_dev_workflow
     connectionName: default.workflow_serverless
@@ -44,6 +42,11 @@ stages:
       - name: genai-workflows
         connectionName: default.s3_shared
         targetDirectory: genai/bundle/workflows
+    bootstrap:
+      actions:
+      - type: workflow.run
+        workflowName: genai_dev_workflow
+        trailLogs: true
 tests:
   folder: examples/analytic-workflow/genai/app_tests/
 

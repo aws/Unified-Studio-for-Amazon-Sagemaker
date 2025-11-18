@@ -933,3 +933,115 @@ def get_workflow_logs(
         formatted_logs.append(f"[{timestamp}] [{stream}] {message}")
 
     return formatted_logs
+
+
+def monitor_workflow_logs_live(workflow_arn: str, region: str, run_id: str = None, callback=None) -> dict:
+    """
+    Monitor workflow logs live until completion.
+    
+    Args:
+        workflow_arn: Workflow ARN
+        region: AWS region
+        run_id: Specific run ID to monitor (if None, monitors most recent)
+        callback: Optional callback function(log_event) for each log line
+        
+    Returns:
+        dict with final_status, run_id, success
+    """
+    import time
+    
+    workflow_name = workflow_arn.split("/")[-1]
+    log_group = f"/aws/mwaa-serverless/{workflow_name}/"
+    
+    last_timestamp = None
+    final_status = None
+    final_run_id = run_id
+    
+    while True:
+        try:
+            # Check workflow runs
+            runs = list_workflow_runs(workflow_arn, region=region, max_results=5)
+            
+            if not runs:
+                # No runs yet, wait and retry
+                time.sleep(5)
+                continue
+            
+            # Find the target run
+            if run_id:
+                target_run = next((r for r in runs if r["run_id"] == run_id), None)
+                if not target_run:
+                    raise Exception(f"Run {run_id} not found")
+            else:
+                target_run = runs[0]  # Most recent
+                final_run_id = target_run["run_id"]
+            
+            # Check if target run is still active
+            is_active = is_workflow_run_active(target_run)
+            
+            # Fetch new logs
+            log_events = get_cloudwatch_logs(
+                log_group,
+                start_time=last_timestamp + 1 if last_timestamp else None,
+                region=region,
+                limit=50,
+            )
+            
+            # Process logs
+            if log_events:
+                for event in log_events:
+                    if callback:
+                        callback(event)
+                    last_timestamp = event["timestamp"]
+            
+            # Check if target run completed
+            if not is_active:
+                final_status = target_run.get("status") or "COMPLETED"
+                break
+            
+            time.sleep(5)
+            
+        except Exception as e:
+            # Log error but continue monitoring
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error in live monitoring: {e}")
+            time.sleep(5)
+    
+    return {
+        "success": final_status in ["COMPLETED", "SUCCESS"],
+        "final_status": final_status,
+        "run_id": final_run_id,
+    }
+
+
+def wait_for_workflow_completion(workflow_arn: str, region: str, run_id: str) -> dict:
+    """
+    Wait for workflow completion without streaming logs.
+    
+    Args:
+        workflow_arn: Workflow ARN
+        region: AWS region
+        run_id: Specific run ID to wait for
+        
+    Returns:
+        dict with final_status, run_id, success
+    """
+    import time
+    
+    while True:
+        runs = list_workflow_runs(workflow_arn, region=region, max_results=5)
+        target_run = next((r for r in runs if r["run_id"] == run_id), None)
+        
+        if not target_run:
+            raise Exception(f"Run {run_id} not found")
+        
+        if not is_workflow_run_active(target_run):
+            final_status = target_run.get("status") or "COMPLETED"
+            return {
+                "success": final_status in ["COMPLETED", "SUCCESS"],
+                "final_status": final_status,
+                "run_id": run_id,
+            }
+        
+        time.sleep(10)

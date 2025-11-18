@@ -62,5 +62,8 @@ stages:
         properties:
           trackingServerArn: arn:aws:sagemaker:${STS_REGION}:${STS_ACCOUNT_ID}:mlflow-tracking-server/smus-integration-mlflow-use2
           trackingServerName: smus-integration-mlflow-use2
+      - type: workflow.run
+        workflowName: ml_training_workflow
+        trailLogs: true
 tests:
   folder: examples/analytic-workflow/ml/training/app_tests/

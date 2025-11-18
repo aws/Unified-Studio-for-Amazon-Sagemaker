@@ -49,10 +49,9 @@ stages:
       GRANT_TO: Admin,service-role/aws-quicksight-service-role-v0
     bootstrap:
       actions:
-      - type: workflow.logs
+      - type: workflow.run
         workflowName: covid_dashboard_glue_quick_pipeline
-        live: true
-        lines: 10000
+        trailLogs: true
       - type: quicksight.refresh_dataset
         refreshScope: IMPORTED
         ingestionType: FULL_REFRESH
