@@ -33,16 +33,16 @@ def test_bedrock_agent_created(smus_config):
 
 def test_workflow_completed_successfully(smus_config):
     """Verify the workflow run completed successfully."""
-    from smus_cicd.helpers.airflow_serverless import list_workflows, get_workflow_runs
-    
     region = smus_config["region"]
     project_name = smus_config["project_name"]
     
-    # List workflows to find our workflow
-    workflows = list_workflows(region=region)
-    assert workflows.get("success"), "Failed to list workflows"
+    # Use boto3 directly to interact with Airflow Serverless
+    client = boto3.client("mwaaserverless-internal", region_name=region)
     
-    workflow_list = workflows.get("workflows", [])
+    # List workflows to find our workflow
+    response = client.list_workflows(MaxResults=100)
+    
+    workflow_list = response.get("Workflows", [])
     genai_workflows = [
         w
         for w in workflow_list
@@ -55,10 +55,9 @@ def test_workflow_completed_successfully(smus_config):
     workflow_arn = genai_workflows[0]["Arn"]
     
     # Get recent runs
-    runs = get_workflow_runs(workflow_arn, region=region)
-    assert runs.get("success"), "Failed to get workflow runs"
+    runs_response = client.list_workflow_runs(WorkflowArn=workflow_arn, MaxResults=10)
     
-    run_list = runs.get("runs", [])
+    run_list = runs_response.get("WorkflowRuns", [])
     assert len(run_list) > 0, "No workflow runs found"
     
     # Check most recent run
