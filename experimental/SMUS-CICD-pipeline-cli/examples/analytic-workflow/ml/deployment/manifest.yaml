@@ -22,7 +22,7 @@ stages:
     domain:
       tags:
         purpose: smus-cicd-testing
-      region: ${DEV_DOMAIN_REGION:us-east-1}
+      region: ${DEV_DOMAIN_REGION:us-east-2}
     project:
       name: dev-marketing
     environment_variables:
@@ -32,7 +32,7 @@ stages:
     domain:
       tags:
         purpose: smus-cicd-testing
-      region: ${DEV_DOMAIN_REGION:us-east-1}
+      region: ${TEST_DOMAIN_REGION:us-east-1}
     project:
       name: test-ml-deployment
       create: true

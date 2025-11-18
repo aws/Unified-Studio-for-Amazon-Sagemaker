@@ -28,7 +28,7 @@ stages:
     domain:
       tags:
         purpose: smus-cicd-testing
-      region: ${DEV_DOMAIN_REGION:us-east-1}
+      region: ${TEST_DOMAIN_REGION:us-east-1}
     project:
       name: test-marketing
       owners:

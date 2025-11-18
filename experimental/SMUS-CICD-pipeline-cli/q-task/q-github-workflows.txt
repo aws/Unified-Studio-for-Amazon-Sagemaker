@@ -48,13 +48,20 @@ Jobs:
 
 ### Application Workflows
 Created 5 workflows for analytic examples:
-- analytic-data-notebooks.yml (skip_bundle: true)
+- analytic-data-notebooks.yml (skip_bundle: true - PERMANENT, deploys directly from branch)
 - analytic-dashboard-glue-quicksight.yml
-- analytic-genai.yml
+- analytic-genai.yml (skip_bundle: true - PERMANENT, deploys directly from branch)
 - analytic-ml-deployment.yml
 - analytic-ml-training.yml
 
 All trigger on push to test/main branches with path filters.
+
+**Bundle Policy:**
+- data-notebooks and genai: `skip_bundle: true` is PERMANENT
+  - These workflows only contain storage files and serverless workflows
+  - No MWAA workflows that need bundling from dev environment
+  - Deploy directly from branch code to target environments
+- Other workflows: Use bundle step to package from dev environment
 
 ## Testing Process
 
@@ -121,12 +128,26 @@ aws datazone create-project-membership \
 - test: `test-aws-account`
 - deploy-prod: `prod-aws-account`
 
-### Iteration 7: Target Validation
-**Enhancement**: Added `describe --connect` validation before each operation
-- Bundle job: validates dev target
-- Deploy-test job: validates test target
-- Deploy-prod job: validates prod target
-- Ensures project connectivity before attempting operations
+### Iteration 7: Workflow Split and Region Configuration
+**Enhancement**: Split into two reusable workflows for cleaner execution
+**Changes**:
+- Created `smus-bundle-deploy.yml` for workflows needing bundling from dev
+- Created `smus-direct-deploy.yml` for workflows deploying directly from branch
+- Removed `skip_bundle` parameter - workflows choose appropriate pattern
+- Changed all region references from `inputs.aws_region` to `vars.aws_region`
+- Updated manifests to use separate env vars: `DEV_DOMAIN_REGION`, `TEST_DOMAIN_REGION`, `PROD_DOMAIN_REGION`
+- Each job sets proper environment variables based on its environment context
+- Renamed SMUS CLI steps for clarity: `smus-cli bundle from dev`, `smus-cli deploy to test`, etc.
+
+**Workflow Assignments**:
+- genai, data-notebooks → `smus-direct-deploy.yml`
+- ml-training, ml-deployment, dashboard → `smus-bundle-deploy.yml`
+
+**Region Configuration**:
+- Dev account (198737698272): us-east-2
+- Test account (019900059033): us-east-1
+- Each job gets region from GitHub environment variable `vars.aws_region`
+- Manifests use `${DEV_DOMAIN_REGION:us-east-2}` and `${TEST_DOMAIN_REGION:us-east-1}`
 
 ## Key Learnings
 
@@ -156,7 +177,9 @@ aws datazone create-project-membership \
 ✅ All CLI commands verified
 ✅ Environment configuration complete
 ✅ Target validation added for all stages
-⏳ Ready for full workflow test
+✅ Split into bundle-deploy and direct-deploy workflows
+✅ Region configuration using GitHub environment variables
+⏳ Testing genai workflow with direct-deploy pattern
 
 ## Testing Commands
 
