@@ -47,3 +47,4 @@ stages:
 tests:
   folder: examples/analytic-workflow/genai/app_tests/
 
+
