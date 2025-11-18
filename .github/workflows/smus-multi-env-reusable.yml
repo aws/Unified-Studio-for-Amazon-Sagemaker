@@ -92,7 +92,10 @@ jobs:
             --service-name mwaaserverless-internal
       
       - name: Bundle application
+        env:
+          DOMAIN_REGION: ${{ inputs.aws_region }}
         run: |
+          echo "🔍 DOMAIN_REGION: $DOMAIN_REGION"
           cd experimental/SMUS-CICD-pipeline-cli
           smus-cli bundle \
             --manifest ../../${{ inputs.manifest_path }} \
@@ -133,7 +136,11 @@ jobs:
           role-session-name: smus-validate-session
       
       - name: Validate configuration
+        env:
+          DOMAIN_REGION: ${{ inputs.aws_region }}
         run: |
+          echo "🔍 DOMAIN_REGION: $DOMAIN_REGION"
+          echo "🔍 AWS_REGION: $AWS_REGION"
           cd experimental/SMUS-CICD-pipeline-cli
           smus-cli describe --manifest ../../${{ inputs.manifest_path }} --connect
 
@@ -179,7 +186,10 @@ jobs:
             --service-name mwaaserverless-internal
       
       - name: Deploy to test
+        env:
+          DOMAIN_REGION: ${{ inputs.aws_region }}
         run: |
+          echo "🔍 DOMAIN_REGION: $DOMAIN_REGION"
           cd experimental/SMUS-CICD-pipeline-cli
           smus-cli deploy \
             --manifest ../../${{ inputs.manifest_path }} \
@@ -221,7 +231,10 @@ jobs:
             --service-name mwaaserverless-internal
       
       - name: Run validation tests
+        env:
+          DOMAIN_REGION: ${{ inputs.aws_region }}
         run: |
+          echo "🔍 DOMAIN_REGION: $DOMAIN_REGION"
           cd experimental/SMUS-CICD-pipeline-cli
           smus-cli test \
             --manifest ../../${{ inputs.manifest_path }} \
@@ -270,7 +283,10 @@ jobs:
             --service-name mwaaserverless-internal
       
       - name: Deploy to production
+        env:
+          DOMAIN_REGION: ${{ inputs.aws_region }}
         run: |
+          echo "🔍 DOMAIN_REGION: $DOMAIN_REGION"
           cd experimental/SMUS-CICD-pipeline-cli
           smus-cli deploy \
             --manifest ../../${{ inputs.manifest_path }} \
