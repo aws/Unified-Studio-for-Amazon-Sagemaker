@@ -11,7 +11,7 @@ on:
 
 jobs:
   deploy:
-    uses: ./experimental/SMUS-CICD-pipeline-cli/git-templates/smus-multi-env-reusable.yml
+    uses: ./.github/workflows/smus-multi-env-reusable.yml
     with:
       manifest_path: 'experimental/SMUS-CICD-pipeline-cli/examples/analytic-workflow/dashboard-glue-quick/manifest.yaml'
       test_target: 'test'
