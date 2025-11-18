@@ -32,7 +32,9 @@ class SMUSMCPServer:
         else:
             # Load from package resources
             try:
-                config_text = files("smus_cicd.resources").joinpath("mcp-config.yaml").read_text()
+                config_text = (
+                    files("smus_cicd.resources").joinpath("mcp-config.yaml").read_text()
+                )
                 return yaml.safe_load(config_text)
             except Exception:
                 pass
