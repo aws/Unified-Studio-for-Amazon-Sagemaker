@@ -128,7 +128,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN_TEST }}
+          role-to-assume: arn:aws:iam::019900059033:role/GitHubActionsRole-SMUS-CLI-Tests
           aws-region: ${{ inputs.aws_region }}
           role-session-name: smus-validate-session
       
