@@ -51,3 +51,4 @@ stages:
           trackingServerName: smus-integration-mlflow-use2
 tests:
   folder: examples/analytic-workflow/data-notebooks/app_tests/
+
