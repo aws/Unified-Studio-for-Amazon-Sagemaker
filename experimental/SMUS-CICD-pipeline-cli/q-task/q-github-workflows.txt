@@ -157,6 +157,13 @@ aws datazone create-project-membership \
 - Removed need for DEV_DOMAIN_REGION in validate job since it only checks test target
 - Each job gets region from its environment's `vars.DOMAIN_REGION`
 
+### Iteration 9: Hardcode Role ARNs
+**Issue**: Deploy-test failed with "Could not load credentials"
+**Fix**: 
+- Replaced `secrets.AWS_ROLE_ARN_TEST` with hardcoded test account role ARN
+- Added TODO comments to migrate to secrets later
+- All jobs now use hardcoded role ARNs: dev (198737698272), test (019900059033)
+
 ## Key Learnings
 
 ### IAM Trust Policy Requirements
