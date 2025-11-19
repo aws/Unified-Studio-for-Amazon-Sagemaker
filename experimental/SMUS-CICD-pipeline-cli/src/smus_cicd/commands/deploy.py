@@ -179,10 +179,9 @@ def deploy_command(
             # Get comprehensive project info for bootstrap actions
             from ..helpers.utils import get_datazone_project_info
 
-            project_info = get_datazone_project_info(
-                target_config.project.name, config
-            )
-            metadata["project_info"] = project_info
+            project_info = get_datazone_project_info(target_config.project.name, config)
+            if metadata is not None:
+                metadata["project_info"] = project_info
 
             # Emit project init completed
             project_info_event = {
