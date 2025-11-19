@@ -50,11 +50,15 @@ def create_connection(
     target_config = context.get("target_config")
     config = context.get("config")
     metadata = context.get("metadata", {})
-    
+
     typer.echo(f"🔍 DEBUG handler: context keys: {list(context.keys())}")
     typer.echo(f"🔍 DEBUG handler: metadata type: {type(metadata)}")
-    typer.echo(f"🔍 DEBUG handler: metadata keys: {list(metadata.keys()) if isinstance(metadata, dict) else 'not a dict'}")
-    typer.echo(f"🔍 DEBUG handler: metadata has project_info: {'project_info' in metadata if isinstance(metadata, dict) else False}")
+    typer.echo(
+        f"🔍 DEBUG handler: metadata keys: {list(metadata.keys()) if isinstance(metadata, dict) else 'not a dict'}"
+    )
+    typer.echo(
+        f"🔍 DEBUG handler: metadata has project_info: {'project_info' in metadata if isinstance(metadata, dict) else False}"
+    )
 
     # Get connection parameters - they're in action.parameters dict
     params = action.parameters
@@ -67,8 +71,11 @@ def create_connection(
 
     # Get project info from metadata
     project_info = metadata.get("project_info", {})
+    typer.echo(f"🔍 DEBUG handler: project_info type: {type(project_info)}")
+    typer.echo(f"🔍 DEBUG handler: project_info value: {project_info}")
     project_id = project_info.get("project_id")
     domain_id = project_info.get("domain_id")
+    typer.echo(f"🔍 DEBUG handler: project_id={project_id}, domain_id={domain_id}")
     region = config.get("region")
 
     if not project_id or not domain_id:
