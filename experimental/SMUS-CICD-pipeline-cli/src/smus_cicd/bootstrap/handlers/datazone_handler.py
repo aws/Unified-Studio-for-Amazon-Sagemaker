@@ -50,6 +50,11 @@ def create_connection(
     target_config = context.get("target_config")
     config = context.get("config")
     metadata = context.get("metadata", {})
+    
+    typer.echo(f"🔍 DEBUG handler: context keys: {list(context.keys())}")
+    typer.echo(f"🔍 DEBUG handler: metadata type: {type(metadata)}")
+    typer.echo(f"🔍 DEBUG handler: metadata keys: {list(metadata.keys()) if isinstance(metadata, dict) else 'not a dict'}")
+    typer.echo(f"🔍 DEBUG handler: metadata has project_info: {'project_info' in metadata if isinstance(metadata, dict) else False}")
 
     # Get connection parameters - they're in action.parameters dict
     params = action.parameters
