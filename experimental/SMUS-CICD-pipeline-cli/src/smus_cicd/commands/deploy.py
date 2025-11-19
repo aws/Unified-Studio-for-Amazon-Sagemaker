@@ -2043,11 +2043,10 @@ def _deploy_quicksight_dashboards(
         qs_config = getattr(target_config.deployment_configuration, "quicksight", None)
         typer.echo(f"🔍 qs_config value: {qs_config}")
 
-    typer.echo(f"🔍 DEBUG: Found {len(dashboards)} QuickSight dashboards to deploy")
-
     if not dashboards:
         return []
 
+    typer.echo(f"🔍 DEBUG: Found {len(dashboards)} QuickSight dashboards to deploy")
     typer.echo("Deploying QuickSight dashboards...")
 
     aws_account_id = config.get("aws", {}).get("account_id")
