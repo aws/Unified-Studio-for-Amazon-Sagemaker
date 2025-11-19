@@ -227,7 +227,7 @@ def deploy_command(
             # Process bootstrap actions (after deployment completes)
             if target_config.bootstrap:
                 typer.echo("Processing bootstrap actions...")
-                _process_bootstrap_actions(target_config, stage_name, config, manifest)
+                _process_bootstrap_actions(target_config, stage_name, config, manifest, metadata)
             # Emit deploy completed
             emitter.deploy_completed(
                 manifest.application_name,
@@ -523,6 +523,8 @@ def _deploy_bundle_to_target(
 
     # Workflow creation now handled by workflow.create bootstrap action
     # S3 location passed to bootstrap via metadata
+    if metadata is None:
+        metadata = {}
     metadata["s3_bucket"] = s3_bucket
     metadata["s3_prefix"] = s3_prefix
     metadata["bundle_path"] = bundle_path
@@ -1550,6 +1552,7 @@ def _process_bootstrap_actions(
     stage_name: str,
     config: Dict[str, Any],
     manifest=None,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> None:
     """
     Process bootstrap actions sequentially.
@@ -1559,6 +1562,7 @@ def _process_bootstrap_actions(
         stage_name: Stage name
         config: Configuration dictionary
         manifest: Manifest object (optional)
+        metadata: Deployment metadata including S3 locations (optional)
     """
     from ..bootstrap import executor
 
@@ -1574,6 +1578,7 @@ def _process_bootstrap_actions(
         "config": config,  # Pass full config including imported_quicksight_datasets
         "manifest": manifest,  # Add manifest to context
         "target_config": target_config,  # Add target_config to context
+        "metadata": metadata or {},  # Add metadata to context
     }
 
     # Execute bootstrap actions (will raise on failure)
