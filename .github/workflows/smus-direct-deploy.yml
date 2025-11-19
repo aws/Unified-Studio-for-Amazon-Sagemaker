@@ -126,6 +126,9 @@ jobs:
           aws configure add-model \
             --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/mwaaserverless-2024-07-26.normal-edited-2.json \
             --service-name mwaaserverless-internal
+          aws configure add-model \
+            --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/datazone-2018-05-10.json \
+            --service-name datazone
       
       - name: smus-cli describe (validate test target)
         env:
@@ -183,6 +186,9 @@ jobs:
           aws configure add-model \
             --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/mwaaserverless-2024-07-26.normal-edited-2.json \
             --service-name mwaaserverless-internal
+          aws configure add-model \
+            --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/datazone-2018-05-10.json \
+            --service-name datazone
       
       - name: smus-cli test
         env:
@@ -231,6 +237,9 @@ jobs:
           aws configure add-model \
             --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/mwaaserverless-2024-07-26.normal-edited-2.json \
             --service-name mwaaserverless-internal
+          aws configure add-model \
+            --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/datazone-2018-05-10.json \
+            --service-name datazone
       
       - name: smus-cli describe (validate prod target)
         env:

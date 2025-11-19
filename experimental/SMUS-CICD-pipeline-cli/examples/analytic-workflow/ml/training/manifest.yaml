@@ -30,7 +30,7 @@ stages:
         purpose: smus-cicd-testing
       region: ${TEST_DOMAIN_REGION:us-east-1}
     project:
-      name: test-ml-training
+      name: test-marketing
       create: true
       owners:
       - Eng1
