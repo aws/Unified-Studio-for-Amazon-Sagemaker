@@ -12,8 +12,8 @@ class ContextResolver:
         self,
         project_name: str,
         domain_id: str,
-        domain_name: str,
         region: str,
+        domain_name: str = None,
         stage_name: str = None,
         env_vars: Dict[str, str] = None,
     ):

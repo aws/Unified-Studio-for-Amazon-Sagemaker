@@ -176,13 +176,21 @@ def deploy_command(
         try:
             project_manager.ensure_project_exists(stage_name, target_config)
 
+            # Get comprehensive project info for bootstrap actions
+            from ..helpers.utils import get_datazone_project_info
+
+            project_info = get_datazone_project_info(
+                target_config.project.name, config
+            )
+            metadata["project_info"] = project_info
+
             # Emit project init completed
-            project_info = {
+            project_info_event = {
                 "name": target_config.project.name,
                 "status": "ACTIVE",
             }
             emitter.project_init_completed(
-                manifest.application_name, target_info, project_info, metadata
+                manifest.application_name, target_info, project_info_event, metadata
             )
 
         except Exception as e:
@@ -227,7 +235,9 @@ def deploy_command(
             # Process bootstrap actions (after deployment completes)
             if target_config.bootstrap:
                 typer.echo("Processing bootstrap actions...")
-                _process_bootstrap_actions(target_config, stage_name, config, manifest, metadata)
+                _process_bootstrap_actions(
+                    target_config, stage_name, config, manifest, metadata
+                )
             # Emit deploy completed
             emitter.deploy_completed(
                 manifest.application_name,
@@ -523,11 +533,10 @@ def _deploy_bundle_to_target(
 
     # Workflow creation now handled by workflow.create bootstrap action
     # S3 location passed to bootstrap via metadata
-    if metadata is None:
-        metadata = {}
-    metadata["s3_bucket"] = s3_bucket
-    metadata["s3_prefix"] = s3_prefix
-    metadata["bundle_path"] = bundle_path
+    if metadata is not None:
+        metadata["s3_bucket"] = s3_bucket
+        metadata["s3_prefix"] = s3_prefix
+        metadata["bundle_path"] = bundle_path
 
     # Process catalog assets if configured
     asset_success = _process_catalog_assets(
