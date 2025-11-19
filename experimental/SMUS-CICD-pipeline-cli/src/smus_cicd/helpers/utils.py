@@ -308,6 +308,8 @@ def get_datazone_project_info(
         result = {
             "projectId": project_id,
             "project_id": project_id,  # Keep backward compatibility
+            "domainId": domain_id,
+            "domain_id": domain_id,  # Keep backward compatibility
             "status": project_details.get("status", "Unknown"),
             "owners": project_owners,
             "connections": project_connections,
