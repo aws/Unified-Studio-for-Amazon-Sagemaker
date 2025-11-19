@@ -846,3 +846,9 @@ This project is licensed under the MIT-0 License. See [LICENSE](../../LICENSE) f
   <img src="docs/readme-qr-code.png" alt="Scan to view README" width="200"/>
   <p><em>Scan QR code to view this README on GitHub</em></p>
 </div>
+
+---
+
+## Idiomas / Languages
+
+**English** (current) | **[Português (Brasil)](README.pt-BR.md)**
