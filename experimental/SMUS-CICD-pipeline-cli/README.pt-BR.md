@@ -191,6 +191,148 @@ S3 • Lambda • Step Functions • DynamoDB • RDS • SNS/SQS • Batch
 **Veja lista completa:** [Referência de Operadores AWS do Airflow](docs/airflow-aws-operators.md)
 
 ---
+
+## Conceitos Principais
+
+### Separação de Responsabilidades: O Princípio de Design Chave
+
+**O Problema:** Abordagens tradicionais de implantação forçam equipes de DevOps a aprender serviços de analytics AWS (Glue, Athena, DataZone, SageMaker, MWAA, etc.) e entender estruturas de projeto SMUS, ou forçam equipes de dados a se tornarem especialistas em CI/CD.
+
+**A Solução:** SMUS CLI é a camada de abstração que encapsula toda a complexidade AWS e SMUS:
+
+```
+Equipes de Dados              SMUS CLI                    Equipes de DevOps
+    ↓                            ↓                              ↓
+manifest.yaml          smus-cli deploy                  GitHub Actions
+(O QUE & ONDE)         (ABSTRAÇÃO AWS)                  (COMO & QUANDO)
+```
+
+**Equipes de dados focam em:**
+- Código da aplicação e workflows
+- Quais serviços AWS usar (Glue, Athena, SageMaker, etc.)
+- Configurações de ambiente
+- Lógica de negócio
+
+**SMUS CLI gerencia TODA a complexidade AWS:**
+- Gerenciamento de domínio e projeto DataZone
+- APIs AWS Glue, Athena, SageMaker, MWAA
+- Gerenciamento de armazenamento e artefatos S3
+- Roles e permissões IAM
+- Configurações de conexão
+- Assinaturas de assets de catálogo
+- Implantação de workflow no Airflow
+- Provisionamento de infraestrutura
+- Testes e validação
+
+**Equipes de DevOps focam em:**
+- Melhores práticas de CI/CD (testes, aprovações, notificações)
+- Gates de segurança e conformidade
+- Orquestração de implantação
+- Monitoramento e alertas
+
+**Resultado:** 
+- Equipes de dados nunca tocam em configs de CI/CD
+- **Equipes de DevOps nunca chamam APIs AWS diretamente** - apenas chamam `smus-cli deploy`
+- **Workflows CI/CD são genéricos** - o mesmo workflow funciona para apps Glue, SageMaker ou Bedrock
+- Ambas as equipes trabalham independentemente usando sua expertise
+
+---
+
+### Manifesto da Aplicação
+Um arquivo YAML declarativo (`manifest.yaml`) que define sua aplicação de dados:
+- **Detalhes da aplicação** - Nome, versão, descrição
+- **Conteúdo** - Código de repositórios git, dados/modelos de armazenamento, dashboards QuickSight
+- **Workflows** - DAGs Airflow para orquestração e automação
+- **Stages** - Onde implantar (ambientes dev, test, prod)
+- **Configuração** - Configurações específicas por ambiente, conexões e ações de bootstrap
+
+**Criado e mantido por equipes de dados.** Define **o que** implantar e **onde**. Não requer conhecimento de CI/CD.
+
+### Aplicação
+Sua carga de trabalho de dados/analytics sendo implantada:
+- DAGs Airflow e scripts Python
+- Notebooks Jupyter e arquivos de dados
+- Modelos ML e código de treinamento
+- Pipelines ETL e transformações
+- Agentes GenAI e servidores MCP
+- Configurações de modelos de fundação
+
+### Stage
+Um ambiente de implantação (dev, test, prod) mapeado para um projeto do SageMaker Unified Studio:
+- Configuração de domínio e região
+- Nome e configurações do projeto
+- Conexões de recursos (S3, Airflow, Athena, Glue)
+- Parâmetros específicos do ambiente
+- Mapeamento opcional de branch para implantações baseadas em git
+
+### Workflow
+Lógica de orquestração que executa sua aplicação. Workflows servem dois propósitos:
+
+**1. Tempo de implantação:** Criar recursos AWS necessários durante a implantação
+- Provisionar infraestrutura (buckets S3, databases, roles IAM)
+- Configurar conexões e permissões
+- Configurar monitoramento e logging
+
+**2. Runtime:** Executar pipelines contínuos de dados e ML
+- Execução agendada (diária, horária, etc.)
+- Triggers orientados a eventos (uploads S3, chamadas API)
+- Processamento e transformações de dados
+- Treinamento e inferência de modelos
+
+Workflows são definidos como DAGs Airflow (Directed Acyclic Graphs) em formato YAML. Suporta [MWAA (Managed Workflows for Apache Airflow)](https://aws.amazon.com/managed-workflows-for-apache-airflow/) e [Amazon MWAA Serverless](https://aws.amazon.com/blogs/big-data/introducing-amazon-mwaa-serverless/) ([Guia do Usuário](https://docs.aws.amazon.com/mwaa/latest/mwaa-serverless-userguide/what-is-mwaa-serverless.html)).
+
+### Automação CI/CD
+Workflows do GitHub Actions (ou outros sistemas CI/CD) que automatizam a implantação:
+- **Criado e mantido por equipes de DevOps**
+- Define **como** e **quando** implantar
+- Executa testes e quality gates
+- Gerencia promoção entre targets
+- Aplica políticas de segurança e conformidade
+- Exemplo: `.github/workflows/deploy.yml`
+
+**Insight chave:** Equipes de DevOps criam workflows genéricos e reutilizáveis que funcionam para QUALQUER aplicação. Eles não precisam saber se o app usa Glue, SageMaker ou Bedrock - a CLI gerencia todas as interações com serviços AWS. O workflow apenas chama `smus-cli deploy` e a CLI faz o resto.
+
+### Modos de Implantação
+
+**Baseado em Bundle (Artefato):** Criar arquivo versionado → implantar arquivo nos stages
+- Bom para: trilhas de auditoria, capacidade de rollback, conformidade
+- Comando: `smus-cli bundle` depois `smus-cli deploy --manifest app.tar.gz`
+
+**Direto (Baseado em Git):** Implantar diretamente das fontes sem artefatos intermediários
+- Bom para: workflows mais simples, iteração rápida, git como fonte da verdade
+- Comando: `smus-cli deploy --manifest manifest.yaml --stage test`
+
+Ambos os modos funcionam com qualquer combinação de fontes de conteúdo de armazenamento e git.
+
+---
+
+### Como Tudo Funciona Junto
+
+```
+1. Equipe de Dados               2. Equipe de DevOps            3. SMUS CLI (A Abstração)
+   ↓                                ↓                              ↓
+Cria manifest.yaml             Cria workflow genérico         Workflow chama:
+- Jobs Glue                    - Teste no merge               smus-cli deploy --manifest manifest.yaml
+- Treinamento SageMaker        - Aprovação para prod            ↓
+- Queries Athena               - Scans de segurança           CLI gerencia TODA complexidade AWS:
+- Localizações S3              - Regras de notificação        - APIs DataZone
+                                                              - APIs Glue/Athena/SageMaker
+                               Funciona para QUALQUER app!    - Implantação MWAA
+                               Sem conhecimento AWS!          - Gerenciamento S3
+                                                              - Configuração IAM
+                                                              - Provisionamento de infraestrutura
+                                                                ↓
+                                                              Sucesso!
+```
+
+**A beleza:** 
+- Equipes de dados nunca aprendem GitHub Actions
+- **Equipes de DevOps nunca chamam APIs AWS** - a CLI encapsula toda a complexidade de analytics, ML e SMUS da AWS
+- Workflows CI/CD são simples: apenas chame `smus-cli deploy`
+- O mesmo workflow funciona para QUALQUER aplicação, independente dos serviços AWS usados
+
+---
+
 ## Aplicações de Exemplo
 
 Exemplos do mundo real mostrando como implantar diferentes tipos de cargas de trabalho com SMUS CI/CD.
@@ -315,3 +457,134 @@ Este projeto está licenciado sob a Licença MIT-0. Veja [LICENSE](../../LICENSE
 ---
 
 **[English Version](README.md)** | **Versão em Português**
+
+---
+
+<details>
+<summary><h2>📋 Lista de Recursos</h2></summary>
+
+**Legenda:** ✅ Suportado | 🔄 Planejado | 🔮 Futuro
+
+### Infraestrutura Principal
+| Recurso | Status | Notas |
+|---------|--------|-------|
+| Configuração YAML | ✅ | [Guia do Manifesto](docs/manifest.md) |
+| Infraestrutura como Código | ✅ | [Comando Deploy](docs/cli-commands.md#deploy) |
+| Implantação multi-ambiente | ✅ | [Stages](docs/manifest-schema.md#stages) |
+| Ferramenta CLI | ✅ | [Comandos CLI](docs/cli-commands.md) |
+| Integração com controle de versão | ✅ | [GitHub Actions](docs/github-actions-integration.md) |
+
+### Implantação e Bundling
+| Recurso | Status | Notas |
+|---------|--------|-------|
+| Bundling de artefatos | ✅ | [Comando Bundle](docs/cli-commands.md#bundle) |
+| Implantação baseada em bundle | ✅ | [Comando Deploy](docs/cli-commands.md#deploy) |
+| Implantação direta | ✅ | [Comando Deploy](docs/cli-commands.md#deploy) |
+| Validação de implantação | ✅ | [Comando Describe](docs/cli-commands.md#describe) |
+| Implantação incremental | 🔄 | Upload apenas de arquivos alterados |
+| Suporte a rollback | 🔮 | Rollback automatizado |
+| Implantação blue-green | 🔮 | Implantações sem downtime |
+
+### Experiência do Desenvolvedor
+| Recurso | Status | Notas |
+|---------|--------|-------|
+| Templates de projeto | 🔄 | `smus-cli init` com templates |
+| Inicialização de manifesto | ✅ | [Comando Create](docs/cli-commands.md#create) |
+| Configuração interativa | 🔄 | Prompts de configuração guiada |
+| Desenvolvimento local | ✅ | [Comandos CLI](docs/cli-commands.md) |
+| Extensão VS Code | 🔮 | IntelliSense e validação |
+
+### Configuração
+| Recurso | Status | Notas |
+|---------|--------|-------|
+| Substituição de variáveis | ✅ | [Guia de Substituições](docs/substitutions-and-variables.md) |
+| Configuração específica por ambiente | ✅ | [Stages](docs/manifest-schema.md#stages) |
+| Gerenciamento de secrets | 🔮 | Integração AWS Secrets Manager |
+| Validação de configuração | ✅ | [Schema do Manifesto](docs/manifest-schema.md) |
+| Gerenciamento de conexões | ✅ | [Guia de Conexões](docs/connections.md) |
+
+### Recursos e Cargas de Trabalho
+| Recurso | Status | Notas |
+|---------|--------|-------|
+| DAGs Airflow | ✅ | [Workflows](docs/manifest-schema.md#workflows) |
+| Notebooks Jupyter | ✅ | [SageMakerNotebookOperator](docs/airflow-aws-operators.md#amazon-sagemaker) |
+| Jobs ETL Glue | ✅ | [GlueJobOperator](docs/airflow-aws-operators.md#aws-glue) |
+| Queries Athena | ✅ | [AthenaOperator](docs/airflow-aws-operators.md#amazon-athena) |
+| Treinamento SageMaker | ✅ | [SageMakerTrainingOperator](docs/airflow-aws-operators.md#amazon-sagemaker) |
+| Endpoints SageMaker | ✅ | [SageMakerEndpointOperator](docs/airflow-aws-operators.md#amazon-sagemaker) |
+| Dashboards QuickSight | ✅ | [Implantação QuickSight](docs/quicksight-deployment.md) |
+| Agentes Bedrock | ✅ | [BedrockInvokeModelOperator](docs/airflow-aws-operators.md#amazon-bedrock) |
+| Funções Lambda | 🔄 | [LambdaInvokeFunctionOperator](docs/airflow-aws-operators.md#aws-lambda) |
+| Jobs EMR | ✅ | [EmrAddStepsOperator](docs/airflow-aws-operators.md#amazon-emr) |
+| Queries Redshift | ✅ | [RedshiftDataOperator](docs/airflow-aws-operators.md#amazon-redshift) |
+
+### Bootstrap Actions
+| Recurso | Status | Notas |
+|---------|--------|-------|
+| Execução de workflow | ✅ | [workflow.run](docs/bootstrap-actions.md#workflowrun---trigger-workflow-execution) |
+| Recuperação de logs | ✅ | [workflow.logs](docs/bootstrap-actions.md#workflowlogs---fetch-workflow-logs) |
+| Atualização QuickSight | ✅ | [quicksight.refresh_dataset](docs/bootstrap-actions.md#quicksightrefresh_dataset---trigger-dataset-ingestion) |
+| Eventos EventBridge | ✅ | [eventbridge.put_events](docs/bootstrap-actions.md#customput_events---emit-custom-events) |
+| Conexões DataZone | ✅ | [datazone.create_connection](docs/bootstrap-actions.md) |
+| Execução sequencial | ✅ | [Fluxo de Execução](docs/bootstrap-actions.md#execution-flow) |
+
+### Integração CI/CD
+| Recurso | Status | Notas |
+|---------|--------|-------|
+| GitHub Actions | ✅ | [Guia GitHub Actions](docs/github-actions-integration.md) |
+| GitLab CI | ✅ | [Comandos CLI](docs/cli-commands.md) |
+| Azure DevOps | ✅ | [Comandos CLI](docs/cli-commands.md) |
+| Jenkins | ✅ | [Comandos CLI](docs/cli-commands.md) |
+| Service principals | ✅ | [Guia GitHub Actions](docs/github-actions-integration.md) |
+| Federação OIDC | ✅ | [Guia GitHub Actions](docs/github-actions-integration.md) |
+
+### Testes e Validação
+| Recurso | Status | Notas |
+|---------|--------|-------|
+| Testes unitários | ✅ | [Comando Test](docs/cli-commands.md#test) |
+| Testes de integração | ✅ | [Comando Test](docs/cli-commands.md#test) |
+| Testes automatizados | ✅ | [Comando Test](docs/cli-commands.md#test) |
+| Quality gates | ✅ | [Comando Test](docs/cli-commands.md#test) |
+| Monitoramento de workflow | ✅ | [Comando Monitor](docs/cli-commands.md#monitor) |
+
+### Monitoramento e Observabilidade
+| Recurso | Status | Notas |
+|---------|--------|-------|
+| Monitoramento de implantação | ✅ | [Comando Deploy](docs/cli-commands.md#deploy) |
+| Monitoramento de workflow | ✅ | [Comando Monitor](docs/cli-commands.md#monitor) |
+| Alertas customizados | ✅ | [Métricas de Implantação](docs/pipeline-deployment-metrics.md) |
+| Coleta de métricas | ✅ | [Métricas de Implantação](docs/pipeline-deployment-metrics.md) |
+| Histórico de implantação | ✅ | [Comando Bundle](docs/cli-commands.md#bundle) |
+
+### Integração com Serviços AWS
+| Recurso | Status | Notas |
+|---------|--------|-------|
+| Amazon MWAA | ✅ | [Workflows](docs/manifest-schema.md#workflows) |
+| MWAA Serverless | ✅ | [Workflows](docs/manifest-schema.md#workflows) |
+| AWS Glue | ✅ | [Operadores Airflow](docs/airflow-aws-operators.md#aws-glue) |
+| Amazon Athena | ✅ | [Operadores Airflow](docs/airflow-aws-operators.md#amazon-athena) |
+| SageMaker | ✅ | [Operadores Airflow](docs/airflow-aws-operators.md#amazon-sagemaker) |
+| Amazon Bedrock | ✅ | [Operadores Airflow](docs/airflow-aws-operators.md#amazon-bedrock) |
+| Amazon QuickSight | ✅ | [Implantação QuickSight](docs/quicksight-deployment.md) |
+| DataZone | ✅ | [Schema do Manifesto](docs/manifest-schema.md) |
+| EventBridge | ✅ | [Métricas de Implantação](docs/pipeline-deployment-metrics.md) |
+| Lake Formation | ✅ | [Guia de Conexões](docs/connections.md) |
+| Amazon S3 | ✅ | [Storage](docs/manifest-schema.md#storage) |
+| AWS Lambda | 🔄 | [Operadores Airflow](docs/airflow-aws-operators.md#aws-lambda) |
+| Amazon EMR | ✅ | [Operadores Airflow](docs/airflow-aws-operators.md#amazon-emr) |
+| Amazon Redshift | ✅ | [Operadores Airflow](docs/airflow-aws-operators.md#amazon-redshift) |
+
+### Recursos Avançados
+| Recurso | Status | Notas |
+|---------|--------|-------|
+| Implantação multi-região | ✅ | [Stages](docs/manifest-schema.md#stages) |
+| Implantação cross-project | ✅ | [Stages](docs/manifest-schema.md#stages) |
+| Gerenciamento de dependências | ✅ | [Operadores Airflow](docs/airflow-aws-operators.md) |
+| Assinaturas de catálogo | ✅ | [Schema do Manifesto](docs/manifest-schema.md) |
+| Orquestração multi-serviço | ✅ | [Operadores Airflow](docs/airflow-aws-operators.md) |
+| Detecção de drift | 🔮 | Detectar drift de configuração |
+| Gerenciamento de estado | 🔄 | Rastreamento abrangente de estado |
+
+</details>
+
+---
