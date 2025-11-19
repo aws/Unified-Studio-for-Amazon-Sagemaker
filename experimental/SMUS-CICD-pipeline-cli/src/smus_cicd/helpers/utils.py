@@ -224,7 +224,7 @@ def validate_project_exists(
     project_info: Dict[str, Any],
     project_name: str,
     target_name: str,
-    allow_create: bool = False
+    allow_create: bool = False,
 ) -> None:
     """
     Validate that project exists when connecting to AWS.

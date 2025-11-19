@@ -120,7 +120,7 @@ def describe_command(
                             project_info,
                             target_config.project.name,
                             stage_name,
-                            allow_create=target_config.project.create
+                            allow_create=target_config.project.create,
                         )
 
                     # Check if project exists
