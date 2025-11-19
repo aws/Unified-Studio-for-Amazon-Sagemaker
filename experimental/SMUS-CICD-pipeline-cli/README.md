@@ -849,6 +849,6 @@ This project is licensed under the MIT-0 License. See [LICENSE](../../LICENSE) f
 
 ---
 
-## Idiomas / Languages
+## Idiomas / Languages / Langues / Lingue / 言語 / 语言 / שפות
 
-**English** (current) | **[Português (Brasil)](README.pt-BR.md)**
+**English** (current) | **[Português (Brasil)](docs/langs/pt/README.md)** | **[Français](docs/langs/fr/README.md)** | **[Italiano](docs/langs/it/README.md)** | **[日本語](docs/langs/ja/README.md)** | **[中文](docs/langs/zh/README.md)** | **[עברית](docs/langs/he/README.md)**
