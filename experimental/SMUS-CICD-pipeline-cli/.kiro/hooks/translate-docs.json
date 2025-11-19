@@ -1,0 +1,12 @@
+{
+  "name": "Auto-translate Documentation",
+  "description": "Automatically translates README and docs files to multiple languages when saved",
+  "trigger": {
+    "type": "onFileSave",
+    "filePattern": "{README.md,docs/**/*.md,developer/**/*.md}",
+    "excludePattern": "docs/langs/**"
+  },
+  "prompt": "The file {{filePath}} has been updated. Translate this file into French (fr), Hebrew (he), Italian (it), Japanese (ja), Portuguese (pt), and Chinese (zh).\n\n**CRITICAL STRUCTURE REQUIREMENTS:**\n1. Preserve EXACT markdown structure:\n   - Same number of headers (# ## ###)\n   - Same header hierarchy and nesting\n   - Same number of code blocks with identical content\n   - Same number of lists, tables, and sections\n   - All emojis in same positions (✅ 👨‍💻 🚀 etc.)\n   - All horizontal rules (---) in same positions\n   - All HTML comments and collapsible sections\n\n2. DO NOT translate:\n   - Code blocks (bash, yaml, python, etc.) - keep 100% identical\n   - Command names: smus-cli, git, pip, etc.\n   - File names: manifest.yaml, README.md, etc.\n   - URLs and links\n   - AWS service names: SageMaker, Glue, Athena, DataZone, S3, etc.\n   - Technical terms: CLI, CI/CD, DevOps, workflow, pipeline, bundle, manifest\n   - Variable names and parameters\n\n3. TRANSLATE naturally:\n   - Descriptive text and explanations\n   - Section headings (but keep technical terms in English)\n   - User-facing messages\n   - Documentation prose\n\n4. Reference style: Check docs/langs/pt/README.md for translation style examples\n\n5. Save to: docs/langs/{language-code}/{{fileName}}\n   - Maintain subdirectory structure (e.g., developer/guide.md → docs/langs/fr/developer/guide.md)\n\n6. Quality check before saving:\n   - Count headers in source vs translation (must match)\n   - Count code blocks in source vs translation (must match)\n   - Verify all emojis present\n   - Verify all links work",
+  "enabled": true,
+  "autoApprove": true
+}

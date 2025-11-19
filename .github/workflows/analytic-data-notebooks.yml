@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  deploy:
+  pipeline:
     uses: ./.github/workflows/smus-direct-deploy.yml
     with:
       manifest_path: 'experimental/SMUS-CICD-pipeline-cli/examples/analytic-workflow/data-notebooks/manifest.yaml'

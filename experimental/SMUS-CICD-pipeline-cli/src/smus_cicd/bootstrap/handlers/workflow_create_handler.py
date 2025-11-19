@@ -67,8 +67,7 @@ def handle_workflow_create(
     domain_id = project_info.get("domain_id")
 
     if not project_id or not domain_id:
-        typer.echo("❌ Project info not available in context")
-        return False
+        raise ValueError("Project info not available in context - metadata not properly initialized")
 
     # Get S3 location from metadata (set by deploy)
     s3_bucket = metadata.get("s3_bucket")
@@ -76,10 +75,7 @@ def handle_workflow_create(
     bundle_path = metadata.get("bundle_path")
 
     if not s3_bucket or s3_prefix is None:
-        typer.echo(
-            "❌ S3 location not available. Workflows must be deployed before creation."
-        )
-        return False
+        raise ValueError("S3 location not available - workflows must be deployed before creation")
 
     # Ensure bundle is local if needed
     if bundle_path:

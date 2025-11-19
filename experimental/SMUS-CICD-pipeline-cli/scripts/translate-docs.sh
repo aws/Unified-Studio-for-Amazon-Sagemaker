@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Translation script for SMUS CI/CD documentation
 # Usage: ./scripts/translate-docs.sh <lang_code>
@@ -13,15 +13,20 @@ SOURCE_README="$PROJECT_ROOT/README.md"
 TARGET_DIR="$PROJECT_ROOT/docs/langs/$LANG_CODE"
 TARGET_README="$TARGET_DIR/README.md"
 
-# Language names
-declare -A LANG_NAMES=(
-    ["pt"]="Português (Brasil)"
-    ["fr"]="Français"
-    ["it"]="Italiano"
-    ["ja"]="日本語"
-    ["zh"]="中文"
-    ["he"]="עברית"
-)
+# Language names function
+get_lang_name() {
+    case $1 in
+        pt) echo "Português (Brasil)" ;;
+        fr) echo "Français" ;;
+        it) echo "Italiano" ;;
+        ja) echo "日本語" ;;
+        zh) echo "中文" ;;
+        he) echo "עברית" ;;
+        *) echo "Unknown" ;;
+    esac
+}
+
+LANG_NAME=$(get_lang_name "$LANG_CODE")
 
 # Validation
 if [ -z "$LANG_CODE" ]; then
@@ -41,115 +46,148 @@ if [ ! -f "$SOURCE_README" ]; then
 fi
 
 echo "========================================="
-echo "Translating README to ${LANG_NAMES[$LANG_CODE]}"
+echo "Translating README to $LANG_NAME"
 echo "========================================="
+echo ""
+echo "NOTE: This will use Q CLI to translate the README."
+echo "The translation may take a few minutes due to the file size."
 echo ""
 
 # Count sections in source
 SOURCE_SECTIONS=$(grep -c "^## " "$SOURCE_README" || true)
 SOURCE_EXAMPLES=$(grep -c "^### 📊\|^### 📓\|^### 🤖\|^### 🧠" "$SOURCE_README" || true)
 SOURCE_DETAILS=$(grep -c "<details>" "$SOURCE_README" || true)
+SOURCE_CODE_BLOCKS=$(grep -c '```' "$SOURCE_README" || true)
 
 echo "Source README structure:"
 echo "  - Major sections (##): $SOURCE_SECTIONS"
 echo "  - Examples: $SOURCE_EXAMPLES"
 echo "  - Collapsible sections: $SOURCE_DETAILS"
+echo "  - Code blocks: $SOURCE_CODE_BLOCKS"
 echo ""
 
-# Create translation prompt
-TRANSLATION_PROMPT="Translate the following README from English to ${LANG_NAMES[$LANG_CODE]}.
+# Create a temporary prompt file
+PROMPT_FILE=$(mktemp)
+cat > "$PROMPT_FILE" << 'PROMPT_END'
+Translate the README from English to TARGET_LANG_NAME.
 
-CRITICAL RULES:
-1. Keep ALL technical terms in English: pipeline, deploy, workflow, manifest, bundle, stage, CLI, CI/CD, DevOps, etc.
-2. Keep ALL code blocks unchanged (including bash, yaml, markdown examples)
+CRITICAL TRANSLATION RULES:
+1. Keep ALL technical terms in English: pipeline, deploy, workflow, manifest, bundle, stage, CLI, CI/CD, DevOps, SageMaker, Glue, Athena, QuickSight, Bedrock, MWAA, DataZone, EventBridge, MLflow, etc.
+2. Keep ALL code blocks COMPLETELY unchanged (bash, yaml, json examples)
 3. Keep ALL URLs unchanged
-4. Keep ALL command examples unchanged
-5. Translate ONLY descriptive text, headings, and explanations
-6. Maintain exact same structure: same sections, same order, same formatting
-7. Keep all <details> tags and HTML unchanged
-8. Keep all markdown formatting (**, ##, ###, etc.)
+4. Keep ALL command examples unchanged (smus-cli deploy, git clone, pip install, etc.)
+5. Keep ALL file paths unchanged (manifest.yaml, README.md, docs/, etc.)
+6. Translate ONLY descriptive text, headings, and explanations
+7. Maintain EXACT same structure: same sections, same order, same formatting
+8. Keep ALL <details> and </details> tags unchanged
+9. Keep ALL HTML unchanged
+10. Keep ALL markdown formatting unchanged (**, ##, ###, [], (), etc.)
+11. Keep ALL emojis unchanged (📊, 📓, 🤖, 🧠, ✅, etc.)
 
-For ${LANG_CODE}:
-$([ "$LANG_CODE" = "he" ] && echo "- Note: Hebrew is RTL but keep technical terms LTR")
-$([ "$LANG_CODE" = "ja" ] || [ "$LANG_CODE" = "zh" ] && echo "- Keep technical terms in English even though they may have local equivalents")
+LANG_SPECIFIC_NOTES
 
-Now translate this README:
+Read the following English README and output ONLY the translated version. Do not add any explanations or comments.
 
----
-$(cat "$SOURCE_README")
----
+PROMPT_END
 
-Output ONLY the translated README, no explanations."
+# Add language-specific notes
+LANG_NOTES=""
+if [ "$LANG_CODE" = "he" ]; then
+    LANG_NOTES="- Hebrew is RTL but keep ALL technical terms in LTR English"
+elif [ "$LANG_CODE" = "ja" ] || [ "$LANG_CODE" = "zh" ]; then
+    LANG_NOTES="- Keep technical terms in English even though local equivalents may exist"
+fi
 
-echo "Calling Q CLI for translation..."
+sed -i.bak "s/TARGET_LANG_NAME/$LANG_NAME/g" "$PROMPT_FILE"
+sed -i.bak "s/LANG_SPECIFIC_NOTES/$LANG_NOTES/g" "$PROMPT_FILE"
+
+# Append the source README
+echo "" >> "$PROMPT_FILE"
+echo "---" >> "$PROMPT_FILE"
+cat "$SOURCE_README" >> "$PROMPT_FILE"
+echo "---" >> "$PROMPT_FILE"
+
+echo "Calling Q CLI for translation (this may take a few minutes)..."
 echo ""
 
-# Call Q CLI for translation
-q chat "$TRANSLATION_PROMPT" > "$TARGET_README.tmp"
-
-# Verify translation
-echo ""
-echo "Verifying translation..."
-
-if [ ! -f "$TARGET_README.tmp" ]; then
-    echo "Error: Translation failed - no output file"
-    exit 1
-fi
-
-TARGET_SECTIONS=$(grep -c "^## " "$TARGET_README.tmp" || true)
-TARGET_EXAMPLES=$(grep -c "^### 📊\|^### 📓\|^### 🤖\|^### 🧠" "$TARGET_README.tmp" || true)
-TARGET_DETAILS=$(grep -c "<details>" "$TARGET_README.tmp" || true)
-
-echo "Translated README structure:"
-echo "  - Major sections (##): $TARGET_SECTIONS"
-echo "  - Examples: $TARGET_EXAMPLES"
-echo "  - Collapsible sections: $TARGET_DETAILS"
-echo ""
-
-# Verification checks
-VERIFICATION_PASSED=true
-
-if [ "$SOURCE_SECTIONS" -ne "$TARGET_SECTIONS" ]; then
-    echo "❌ VERIFICATION FAILED: Section count mismatch"
-    echo "   Expected: $SOURCE_SECTIONS, Got: $TARGET_SECTIONS"
-    VERIFICATION_PASSED=false
-fi
-
-if [ "$SOURCE_EXAMPLES" -ne "$TARGET_EXAMPLES" ]; then
-    echo "❌ VERIFICATION FAILED: Example count mismatch"
-    echo "   Expected: $SOURCE_EXAMPLES, Got: $TARGET_EXAMPLES"
-    VERIFICATION_PASSED=false
-fi
-
-if [ "$SOURCE_DETAILS" -ne "$TARGET_DETAILS" ]; then
-    echo "❌ VERIFICATION FAILED: Collapsible section count mismatch"
-    echo "   Expected: $SOURCE_DETAILS, Got: $TARGET_DETAILS"
-    VERIFICATION_PASSED=false
-fi
-
-# Check for code blocks
-SOURCE_CODE_BLOCKS=$(grep -c '```' "$SOURCE_README" || true)
-TARGET_CODE_BLOCKS=$(grep -c '```' "$TARGET_README.tmp" || true)
-
-if [ "$SOURCE_CODE_BLOCKS" -ne "$TARGET_CODE_BLOCKS" ]; then
-    echo "❌ VERIFICATION FAILED: Code block count mismatch"
-    echo "   Expected: $SOURCE_CODE_BLOCKS, Got: $TARGET_CODE_BLOCKS"
-    VERIFICATION_PASSED=false
-fi
-
-if [ "$VERIFICATION_PASSED" = true ]; then
-    echo "✅ Verification passed!"
-    mv "$TARGET_README.tmp" "$TARGET_README"
+# Call Q CLI - note: this might fail if README is too large
+if q chat "$(cat "$PROMPT_FILE")" > "$TARGET_README.tmp" 2>&1; then
     echo ""
-    echo "Translation saved to: $TARGET_README"
+    echo "Translation completed. Verifying..."
+    
+    # Verify translation
+    if [ ! -f "$TARGET_README.tmp" ] || [ ! -s "$TARGET_README.tmp" ]; then
+        echo "❌ Error: Translation failed - no output or empty file"
+        rm -f "$PROMPT_FILE" "$PROMPT_FILE.bak"
+        exit 1
+    fi
+    
+    TARGET_SECTIONS=$(grep -c "^## " "$TARGET_README.tmp" || true)
+    TARGET_EXAMPLES=$(grep -c "^### 📊\|^### 📓\|^### 🤖\|^### 🧠" "$TARGET_README.tmp" || true)
+    TARGET_DETAILS=$(grep -c "<details>" "$TARGET_README.tmp" || true)
+    TARGET_CODE_BLOCKS=$(grep -c '```' "$TARGET_README.tmp" || true)
+    
     echo ""
-    echo "Next steps:"
-    echo "1. Review the translation for accuracy"
-    echo "2. Update language selector in main README"
-    echo "3. Commit and push changes"
+    echo "Translated README structure:"
+    echo "  - Major sections (##): $TARGET_SECTIONS"
+    echo "  - Examples: $TARGET_EXAMPLES"
+    echo "  - Collapsible sections: $TARGET_DETAILS"
+    echo "  - Code blocks: $TARGET_CODE_BLOCKS"
+    echo ""
+    
+    # Verification checks
+    VERIFICATION_PASSED=true
+    
+    if [ "$SOURCE_SECTIONS" -ne "$TARGET_SECTIONS" ]; then
+        echo "⚠️  WARNING: Section count mismatch"
+        echo "   Expected: $SOURCE_SECTIONS, Got: $TARGET_SECTIONS"
+        VERIFICATION_PASSED=false
+    fi
+    
+    if [ "$SOURCE_EXAMPLES" -ne "$TARGET_EXAMPLES" ]; then
+        echo "⚠️  WARNING: Example count mismatch"
+        echo "   Expected: $SOURCE_EXAMPLES, Got: $TARGET_EXAMPLES"
+        VERIFICATION_PASSED=false
+    fi
+    
+    if [ "$SOURCE_DETAILS" -ne "$TARGET_DETAILS" ]; then
+        echo "⚠️  WARNING: Collapsible section count mismatch"
+        echo "   Expected: $SOURCE_DETAILS, Got: $TARGET_DETAILS"
+        VERIFICATION_PASSED=false
+    fi
+    
+    if [ "$SOURCE_CODE_BLOCKS" -ne "$TARGET_CODE_BLOCKS" ]; then
+        echo "⚠️  WARNING: Code block count mismatch"
+        echo "   Expected: $SOURCE_CODE_BLOCKS, Got: $TARGET_CODE_BLOCKS"
+        VERIFICATION_PASSED=false
+    fi
+    
+    if [ "$VERIFICATION_PASSED" = true ]; then
+        echo "✅ Verification passed!"
+        mv "$TARGET_README.tmp" "$TARGET_README"
+        echo ""
+        echo "Translation saved to: $TARGET_README"
+        echo ""
+        echo "Please review the translation for:"
+        echo "  - Technical accuracy"
+        echo "  - Proper handling of technical terms (should be in English)"
+        echo "  - Links work correctly"
+    else
+        echo ""
+        echo "⚠️  Verification warnings detected"
+        echo "Translation saved to: $TARGET_README.tmp"
+        echo ""
+        echo "Please review manually before accepting:"
+        echo "  mv $TARGET_README.tmp $TARGET_README"
+    fi
 else
+    echo "❌ Error: Q CLI translation failed"
+    echo "This might be because the README is too large for a single Q CLI call"
     echo ""
-    echo "Translation saved to: $TARGET_README.tmp (for review)"
-    echo "Please review and fix issues before using"
+    echo "Alternative: Use the Portuguese translation as a template and manually translate"
+    rm -f "$PROMPT_FILE" "$PROMPT_FILE.bak"
     exit 1
 fi
+
+# Cleanup
+rm -f "$PROMPT_FILE" "$PROMPT_FILE.bak"

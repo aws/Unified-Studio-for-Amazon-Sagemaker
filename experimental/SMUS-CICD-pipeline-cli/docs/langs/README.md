@@ -31,7 +31,25 @@ This directory contains translations of the SMUS CI/CD Pipeline CLI documentatio
 
 ### Translation Process
 
-Use the translation script:
+### Automated Translation with Kiro Agent Hooks
+
+**NEW**: Documentation is now automatically translated when you save files using a Kiro agent hook!
+
+#### How It Works
+1. Edit any documentation file (README.md, docs/*.md, developer/*.md)
+2. Save the file
+3. The agent hook triggers automatically
+4. Translations are generated for all 6 languages
+5. Files are saved to `docs/langs/{language}/` with the same structure
+
+#### Manual Translation
+You can also manually trigger translation by asking Kiro:
+```
+Translate docs/cli-commands.md to all languages
+```
+
+#### Legacy Script (Optional)
+The translation script is still available:
 
 ```bash
 # From project root
@@ -42,12 +60,6 @@ Use the translation script:
 ./scripts/translate-docs.sh ja  # Japanese
 ./scripts/translate-docs.sh he  # Hebrew
 ```
-
-The script will:
-1. Call Q CLI to translate the main README
-2. Verify structure matches (sections, examples, collapsible elements)
-3. Check code block count
-4. Save translation only if verification passes
 
 ### Manual Review Required
 
