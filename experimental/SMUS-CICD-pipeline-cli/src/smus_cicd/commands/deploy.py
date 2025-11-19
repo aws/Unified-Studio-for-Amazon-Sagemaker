@@ -150,6 +150,11 @@ def deploy_command(
 
         target_info = build_target_info(stage_name, target_config)
         metadata = collect_metadata(manifest)
+        
+        # Always initialize metadata as dict for internal state
+        if metadata is None:
+            metadata = {}
+        
         typer.echo(f"🔍 Metadata collected: {bool(metadata)}")
 
         # Emit deploy started event
@@ -176,13 +181,19 @@ def deploy_command(
         try:
             project_manager.ensure_project_exists(stage_name, target_config)
 
+            # Get comprehensive project info for bootstrap actions
+            from ..helpers.utils import get_datazone_project_info
+
+            project_info = get_datazone_project_info(target_config.project.name, config)
+            metadata["project_info"] = project_info
+
             # Emit project init completed
-            project_info = {
+            project_info_event = {
                 "name": target_config.project.name,
                 "status": "ACTIVE",
             }
             emitter.project_init_completed(
-                manifest.application_name, target_info, project_info, metadata
+                manifest.application_name, target_info, project_info_event, metadata
             )
 
         except Exception as e:
