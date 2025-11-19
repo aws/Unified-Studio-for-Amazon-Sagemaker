@@ -58,8 +58,7 @@ def create_connection(
     properties = params.get("properties", {})
 
     if not name or not connection_type:
-        typer.echo("❌ Connection name and type are required")
-        return False
+        raise ValueError("Connection name and type are required")
 
     # Get project info from metadata
     project_info = metadata.get("project_info", {})
@@ -68,18 +67,18 @@ def create_connection(
     region = config.get("region")
 
     if not project_id or not domain_id:
-        typer.echo("❌ Project info not available for connection creation")
-        return False
+        raise ValueError("Project info not available for connection creation")
 
     # Get project environments
     environments = datazone.get_project_environments(project_id, domain_id, region)
     if not environments:
-        typer.echo(f"❌ No environments found for project {project_id}")
-        return False
+        raise ValueError(f"No environments found for project {project_id}")
 
     # Use first environment (default environment)
     environment_id = environments[0].get("id")
-    typer.echo(f"🔗 Creating {connection_type} connection '{name}' in environment {environment_id}")
+    typer.echo(
+        f"🔗 Creating {connection_type} connection '{name}' in environment {environment_id}"
+    )
 
     try:
         # Create connection using ConnectionCreator
@@ -88,15 +87,19 @@ def create_connection(
             environment_id=environment_id,
             name=name,
             connection_type=connection_type,
-            **properties
+            **properties,
         )
-        
+
         typer.echo(f"✅ Connection '{name}' created successfully: {connection_id}")
-        return {"action": "datazone.create_connection", "status": "success", "connection_id": connection_id}
+        return {
+            "action": "datazone.create_connection",
+            "status": "success",
+            "connection_id": connection_id,
+        }
 
     except Exception as e:
         typer.echo(f"❌ Failed to create connection '{name}': {e}")
-        return False
+        raise
 
 
 def create_domain(action: BootstrapAction, context: Dict[str, Any]) -> Dict[str, Any]:
