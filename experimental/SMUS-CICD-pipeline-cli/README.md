@@ -1,10 +1,5 @@
 # SMUS CI/CD Pipeline CLI
 
-<div align="center">
-  <img src="docs/qr-code.png" alt="Scan to view README" width="200"/>
-  <p><em>Scan QR code to view this README on GitHub</em></p>
-</div>
-
 **Automate deployment of data applications across SageMaker Unified Studio environments**
 
 Deploy Airflow DAGs, Jupyter notebooks, and ML workflows from development to production with confidence. Built for data scientists, data engineers, ML engineers, and GenAI app developers working with DevOps teams.
@@ -844,3 +839,16 @@ pip install smus-cicd-cli  # May contain malicious code
 ## License
 
 This project is licensed under the MIT-0 License. See [LICENSE](../../LICENSE) for details.
+
+---
+
+<div align="center">
+  <img src="docs/readme-qr-code.png" alt="Scan to view README" width="200"/>
+  <p><em>Scan QR code to view this README on GitHub</em></p>
+</div>
+
+---
+
+## Idiomas / Languages
+
+**English** (current) | **[Português (Brasil)](README.pt-BR.md)**

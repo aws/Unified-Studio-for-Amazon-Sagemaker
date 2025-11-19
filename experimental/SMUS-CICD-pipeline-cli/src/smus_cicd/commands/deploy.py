@@ -227,7 +227,7 @@ def deploy_command(
             # Process bootstrap actions (after deployment completes)
             if target_config.bootstrap:
                 typer.echo("Processing bootstrap actions...")
-                _process_bootstrap_actions(target_config, stage_name, config, manifest)
+                _process_bootstrap_actions(target_config, stage_name, config, manifest, metadata)
             # Emit deploy completed
             emitter.deploy_completed(
                 manifest.application_name,
@@ -521,17 +521,13 @@ def _deploy_bundle_to_target(
             s3_prefix = parts[1] if len(parts) > 1 else ""
             break
 
-    airflow_serverless_success = _create_airflow_serverless_workflows(
-        bundle_path,
-        manifest,
-        target_config,
-        config,
-        effective_target_name,
-        s3_bucket,
-        s3_prefix,
-        emitter,
-        metadata,
-    )
+    # Workflow creation now handled by workflow.create bootstrap action
+    # S3 location passed to bootstrap via metadata
+    if metadata is None:
+        metadata = {}
+    metadata["s3_bucket"] = s3_bucket
+    metadata["s3_prefix"] = s3_prefix
+    metadata["bundle_path"] = bundle_path
 
     # Process catalog assets if configured
     asset_success = _process_catalog_assets(
@@ -541,9 +537,7 @@ def _deploy_bundle_to_target(
     # Return overall success - storage must succeed, git is optional
     storage_success = all(r[0] is not None for r in storage_results)
     git_success = all(r[0] is not None for r in git_results) if git_results else True
-    return (
-        storage_success and git_success and asset_success and airflow_serverless_success
-    )
+    return storage_success and git_success and asset_success
 
 
 def _deploy_local_storage_item(
@@ -1296,410 +1290,6 @@ def _process_catalog_assets(
         return False
 
 
-def _create_airflow_serverless_workflows(
-    bundle_path: Optional[str],
-    manifest: ApplicationManifest,
-    target_config,
-    config: Dict[str, Any],
-    stage_name: str,
-    s3_bucket: Optional[str],
-    s3_prefix: Optional[str],
-    emitter=None,
-    metadata: Optional[Dict[str, Any]] = None,
-) -> bool:
-    """
-    Create serverless Airflow workflows if airflow-serverless flag is enabled.
-
-    Args:
-        bundle_path: Path to the bundle file (None for local deployment)
-        manifest: Pipeline manifest object
-        target_config: Target configuration object
-        config: Configuration dictionary
-        stage_name: Name of the target
-        s3_bucket: S3 bucket where files were deployed
-        s3_prefix: S3 prefix where files were deployed
-        emitter: Optional EventEmitter for monitoring
-        metadata: Optional metadata for events
-
-    Returns:
-        True if all workflows created successfully, False otherwise
-    """
-    from ..helpers.monitoring import build_target_info
-
-    # Check if any workflow configuration has airflow-serverless enabled
-    airflow_serverless_enabled = False
-
-    # Check bundle storage configurations for airflow-serverless flag
-    if manifest.content.storage:
-        for storage_config in manifest.content.storage:
-            airflow_serverless_flag = (
-                getattr(storage_config, "airflow-serverless", False)
-                if hasattr(storage_config, "airflow-serverless")
-                else False
-            )
-            if airflow_serverless_flag:
-                airflow_serverless_enabled = True
-                break
-
-    # Check workflows section for serverless workflows
-    if hasattr(manifest.content, "workflows") and manifest.content.workflows:
-        for workflow in manifest.content.workflows:
-            if workflow.get("connectionName", ""):
-                airflow_serverless_enabled = True
-                break
-
-    if not airflow_serverless_enabled:
-        typer.echo("📋 No serverless Airflow workflows configured")
-        return True
-
-    typer.echo("🚀 Creating serverless Airflow workflows...")
-
-    # Emit workflow creation started
-    if emitter:
-        target_info = build_target_info(stage_name, target_config)
-        workflows_info = [
-            {
-                "workflowName": wf.get("workflowName", ""),
-                "connectionName": wf.get("connectionName", ""),
-            }
-            for wf in manifest.content.workflows
-            if wf.get("connectionName", "")
-        ]
-        emitter.workflow_creation_started(
-            manifest.application_name, target_info, workflows_info, metadata
-        )
-
-    try:
-        from ..helpers import airflow_serverless
-        from ..helpers.bundle_storage import ensure_bundle_local
-        from ..helpers.datazone import resolve_domain_id
-
-        # Ensure bundle ZIP is available locally if we have a bundle
-        if bundle_path:
-            ensure_bundle_local(bundle_path, config["region"])
-
-        # Get project user role ARN for serverless Airflow execution
-        project_name = target_config.project.name
-        region = config["region"]
-
-        # Resolve domain
-        domain_id, domain_name = resolve_domain_id(
-            domain_name=target_config.domain.name,
-            domain_tags=target_config.domain.tags,
-            region=region,
-        )
-
-        role_arn = datazone.get_project_user_role_arn(project_name, domain_name, region)
-        if not role_arn:
-            error_msg = "No project user role found"
-            typer.echo(f"❌ {error_msg}")
-            if emitter:
-                target_info = build_target_info(stage_name, target_config)
-                error = {
-                    "stage": "workflow-creation",
-                    "code": "ROLE_NOT_FOUND",
-                    "message": error_msg,
-                }
-                emitter.workflow_creation_failed(
-                    manifest.application_name, target_info, error, metadata
-                )
-            return False
-
-        # Get domain and project IDs for workflow creation
-        domain_id = datazone.get_domain_id_by_name(domain_name, region)
-        if not domain_id:
-            error_msg = f"Could not find domain ID for domain: {domain_name}"
-            typer.echo(f"❌ {error_msg}")
-            if emitter:
-                target_info = build_target_info(stage_name, target_config)
-                error = {
-                    "stage": "workflow-creation",
-                    "code": "DOMAIN_NOT_FOUND",
-                    "message": error_msg,
-                }
-                emitter.workflow_creation_failed(
-                    manifest.application_name, target_info, error, metadata
-                )
-            return False
-
-        project_id = datazone.get_project_id_by_name(project_name, domain_id, region)
-        if not project_id:
-            error_msg = f"Could not find project ID for project: {project_name}"
-            typer.echo(f"❌ {error_msg}")
-            if emitter:
-                target_info = build_target_info(stage_name, target_config)
-                error = {
-                    "stage": "workflow-creation",
-                    "code": "PROJECT_NOT_FOUND",
-                    "message": error_msg,
-                }
-                emitter.workflow_creation_failed(
-                    manifest.application_name, target_info, error, metadata
-                )
-            return False
-
-        workflows_created = []
-
-        if not s3_bucket or s3_prefix is None:
-            error_msg = "Could not determine S3 location from storage deployment"
-            typer.echo(f"❌ {error_msg}")
-            if emitter:
-                target_info = build_target_info(stage_name, target_config)
-                error = {
-                    "stage": "workflow-creation",
-                    "code": "S3_LOCATION_NOT_FOUND",
-                    "message": error_msg,
-                }
-                emitter.workflow_creation_failed(
-                    manifest.application_name, target_info, error, metadata
-                )
-            return False
-
-        # Search for DAG files in S3
-        s3_client = boto3.client("s3", region_name=region)
-        dag_files_in_s3 = _find_dag_files_in_s3(
-            s3_client, s3_bucket, s3_prefix, manifest, target_config
-        )
-
-        if not dag_files_in_s3:
-            typer.echo("⚠️ No DAG files found to create workflows")
-            return True
-
-        # Initialize context resolver using our helpers
-        from ..helpers.context_resolver import ContextResolver
-
-        resolver = ContextResolver(
-            project_name=project_name,
-            domain_id=domain_id,
-            domain_name=domain_name,
-            region=region,
-            stage_name=stage_name,
-            env_vars=target_config.environment_variables or {},
-        )
-
-        for s3_key, workflow_name_from_yaml in dag_files_in_s3:
-            workflow_name = _generate_workflow_name(
-                manifest.application_name,
-                workflow_name_from_yaml,
-                target_config,
-            )
-
-            # Download workflow YAML from S3, resolve variables, upload back
-            temp_yaml = tempfile.NamedTemporaryFile(
-                mode="w+", suffix=".yaml", delete=False
-            )
-            try:
-                # Download original
-                typer.echo(f"🔍 DEBUG: Downloading {s3_key} from S3")
-                s3_client.download_file(s3_bucket, s3_key, temp_yaml.name)
-
-                # Read and resolve
-                with open(temp_yaml.name, "r") as f:
-                    original_content = f.read()
-
-                typer.echo(
-                    f"🔍 DEBUG: Original content length: {len(original_content)}"
-                )
-                resolved_content = resolver.resolve(original_content)
-                typer.echo(
-                    f"🔍 DEBUG: Resolved content length: {len(resolved_content)}"
-                )
-
-                if original_content != resolved_content:
-                    typer.echo("🔍 DEBUG: Content changed, uploading resolved version")
-                else:
-                    typer.echo("🔍 DEBUG: No variables found to resolve")
-
-                # Upload resolved version
-                with open(temp_yaml.name, "w") as f:
-                    f.write(resolved_content)
-
-                typer.echo(
-                    f"🔍 DEBUG: Uploading resolved content to s3://{s3_bucket}/{s3_key}"
-                )
-                s3_client.upload_file(temp_yaml.name, s3_bucket, s3_key)
-                typer.echo(f"✅ Resolved variables in {s3_key}")
-            except Exception as e:
-                typer.echo(f"❌ Error resolving variables in {s3_key}: {e}", err=True)
-                raise
-            finally:
-                os.unlink(temp_yaml.name)
-
-            # S3 location for the DAG file
-            s3_location = f"s3://{s3_bucket}/{s3_key}"
-
-            # Create serverless Airflow workflow
-            typer.echo(
-                "🔍 DEBUG: About to call airflow_serverless.create_workflow with:"
-            )
-            typer.echo(f"🔍 DEBUG: workflow_name={workflow_name}")
-            typer.echo(f"🔍 DEBUG: dag_s3_location={s3_location}")
-            typer.echo(f"🔍 DEBUG: role_arn={role_arn}")
-            typer.echo(f"🔍 DEBUG: datazone_domain_id={domain_id}")
-            typer.echo(f"🔍 DEBUG: datazone_project_id={project_id}")
-
-            result = airflow_serverless.create_workflow(
-                workflow_name=workflow_name,
-                dag_s3_location=s3_location,
-                role_arn=role_arn,
-                description=f"SMUS CI/CD workflow for {manifest.application_name}",
-                tags={
-                    "Pipeline": manifest.application_name,
-                    "Target": target_config.project.name,
-                    "STAGE": stage_name.upper(),
-                    "CreatedBy": "SMUS-CICD",
-                },
-                datazone_domain_id=domain_id,
-                datazone_domain_region=config.get("region"),
-                datazone_project_id=project_id,
-                region=config.get("region"),
-            )
-
-            typer.echo(
-                f"🔍 DEBUG: airflow_serverless.create_workflow returned: {result}"
-            )
-            typer.echo(f"🔍 DEBUG: result type: {type(result)}")
-            if isinstance(result, dict):
-                typer.echo(f"🔍 DEBUG: result keys: {list(result.keys())}")
-                typer.echo(f"🔍 DEBUG: result.get('success'): {result.get('success')}")
-                typer.echo(f"🔍 DEBUG: result.get('error'): {result.get('error')}")
-
-            if result.get("success"):
-                workflow_arn = result["workflow_arn"]
-                workflows_created.append(
-                    {
-                        "name": workflow_name,
-                        "arn": workflow_arn,
-                        "s3_key": s3_key,
-                    }
-                )
-                typer.echo(f"✅ Created MWAA Serverless workflow: {workflow_name}")
-                typer.echo(f"   ARN: {workflow_arn}")
-
-                # Validate workflow status
-                workflow_status = airflow_serverless.get_workflow_status(
-                    workflow_arn, region=config.get("region")
-                )
-                if workflow_status.get("success"):
-                    status = workflow_status.get("status")
-                    typer.echo(f"   Status: {status}")
-                    if status == "FAILED":
-                        error_msg = f"Workflow {workflow_name} is in FAILED state"
-                        typer.echo(f"❌ {error_msg}")
-                        if emitter:
-                            target_info = build_target_info(stage_name, target_config)
-                            error = {
-                                "stage": "workflow-creation",
-                                "code": "WORKFLOW_FAILED",
-                                "message": error_msg,
-                                "details": {"workflowName": workflow_name},
-                            }
-                            emitter.workflow_creation_failed(
-                                manifest.application_name, target_info, error, metadata
-                            )
-                        return False
-                else:
-                    error_msg = workflow_status.get("error")
-                    typer.echo(f"❌ Could not verify workflow status: {error_msg}")
-                    if emitter:
-                        target_info = build_target_info(stage_name, target_config)
-                        error = {
-                            "stage": "workflow-creation",
-                            "code": "WORKFLOW_STATUS_CHECK_FAILED",
-                            "message": error_msg,
-                            "details": {"workflowName": workflow_name},
-                        }
-                        emitter.workflow_creation_failed(
-                            manifest.application_name, target_info, error, metadata
-                        )
-                    return False
-            else:
-                error_msg = result.get("error")
-                typer.echo(f"❌ Failed to create workflow {workflow_name}: {error_msg}")
-                if emitter:
-                    target_info = build_target_info(stage_name, target_config)
-                    error = {
-                        "stage": "workflow-creation",
-                        "code": "WORKFLOW_CREATION_FAILED",
-                        "message": error_msg,
-                        "details": {"workflowName": workflow_name},
-                    }
-                    emitter.workflow_creation_failed(
-                        manifest.application_name, target_info, error, metadata
-                    )
-                return False
-
-        if workflows_created:
-            typer.echo(
-                f"\n🎉 Successfully created {len(workflows_created)} MWAA Serverless workflows"
-            )
-
-            # Emit workflow creation completed
-            if emitter:
-                target_info = build_target_info(stage_name, target_config)
-                workflow_results = [
-                    {
-                        "workflowName": wf["name"],
-                        "connectionName": "airflow-serverless",
-                        "status": "created",
-                        "workflowArn": wf["arn"],
-                    }
-                    for wf in workflows_created
-                ]
-                emitter.workflow_creation_completed(
-                    manifest.application_name, target_info, workflow_results, metadata
-                )
-
-            return True
-        else:
-            typer.echo("⚠️ No workflows were created")
-            return True
-
-    except Exception as e:
-        error_msg = f"Error creating MWAA Serverless workflows: {e}"
-        typer.echo(f"❌ {error_msg}")
-        if emitter:
-            target_info = build_target_info(stage_name, target_config)
-            error = {
-                "stage": "workflow-creation",
-                "code": "WORKFLOW_CREATION_ERROR",
-                "message": str(e),
-            }
-            emitter.workflow_creation_failed(
-                manifest.application_name, target_info, error, metadata
-            )
-        return False
-
-
-def _get_airflow_serverless_execution_role(config: Dict[str, Any]) -> Optional[str]:
-    """
-    Get the IAM role ARN for MWAA Serverless workflow execution.
-
-    Args:
-        config: Configuration dictionary
-
-    Returns:
-        Role ARN string or None if not found
-    """
-    # For now, use a default role name pattern
-    # In production, this should be configurable
-    account_id = config.get("aws", {}).get("account_id")
-    if not account_id:
-        # Try to get account ID from STS
-        try:
-            import boto3
-
-            sts = boto3.client("sts")
-            identity = sts.get_caller_identity()
-            account_id = identity["Account"]
-        except Exception as e:
-            typer.echo(f"⚠️ Failed to get account ID: {e}", err=True)
-            return None
-
-    # Use the role we created during testing
-    return f"arn:aws:iam::{account_id}:role/MWAA ServerlessExecutionRole"
-
-
 def _find_dag_files_in_s3(
     s3_client,
     s3_bucket: str,
@@ -1962,6 +1552,7 @@ def _process_bootstrap_actions(
     stage_name: str,
     config: Dict[str, Any],
     manifest=None,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> None:
     """
     Process bootstrap actions sequentially.
@@ -1971,6 +1562,7 @@ def _process_bootstrap_actions(
         stage_name: Stage name
         config: Configuration dictionary
         manifest: Manifest object (optional)
+        metadata: Deployment metadata including S3 locations (optional)
     """
     from ..bootstrap import executor
 
@@ -1986,6 +1578,7 @@ def _process_bootstrap_actions(
         "config": config,  # Pass full config including imported_quicksight_datasets
         "manifest": manifest,  # Add manifest to context
         "target_config": target_config,  # Add target_config to context
+        "metadata": metadata or {},  # Add metadata to context
     }
 
     # Execute bootstrap actions (will raise on failure)

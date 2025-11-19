@@ -45,6 +45,8 @@ stages:
         targetDirectory: genai/bundle/workflows
     bootstrap:
       actions:
+      - type: workflow.create
+        workflowName: genai_dev_workflow
       - type: workflow.run
         workflowName: genai_dev_workflow
         trailLogs: true
