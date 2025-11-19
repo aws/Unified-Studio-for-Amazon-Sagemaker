@@ -2,6 +2,10 @@
 
 from typing import Any, Dict
 
+import typer
+
+from ...helpers import datazone
+from ...helpers.connection_creator import ConnectionCreator
 from ...helpers.logger import get_logger
 from ..models import BootstrapAction
 
@@ -42,10 +46,57 @@ def create_connection(
     """Create DataZone connection."""
     logger.info("Creating DataZone connection")
 
-    # TODO: Implement connection creation
-    # This will use existing logic from initialization_handler.py
+    # Extract context
+    target_config = context.get("target_config")
+    config = context.get("config")
+    metadata = context.get("metadata", {})
 
-    return {"action": "datazone.create_connection", "status": "not_implemented"}
+    # Get connection parameters - they're in action.parameters dict
+    params = action.parameters
+    name = params.get("name")
+    connection_type = params.get("connection_type")
+    properties = params.get("properties", {})
+
+    if not name or not connection_type:
+        typer.echo("❌ Connection name and type are required")
+        return False
+
+    # Get project info from metadata
+    project_info = metadata.get("project_info", {})
+    project_id = project_info.get("project_id")
+    domain_id = project_info.get("domain_id")
+    region = config.get("region")
+
+    if not project_id or not domain_id:
+        typer.echo("❌ Project info not available for connection creation")
+        return False
+
+    # Get project environments
+    environments = datazone.get_project_environments(project_id, domain_id, region)
+    if not environments:
+        typer.echo(f"❌ No environments found for project {project_id}")
+        return False
+
+    # Use first environment (default environment)
+    environment_id = environments[0].get("id")
+    typer.echo(f"🔗 Creating {connection_type} connection '{name}' in environment {environment_id}")
+
+    try:
+        # Create connection using ConnectionCreator
+        creator = ConnectionCreator(domain_id=domain_id, region=region)
+        connection_id = creator.create_connection(
+            environment_id=environment_id,
+            name=name,
+            connection_type=connection_type,
+            **properties
+        )
+        
+        typer.echo(f"✅ Connection '{name}' created successfully: {connection_id}")
+        return {"action": "datazone.create_connection", "status": "success", "connection_id": connection_id}
+
+    except Exception as e:
+        typer.echo(f"❌ Failed to create connection '{name}': {e}")
+        return False
 
 
 def create_domain(action: BootstrapAction, context: Dict[str, Any]) -> Dict[str, Any]:
