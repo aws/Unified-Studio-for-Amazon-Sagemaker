@@ -198,13 +198,7 @@ def _fetch_static_logs(
             typer.echo()
 
             for event in log_events:
-                timestamp = time.strftime(
-                    "%Y-%m-%d %H:%M:%S", time.localtime(event["timestamp"] / 1000)
-                )
-                stream = event.get("log_stream_name", "unknown")
-                message = event["message"]
-
-                typer.echo(f"[{timestamp}] [{stream}] {message}")
+                typer.echo(airflow_serverless.format_log_event(event))
         else:
             typer.echo("📄 No log events found")
 

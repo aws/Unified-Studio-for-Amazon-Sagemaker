@@ -72,15 +72,26 @@ def run_workflow(action: BootstrapAction, context: Dict[str, Any]) -> Dict[str, 
 
         if trail_logs:
             logger.info("Streaming logs until completion...")
+
+            # Define callback to print log events
+            def print_log_event(event):
+                print(airflow_serverless.format_log_event(event))
+
             # Monitor with log streaming
             monitor_result = airflow_serverless.monitor_workflow_logs_live(
-                workflow_arn, region, run_id=run_id, callback=lambda event: None
+                workflow_arn, region, run_id=run_id, callback=print_log_event
             )
         else:
             logger.info("Waiting for completion...")
             # Wait without log streaming
             monitor_result = airflow_serverless.wait_for_workflow_completion(
                 workflow_arn, region, run_id=run_id
+            )
+
+        # Check if workflow failed and raise exception
+        if not monitor_result["success"]:
+            raise Exception(
+                f"Workflow '{workflow_name}' failed with status: {monitor_result['final_status']}"
             )
 
         return {

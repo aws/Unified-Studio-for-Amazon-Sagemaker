@@ -4,12 +4,14 @@ content:
   - name: notebooks
     include:
     - notebooks/
-    - workflows/
     exclude:
     - .ipynb_checkpoints/
     - __pycache__/
+  - name: workflows
+    include:
+    - workflows/
   workflows:
-  - workflowName: parallel_notebooks_execution
+  - workflowName: parallel_notebooks_workflow
     connectionName: default.workflow_serverless
 stages:
   dev:
@@ -38,7 +40,11 @@ stages:
     deployment_configuration:
       storage:
       - name: notebooks
+        connectionName: default.s3_shared
         targetDirectory: notebooks/bundle/notebooks
+      - name: workflows
+        connectionName: default.s3_shared
+        targetDirectory: notebooks/bundle/workflows
     bootstrap:
       actions:
       - type: datazone.create_connection
@@ -48,9 +54,10 @@ stages:
           trackingServerArn: arn:aws:sagemaker:${STS_REGION}:${STS_ACCOUNT_ID}:mlflow-tracking-server/smus-integration-mlflow-use2
           trackingServerName: smus-integration-mlflow-use2
       - type: workflow.run
-        workflowName: parallel_notebooks_execution
+        workflowName: parallel_notebooks_workflow
         trailLogs: true
 tests:
   folder: examples/analytic-workflow/data-notebooks/app_tests/
 
 
+# Trigger workflow

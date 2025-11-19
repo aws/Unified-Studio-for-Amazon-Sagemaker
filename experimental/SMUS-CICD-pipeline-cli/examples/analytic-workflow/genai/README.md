@@ -61,3 +61,4 @@ smus-cli run --workflow genai_dev_workflow --targets test --manifest genai/manif
 
 
 
+# Trigger workflow
