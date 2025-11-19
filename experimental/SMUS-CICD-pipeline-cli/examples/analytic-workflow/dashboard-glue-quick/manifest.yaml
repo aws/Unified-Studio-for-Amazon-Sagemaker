@@ -10,6 +10,11 @@ content:
     - __pycache__/
     - '*.pyc'
     - test_*.sh
+  - name: workflows
+    include:
+    - "*.yaml"
+    exclude:
+    - manifest.yaml
   git:
   - repository: covid-19-dataset
     url: https://github.com/datasets/covid-19.git

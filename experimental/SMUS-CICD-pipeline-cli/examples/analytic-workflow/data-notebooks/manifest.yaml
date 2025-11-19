@@ -4,10 +4,12 @@ content:
   - name: notebooks
     include:
     - notebooks/
-    - workflows/
     exclude:
     - .ipynb_checkpoints/
     - __pycache__/
+  - name: workflows
+    include:
+    - workflows/
   workflows:
   - workflowName: parallel_notebooks_workflow
     connectionName: default.workflow_serverless
