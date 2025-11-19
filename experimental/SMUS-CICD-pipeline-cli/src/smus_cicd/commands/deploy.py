@@ -238,7 +238,9 @@ def deploy_command(
             # Process bootstrap actions (after deployment completes)
             if target_config.bootstrap:
                 typer.echo("Processing bootstrap actions...")
-                _process_bootstrap_actions(target_config, stage_name, config, manifest, metadata)
+                _process_bootstrap_actions(
+                    target_config, stage_name, config, manifest, metadata
+                )
             # Emit deploy completed
             emitter.deploy_completed(
                 manifest.application_name,

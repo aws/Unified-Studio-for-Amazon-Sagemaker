@@ -36,7 +36,7 @@ def handle_workflow_create(
     config = context["config"]
     manifest = context["manifest"]
     metadata = context.get("metadata", {})
-    
+
     workflow_name_filter = action.parameters.get("workflowName")
 
     # Get workflows from manifest

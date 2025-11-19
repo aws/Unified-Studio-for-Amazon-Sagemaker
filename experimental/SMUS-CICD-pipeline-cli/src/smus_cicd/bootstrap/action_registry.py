@@ -20,7 +20,7 @@ class ActionRegistry:
         # Check for exact match first (e.g., "workflow.create")
         if action_type in self._handlers:
             return self._handlers[action_type]
-        
+
         # Fall back to service-level handler (e.g., "workflow")
         service = action_type.split(".", 1)[0]
 

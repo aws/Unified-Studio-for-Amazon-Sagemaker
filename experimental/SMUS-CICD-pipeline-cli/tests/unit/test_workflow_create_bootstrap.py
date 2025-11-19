@@ -4,6 +4,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 
 from smus_cicd.bootstrap.handlers.workflow_create_handler import handle_workflow_create
+from smus_cicd.bootstrap.models import BootstrapAction
 
 
 @pytest.fixture
@@ -52,11 +53,15 @@ def test_handle_workflow_create_no_workflows(mock_target_config, mock_config):
     manifest = MagicMock()
     manifest.content.workflows = None
     
-    action = {}
+    action = BootstrapAction(type="workflow.create")
+    context = {
+        "target_config": mock_target_config,
+        "config": mock_config,
+        "manifest": manifest,
+        "metadata": {"project_info": {}, "s3_bucket": "test", "s3_prefix": "test"}
+    }
     
-    result = handle_workflow_create(
-        action, mock_target_config, mock_config, manifest
-    )
+    result = handle_workflow_create(action, context)
     
     assert result is True
 
@@ -65,12 +70,15 @@ def test_handle_workflow_create_missing_s3_location(
     mock_manifest, mock_target_config, mock_config
 ):
     """Test workflow.create fails without S3 location."""
-    action = {}
-    metadata = {}  # No S3 location
+    action = BootstrapAction(type="workflow.create")
+    context = {
+        "target_config": mock_target_config,
+        "config": mock_config,
+        "manifest": mock_manifest,
+        "metadata": {"project_info": {"project_id": "test", "domain_id": "test"}}  # No S3 location
+    }
     
-    result = handle_workflow_create(
-        action, mock_target_config, mock_config, mock_manifest, metadata=metadata
-    )
+    result = handle_workflow_create(action, context)
     
     assert result is False
 
@@ -79,7 +87,13 @@ def test_handle_workflow_create_specific_workflow(
     mock_manifest, mock_target_config, mock_config, mock_metadata
 ):
     """Test workflow.create with specific workflow name."""
-    action = {"workflowName": "test_workflow"}
+    action = BootstrapAction(type="workflow.create", parameters={"workflowName": "test_workflow"})
+    context = {
+        "target_config": mock_target_config,
+        "config": mock_config,
+        "manifest": mock_manifest,
+        "metadata": mock_metadata
+    }
     
     with patch("smus_cicd.bootstrap.handlers.workflow_create_handler.resolve_domain_id") as mock_resolve:
         mock_resolve.return_value = ("domain-123", "test-domain")
@@ -91,9 +105,7 @@ def test_handle_workflow_create_specific_workflow(
             with patch("smus_cicd.commands.deploy._find_dag_files_in_s3") as mock_find:
                 mock_find.return_value = []  # No DAG files
                 
-                result = handle_workflow_create(
-                    action, mock_target_config, mock_config, mock_manifest, metadata=mock_metadata
-                )
+                result = handle_workflow_create(action, context)
                 
                 assert result is True
 
@@ -102,10 +114,14 @@ def test_handle_workflow_create_workflow_not_found(
     mock_manifest, mock_target_config, mock_config, mock_metadata
 ):
     """Test workflow.create with non-existent workflow name."""
-    action = {"workflowName": "nonexistent_workflow"}
+    action = BootstrapAction(type="workflow.create", parameters={"workflowName": "nonexistent_workflow"})
+    context = {
+        "target_config": mock_target_config,
+        "config": mock_config,
+        "manifest": mock_manifest,
+        "metadata": mock_metadata
+    }
     
-    result = handle_workflow_create(
-        action, mock_target_config, mock_config, mock_manifest, metadata=mock_metadata
-    )
+    result = handle_workflow_create(action, context)
     
     assert result is False
