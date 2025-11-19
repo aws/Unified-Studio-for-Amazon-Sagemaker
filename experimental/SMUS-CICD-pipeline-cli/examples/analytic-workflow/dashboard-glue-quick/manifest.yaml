@@ -54,6 +54,8 @@ stages:
       GRANT_TO: Admin,service-role/aws-quicksight-service-role-v0
     bootstrap:
       actions:
+      - type: workflow.create
+        workflowName: covid_dashboard_glue_quick_pipeline
       - type: workflow.run
         workflowName: covid_dashboard_glue_quick_pipeline
         trailLogs: true

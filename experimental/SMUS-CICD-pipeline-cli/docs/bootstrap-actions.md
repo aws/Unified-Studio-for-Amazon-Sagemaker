@@ -16,6 +16,46 @@ When you deploy your application, the SMUS CLI can automatically execute bootstr
 
 ### 1. Workflow Actions
 
+#### workflow.create - Create MWAA Serverless Workflows
+
+Create workflows from the `workflows:` section in manifest after connections are established.
+
+**IMPORTANT:** This action must be added to all manifests with workflows. Workflow creation during deploy is deprecated.
+
+```yaml
+workflows:
+  - workflowName: ml_training_workflow
+    connectionName: default.workflow_serverless
+
+stages:
+  test:
+    bootstrap:
+      actions:
+        - type: datazone.create_connection
+          name: mlflow-server
+          # ... connection config
+        
+        - type: workflow.create
+          workflowName: ml_training_workflow  # Optional: omit to create all
+        
+        - type: workflow.run
+          workflowName: ml_training_workflow
+```
+
+**Properties:**
+- `workflowName` (optional): Specific workflow name to create. Omit to create all workflows defined in `workflows:` section.
+
+**Use Case:** Create workflows after all required connections exist, allowing workflow definitions to reference connections like MLflow tracking servers.
+
+**Example - Create all workflows:**
+```yaml
+bootstrap:
+  actions:
+    - type: workflow.create  # Creates all workflows from workflows: section
+```
+
+---
+
 #### workflow.run - Trigger Workflow Execution
 
 Automatically trigger a workflow run during deployment.
