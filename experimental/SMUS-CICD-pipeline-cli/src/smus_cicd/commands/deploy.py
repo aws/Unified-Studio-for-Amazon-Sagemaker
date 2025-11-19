@@ -186,6 +186,8 @@ def deploy_command(
 
             project_info = get_datazone_project_info(target_config.project.name, config)
             metadata["project_info"] = project_info
+            typer.echo(f"🔍 DEBUG: Added project_info to metadata: {project_info is not None}")
+            typer.echo(f"🔍 DEBUG: metadata keys after adding project_info: {list(metadata.keys())}")
 
             # Emit project init completed
             project_info_event = {
@@ -238,6 +240,8 @@ def deploy_command(
             # Process bootstrap actions (after deployment completes)
             if target_config.bootstrap:
                 typer.echo("Processing bootstrap actions...")
+                typer.echo(f"🔍 DEBUG: metadata keys before bootstrap: {list(metadata.keys()) if metadata else 'None'}")
+                typer.echo(f"🔍 DEBUG: metadata has project_info: {'project_info' in metadata if metadata else False}")
                 _process_bootstrap_actions(
                     target_config, stage_name, config, manifest, metadata
                 )
