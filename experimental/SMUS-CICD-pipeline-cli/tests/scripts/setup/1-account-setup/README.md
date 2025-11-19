@@ -1,48 +1,69 @@
-# Stage 1: Account Minimal Setup
+# Account Setup Scripts
 
-Deploys minimal account-level resources required for SMUS integration testing.
-
-**📚 User documentation:** [Admin Quick Start - CI/CD Authentication](../../../../docs/getting-started/admin-quickstart.md#step-8-set-up-cicd-authentication-optional)
-
-## What Gets Deployed
-
-1. **GitHub OIDC Integration** - IAM role for GitHub Actions workflows
-2. **VPC Infrastructure** - Multi-AZ VPC with private subnets for SageMaker Unified Studio
-
-## Usage
-
-```bash
-./deploy.sh [path/to/config.yaml]
-```
-
-If no config file is specified, uses `../../config.yaml`.
+This directory contains scripts for setting up the AWS account infrastructure needed for SMUS CI/CD testing.
 
 ## Prerequisites
 
-- AWS CLI configured with admin permissions
-- `yq` installed: `brew install yq`
-- Valid `config.yaml` with account_id and regions
+- AWS CLI configured with appropriate credentials
+- Permissions to create IAM roles, VPCs, and CloudFormation stacks
+
+## Scripts
+
+### 1. deploy.sh
+Main deployment script that sets up all required infrastructure:
+- VPC with public/private subnets
+- GitHub OIDC provider and role for GitHub Actions
+- S3 bucket for artifacts
+
+Usage:
+```bash
+./deploy.sh
+```
+
+### 2. create-stage-roles.sh
+Creates all IAM roles needed for a SMUS project stage:
+- Project role (for DataZone project)
+- Bedrock agent execution role
+- Bedrock agent Lambda role
+- Managed policies for Bedrock testing
+
+Usage:
+```bash
+./create-stage-roles.sh test-marketing-role
+./create-stage-roles.sh prod-marketing-role
+```
+
+## CloudFormation Templates
+
+### vpc-template.yaml
+Creates VPC infrastructure:
+- VPC with CIDR 10.0.0.0/16
+- 2 public subnets
+- 2 private subnets
+- Internet Gateway, NAT Gateways, Route tables
+
+### github-oidc-role.yaml
+Creates GitHub Actions integration:
+- OIDC provider for GitHub Actions
+- IAM role that GitHub Actions can assume
+- Permissions for deploying to AWS
+
+### stage-roles.yaml
+Creates all IAM roles for a project stage:
+- Project role with trust policy for 10 AWS services
+- Bedrock agent execution role (DEFAULT_AgentExecutionRole)
+- Bedrock agent Lambda role (test_agent-lambda-role-{region}-{account})
+- BedrockTestingPolicy (Lambda and IAM role management)
+- BedrockAgentPassRolePolicy (PassRole for Bedrock agent)
 
 ## Outputs
 
-Saved to `/tmp/`:
-- `vpc_id_<region>.txt` - VPC ID
-- `subnets_<region>.txt` - Private subnet IDs (comma-separated)
-- `azs_<region>.txt` - Availability zones (comma-separated)
+After running deploy.sh:
+- VPC ID and subnet IDs
+- GitHub Actions role ARN
+- S3 bucket name for artifacts
 
-## CloudFormation Stacks Created
-
-- `smus-cli-github-integration` - GitHub OIDC role
-- `sagemaker-unified-studio-vpc` - VPC infrastructure (per region)
-
-## Next Steps
-
-After Stage 1 completes:
-- **Option A:** Run Stage 2 to create domain via CloudFormation
-- **Option B:** Create domain manually in AWS console, then run Stage 3
-
-## Idempotency
-
-- VPC deployment checks for existing VPCs with tag `CreatedForUseWithSageMakerUnifiedStudio=true`
-- Reuses existing VPCs if found
-- Safe to re-run
+After running create-stage-roles.sh:
+- Project role ARN
+- Bedrock agent role ARN
+- Bedrock agent Lambda role ARN

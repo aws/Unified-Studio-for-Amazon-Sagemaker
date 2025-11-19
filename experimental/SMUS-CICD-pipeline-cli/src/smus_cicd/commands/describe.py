@@ -10,6 +10,7 @@ from ..helpers.utils import (  # noqa: F401
     build_domain_config,
     get_datazone_project_info,
     load_config,
+    validate_project_exists,
 )
 
 
@@ -112,6 +113,15 @@ def describe_command(
                     project_info = get_datazone_project_info(
                         target_config.project.name, config
                     )
+
+                    # Validate project exists when using --connect
+                    if connect:
+                        validate_project_exists(
+                            project_info,
+                            target_config.project.name,
+                            stage_name,
+                            allow_create=target_config.project.create
+                        )
 
                     # Check if project exists
                     if project_info.get("status") == "NOT_FOUND":

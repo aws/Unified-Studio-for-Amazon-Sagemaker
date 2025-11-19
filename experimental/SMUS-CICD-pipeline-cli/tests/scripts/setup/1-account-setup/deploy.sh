@@ -53,6 +53,18 @@ ROLE_ARN=$(aws cloudformation describe-stacks \
 
 echo "GitHub Actions Role ARN: $ROLE_ARN"
 echo "Add this to your GitHub repository secrets as AWS_ROLE_ARN"
+
+# Deploy stage roles
+echo ""
+echo "=== Deploying Stage Roles ==="
+
+for PROJECT_ROLE in "test-marketing-role" "prod-marketing-role"; do
+    echo "Deploying roles for: $PROJECT_ROLE"
+    "$SCRIPT_DIR/create-stage-roles.sh" "$PROJECT_ROLE"
+done
+
+echo ""
+echo "✅ All deployments complete!"
 #!/bin/bash
 
 # Deploy VPC for SageMaker Unified Studio in specified region

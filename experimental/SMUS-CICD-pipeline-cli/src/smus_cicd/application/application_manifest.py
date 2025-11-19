@@ -186,6 +186,7 @@ class ApplicationManifest:
         from .validation import validate_manifest_file
 
         # Validate manifest file (YAML syntax + schema)
+        # Missing env var check happens in load_yaml
         is_valid, errors, manifest_data = validate_manifest_file(manifest_file)
         if not is_valid:
             error_msg = (

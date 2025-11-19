@@ -33,6 +33,43 @@ def build_domain_config(target_config) -> Dict[str, Any]:
     return config
 
 
+def find_missing_env_vars(data: Union[Dict, List, str]) -> List[str]:
+    """
+    Find environment variables referenced in data that are not set.
+
+    Args:
+        data: YAML data (dict, list, or string)
+
+    Returns:
+        List of missing environment variable names (without defaults)
+    """
+    missing = set()
+
+    def check_value(value):
+        if isinstance(value, dict):
+            for v in value.values():
+                check_value(v)
+        elif isinstance(value, list):
+            for item in value:
+                check_value(item)
+        elif isinstance(value, str):
+            pattern = r"\$\{([^}:]+)(?::([^}]*))?\}"
+            for match in re.finditer(pattern, value):
+                var_name = match.group(1)
+                has_default = match.group(2) is not None
+
+                # Skip pseudo env vars
+                if var_name in ("STS_ACCOUNT_ID", "AWS_ACCOUNT_ID", "STS_REGION"):
+                    continue
+
+                # Only flag as missing if no default and not set
+                if not has_default and not os.getenv(var_name):
+                    missing.add(var_name)
+
+    check_value(data)
+    return sorted(missing)
+
+
 def substitute_env_vars(data: Union[Dict, List, str]) -> Union[Dict, List, str]:
     """
     Recursively substitute environment variables in YAML data.
@@ -80,12 +117,13 @@ def substitute_env_vars(data: Union[Dict, List, str]) -> Union[Dict, List, str]:
         return data
 
 
-def load_yaml(file_path: str) -> Dict[str, Any]:
+def load_yaml(file_path: str, check_missing_vars: bool = True) -> Dict[str, Any]:
     """
     Load and parse YAML file.
 
     Args:
         file_path: Path to the YAML file
+        check_missing_vars: If True, check for missing required env vars before substitution
 
     Returns:
         Parsed YAML content as dictionary
@@ -93,6 +131,7 @@ def load_yaml(file_path: str) -> Dict[str, Any]:
     Raises:
         FileNotFoundError: If the file doesn't exist
         yaml.YAMLError: If the file contains invalid YAML
+        ValueError: If required environment variables are missing
     """
     if not os.path.exists(file_path):
         raise FileNotFoundError(
@@ -103,6 +142,17 @@ def load_yaml(file_path: str) -> Dict[str, Any]:
     try:
         with open(file_path, "r") as f:
             data = yaml.safe_load(f)
+
+            # Check for missing required env vars before substitution
+            if check_missing_vars:
+                missing_vars = find_missing_env_vars(data)
+                if missing_vars:
+                    raise ValueError(
+                        f"Missing required environment variables in {file_path}:\n"
+                        + "\n".join(f"  - {var}" for var in missing_vars)
+                        + "\n\nPlease set these environment variables before running the command."
+                    )
+
             return substitute_env_vars(data)
     except yaml.YAMLError as e:
         raise yaml.YAMLError(f"Invalid YAML syntax in {file_path}: {e}")
@@ -168,6 +218,52 @@ def _extract_domain_id_from_outputs(outputs: List[Dict[str, Any]]) -> Optional[s
         if output.get("OutputKey") == "DomainId":
             return output.get("OutputValue")
     return None
+
+
+def validate_project_exists(
+    project_info: Dict[str, Any],
+    project_name: str,
+    target_name: str,
+    allow_create: bool = False
+) -> None:
+    """
+    Validate that project exists when connecting to AWS.
+
+    Args:
+        project_info: Project info dict from get_datazone_project_info
+        project_name: Name of the project
+        target_name: Name of the target
+        allow_create: If True, don't fail if project will be created
+
+    Raises:
+        ValueError: If project or domain not found
+    """
+    # Check if domain lookup failed
+    if project_info.get("error"):
+        error_msg = project_info.get("error")
+        if "Domain not found" in error_msg:
+            raise ValueError(
+                f"Cannot connect to target '{target_name}': Domain not found.\n"
+                f"Please check:\n"
+                f"  - Domain tags in manifest match an existing domain\n"
+                f"  - Domain region is correct\n"
+                f"  - AWS credentials have access to the domain"
+            )
+        raise ValueError(f"Cannot connect to target '{target_name}': {error_msg}")
+
+    # Check if project exists
+    if project_info.get("status") == "NOT_FOUND":
+        if allow_create:
+            # Project will be created during deployment
+            return
+        raise ValueError(
+            f"Cannot connect to target '{target_name}': Project '{project_name}' not found.\n"
+            f"Please check:\n"
+            f"  - Project name is correct\n"
+            f"  - Project exists in the domain\n"
+            f"  - AWS credentials have access to the project\n"
+            f"Or set 'create: true' in the project configuration to create it during deployment."
+        )
 
 
 def get_datazone_project_info(
