@@ -10,6 +10,11 @@ content:
     - __pycache__/
     - '*.pyc'
     - test_*.sh
+  - name: workflows
+    include:
+    - "*.yaml"
+    exclude:
+    - manifest.yaml
   git:
   - repository: covid-19-dataset
     url: https://github.com/datasets/covid-19.git
@@ -49,6 +54,8 @@ stages:
       GRANT_TO: Admin,service-role/aws-quicksight-service-role-v0
     bootstrap:
       actions:
+      - type: workflow.create
+        workflowName: covid_dashboard_glue_quick_pipeline
       - type: workflow.run
         workflowName: covid_dashboard_glue_quick_pipeline
         trailLogs: true
@@ -61,6 +68,9 @@ stages:
       - name: dashboard-glue-quick
         connectionName: default.s3_shared
         targetDirectory: dashboard-glue-quick/bundle
+      - name: workflows
+        connectionName: default.s3_shared
+        targetDirectory: dashboard-glue-quick/bundle/workflows
       git:
       - name: covid-19-dataset
         connectionName: default.s3_shared
@@ -74,3 +84,4 @@ stages:
             Name: TotalDeathByCountry-{stage.name}
 tests:
   folder: examples/analytic-workflow/dashboard-glue-quick/app_tests/
+# Trigger workflow

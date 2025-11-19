@@ -14,6 +14,24 @@ AIRFLOW_SERVERLESS_ENDPOINT = os.environ.get("AIRFLOW_SERVERLESS_ENDPOINT")
 AIRFLOW_SERVERLESS_SERVICE = "mwaaserverless-internal"
 
 
+def format_log_event(event: dict) -> str:
+    """
+    Format a CloudWatch log event for display.
+
+    Args:
+        event: Log event dict with timestamp, log_stream_name, and message
+
+    Returns:
+        Formatted log line string
+    """
+    timestamp = time.strftime(
+        "%Y-%m-%d %H:%M:%S", time.localtime(event["timestamp"] / 1000)
+    )
+    stream = event.get("log_stream_name", "unknown")
+    message = event["message"]
+    return f"[{timestamp}] [{stream}] {message}"
+
+
 def create_airflow_serverless_client(
     connection_info: Dict[str, Any] = None, region: str = None
 ):
@@ -422,14 +440,25 @@ def get_workflow_run_status(
         run_detail = response.get("RunDetail", {})
         status = run_detail.get("RunState") or response.get("Status", "UNKNOWN")
 
+        created_at = run_detail.get("CreatedAt")
+        started_on = run_detail.get("StartedOn")
+        completed_on = run_detail.get("CompletedOn")
+
+        # Calculate queue time if both timestamps available
+        queue_time_seconds = None
+        if created_at and started_on:
+            queue_time_seconds = (started_on - created_at).total_seconds()
+
         return {
             "run_id": response["RunId"],
             "workflow_arn": response.get(
                 "WorkflowArn", workflow_arn
             ),  # Use provided if not in response
             "status": status,
-            "started_at": run_detail.get("StartedAt"),
-            "ended_at": run_detail.get("EndedAt"),
+            "created_at": created_at,
+            "started_at": started_on,
+            "ended_at": completed_on,
+            "queue_time_seconds": queue_time_seconds,
             "success": True,
         }
 
@@ -460,13 +489,25 @@ def list_workflow_runs(
         for run in response.get("WorkflowRuns", []):
             # Handle nested RunDetailSummary structure
             run_detail = run.get("RunDetailSummary", {})
+
+            created_at = run_detail.get("CreatedAt")
+            started_on = run_detail.get("StartedOn")
+            completed_on = run_detail.get("CompletedOn")
+
+            # Calculate queue time if both timestamps available
+            queue_time_seconds = None
+            if created_at and started_on:
+                queue_time_seconds = (started_on - created_at).total_seconds()
+
             runs.append(
                 {
                     "run_id": run["RunId"],
                     "workflow_arn": run.get("WorkflowArn", workflow_arn),
                     "status": run_detail.get("Status", "UNKNOWN"),
-                    "started_at": run_detail.get("StartedAt"),
-                    "ended_at": run_detail.get("EndedAt"),
+                    "created_at": created_at,
+                    "started_at": started_on,
+                    "ended_at": completed_on,
+                    "queue_time_seconds": queue_time_seconds,
                 }
             )
 
@@ -689,7 +730,14 @@ def wait_for_workflow_completion(
                 )
 
             logger.info(f"Workflow run {run_id} completed with status: {status}")
-            return status_result
+
+            # Return with final_status and proper success flag
+            return {
+                "final_status": status,
+                "run_id": run_id,
+                "success": status in ["SUCCEEDED", "SUCCESS"],
+                "workflow_arn": workflow_arn,
+            }
 
         logger.info(f"Workflow run {run_id} status: {status}, waiting...")
         time.sleep(30)  # Wait 30 seconds before checking again
@@ -958,6 +1006,7 @@ def monitor_workflow_logs_live(
     last_timestamp = None
     final_status = None
     final_run_id = run_id
+    first_fetch = True
 
     while True:
         try:
@@ -981,13 +1030,24 @@ def monitor_workflow_logs_live(
             # Check if target run is still active
             is_active = is_workflow_run_active(target_run)
 
-            # Fetch new logs
-            log_events = get_cloudwatch_logs(
-                log_group,
-                start_time=last_timestamp + 1 if last_timestamp else None,
-                region=region,
-                limit=50,
-            )
+            # Fetch logs - on first fetch, get all logs; afterwards get incremental
+            if first_fetch:
+                # Get all logs from the beginning
+                log_events = get_cloudwatch_logs(
+                    log_group,
+                    start_time=None,
+                    region=region,
+                    limit=10000,  # Large limit to get all logs
+                )
+                first_fetch = False
+            else:
+                # Get only new logs since last timestamp
+                log_events = get_cloudwatch_logs(
+                    log_group,
+                    start_time=last_timestamp + 1 if last_timestamp else None,
+                    region=region,
+                    limit=1000,  # Increased from 50 to handle bursts
+                )
 
             # Process logs
             if log_events:

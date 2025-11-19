@@ -34,14 +34,14 @@ stages:
         purpose: smus-cicd-testing
       region: ${TEST_DOMAIN_REGION:us-east-1}
     project:
-      name: test-ml-deployment
+      name: test-marketing
       create: true
       owners:
       - Eng1
       - arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
       contributors: []
       role:
-        arn: arn:aws:iam::${AWS_ACCOUNT_ID}:role/SMUSCICDTestRole
+        arn: arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
     environment_variables:
       S3_PREFIX: test
     deployment_configuration:
@@ -57,6 +57,9 @@ stages:
         targetDirectory: ml/bundle/model-artifacts
     bootstrap:
       actions:
+      - type: workflow.create
+        workflowName: ml_deployment_workflow
       - type: workflow.run
         workflowName: ml_deployment_workflow
         trailLogs: true
+# Trigger workflow

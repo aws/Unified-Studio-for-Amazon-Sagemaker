@@ -14,6 +14,103 @@ Task progress and context are tracked in the `q-tasks/` folder:
 - Purpose: Track progress, environment setup, debugging steps, and next actions
 - Note: This folder is git-ignored for local development tracking only
 
+## Test Account Setup
+
+### Account Types
+
+**IAM-Based Domains** (Simpler setup - no IDC required)
+- Steps: 1 → 4 → 5
+- Location: `tests/scripts/setup/iam-based-domains/`
+
+**IDC-Based Domains** (Full setup with IAM Identity Center)
+- Steps: 1 → 2 → 3 → 4 → 5
+- Location: `tests/scripts/setup/idc-based-domains/`
+
+### Setup Steps
+
+#### Step 1: Account Setup
+```bash
+cd tests/scripts/setup/{domain-type}/1-account-setup
+./deploy.sh
+```
+Creates:
+- VPC and networking
+- IAM roles for GitHub Actions
+- Stage-specific IAM roles (dev/test/prod)
+
+#### Step 2: Domain Creation (IDC only)
+```bash
+cd tests/scripts/setup/idc-based-domains/2-domain-creation
+./deploy.sh
+```
+Creates SageMaker Unified Studio domain with IDC integration.
+
+#### Step 3: Domain Configuration (IDC only)
+```bash
+cd tests/scripts/setup/idc-based-domains/3-domain-configuration
+./deploy.sh
+```
+Configures domain blueprints and profiles.
+
+#### Step 4: Project Setup
+```bash
+cd tests/scripts/setup/{domain-type}/4-project-setup
+./deploy.sh
+```
+Creates SMUS projects (dev-marketing, test-marketing).
+
+#### Step 5: Testing Infrastructure and Data
+```bash
+# Deploy infrastructure (MLflow, IAM roles, S3)
+cd tests/scripts/setup/{domain-type}/5-testing-infrastructure/testing-infrastructure
+./deploy.sh us-east-1
+
+# Deploy test data (ML datasets, COVID data)
+cd ../testing-data
+./deploy.sh us-east-1
+```
+
+**Infrastructure creates:**
+- MLflow tracking server
+- SageMaker execution role
+- S3 artifacts bucket
+
+**Test data creates:**
+- ML training/inference datasets (always)
+- COVID-19 catalog data (optional, requires DataZone)
+
+**Outputs saved to `/tmp/`:**
+- `mlflow_arn_{region}.txt`
+- `sagemaker_role_arn_{region}.txt`
+- `mlflow_bucket_{region}.txt`
+- `ml_bucket_{region}.txt`
+
+### Quick Start (IAM-Based)
+
+```bash
+cd tests/scripts/setup/iam-based-domains
+
+# Step 1: Account base setup
+cd 1-account-setup && ./deploy.sh && cd ..
+
+# Step 4: Create projects
+cd 4-project-setup && ./deploy.sh && cd ..
+
+# Step 5: Deploy infrastructure and data
+cd 5-testing-infrastructure/testing-infrastructure && ./deploy.sh us-east-1 && cd ..
+cd testing-data && ./deploy.sh us-east-1
+```
+
+### Environment Variables
+
+After setup, export these for integration tests:
+```bash
+export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+export TEST_DOMAIN_REGION=us-east-1
+export DEV_DOMAIN_REGION=us-east-1
+export AWS_DEFAULT_REGION=us-east-1
+```
+
 ## Automated Workflow for Code Changes
 
 When making any code changes to the SMUS CI/CD CLI, follow this automated workflow to ensure consistency and quality:

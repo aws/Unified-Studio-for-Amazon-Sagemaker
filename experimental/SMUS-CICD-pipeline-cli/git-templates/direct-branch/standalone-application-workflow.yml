@@ -129,7 +129,8 @@ jobs:
             --connect
           echo "✅ Connections validated"
         env:
-          TEST_DOMAIN_REGION: ${{ vars.TEST_DOMAIN_REGION }}
+          DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+          MLFLOW_TRACKING_SERVER_NAME: ${{ vars.MLFLOW_TRACKING_SERVER_NAME }}
           SMUS_LOG_LEVEL: WARNING
       
       - name: Deploy to test
@@ -140,7 +141,8 @@ jobs:
             test
           echo "✅ Deployed to test"
         env:
-          TEST_DOMAIN_REGION: ${{ vars.TEST_DOMAIN_REGION }}
+          DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+          MLFLOW_TRACKING_SERVER_NAME: ${{ vars.MLFLOW_TRACKING_SERVER_NAME }}
           SMUS_LOG_LEVEL: WARNING
       
       - name: Run tests
@@ -152,7 +154,8 @@ jobs:
             test
           echo "✅ Tests passed"
         env:
-          TEST_DOMAIN_REGION: ${{ vars.TEST_DOMAIN_REGION }}
+          DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+          MLFLOW_TRACKING_SERVER_NAME: ${{ vars.MLFLOW_TRACKING_SERVER_NAME }}
           SMUS_LOG_LEVEL: WARNING
       
       - name: Create test results comment
@@ -211,7 +214,8 @@ jobs:
             --connect
           echo "✅ Connections validated"
         env:
-          PROD_DOMAIN_REGION: ${{ vars.PROD_DOMAIN_REGION }}
+          DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+          MLFLOW_TRACKING_SERVER_NAME: ${{ vars.MLFLOW_TRACKING_SERVER_NAME }}
           SMUS_LOG_LEVEL: WARNING
       
       - name: Deploy to production
@@ -222,7 +226,8 @@ jobs:
             prod
           echo "✅ Deployed to production"
         env:
-          PROD_DOMAIN_REGION: ${{ vars.PROD_DOMAIN_REGION }}
+          DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+          MLFLOW_TRACKING_SERVER_NAME: ${{ vars.MLFLOW_TRACKING_SERVER_NAME }}
           SMUS_LOG_LEVEL: WARNING
       
       - name: Run smoke tests
@@ -233,7 +238,8 @@ jobs:
             prod
           echo "✅ Smoke tests passed"
         env:
-          PROD_DOMAIN_REGION: ${{ vars.PROD_DOMAIN_REGION }}
+          DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+          MLFLOW_TRACKING_SERVER_NAME: ${{ vars.MLFLOW_TRACKING_SERVER_NAME }}
           SMUS_LOG_LEVEL: WARNING
       
       - name: Production deployment summary
