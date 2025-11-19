@@ -150,11 +150,11 @@ def deploy_command(
 
         target_info = build_target_info(stage_name, target_config)
         metadata = collect_metadata(manifest)
-        
+
         # Always initialize metadata as dict for internal state
         if metadata is None:
             metadata = {}
-        
+
         typer.echo(f"🔍 Metadata collected: {bool(metadata)}")
 
         # Emit deploy started event
