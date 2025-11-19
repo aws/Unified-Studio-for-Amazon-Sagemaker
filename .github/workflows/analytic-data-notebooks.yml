@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - test
+      - amirb_feature_branch
     paths:
       - 'experimental/SMUS-CICD-pipeline-cli/examples/analytic-workflow/data-notebooks/**'
   workflow_dispatch:

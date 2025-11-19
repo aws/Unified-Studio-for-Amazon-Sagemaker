@@ -10,7 +10,6 @@ import typer
 from ...helpers import airflow_serverless, datazone
 from ...helpers.bundle_storage import ensure_bundle_local
 from ...helpers.context_resolver import ContextResolver
-from ...helpers.datazone import resolve_domain_id
 from ..models import BootstrapAction
 
 
@@ -36,7 +35,7 @@ def handle_workflow_create(
     config = context["config"]
     manifest = context["manifest"]
     metadata = context.get("metadata", {})
-    
+
     workflow_name_filter = action.parameters.get("workflowName")
 
     # Get workflows from manifest
@@ -57,12 +56,21 @@ def handle_workflow_create(
 
     typer.echo(f"🚀 Creating {len(workflows_to_create)} MWAA Serverless workflow(s)...")
 
-    # Get required info
+    # Get required info from context
     project_name = target_config.project.name
     region = config["region"]
     stage_name = config.get("stage_name", "unknown")
 
-    # Get S3 location from metadata (passed from deploy)
+    # Get project info from metadata (resolved once in deploy)
+    project_info = metadata.get("project_info", {})
+    project_id = project_info.get("project_id")
+    domain_id = project_info.get("domain_id")
+
+    if not project_id or not domain_id:
+        typer.echo("❌ Project info not available in context")
+        return False
+
+    # Get S3 location from metadata (set by deploy)
     s3_bucket = metadata.get("s3_bucket")
     s3_prefix = metadata.get("s3_prefix")
     bundle_path = metadata.get("bundle_path")
@@ -77,31 +85,18 @@ def handle_workflow_create(
     if bundle_path:
         ensure_bundle_local(bundle_path, region)
 
-    # Resolve domain
-    domain_id, domain_name = resolve_domain_id(
-        domain_name=target_config.domain.name,
-        domain_tags=target_config.domain.tags,
-        region=region,
-    )
-
     # Get role ARN
-    role_arn = datazone.get_project_user_role_arn(project_name, domain_name, region)
+    role_arn = datazone.get_project_user_role_arn(project_name, domain_id, region)
     if not role_arn:
         typer.echo("❌ No project user role found")
-        return False
-
-    # Get project ID
-    project_id = datazone.get_project_id_by_name(project_name, domain_id, region)
-    if not project_id:
-        typer.echo(f"❌ Could not find project ID for project: {project_name}")
         return False
 
     # Initialize context resolver
     resolver = ContextResolver(
         project_name=project_name,
         domain_id=domain_id,
-        domain_name=domain_name,
         region=region,
+        domain_name=None,  # Not available in bootstrap context
         stage_name=stage_name,
         env_vars=target_config.environment_variables or {},
     )
