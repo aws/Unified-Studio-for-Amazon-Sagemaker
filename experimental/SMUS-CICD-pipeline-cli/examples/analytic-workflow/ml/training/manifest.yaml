@@ -66,4 +66,4 @@ stages:
         trailLogs: true
 tests:
   folder: examples/analytic-workflow/ml/training/app_tests/
-# Trigger workflow
+# Trigger workflow - test domain_name fix
