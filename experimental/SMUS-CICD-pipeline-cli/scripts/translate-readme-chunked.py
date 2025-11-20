@@ -43,17 +43,24 @@ def split_into_sections(content: str) -> List[Tuple[str, str]]:
     
     return sections
 
-def translate_chunk(content: str, language: str) -> str:
+def translate_chunk(content: str, language: str, lang_code: str) -> str:
     """Translate a chunk using Bedrock."""
     bedrock = boto3.client('bedrock-runtime')
     
+    rtl_note = ""
+    if lang_code == 'he':
+        rtl_note = "\n- For Hebrew: Wrap entire document in <div dir=\"rtl\">...</div>"
+    
     prompt = f"""Translate to {language}. Output ONLY translated markdown, no explanations.
 
-RULES:
+CRITICAL RULES:
 - Keep code blocks, commands, file names, URLs, AWS services unchanged
 - Keep technical terms: CLI, CI/CD, DevOps, workflow, pipeline, bundle, manifest
-- Translate descriptive text naturally
-- Preserve ALL markdown formatting exactly
+- AVOID LANGUAGE MIXING: If a sentence has multiple English technical terms, keep ENTIRE sentence in English and add translation in parentheses
+- Example: "Deploy Airflow DAGs and ML workflows" → Keep in English, add translation in parentheses after
+- Only translate purely descriptive sentences with minimal technical terms
+- Never switch languages mid-sentence
+- Preserve ALL markdown formatting exactly{rtl_note}
 
 {content}"""
     
@@ -96,11 +103,40 @@ def main():
         
         for i, (header, section_content) in enumerate(sections, 1):
             print(f"  Section {i}/{len(sections)}: {header[:50]}...")
-            translated = translate_chunk(section_content, lang_name)
+            translated = translate_chunk(section_content, lang_name, lang_code)
             translated_sections.append(translated)
         
         # Combine sections
         full_translation = '\n\n'.join(translated_sections)
+        
+        # Add language badges at the top
+        badges = [
+            "[![en](https://img.shields.io/badge/lang-en-gray.svg)](../../../README.md)",
+            "[![pt](https://img.shields.io/badge/lang-pt-gray.svg)](../pt/README.md)",
+            "[![fr](https://img.shields.io/badge/lang-fr-gray.svg)](../fr/README.md)",
+            "[![it](https://img.shields.io/badge/lang-it-gray.svg)](../it/README.md)",
+            "[![ja](https://img.shields.io/badge/lang-ja-gray.svg)](../ja/README.md)",
+            "[![zh](https://img.shields.io/badge/lang-zh-gray.svg)](../zh/README.md)",
+            "[![he](https://img.shields.io/badge/lang-he-gray.svg)](../he/README.md)"
+        ]
+        
+        # Highlight current language
+        badge_map = {'pt': 1, 'fr': 2, 'it': 3, 'ja': 4, 'zh': 5, 'he': 6}
+        if lang_code in badge_map:
+            idx = badge_map[lang_code]
+            badges[idx] = badges[idx].replace('-gray.svg)', '-brightgreen.svg?style=for-the-badge)')
+        
+        badge_bar = '\n'.join(badges)
+        
+        # Wrap Hebrew in RTL div and fix code blocks
+        if lang_code == 'he':
+            # Wrap code blocks in LTR divs
+            import re
+            pattern = r'(```[\s\S]*?```)'
+            full_translation = re.sub(pattern, r'<div dir="ltr">\n\n\1\n\n</div>', full_translation)
+            full_translation = f'<div dir="rtl">\n\n{badge_bar}\n\n{full_translation}\n\n</div>'
+        else:
+            full_translation = f'{badge_bar}\n\n{full_translation}'
         
         # Save
         output_dir = project_root / "docs" / "langs" / lang_code

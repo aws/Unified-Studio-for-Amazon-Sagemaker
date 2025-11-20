@@ -1,3 +1,11 @@
+[![en](https://img.shields.io/badge/lang-en-brightgreen.svg?style=for-the-badge)](README.md)
+[![pt](https://img.shields.io/badge/lang-pt-gray.svg)](docs/langs/pt/README.md)
+[![fr](https://img.shields.io/badge/lang-fr-gray.svg)](docs/langs/fr/README.md)
+[![it](https://img.shields.io/badge/lang-it-gray.svg)](docs/langs/it/README.md)
+[![ja](https://img.shields.io/badge/lang-ja-gray.svg)](docs/langs/ja/README.md)
+[![zh](https://img.shields.io/badge/lang-zh-gray.svg)](docs/langs/zh/README.md)
+[![he](https://img.shields.io/badge/lang-he-gray.svg)](docs/langs/he/README.md)
+
 # SMUS CI/CD Pipeline CLI
 
 **Automate deployment of data applications across SageMaker Unified Studio environments**
@@ -62,26 +70,6 @@ smus-cli test --manifest manifest.yaml --targets test
 - ML Workflows (SageMaker, Notebooks)
 - GenAI Applications (Bedrock, Notebooks)
 
-**Bootstrap Actions - Automate Post-Deployment Tasks:**
-
-Define actions in your manifest that run automatically after deployment:
-- Trigger workflows immediately (no manual execution needed)
-- Refresh QuickSight dashboards with latest data
-- Provision MLflow connections for experiment tracking
-- Fetch logs for validation
-- Emit events to trigger downstream processes
-
-Example:
-```yaml
-bootstrap:
-  actions:
-    - type: workflow.run
-      workflowName: etl_pipeline
-      wait: true
-    - type: quicksight.refresh_dataset
-      refreshScope: IMPORTED
-```
-
 ### 🔧 DevOps Teams
 **You focus on:** CI/CD best practices, security, compliance, and deployment automation  
 **You define:** Workflow templates that enforce testing, approvals, and promotion policies  
@@ -90,7 +78,7 @@ bootstrap:
 → **[Admin Guide](docs/getting-started/admin-quickstart.md)** - Configure infrastructure and pipelines in 15 minutes  
 → **[GitHub Workflow Templates](git-templates/)** - Generic, reusable workflow templates for automated deployment
 
-**The CLI is your abstraction layer:** You just call `smus-cli deploy` - the CLI handles all AWS service interactions (DataZone, Glue, Athena, SageMaker, MWAA, S3, IAM, etc.) and executes bootstrap actions (workflow runs, log streaming, QuickSight refreshes, EventBridge events). Your workflows stay simple and generic.
+**The CLI is your abstraction layer:** You just call `smus-cli deploy` - the CLI handles all AWS service interactions (DataZone, Glue, Athena, SageMaker, MWAA, S3, IAM, etc.). Your workflows stay simple and generic.
 
 ---
 
@@ -847,8 +835,4 @@ This project is licensed under the MIT-0 License. See [LICENSE](../../LICENSE) f
   <p><em>Scan QR code to view this README on GitHub</em></p>
 </div>
 
----
 
-## Idiomas / Languages
-
-**English** (current) | **[Português (Brasil)](README.pt-BR.md)**

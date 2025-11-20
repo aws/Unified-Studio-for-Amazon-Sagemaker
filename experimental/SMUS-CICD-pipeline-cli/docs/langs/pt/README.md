@@ -1,3 +1,11 @@
+[![en](https://img.shields.io/badge/lang-en-gray.svg)](../../../README.md)
+[![pt](https://img.shields.io/badge/lang-pt-brightgreen.svg?style=for-the-badge)](../pt/README.md)
+[![fr](https://img.shields.io/badge/lang-fr-gray.svg)](../fr/README.md)
+[![it](https://img.shields.io/badge/lang-it-gray.svg)](../it/README.md)
+[![ja](https://img.shields.io/badge/lang-ja-gray.svg)](../ja/README.md)
+[![zh](https://img.shields.io/badge/lang-zh-gray.svg)](../zh/README.md)
+[![he](https://img.shields.io/badge/lang-he-gray.svg)](../he/README.md)
+
 # SMUS CI/CD Pipeline CLI
 
 **Automatize a implantação de aplicações de dados em ambientes do SageMaker Unified Studio**
