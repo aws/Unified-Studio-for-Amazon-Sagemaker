@@ -12,9 +12,7 @@ on:
 
 jobs:
   deploy:
-    uses: ./.github/workflows/smus-bundle-deploy.yml
+    uses: ./.github/workflows/smus-direct-deploy.yml
     with:
       manifest_path: 'experimental/SMUS-CICD-pipeline-cli/examples/analytic-workflow/ml/training/manifest.yaml'
       test_target: 'test'
-      prod_target: 'prod'
-      deploy_to_prod: ${{ github.ref == 'refs/heads/main' }}

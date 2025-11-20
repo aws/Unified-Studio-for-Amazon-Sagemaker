@@ -2,11 +2,9 @@ applicationName: IntegrationTestMLTraining
 content:
   storage:
   - name: training-code
-    connectionName: default.s3_shared
     include:
     - ml/training/code
   - name: training-workflows
-    connectionName: default.s3_shared
     include:
     - ml/training/workflows
   workflows:
