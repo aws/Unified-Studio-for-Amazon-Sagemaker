@@ -236,13 +236,18 @@ def bundle_command(
 
                 if aws_account_id:
                     for dashboard_config in quicksight_dashboards:
-                        if dashboard_config.source == "export":
+                        # Get assetBundle attribute (defaults to "export" if not provided)
+                        asset_bundle = getattr(dashboard_config, "assetBundle", "export")
+                        dashboard_id = dashboard_config.dashboardId
+                        
+                        if asset_bundle == "export":
+                            # Export from QuickSight service
                             typer.echo(
-                                f"Exporting QuickSight dashboard: {dashboard_config.dashboardId}"
+                                f"Exporting QuickSight dashboard: {dashboard_id}"
                             )
                             try:
                                 job_id = export_dashboard(
-                                    dashboard_config.dashboardId, aws_account_id, region
+                                    dashboard_id, aws_account_id, region
                                 )
                                 download_url = poll_export_job(
                                     job_id, aws_account_id, region
@@ -257,7 +262,7 @@ def bundle_command(
                                 bundle_path = os.path.join(
                                     temp_bundle_dir,
                                     "quicksight",
-                                    f"{dashboard_config.dashboardId}.qs",
+                                    f"{dashboard_id}.qs",
                                 )
                                 os.makedirs(os.path.dirname(bundle_path), exist_ok=True)
                                 with open(bundle_path, "wb") as f:
@@ -267,7 +272,44 @@ def bundle_command(
                                 typer.echo("  Exported dashboard to bundle")
                             except Exception as e:
                                 typer.echo(
-                                    f"Error exporting dashboard {dashboard_config.dashboardId}: {e}",
+                                    f"Error exporting dashboard {dashboard_id}: {e}",
+                                    err=True,
+                                )
+                        else:
+                            # Copy local file to bundle
+                            typer.echo(
+                                f"Copying local QuickSight file: {asset_bundle}"
+                            )
+                            try:
+                                # Resolve path relative to manifest directory
+                                if manifest_file:
+                                    manifest_dir = os.path.dirname(os.path.abspath(manifest_file))
+                                    source_path = os.path.join(manifest_dir, asset_bundle)
+                                else:
+                                    source_path = asset_bundle
+                                
+                                if not os.path.exists(source_path):
+                                    typer.echo(
+                                        f"  Warning: Local file not found: {source_path}",
+                                        err=True,
+                                    )
+                                    continue
+                                
+                                # Copy to bundle at quicksight/{dashboardId}.qs
+                                bundle_path = os.path.join(
+                                    temp_bundle_dir,
+                                    "quicksight",
+                                    f"{dashboard_id}.qs",
+                                )
+                                os.makedirs(os.path.dirname(bundle_path), exist_ok=True)
+                                
+                                shutil.copy2(source_path, bundle_path)
+                                
+                                total_files_added += 1
+                                typer.echo(f"  Copied to bundle: {bundle_path}")
+                            except Exception as e:
+                                typer.echo(
+                                    f"Error copying local file {asset_bundle}: {e}",
                                     err=True,
                                 )
 

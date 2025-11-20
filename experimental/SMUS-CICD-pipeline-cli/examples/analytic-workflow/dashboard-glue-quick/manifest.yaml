@@ -2,7 +2,6 @@ applicationName: IntegrationTestETLWorkflow
 content:
   storage:
   - name: dashboard-glue-quick
-    connectionName: default.s3_shared
     include:
     - dashboard-glue-quick
     exclude:
@@ -20,7 +19,6 @@ content:
     url: https://github.com/datasets/covid-19.git
   quicksight:
   - dashboardId: sample-dashboard
-    assetBundle: quicksight/sample-dashboard.qs
     owners:
     - arn:aws:quicksight:${DEV_DOMAIN_REGION:us-east-2}:*:user/default/Admin/*
     viewers:
