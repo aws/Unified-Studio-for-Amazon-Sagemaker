@@ -180,6 +180,8 @@ def deploy_command(
             from ..helpers.utils import get_datazone_project_info
 
             project_info = get_datazone_project_info(target_config.project.name, config)
+            if metadata is None:
+                metadata = {}
             metadata["project_info"] = project_info
 
             # Emit project init completed
