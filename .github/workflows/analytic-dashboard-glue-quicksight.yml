@@ -3,6 +3,7 @@ name: Deploy Dashboard Glue QuickSight
 on:
   push:
     branches:
+      - amirbo_feature_branch
       - main
       - test
     paths:
