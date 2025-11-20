@@ -3,10 +3,10 @@ content:
   storage:
   - name: training-code
     include:
-    - ml/training/code
+    - code
   - name: training-workflows
     include:
-    - ml/training/workflows
+    - workflows
   workflows:
   - workflowName: ml_training_workflow
     connectionName: default.workflow_serverless
