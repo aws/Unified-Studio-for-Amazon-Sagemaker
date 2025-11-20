@@ -85,8 +85,9 @@ def handle_workflow_create(
     if bundle_path:
         ensure_bundle_local(bundle_path, region)
 
-    # Get role ARN
-    role_arn = datazone.get_project_user_role_arn(project_name, domain_id, region)
+    # Get role ARN - need domain_name not domain_id
+    domain_name = target_config.domain.name
+    role_arn = datazone.get_project_user_role_arn(project_name, domain_name, region)
     if not role_arn:
         typer.echo("❌ No project user role found")
         return False

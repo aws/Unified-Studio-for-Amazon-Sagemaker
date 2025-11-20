@@ -91,7 +91,32 @@ def test_handle_workflow_create_specific_workflow(mock_action, mock_context):
             
             result = handle_workflow_create(mock_action, mock_context)
             
+            # Verify get_project_user_role_arn called with domain_name, not domain_id
+            mock_dz.get_project_user_role_arn.assert_called_once_with(
+                "test-project",
+                "test-domain",  # Should be domain_name from target_config.domain.name
+                "us-east-1"
+            )
+            
             assert result is True
+
+
+def test_handle_workflow_create_role_lookup_failure(mock_action, mock_context):
+    """Test workflow.create fails when project user role not found."""
+    with patch("smus_cicd.bootstrap.handlers.workflow_create_handler.datazone") as mock_dz:
+        mock_dz.get_project_user_role_arn.return_value = None  # Role not found
+        
+        result = handle_workflow_create(mock_action, mock_context)
+        
+        # Should fail when role not found
+        assert result is False
+        
+        # Verify it was called with correct parameters
+        mock_dz.get_project_user_role_arn.assert_called_once_with(
+            "test-project",
+            "test-domain",
+            "us-east-1"
+        )
 
 
 def test_handle_workflow_create_workflow_not_found(mock_action, mock_context):
