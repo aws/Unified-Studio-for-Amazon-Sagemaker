@@ -237,9 +237,11 @@ def bundle_command(
                 if aws_account_id:
                     for dashboard_config in quicksight_dashboards:
                         # Get assetBundle attribute (defaults to "export" if not provided)
-                        asset_bundle = getattr(dashboard_config, "assetBundle", "export")
+                        asset_bundle = getattr(
+                            dashboard_config, "assetBundle", "export"
+                        )
                         dashboard_id = dashboard_config.dashboardId
-                        
+
                         if asset_bundle == "export":
                             # Export from QuickSight service
                             typer.echo(
@@ -277,24 +279,26 @@ def bundle_command(
                                 )
                         else:
                             # Copy local file to bundle
-                            typer.echo(
-                                f"Copying local QuickSight file: {asset_bundle}"
-                            )
+                            typer.echo(f"Copying local QuickSight file: {asset_bundle}")
                             try:
                                 # Resolve path relative to manifest directory
                                 if manifest_file:
-                                    manifest_dir = os.path.dirname(os.path.abspath(manifest_file))
-                                    source_path = os.path.join(manifest_dir, asset_bundle)
+                                    manifest_dir = os.path.dirname(
+                                        os.path.abspath(manifest_file)
+                                    )
+                                    source_path = os.path.join(
+                                        manifest_dir, asset_bundle
+                                    )
                                 else:
                                     source_path = asset_bundle
-                                
+
                                 if not os.path.exists(source_path):
                                     typer.echo(
                                         f"  Warning: Local file not found: {source_path}",
                                         err=True,
                                     )
                                     continue
-                                
+
                                 # Copy to bundle at quicksight/{dashboardId}.qs
                                 bundle_path = os.path.join(
                                     temp_bundle_dir,
@@ -302,9 +306,9 @@ def bundle_command(
                                     f"{dashboard_id}.qs",
                                 )
                                 os.makedirs(os.path.dirname(bundle_path), exist_ok=True)
-                                
+
                                 shutil.copy2(source_path, bundle_path)
-                                
+
                                 total_files_added += 1
                                 typer.echo(f"  Copied to bundle: {bundle_path}")
                             except Exception as e:
