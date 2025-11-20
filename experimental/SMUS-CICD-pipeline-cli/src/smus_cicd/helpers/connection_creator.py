@@ -142,21 +142,10 @@ class ConnectionCreator:
             tracking_server_arn = kwargs.get("trackingServerArn") or kwargs.get(
                 "tracking_server_arn"
             )
-            tracking_server_name = kwargs.get("trackingServerName") or kwargs.get(
-                "tracking_server_name"
-            )
-
-            # Extract server name from ARN if not provided
-            if not tracking_server_name and tracking_server_arn:
-                tracking_server_name = tracking_server_arn.split("/")[-1]
-                print(
-                    f"🔍 DEBUG: Extracted trackingServerName from ARN: {tracking_server_name}"
-                )
 
             props = {
                 "mlflowProperties": {
                     "trackingServerArn": tracking_server_arn,
-                    "trackingServerName": tracking_server_name,
                 }
             }
             print(f"🔍 DEBUG: MLflow props being returned: {props}")
