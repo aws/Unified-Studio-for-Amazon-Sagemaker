@@ -114,3 +114,80 @@ class TestStorageConfig:
         assert hasattr(
             storage_config, "targetDirectory"
         ), "StorageConfig missing 'targetDirectory' attribute"
+
+    def test_storage_config_compression_field(self):
+        """Test that StorageConfig includes compression field for tar.gz packaging."""
+        manifest_dict = {
+            "applicationName": "TestApp",
+            "content": {
+                "storage": [
+                    {
+                        "name": "training-code",
+                        "connectionName": "default.s3_shared",
+                        "include": ["ml/training/code"],
+                    }
+                ]
+            },
+            "stages": {
+                "test": {
+                    "domain": {"region": "us-east-1"},
+                    "project": {"name": "test-project"},
+                    "deployment_configuration": {
+                        "storage": [
+                            {
+                                "name": "training-code",
+                                "connectionName": "default.s3_shared",
+                                "targetDirectory": "ml/bundle/training-code",
+                                "compression": "gz",
+                            }
+                        ]
+                    },
+                }
+            },
+        }
+
+        manifest = ApplicationManifest.from_dict(manifest_dict)
+        storage_config = manifest.stages["test"].deployment_configuration.storage[0]
+
+        assert hasattr(
+            storage_config, "compression"
+        ), "StorageConfig missing 'compression' attribute"
+        assert storage_config.compression == "gz"
+
+    def test_storage_config_compression_optional(self):
+        """Test that compression field is optional in StorageConfig."""
+        manifest_dict = {
+            "applicationName": "TestApp",
+            "content": {
+                "storage": [
+                    {
+                        "name": "data",
+                        "connectionName": "default.s3_shared",
+                        "include": ["data/"],
+                    }
+                ]
+            },
+            "stages": {
+                "test": {
+                    "domain": {"region": "us-east-1"},
+                    "project": {"name": "test-project"},
+                    "deployment_configuration": {
+                        "storage": [
+                            {
+                                "name": "data",
+                                "connectionName": "default.s3_shared",
+                                "targetDirectory": "data/bundle",
+                            }
+                        ]
+                    },
+                }
+            },
+        }
+
+        manifest = ApplicationManifest.from_dict(manifest_dict)
+        storage_config = manifest.stages["test"].deployment_configuration.storage[0]
+
+        assert hasattr(
+            storage_config, "compression"
+        ), "StorageConfig missing 'compression' attribute"
+        assert storage_config.compression is None

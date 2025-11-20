@@ -45,6 +45,36 @@ tests/
 │   └── PARALLEL_TESTING.md # Parallel execution guide
 ├── run_tests.py            # Test runner with parallel support
 └── scripts/                # Setup and utility scripts
+    ├── combine_coverage.py # Combine coverage from parallel runs
+    └── README-coverage.md  # Coverage combining guide
+```
+
+### GitHub CI/CD Integration
+
+**Automatic Test Discovery:**
+The PR test workflow (`pr-tests.yml`) automatically discovers all integration tests:
+- Scans `tests/integration/` for directories with `test_*.py` files
+- Excludes `examples-analytics-workflows/` (separate workflows)
+- Runs all discovered tests in parallel via matrix strategy
+
+**Adding New Tests:**
+Simply create a new test directory - no workflow changes needed:
+```bash
+tests/integration/
+  └── my_new_feature/
+      ├── manifest.yaml
+      └── test_my_feature.py  # ✅ Auto-discovered in CI!
+```
+
+**Coverage Reports:**
+Each test generates separate coverage files that are combined:
+```bash
+# Download from GitHub Actions
+gh run download <RUN_ID> -n test-summary-combined
+
+# Combine coverage locally
+python tests/scripts/combine_coverage.py
+open coverage-combined/htmlcov-combined/index.html
 ```
 
 ### Base Test Class

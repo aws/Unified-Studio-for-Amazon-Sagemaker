@@ -393,8 +393,10 @@ class ProjectManager:
             handle_error(f"Domain '{domain_name}' not found")
             return False
 
-        # Get profile ID
-        dz_client = boto3.client("datazone", region_name=region)
+        # Use datazone-internal client for project creation (supports customerProvidedRoleConfigs)
+        dz_client = datazone._get_datazone_internal_client(region)
+
+        # Get profile ID (use regular datazone client for listing profiles)
         response = dz_client.list_project_profiles(domainIdentifier=domain_id)
         profile_id = None
         available_profiles = []

@@ -129,6 +129,9 @@ jobs:
           aws configure add-model \
             --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/datazone-2018-05-10.json \
             --service-name datazone
+          aws configure add-model \
+            --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/datazone-internal-2018-05-10.json \
+            --service-name datazone-internal
       
       - name: smus-cli describe (validate test target)
         env:
@@ -189,6 +192,9 @@ jobs:
           aws configure add-model \
             --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/datazone-2018-05-10.json \
             --service-name datazone
+          aws configure add-model \
+            --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/datazone-internal-2018-05-10.json \
+            --service-name datazone-internal
       
       - name: smus-cli test
         env:
@@ -240,6 +246,9 @@ jobs:
           aws configure add-model \
             --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/datazone-2018-05-10.json \
             --service-name datazone
+          aws configure add-model \
+            --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/datazone-internal-2018-05-10.json \
+            --service-name datazone-internal
       
       - name: smus-cli describe (validate prod target)
         env:

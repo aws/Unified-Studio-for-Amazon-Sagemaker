@@ -3,6 +3,7 @@ name: Deploy ML Deployment
 on:
   push:
     branches:
+      - amirbo_feature_branch
       - main
       - test
       - amirb_feature_branch

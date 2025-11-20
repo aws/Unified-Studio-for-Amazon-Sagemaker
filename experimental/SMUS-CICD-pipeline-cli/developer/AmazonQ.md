@@ -250,6 +250,10 @@ gh pr checks <PR-NUMBER>
 # Get detailed logs for any failing tests
 gh run view <RUN-ID> --job <JOB-NAME> --log
 
+# Download combined coverage report
+gh run download <RUN-ID> -n test-summary-combined
+python tests/scripts/combine_coverage.py --coverage-dir coverage-artifacts
+
 # Analyze failures and provide summary:
 # - What tests are failing and why
 # - Root cause analysis of failures
@@ -260,6 +264,22 @@ gh run view <RUN-ID> --job <JOB-NAME> --log
 # - Present analysis of test failures first
 # - Wait for confirmation before implementing fixes
 # - Ensure all stakeholders understand the impact
+```
+
+### PR Test Structure
+
+**Automatic test discovery** - no workflow updates needed when adding tests.
+
+**Adding New Tests**:
+```bash
+tests/integration/my_new_app/
+  └── test_my_new_app.py  # Auto-discovered!
+```
+
+**Coverage combining**:
+```bash
+gh run download <RUN_ID> -n test-summary-combined
+python tests/scripts/combine_coverage.py
 ```
 
 ## Test Runner Options

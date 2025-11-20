@@ -25,6 +25,11 @@ stages:
       - Eng1
       - arn:aws:iam::${AWS_ACCOUNT_ID}:role/Admin
       contributors: []
+    deployment_configuration:
+      storage:
+      - name: src
+        connectionName: default.s3_shared
+        targetDirectory: connections-test/src
     bootstrap:
       actions:
       - type: datazone.create_environment
@@ -35,48 +40,23 @@ stages:
         properties:
           s3Uri: s3://test-connections-bucket/data/
       - type: datazone.create_connection
-        name: iam-lineage-sync
+        name: iam-lineage
         connection_type: IAM
         properties:
           glueLineageSyncEnabled: true
       - type: datazone.create_connection
-        name: spark-glue-processing
+        name: spark-glue-proc
         connection_type: SPARK_GLUE
         properties:
           glueVersion: '4.0'
           workerType: G.1X
           numberOfWorkers: 5
       - type: datazone.create_connection
-        name: athena-analytics
-        connection_type: ATHENA
-        properties:
-          workgroupName: primary
-      - type: datazone.create_connection
-        name: redshift-warehouse
-        connection_type: REDSHIFT
-        properties:
-          storage:
-            clusterName: test-analytics-cluster
-          databaseName: analytics
-          host: test-analytics-cluster.abc123.us-east-1.redshift.amazonaws.com
-          port: 5439
-      - type: datazone.create_connection
-        name: spark-emr-processing
-        connection_type: SPARK_EMR
-        properties:
-          computeArn: arn:aws:emr-serverless:us-east-1:123456789012:/applications/00abc123def456
-          runtimeRole: arn:aws:iam::123456789012:role/EMRServerlessExecutionRole
+        name: workflows-serverless
+        connection_type: WORKFLOWS_SERVERLESS
+        properties: {}
       - type: datazone.create_connection
         name: mlflow-experiments
         connection_type: MLFLOW
         properties:
           trackingServerArn: arn:aws:sagemaker:*:*:mlflow-tracking-server/smus-integration-mlflow-use2
-      - type: datazone.create_connection
-        name: mwaa-workflows
-        connection_type: WORKFLOWS_MWAA
-        properties:
-          mwaaEnvironmentName: DataZoneMWAAEnv-dzd_6je2k8b63qse07-4kc6456xevd0h3-dev
-      - type: datazone.create_connection
-        name: serverless-workflows
-        connection_type: WORKFLOWS_SERVERLESS
-        properties: {}

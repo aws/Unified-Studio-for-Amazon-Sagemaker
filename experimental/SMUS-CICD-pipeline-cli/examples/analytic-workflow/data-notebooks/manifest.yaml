@@ -52,7 +52,6 @@ stages:
         connection_type: MLFLOW
         properties:
           trackingServerArn: arn:aws:sagemaker:${STS_REGION}:${STS_ACCOUNT_ID}:mlflow-tracking-server/${MLFLOW_TRACKING_SERVER_NAME:smus-integration-mlflow-use2}
-          trackingServerName: ${MLFLOW_TRACKING_SERVER_NAME:smus-integration-mlflow-use2}
       - type: workflow.create
         workflowName: parallel_notebooks_workflow
       - type: workflow.run

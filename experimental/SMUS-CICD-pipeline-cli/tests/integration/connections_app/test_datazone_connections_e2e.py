@@ -36,18 +36,23 @@ class TestDataZoneConnectionsE2E(IntegrationTestBase):
         if not self.domain_id:
             pytest.skip("No test domain found with tag purpose=smus-cicd-testing")
         
-        # Find test project (prefer test-marketing, but accept any test-* project)
-        projects = self.datazone_client.list_projects(domainIdentifier=self.domain_id)
+        # Find test project (prefer connections-test-project)
+        projects = self.datazone_client.list_projects(
+            domainIdentifier=self.domain_id,
+            maxResults=50
+        )
         self.project_id = None
+        print(f"🔍 Searching for connections-test-project in {len(projects.get('items', []))} projects")
         for project in projects.get('items', []):
-            project_name = project.get('name', '').lower()
-            if 'test-marketing' in project_name or project_name.startswith('test-'):
+            project_name = project.get('name', '')
+            if project_name == 'connections-test-project':
                 self.project_id = project['id']
-                print(f"🔍 Found test project: {project.get('name')} ({self.project_id})")
+                print(f"🔍 Found test project: {project_name} ({self.project_id})")
                 break
         
         if not self.project_id:
-            pytest.skip("No test project found in domain")
+            print("❌ No connections-test-project found in domain")
+            pytest.skip("No connections-test-project found in domain")
         
         # Get the first environment for this project
         try:
@@ -67,17 +72,19 @@ class TestDataZoneConnectionsE2E(IntegrationTestBase):
         self.connection_creator = ConnectionCreator(self.domain_id, region)
 
     def teardown_method(self, method):
-        """Clean up test environment and created connections."""
-        # Clean up any created connections
-        for conn_id in self.created_connection_ids:
-            try:
-                self.datazone_client.delete_connection(
-                    domainIdentifier=self.domain_id,
-                    identifier=conn_id
-                )
-                print(f"✅ Cleaned up connection: {conn_id}")
-            except Exception as e:
-                print(f"⚠️  Failed to cleanup connection {conn_id}: {e}")
+        """Clean up test environment."""
+        # Only cleanup connections created by test_datazone_connections_end_to_end
+        # Leave bootstrap connections for inspection
+        if method.__name__ == 'test_datazone_connections_end_to_end':
+            for conn_id in self.created_connection_ids:
+                try:
+                    self.datazone_client.delete_connection(
+                        domainIdentifier=self.domain_id,
+                        identifier=conn_id
+                    )
+                    print(f"✅ Cleaned up connection: {conn_id}")
+                except Exception as e:
+                    print(f"⚠️  Failed to cleanup connection {conn_id}: {e}")
         
         super().teardown_method(method)
         self.cleanup_test_directory()
@@ -334,3 +341,259 @@ stages:
         print(f"   - Created {len(created_connections)} connections in DataZone")
         print(f"   - Connection types: {', '.join(sorted(set(c['type'] for c in created_connections)))}")
         print(f"   - Confirmed CLI describe --connect shows {connections_found_in_cli} connections")
+
+    def test_bootstrap_connection_idempotency(self):
+        """Test that bootstrap connections are idempotent on re-deploy, especially MLflow."""
+        print("\n=== Bootstrap Connection Idempotency Test ===")
+        
+        if not self.verify_aws_connectivity():
+            pytest.skip("AWS connectivity not available")
+        
+        manifest_path = os.path.join(os.path.dirname(__file__), "manifest.yaml")
+        
+        # Cleanup: Delete existing test connections before starting
+        print("\nCleanup: Removing existing test connections...")
+        test_connection_names = [
+            's3-data-lake', 'iam-lineage', 'spark-glue-proc',
+            'workflows-serverless', 'mlflow-experiments'
+        ]
+        
+        try:
+            connections = self.datazone_client.list_connections(
+                domainIdentifier=self.domain_id,
+                projectIdentifier=self.project_id,
+                maxResults=50
+            )
+            for conn in connections.get('items', []):
+                if conn.get('name') in test_connection_names:
+                    try:
+                        self.datazone_client.delete_connection(
+                            domainIdentifier=self.domain_id,
+                            identifier=conn.get('connectionId')  # Use connectionId
+                        )
+                        print(f"  ✅ Deleted: {conn.get('name')}")
+                    except Exception as e:
+                        print(f"  ⚠️  Failed to delete {conn.get('name')}: {e}")
+        except Exception as e:
+            print(f"  ⚠️  Failed to list connections: {e}")
+        
+        # Step 1: First deployment - creates connections
+        print("\nStep 1: First deployment (creates connections)...")
+        result1 = self.run_cli_command([
+            "deploy", "--manifest", manifest_path, "--targets", "test"
+        ])
+        
+        assert result1["success"], f"First deployment failed: {result1['output']}"
+        print("✅ First deployment successful")
+        
+        # Wait for connections to be fully created
+        time.sleep(2)
+        
+        # Verify MLflow connection was created
+        connections = self.datazone_client.list_connections(
+            domainIdentifier=self.domain_id,
+            projectIdentifier=self.project_id,
+            maxResults=50
+        )
+        mlflow_conn = None
+        for conn in connections.get('items', []):
+            if conn.get('name') == 'mlflow-experiments':
+                mlflow_conn = conn
+                break
+        
+        assert mlflow_conn is not None, "MLflow connection not found after first deployment"
+        mlflow_conn_id = mlflow_conn.get('connectionId')
+        assert mlflow_conn_id, "MLflow connection has no connectionId"
+        print(f"✅ MLflow connection created: {mlflow_conn_id}")
+        
+        # Step 2: Second deployment - should be idempotent
+        print("\nStep 2: Second deployment (should be idempotent)...")
+        result2 = self.run_cli_command([
+            "deploy", "--manifest", manifest_path, "--targets", "test"
+        ])
+        
+        # This is the critical test - should NOT fail with update error
+        assert result2["success"], f"Second deployment failed (not idempotent): {result2['output']}"
+        
+        # Verify no update errors in output
+        assert "Failed to update connection" not in result2["output"], \
+            "Should not attempt to update MLflow connection"
+        assert "Parameter validation failed" not in result2["output"], \
+            "Should not have parameter validation errors"
+        # Note: mlflowProperties may appear in debug logs, which is OK
+        
+        print("✅ Second deployment successful (idempotent)")
+        
+        # Step 3: Verify MLflow connection unchanged
+        print("\nStep 3: Verifying MLflow connection unchanged...")
+        mlflow_conn_after = self.datazone_client.get_connection(
+            domainIdentifier=self.domain_id,
+            identifier=mlflow_conn_id
+        )
+        
+        assert mlflow_conn_after['connectionId'] == mlflow_conn_id, "MLflow connection ID changed"
+        print(f"✅ MLflow connection unchanged: {mlflow_conn_id}")
+        
+        # Step 4: Verify connection is skipped with proper message
+        print("\nStep 4: Verifying skip message in output...")
+        if "MLflow connection" in result2["output"] and "already exists" in result2["output"]:
+            print("✅ Found skip message for MLflow connection")
+        elif "mlflow-experiments" in result2["output"] and "exists" in result2["output"]:
+            print("✅ Found skip message for mlflow-experiments")
+        else:
+            print("⚠️  No explicit skip message found, but deployment succeeded")
+        
+        print("\n🎉 Bootstrap idempotency test completed successfully!")
+        print("   - First deployment: created connections")
+        print("   - Second deployment: idempotent (no errors)")
+        print("   - MLflow connection: immutable (not updated)")
+
+    def test_mlflow_connection_property_change_recreates(self):
+        """Test that MLflow connection is deleted and recreated when properties change."""
+        print("\n=== MLflow Connection Property Change Test ===")
+        
+        if not self.verify_aws_connectivity():
+            pytest.skip("AWS connectivity not available")
+        
+        # Create temporary manifest with initial MLflow ARN
+        manifest_content = f"""applicationName: ConnectionsTestBundle
+content:
+  storage:
+  - name: src
+    connectionName: default.s3_shared
+    include:
+    - src
+    exclude:
+    - .ipynb_checkpoints/
+    - __pycache__/
+    - '*.pyc'
+    - .libs.json
+stages:
+  test:
+    stage: TEST
+    domain:
+      tags:
+        purpose: smus-cicd-testing
+      region: us-east-2
+    project:
+      name: connections-test-project
+      create: true
+      profile_name: All capabilities
+      owners:
+      - Eng1
+      - arn:aws:iam::198737698272:role/Admin
+      contributors: []
+    deployment_configuration:
+      storage:
+      - name: src
+        connectionName: default.s3_shared
+        targetDirectory: connections-test/src
+    bootstrap:
+      actions:
+      - type: datazone.create_environment
+        environment_configuration_name: OnDemand Workflows
+      - type: datazone.create_connection
+        name: mlflow-test-change
+        connection_type: MLFLOW
+        properties:
+          trackingServerArn: arn:aws:sagemaker:us-east-1:198737698272:mlflow-tracking-server/original-server
+"""
+        
+        manifest_path = os.path.join(self.test_dir, "manifest_mlflow_change.yaml")
+        with open(manifest_path, 'w') as f:
+            f.write(manifest_content)
+        
+        # Cleanup: Delete if exists
+        print("\nCleanup: Removing mlflow-test-change if exists...")
+        try:
+            connections = self.datazone_client.list_connections(
+                domainIdentifier=self.domain_id,
+                projectIdentifier=self.project_id,
+                maxResults=50
+            )
+            for conn in connections.get('items', []):
+                if conn.get('name') == 'mlflow-test-change':
+                    self.datazone_client.delete_connection(
+                        domainIdentifier=self.domain_id,
+                        identifier=conn.get('connectionId')
+                    )
+                    print("  ✅ Deleted existing mlflow-test-change")
+        except Exception as e:
+            print(f"  ⚠️  Cleanup failed: {e}")
+        
+        # Step 1: Create MLflow connection with original ARN
+        print("\nStep 1: Creating MLflow connection with original ARN...")
+        result1 = self.run_cli_command([
+            "deploy", "--manifest", manifest_path, "--targets", "test"
+        ])
+        assert result1["success"], f"First deployment failed: {result1['output']}"
+        
+        # Wait for connection to be fully created
+        time.sleep(2)
+        
+        # Get original connection ID
+        connections = self.datazone_client.list_connections(
+            domainIdentifier=self.domain_id,
+            projectIdentifier=self.project_id,
+            maxResults=50
+        )
+        original_conn = None
+        for conn in connections.get('items', []):
+            if conn.get('name') == 'mlflow-test-change':
+                original_conn = conn
+                break
+        
+        assert original_conn, "MLflow connection not created"
+        original_id = original_conn.get('connectionId')
+        original_arn = original_conn.get('props', {}).get('mlflowProperties', {}).get('trackingServerArn')
+        print(f"✅ Original connection: {original_id}, ARN: {original_arn}")
+        
+        # Step 2: Update manifest with different ARN
+        print("\nStep 2: Updating manifest with different ARN...")
+        manifest_content_updated = manifest_content.replace(
+            'original-server',
+            'updated-server'
+        )
+        with open(manifest_path, 'w') as f:
+            f.write(manifest_content_updated)
+        
+        # Step 3: Deploy with changed ARN - should delete and recreate
+        print("\nStep 3: Deploying with changed ARN (should delete+recreate)...")
+        result2 = self.run_cli_command([
+            "deploy", "--manifest", manifest_path, "--targets", "test"
+        ])
+        assert result2["success"], f"Second deployment failed: {result2['output']}"
+        
+        # Wait for connection to be recreated
+        time.sleep(2)
+        
+        # Step 4: Verify connection was recreated with new ID and ARN
+        print("\nStep 4: Verifying connection was recreated...")
+        connections_after = self.datazone_client.list_connections(
+            domainIdentifier=self.domain_id,
+            projectIdentifier=self.project_id,
+            maxResults=50
+        )
+        new_conn = None
+        for conn in connections_after.get('items', []):
+            if conn.get('name') == 'mlflow-test-change':
+                new_conn = conn
+                break
+        
+        assert new_conn, "MLflow connection not found after update"
+        new_id = new_conn.get('connectionId')
+        new_arn = new_conn.get('props', {}).get('mlflowProperties', {}).get('trackingServerArn')
+        
+        print(f"✅ New connection: {new_id}, ARN: {new_arn}")
+        
+        # Verify ID changed (recreated)
+        assert new_id != original_id, f"Connection ID should change (delete+recreate), but stayed {original_id}"
+        
+        # Verify ARN updated
+        assert 'updated-server' in new_arn, f"ARN should contain 'updated-server', got: {new_arn}"
+        assert 'original-server' not in new_arn, f"ARN should not contain 'original-server', got: {new_arn}"
+        
+        print("\n🎉 MLflow property change test completed successfully!")
+        print(f"   - Original: {original_id} → {original_arn}")
+        print(f"   - Updated:  {new_id} → {new_arn}")
+        print("   - Connection was deleted and recreated (ID changed)")

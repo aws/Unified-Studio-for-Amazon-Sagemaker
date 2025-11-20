@@ -109,16 +109,20 @@ jobs:
         run: |
           echo "🔍 DOMAIN_REGION: $DOMAIN_REGION"
           echo "🔍 DEV_DOMAIN_REGION: $DEV_DOMAIN_REGION"
+          BUNDLE_DIR="${{ runner.temp }}/smus-bundles-${{ github.run_id }}"
+          mkdir -p "$BUNDLE_DIR"
+          echo "BUNDLE_DIR=$BUNDLE_DIR" >> $GITHUB_ENV
           cd experimental/SMUS-CICD-pipeline-cli
           smus-cli bundle \
             --manifest ../../${{ inputs.manifest_path }} \
-            --target dev
+            --target dev \
+            --output-dir "$BUNDLE_DIR"
       
       - name: Upload bundle artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ github.event.repository.name }}-bundle
-          path: experimental/SMUS-CICD-pipeline-cli/examples/**/bundles/*.zip
+          path: ${{ env.BUNDLE_DIR }}/*.zip
           if-no-files-found: error
 
   validate:
@@ -174,7 +178,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ${{ github.event.repository.name }}-bundle
-          path: experimental/SMUS-CICD-pipeline-cli/examples/
+          path: ${{ runner.temp }}/smus-bundles-${{ github.run_id }}
       
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -217,10 +221,19 @@ jobs:
         run: |
           echo "🔍 DOMAIN_REGION: $DOMAIN_REGION"
           echo "🔍 TEST_DOMAIN_REGION: $TEST_DOMAIN_REGION"
+          BUNDLE_FILE=$(ls ${{ runner.temp }}/smus-bundles-${{ github.run_id }}/*.zip 2>/dev/null | head -1 || echo "")
+          if [ -n "$BUNDLE_FILE" ]; then
+            echo "🔍 Using bundle: $BUNDLE_FILE"
+            BUNDLE_ARG="--bundle-archive-path $BUNDLE_FILE"
+          else
+            echo "🔍 No bundle found, deploying without bundle"
+            BUNDLE_ARG=""
+          fi
           cd experimental/SMUS-CICD-pipeline-cli
           smus-cli deploy \
             --manifest ../../${{ inputs.manifest_path }} \
-            --targets ${{ inputs.test_target }}
+            --targets ${{ inputs.test_target }} \
+            $BUNDLE_ARG
 
   test:
     name: Run Tests
@@ -284,7 +297,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: ${{ github.event.repository.name }}-bundle
-          path: experimental/SMUS-CICD-pipeline-cli/examples/
+          path: ${{ runner.temp }}/smus-bundles-${{ github.run_id }}
       
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -327,7 +340,16 @@ jobs:
         run: |
           echo "🔍 DOMAIN_REGION: $DOMAIN_REGION"
           echo "🔍 PROD_DOMAIN_REGION: $PROD_DOMAIN_REGION"
+          BUNDLE_FILE=$(ls ${{ runner.temp }}/smus-bundles-${{ github.run_id }}/*.zip 2>/dev/null | head -1 || echo "")
+          if [ -n "$BUNDLE_FILE" ]; then
+            echo "🔍 Using bundle: $BUNDLE_FILE"
+            BUNDLE_ARG="--bundle-archive-path $BUNDLE_FILE"
+          else
+            echo "🔍 No bundle found, deploying without bundle"
+            BUNDLE_ARG=""
+          fi
           cd experimental/SMUS-CICD-pipeline-cli
           smus-cli deploy \
             --manifest ../../${{ inputs.manifest_path }} \
-            --targets ${{ inputs.prod_target }}
+            --targets ${{ inputs.prod_target }} \
+            $BUNDLE_ARG
