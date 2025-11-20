@@ -115,47 +115,67 @@ def create_connection(
                     "connection_id": connection_id,
                 }
 
-            # Update connection with new properties
-            typer.echo(f"🔄 Updating connection '{name}'")
-            datazone_client.update_connection(
-                domainIdentifier=domain_id,
-                identifier=connection_id,
-                props=desired_props,
-            )
-            typer.echo(f"✅ Connection '{name}' updated: {connection_id}")
-            return {
-                "action": "datazone.create_connection",
-                "status": "updated",
-                "connection_id": connection_id,
-            }
+            # MLflow connections cannot be updated - delete and recreate
+            if connection_type == "MLFLOW":
+                typer.echo(
+                    f"🔄 MLflow connection properties changed, deleting and recreating '{name}'"
+                )
+                try:
+                    datazone_client.delete_connection(
+                        domainIdentifier=domain_id, identifier=connection_id
+                    )
+                    typer.echo(f"✅ Deleted old MLflow connection: {connection_id}")
+                except Exception as delete_error:
+                    typer.echo(
+                        f"❌ Failed to delete MLflow connection '{name}': {delete_error}"
+                    )
+                    raise
+
+                # Create new connection (fall through to creation logic below)
+                existing_connection = None
+            else:
+                # Update connection with new properties
+                typer.echo(f"🔄 Updating connection '{name}'")
+                datazone_client.update_connection(
+                    domainIdentifier=domain_id,
+                    identifier=connection_id,
+                    props=desired_props,
+                )
+                typer.echo(f"✅ Connection '{name}' updated: {connection_id}")
+                return {
+                    "action": "datazone.create_connection",
+                    "status": "updated",
+                    "connection_id": connection_id,
+                }
 
         except Exception as e:
             typer.echo(f"❌ Failed to update connection '{name}': {e}")
             raise
 
-    # Create new connection
-    typer.echo(
-        f"🔗 Creating {connection_type} connection '{name}' in environment {environment_id}"
-    )
-
-    try:
-        connection_id = creator.create_connection(
-            environment_id=environment_id,
-            name=name,
-            connection_type=connection_type,
-            **properties,
+    # Create new connection (either new or MLflow recreate)
+    if not existing_connection:
+        typer.echo(
+            f"🔗 Creating {connection_type} connection '{name}' in environment {environment_id}"
         )
 
-        typer.echo(f"✅ Connection '{name}' created: {connection_id}")
-        return {
-            "action": "datazone.create_connection",
-            "status": "created",
-            "connection_id": connection_id,
-        }
+        try:
+            connection_id = creator.create_connection(
+                environment_id=environment_id,
+                name=name,
+                connection_type=connection_type,
+                **properties,
+            )
 
-    except Exception as e:
-        typer.echo(f"❌ Failed to create connection '{name}': {e}")
-        raise
+            typer.echo(f"✅ Connection '{name}' created: {connection_id}")
+            return {
+                "action": "datazone.create_connection",
+                "status": "created",
+                "connection_id": connection_id,
+            }
+
+        except Exception as e:
+            typer.echo(f"❌ Failed to create connection '{name}': {e}")
+            raise
 
 
 def create_domain(action: BootstrapAction, context: Dict[str, Any]) -> Dict[str, Any]:
