@@ -82,49 +82,6 @@ smus-cli test --manifest manifest.yaml --targets test
 
 ---
 
-## Key Features
-
-### 🚀 Automated Deployment
-- **Application Manifest** - Define your application content, workflows, and deployment targets in YAML
-- **Flexible Deployment** - Bundle-based (artifact) or direct (git-based) deployment modes
-- **Multi-Target Deployment** - Deploy to test and prod with a single command
-- **Environment Variables** - Dynamic configuration using `${VAR}` substitution
-- **Version Control** - Track deployments in S3 or git for deployment history
-
-### 🔍 Testing & Validation
-- **Automated Tests** - Run validation tests before promoting to production
-- **Quality Gates** - Block deployments if tests fail
-- **Workflow Monitoring** - Track execution status and logs
-- **Health Checks** - Verify deployment correctness
-
-### 🔄 CI/CD Pipeline Integration
-- **GitHub Actions** - Pre-built CI/CD pipeline workflows for automated deployment
-- **GitLab CI** - Native support for GitLab CI/CD pipelines
-- **Environment Variables** - Flexible configuration for any CI/CD platform
-- **Webhook Support** - Trigger deployments from external events
-
-### 🏗️ Infrastructure Management
-- **Project Creation** - Automatically provision SageMaker Unified Studio projects
-- **Connection Setup** - Configure S3, Airflow, Athena, and Lakehouse connections
-- **Resource Mapping** - Link AWS resources to project connections
-- **Permission Management** - Control access and collaboration
-
-### ⚡ Bootstrap Actions
-- **Automated Workflow Execution** - Trigger workflows automatically during deployment with `workflow.run` (use `trailLogs: true` to stream logs and wait for completion)
-- **Log Retrieval** - Fetch workflow logs for validation and debugging with `workflow.logs`
-- **QuickSight Dataset Refresh** - Automatically refresh dashboards after ETL deployment with `quicksight.refresh_dataset`
-- **EventBridge Integration** - Emit custom events for downstream automation and CI/CD orchestration with `eventbridge.put_events`
-- **DataZone Connections** - Provision MLflow and other service connections during deployment
-- **Sequential Execution** - Actions run in order during `smus-cli deploy` for reliable initialization and validation
-
-### 📊 Catalog Integration
-- **Asset Discovery** - Automatically find required catalog assets (Glue, Lake Formation, DataZone)
-- **Subscription Management** - Request access to tables and datasets
-- **Approval Workflows** - Handle cross-project data access
-- **Asset Tracking** - Monitor catalog dependencies
-
----
-
 ## What Can You Deploy?
 
 **📊 Analytics & BI**
@@ -223,6 +180,25 @@ manifest.yaml          smus-cli deploy                    GitHub Actions
 - **CI/CD workflows are generic** - same workflow works for Glue apps, SageMaker apps, or Bedrock apps
 - Both teams work independently using their expertise
 
+**Example workflow:**
+
+```
+1. Data Team                    2. DevOps Team                 3. SMUS CLI (The Abstraction)
+   ↓                               ↓                              ↓
+Creates manifest.yaml          Creates generic workflow       Workflow calls:
+- Glue jobs                    - Test on merge                smus-cli deploy --manifest manifest.yaml
+- SageMaker training           - Approval for prod              ↓
+- Athena queries               - Security scans               CLI handles ALL AWS complexity:
+- S3 locations                 - Notification rules           - DataZone APIs
+                                                              - Glue/Athena/SageMaker APIs
+                               Works for ANY app!             - MWAA deployment
+                               No AWS knowledge needed!       - S3 management
+                                                              - IAM configuration
+                                                              - Infrastructure provisioning
+                                                                ↓
+                                                              Success!
+```
+
 ---
 
 ### Application Manifest
@@ -290,33 +266,6 @@ GitHub Actions workflows (or other CI/CD systems) that automate deployment:
 - Command: `smus-cli deploy --manifest manifest.yaml --stage test`
 
 Both modes work with any combination of storage and git content sources.
-
----
-
-### How It All Works Together
-
-```
-1. Data Team                    2. DevOps Team                 3. SMUS CLI (The Abstraction)
-   ↓                               ↓                              ↓
-Creates manifest.yaml          Creates generic workflow       Workflow calls:
-- Glue jobs                    - Test on merge                smus-cli deploy --manifest manifest.yaml
-- SageMaker training           - Approval for prod              ↓
-- Athena queries               - Security scans               CLI handles ALL AWS complexity:
-- S3 locations                 - Notification rules           - DataZone APIs
-                                                              - Glue/Athena/SageMaker APIs
-                               Works for ANY app!             - MWAA deployment
-                               No AWS knowledge needed!       - S3 management
-                                                              - IAM configuration
-                                                              - Infrastructure provisioning
-                                                                ↓
-                                                              Success!
-```
-
-**The beauty:** 
-- Data teams never learn GitHub Actions
-- **DevOps teams never call AWS APIs** - the CLI encapsulates all AWS analytics, ML, and SMUS complexity
-- CI/CD workflows are simple: just call `smus-cli deploy`
-- Same workflow works for ANY application, regardless of AWS services used
 
 ---
 
@@ -656,6 +605,8 @@ stages:
 | Version control integration | ✅ | [GitHub Actions](docs/github-actions-integration.md) |
 
 ### Deployment & Bundling
+**Automated Deployment** - Define your application content, workflows, and deployment targets in YAML. Bundle-based (artifact) or direct (git-based) deployment modes. Deploy to test and prod with a single command. Dynamic configuration using `${VAR}` substitution. Track deployments in S3 or git for deployment history.
+
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Artifact bundling | ✅ | [Bundle Command](docs/cli-commands.md#bundle) |
@@ -676,6 +627,8 @@ stages:
 | VS Code extension | 🔮 | IntelliSense and validation |
 
 ### Configuration
+**Environment Variables & Dynamic Configuration** - Flexible configuration for any environment using variable substitution. Environment-specific settings with validation and connection management.
+
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Variable substitution | ✅ | [Substitutions Guide](docs/substitutions-and-variables.md) |
@@ -685,6 +638,8 @@ stages:
 | Connection management | ✅ | [Connections Guide](docs/connections.md) |
 
 ### Resources & Workloads
+**Deploy Any AWS Service** - Airflow DAGs, Jupyter notebooks, Glue ETL jobs, Athena queries, SageMaker training and endpoints, QuickSight dashboards, Bedrock agents, Lambda functions, EMR jobs, and Redshift queries.
+
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Airflow DAGs | ✅ | [Workflows](docs/manifest-schema.md#workflows) |
@@ -700,6 +655,8 @@ stages:
 | Redshift queries | ✅ | [RedshiftDataOperator](docs/airflow-aws-operators.md#amazon-redshift) |
 
 ### Bootstrap Actions
+**Automated Workflow Execution & Event-Driven Workflows** - Trigger workflows automatically during deployment with `workflow.run` (use `trailLogs: true` to stream logs and wait for completion). Fetch workflow logs for validation and debugging with `workflow.logs`. Automatically refresh QuickSight dashboards after ETL deployment with `quicksight.refresh_dataset`. Emit custom events for downstream automation and CI/CD orchestration with `eventbridge.put_events`. Provision MLflow and other DataZone connections during deployment. Actions run in order during `smus-cli deploy` for reliable initialization and validation.
+
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Workflow execution | ✅ | [workflow.run](docs/bootstrap-actions.md#workflowrun---trigger-workflow-execution) |
@@ -710,6 +667,8 @@ stages:
 | Sequential execution | ✅ | [Execution Flow](docs/bootstrap-actions.md#execution-flow) |
 
 ### CI/CD Integration
+**Pre-built CI/CD Pipeline Workflows** - GitHub Actions, GitLab CI, Azure DevOps, and Jenkins support for automated deployment. Flexible configuration for any CI/CD platform. Trigger deployments from external events with webhook support.
+
 | Feature | Status | Notes |
 |---------|--------|-------|
 | GitHub Actions | ✅ | [GitHub Actions Guide](docs/github-actions-integration.md) |
@@ -720,6 +679,8 @@ stages:
 | OIDC federation | ✅ | [GitHub Actions Guide](docs/github-actions-integration.md) |
 
 ### Testing & Validation
+**Automated Tests & Quality Gates** - Run validation tests before promoting to production. Block deployments if tests fail. Track execution status and logs. Verify deployment correctness with health checks.
+
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Unit testing | ✅ | [Test Command](docs/cli-commands.md#test) |

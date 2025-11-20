@@ -222,6 +222,22 @@ jobs:
             --manifest ../../${{ inputs.manifest_path }} \
             --targets ${{ inputs.test_target }} \
             --bundle-archive-path "$BUNDLE_FILE"
+      
+      - name: Download workflow output notebooks
+        if: always()
+        continue-on-error: true
+        run: |
+          cd experimental/SMUS-CICD-pipeline-cli
+          
+          # Extract workflow name from manifest path
+          WORKFLOW_NAME=$(basename $(dirname ${{ inputs.manifest_path }}))
+          FULL_WORKFLOW_NAME="IntegrationTest${WORKFLOW_NAME^}_test_marketing_*"
+          
+          echo "📥 Downloading outputs for workflow: $FULL_WORKFLOW_NAME"
+          python3 tests/scripts/download_workflow_outputs_from_xcom.py \
+            "$FULL_WORKFLOW_NAME" \
+            --region ${{ vars.DOMAIN_REGION }} \
+            --output-dir tests/test-outputs/notebooks || echo "⚠️ No outputs found or download failed"
 
   test:
     name: Run Tests
