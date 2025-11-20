@@ -150,11 +150,6 @@ def deploy_command(
 
         target_info = build_target_info(stage_name, target_config)
         metadata = collect_metadata(manifest)
-
-        # Always initialize metadata as dict for internal state
-        if metadata is None:
-            metadata = {}
-
         typer.echo(f"🔍 Metadata collected: {bool(metadata)}")
 
         # Emit deploy started event
@@ -184,14 +179,10 @@ def deploy_command(
             # Get comprehensive project info for bootstrap actions
             from ..helpers.utils import get_datazone_project_info
 
-            project_info = get_datazone_project_info(target_config.project.name, config)
+            project_info = get_datazone_project_info(
+                target_config.project.name, config
+            )
             metadata["project_info"] = project_info
-            typer.echo(
-                f"🔍 DEBUG: Added project_info to metadata: {project_info is not None}"
-            )
-            typer.echo(
-                f"🔍 DEBUG: metadata keys after adding project_info: {list(metadata.keys())}"
-            )
 
             # Emit project init completed
             project_info_event = {
@@ -244,12 +235,6 @@ def deploy_command(
             # Process bootstrap actions (after deployment completes)
             if target_config.bootstrap:
                 typer.echo("Processing bootstrap actions...")
-                typer.echo(
-                    f"🔍 DEBUG: metadata keys before bootstrap: {list(metadata.keys()) if metadata else 'None'}"
-                )
-                typer.echo(
-                    f"🔍 DEBUG: metadata has project_info: {'project_info' in metadata if metadata else False}"
-                )
                 _process_bootstrap_actions(
                     target_config, stage_name, config, manifest, metadata
                 )
@@ -548,11 +533,10 @@ def _deploy_bundle_to_target(
 
     # Workflow creation now handled by workflow.create bootstrap action
     # S3 location passed to bootstrap via metadata
-    if metadata is None:
-        metadata = {}
-    metadata["s3_bucket"] = s3_bucket
-    metadata["s3_prefix"] = s3_prefix
-    metadata["bundle_path"] = bundle_path
+    if metadata is not None:
+        metadata["s3_bucket"] = s3_bucket
+        metadata["s3_prefix"] = s3_prefix
+        metadata["bundle_path"] = bundle_path
 
     # Process catalog assets if configured
     asset_success = _process_catalog_assets(
