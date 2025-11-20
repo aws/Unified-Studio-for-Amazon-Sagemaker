@@ -80,13 +80,53 @@ jobs:
         continue-on-error: true
         run: |
           cd experimental/SMUS-CICD-pipeline-cli
-          WORKFLOW_NAME=$(basename $(dirname ${{ inputs.manifest_path }}))
-          FULL_WORKFLOW_NAME="IntegrationTest${WORKFLOW_NAME^}_test_marketing_*"
-          echo "📥 Downloading outputs for workflow: $FULL_WORKFLOW_NAME"
-          python3 tests/scripts/download_workflow_outputs_from_xcom.py \
-            "$FULL_WORKFLOW_NAME" \
-            --region ${{ vars.DOMAIN_REGION }} \
-            --output-dir tests/test-outputs/notebooks || echo "⚠️ No outputs found"
+          
+          # Extract workflow names from manifest
+          python3 << 'EOF'
+          import yaml
+          import sys
+          
+          manifest_path = "../../${{ inputs.manifest_path }}"
+          try:
+              with open(manifest_path, 'r') as f:
+                  manifest = yaml.safe_load(f)
+              
+              app_name = manifest.get('applicationName', '')
+              workflows = manifest.get('content', {}).get('workflows', [])
+              
+              if not workflows:
+                  print("No workflows found in manifest")
+                  sys.exit(0)
+              
+              # Get project name from test target
+              project_name = "${{ inputs.test_target }}-marketing"
+              
+              # Download outputs for each workflow
+              for workflow in workflows:
+                  workflow_name = workflow.get('workflowName', '')
+                  if workflow_name:
+                      full_name = f"{app_name}_{project_name}_{workflow_name}"
+                      print(f"📥 Downloading outputs for workflow: {full_name}")
+                      
+                      import subprocess
+                      result = subprocess.run([
+                          'python3', 'tests/scripts/download_workflow_outputs_from_xcom.py',
+                          full_name,
+                          '--region', '${{ vars.DOMAIN_REGION }}',
+                          '--output-dir', 'tests/test-outputs/notebooks'
+                      ], capture_output=True, text=True)
+                      
+                      if result.returncode == 0:
+                          print(f"✅ Downloaded outputs for {workflow_name}")
+                      else:
+                          print(f"⚠️ No outputs found for {workflow_name}")
+                          if result.stdout:
+                              print(result.stdout)
+          
+          except Exception as e:
+              print(f"❌ Error downloading notebooks: {e}")
+              sys.exit(0)  # Don't fail the workflow
+          EOF
 
   test:
     name: Run Tests
