@@ -19,6 +19,14 @@ def _get_datazone_client(region: str):
     return boto3.client("datazone", region_name=region)
 
 
+def _get_datazone_internal_client(region: str):
+    """Create DataZone-internal client for project operations with customerProvidedRoleConfigs support."""
+    endpoint_url = os.environ.get("DATAZONE_ENDPOINT_URL")
+    if endpoint_url:
+        return boto3.client("datazone-internal", region_name=region, endpoint_url=endpoint_url)
+    return boto3.client("datazone-internal", region_name=region)
+
+
 def resolve_domain_id(
     domain_name: Optional[str] = None,
     domain_tags: Optional[Dict[str, str]] = None,
