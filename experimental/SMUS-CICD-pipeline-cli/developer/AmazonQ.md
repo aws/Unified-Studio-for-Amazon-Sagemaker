@@ -711,3 +711,124 @@ endpoint = "https://airflow-serverless.us-east-1.api.aws/"
 endpoint = os.environ.get('AIRFLOW_SERVERLESS_ENDPOINT', 
                          f'https://airflow-serverless.{region}.api.aws/')
 ```
+
+## GitHub Deployment Workflows
+
+### Approval Protocol
+
+**Q Must Ask Before:**
+- ✋ Committing code changes
+- ✋ Pushing to remote repository
+- ✋ Triggering workflows
+- ✋ Deleting files or branches
+- ✋ Merging branches
+
+**Q Can Do Without Asking:**
+- ✅ Reading files
+- ✅ Analyzing logs
+- ✅ Running local tests
+- ✅ Checking git status
+- ✅ Monitoring workflow status
+- ✅ Suggesting fixes
+
+**Approval Keywords:**
+- "yes" / "ok" / "do it" / "fix" / "apply" → Proceed
+- "no" / "wait" / "stop" / "don't" → Do not proceed
+- "show me" / "what would" / "options" → Explain without doing
+
+### Triggering Workflows
+```bash
+# Trigger all workflows
+bash experimental/SMUS-CICD-pipeline-cli/scripts/trigger-workflows.sh all
+
+# Trigger specific workflow
+bash experimental/SMUS-CICD-pipeline-cli/scripts/trigger-workflows.sh genai
+bash experimental/SMUS-CICD-pipeline-cli/scripts/trigger-workflows.sh ml-training
+```
+
+### Monitoring Workflows
+```bash
+# List recent workflow runs
+gh run list --branch <branch-name> --limit 10
+
+# View specific run
+gh run view <run-id>
+
+# View specific job
+gh run view <run-id> --job <job-id>
+
+# Get logs from failed job
+gh api repos/aws/Unified-Studio-for-Amazon-Sagemaker/actions/jobs/<job-id>/logs
+
+# Search for errors in logs
+gh api repos/aws/Unified-Studio-for-Amazon-Sagemaker/actions/jobs/<job-id>/logs | grep -A 20 "Error"
+```
+
+### 4-Phase Workflow Process
+
+**1. Analysis Phase**
+- Monitor GitHub workflow runs
+- Download logs from failed jobs
+- Analyze errors and identify root cause
+- Suggest specific fixes with code examples
+
+**2. Approval Phase**
+- Wait for user approval before committing/pushing/triggering
+- User reviews suggested fixes
+- User explicitly approves with keywords
+
+**3. Implementation Phase**
+- Apply the fix
+- Run unit tests locally
+- Commit with descriptive message
+- Push to branch
+- Trigger workflows if needed
+
+**4. Monitoring Phase**
+- Check workflow status
+- Report success/failure
+- If failure, return to Analysis Phase
+
+### Bundle Artifact Pattern
+
+Use temp directory with unique run ID to prevent stale artifacts:
+
+```yaml
+# Bundle step
+BUNDLE_DIR="${{ runner.temp }}/smus-bundles-${{ github.run_id }}"
+smus-cli bundle --output-dir "$BUNDLE_DIR"
+
+# Upload
+path: ${{ env.BUNDLE_DIR }}/*.zip
+
+# Download
+path: ${{ runner.temp }}/smus-bundles-${{ github.run_id }}
+
+# Deploy
+BUNDLE_FILE=$(ls ${{ runner.temp }}/smus-bundles-${{ github.run_id }}/*.zip | head -1)
+smus-cli deploy --bundle-archive-path "$BUNDLE_FILE"
+```
+
+**Impact:** Clean isolation per run, no stale artifacts, guaranteed only uploads what was just created.
+
+### Common Workflow Failures
+
+**Environment Protection**
+- Error: "Branch not allowed to deploy to dev-aws-account"
+- Cause: Branch not in environment's allowed deployment branches
+- Fix: Add branch to environment protection rules or use different branch
+
+**Bundle Not Found**
+- Error: "No files were found with the provided path"
+- Cause: Bundle path mismatch between creation and upload
+- Fix: Use temp directory approach (see Bundle Artifact Pattern above)
+
+**DataZone API Errors**
+- Error: "Unknown parameter in input: customerProvidedRoleConfigs"
+- Cause: Missing DataZone model registration
+- Fix: Register model with `aws configure add-model`
+
+**Project Creation Failures**
+- Error: "Failed to create project"
+- Cause: Missing project info in metadata or invalid API parameters
+- Fix: Ensure metadata initialization and DataZone model registration
