@@ -53,15 +53,6 @@ dev = [
 [project.scripts]
 smus-cli = "smus_cicd.cli:app"
 
-[tool.coverage.run]
-data_file = "tests/test-outputs/.coverage"
-
-[tool.coverage.html]
-directory = "tests/test-outputs/coverage"
-
-[tool.coverage.xml]
-output = "tests/test-outputs/coverage.xml"
-
 [project.urls]
 Homepage = "https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker"
 "Bug Tracker" = "https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/issues"

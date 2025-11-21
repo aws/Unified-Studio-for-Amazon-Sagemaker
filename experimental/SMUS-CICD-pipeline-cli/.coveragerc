@@ -1,0 +1,18 @@
+[run]
+data_file = tests/test-outputs/.coverage
+source = src/smus_cicd
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+
+[html]
+directory = tests/test-outputs/coverage
+
+[xml]
+output = tests/test-outputs/coverage.xml
