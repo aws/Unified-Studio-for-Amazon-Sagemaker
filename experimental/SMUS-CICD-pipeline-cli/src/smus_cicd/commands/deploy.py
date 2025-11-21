@@ -578,9 +578,11 @@ def _resolve_and_upload_workflows(
 
     # Get domain_id from project_info
     domain_id = project_info.get("domain_id") if project_info else None
-    typer.echo(f"  🔍 DEBUG: project_info keys: {list(project_info.keys()) if project_info else 'None'}")
+    typer.echo(
+        f"  🔍 DEBUG: project_info keys: {list(project_info.keys()) if project_info else 'None'}"
+    )
     typer.echo(f"  🔍 DEBUG: domain_id: {domain_id}")
-    
+
     if not domain_id:
         typer.echo("  ⚠️ No domain_id available, skipping workflow resolution")
         return
