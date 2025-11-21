@@ -57,3 +57,4 @@ class TestDomainConfigGetName:
         """Test get_name returns None when neither name nor tags are set."""
         config = DomainConfig(region="us-east-1")
         assert config.get_name() is None
+# Trigger workflow - Fri Nov 21 16:56:07 EST 2025
