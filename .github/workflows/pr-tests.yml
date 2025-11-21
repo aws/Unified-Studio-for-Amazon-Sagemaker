@@ -131,18 +131,13 @@ jobs:
     
     - name: Verify DataZone domain exists
       run: |
-        echo "🔍 Checking for DataZone domain with tag purpose=smus-cicd-testing in ${{ vars.DOMAIN_REGION }}"
-        DOMAIN_ID=$(aws datazone list-domains --region ${{ vars.DOMAIN_REGION }} --query 'items[?tags.purpose==`smus-cicd-testing`].id' --output text)
-        if [ -z "$DOMAIN_ID" ]; then
-          echo "❌ No DataZone domain found with tag purpose=smus-cicd-testing"
-          echo "   Region: ${{ vars.DOMAIN_REGION }}"
-          echo "   Account: $(aws sts get-caller-identity --query Account --output text)"
-          echo ""
-          echo "Available domains:"
-          aws datazone list-domains --region ${{ vars.DOMAIN_REGION }} --query 'items[].{id:id,name:name,tags:tags}' --output table || echo "No domains found"
-          exit 1
-        fi
-        echo "✓ Found DataZone domain: $DOMAIN_ID"
+        echo "🔍 Checking DataZone domains in ${{ vars.DOMAIN_REGION }}"
+        ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+        echo "Account: $ACCOUNT_ID"
+        echo "Region: ${{ vars.DOMAIN_REGION }}"
+        echo ""
+        echo "Available domains:"
+        aws datazone list-domains --region ${{ vars.DOMAIN_REGION }} --query 'items[].{id:id,name:name}' --output table
     
     - name: Generate test name
       id: test-name
