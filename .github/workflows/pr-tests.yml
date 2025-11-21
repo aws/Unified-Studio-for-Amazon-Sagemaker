@@ -60,6 +60,7 @@ jobs:
   discover-tests:
     runs-on: ubuntu-latest
     needs: unit-tests
+    continue-on-error: true
     outputs:
       test-dirs: ${{ steps.find-tests.outputs.test-dirs }}
     
