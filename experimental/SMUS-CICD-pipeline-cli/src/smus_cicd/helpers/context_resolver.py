@@ -52,7 +52,7 @@ class ContextResolver:
         iam_role = datazone.get_project_user_role_arn(
             self.project_name, self.domain_name, self.region
         )
-        
+
         if not iam_role:
             raise ValueError(
                 f"Failed to get IAM role for project '{self.project_name}' "

@@ -147,7 +147,9 @@ def handle_workflow_create(
 
             s3_client.upload_file(temp_yaml.name, s3_bucket, s3_key)
             typer.echo(f"✅ Resolved variables in {s3_key}")
-            typer.echo(f"🔍 DEBUG: Resolved content preview (first 500 chars):\n{resolved_content[:500]}")
+            typer.echo(
+                f"🔍 DEBUG: Resolved content preview (first 500 chars):\n{resolved_content[:500]}"
+            )
         except Exception as e:
             typer.echo(f"❌ Error resolving variables in {s3_key}: {e}")
             return False
@@ -156,19 +158,25 @@ def handle_workflow_create(
 
         # Create workflow
         s3_location = f"s3://{s3_bucket}/{s3_key}"
-        
+
         # Verify the YAML in S3 before creating workflow
         typer.echo(f"🔍 DEBUG: About to create/update workflow from S3: {s3_location}")
-        verify_temp = tempfile.NamedTemporaryFile(mode="r", suffix=".yaml", delete=False)
+        verify_temp = tempfile.NamedTemporaryFile(
+            mode="r", suffix=".yaml", delete=False
+        )
         try:
             s3_client.download_file(s3_bucket, s3_key, verify_temp.name)
             with open(verify_temp.name, "r") as f:
                 s3_content = f.read()
-            typer.echo(f"🔍 DEBUG: S3 YAML content (first 800 chars):\n{s3_content[:800]}")
+            typer.echo(
+                f"🔍 DEBUG: S3 YAML content (first 800 chars):\n{s3_content[:800]}"
+            )
             if "SMUSCICDTestRole" in s3_content:
                 typer.echo("⚠️ WARNING: S3 YAML still contains 'SMUSCICDTestRole'!")
             if "{proj.iam_role_name}" in s3_content:
-                typer.echo("⚠️ WARNING: S3 YAML still contains unresolved '{proj.iam_role_name}'!")
+                typer.echo(
+                    "⚠️ WARNING: S3 YAML still contains unresolved '{proj.iam_role_name}'!"
+                )
         finally:
             os.unlink(verify_temp.name)
 
