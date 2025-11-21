@@ -60,7 +60,6 @@ jobs:
   discover-tests:
     runs-on: ubuntu-latest
     needs: unit-tests
-    continue-on-error: true
     outputs:
       test-dirs: ${{ steps.find-tests.outputs.test-dirs }}
     
@@ -72,25 +71,15 @@ jobs:
       run: |
         cd experimental/SMUS-CICD-pipeline-cli/tests/integration
         
-        # Find all directories with test_*.py files, excluding analytics
-        test_dirs=$(find . -maxdepth 2 -name "test_*.py" -not -path "*/examples-analytics-workflows/*" | \
+        # Find all directories with test_*.py files, excluding analytics and current dir
+        test_dirs=$(find . -mindepth 1 -maxdepth 2 -name "test_*.py" -not -path "*/examples-analytics-workflows/*" | \
           xargs -I {} dirname {} | \
           sort -u | \
           sed 's|^\./||' | \
-          grep -v '^$' | \
-          grep -v '^\.$' | \
           jq -R -s -c 'split("\n") | map(select(length > 0))')
         
-        # Also find standalone test files in root
-        test_files=$(find . -maxdepth 1 -name "test_*.py" | \
-          sed 's|^\./||' | \
-          jq -R -s -c 'split("\n") | map(select(length > 0))')
-        
-        # Combine and create test matrix
-        all_tests=$(echo "$test_dirs $test_files" | jq -s 'add | unique')
-        
-        echo "test-dirs=$all_tests" >> $GITHUB_OUTPUT
-        echo "Found tests: $all_tests"
+        echo "test-dirs=$test_dirs" >> $GITHUB_OUTPUT
+        echo "Found tests: $test_dirs"
 
   integration-tests:
     runs-on: ubuntu-latest
