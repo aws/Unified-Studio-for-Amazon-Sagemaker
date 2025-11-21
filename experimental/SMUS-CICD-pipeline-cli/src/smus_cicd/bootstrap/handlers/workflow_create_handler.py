@@ -101,10 +101,12 @@ def handle_workflow_create(
         stage_name=stage_name,
         env_vars=target_config.environment_variables or {},
     )
-    
+
     # Debug: Show what's in the resolver context
     context = resolver._build_context()
-    typer.echo(f"🔍 DEBUG: Resolver context proj.iam_role_name = {context['proj'].get('iam_role_name', 'NOT FOUND')}")
+    typer.echo(
+        f"🔍 DEBUG: Resolver context proj.iam_role_name = {context['proj'].get('iam_role_name', 'NOT FOUND')}"
+    )
 
     s3_client = boto3.client("s3", region_name=region)
     workflows_created = []
