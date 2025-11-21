@@ -548,7 +548,13 @@ def _deploy_bundle_to_target(
                     bucket = parts[0]
                     prefix = parts[1] if len(parts) > 1 else ""
                     _resolve_and_upload_workflows(
-                        bucket, prefix, target_config, config, stage_name, project_info
+                        bucket,
+                        prefix,
+                        target_config,
+                        config,
+                        stage_name,
+                        project_info,
+                        manifest,
                     )
 
     # Process catalog assets if configured
@@ -569,13 +575,13 @@ def _resolve_and_upload_workflows(
     config: Dict[str, Any],
     stage_name: Optional[str] = None,
     project_info: Optional[Dict[str, Any]] = None,
+    manifest=None,
 ) -> None:
     """Resolve variables in workflow YAML files and re-upload to S3."""
     import boto3
     import tempfile
+    import yaml
     from ..helpers.context_resolver import ContextResolver
-
-    typer.echo("\n🔄 Resolving workflow variables...")
 
     region = config.get("region", "us-east-1")
     s3_client = boto3.client("s3", region_name=region)
@@ -583,13 +589,19 @@ def _resolve_and_upload_workflows(
 
     # Get domain_id from project_info
     domain_id = project_info.get("domain_id") if project_info else None
-    typer.echo(
-        f"  🔍 DEBUG: project_info keys: {list(project_info.keys()) if project_info else 'None'}"
-    )
-    typer.echo(f"  🔍 DEBUG: domain_id: {domain_id}")
-
     if not domain_id:
         typer.echo("  ⚠️ No domain_id available, skipping workflow resolution")
+        return
+
+    # Get workflow names from manifest content.workflows
+    workflow_names = set()
+    if manifest and manifest.content and manifest.content.workflows:
+        workflow_names = {wf.workflowName for wf in manifest.content.workflows}
+        typer.echo(
+            f"\n🔄 Resolving variables for workflows: {', '.join(workflow_names)}"
+        )
+    else:
+        typer.echo("  ⚠️ No workflows defined in manifest, skipping resolution")
         return
 
     # Initialize resolver
@@ -613,9 +625,7 @@ def _resolve_and_upload_workflows(
             if not s3_key.endswith((".yaml", ".yml")):
                 continue
 
-            typer.echo(f"  Resolving {s3_key}...")
-
-            # Download, resolve, upload
+            # Download and check if it's a workflow YAML
             with tempfile.NamedTemporaryFile(
                 mode="w+", suffix=".yaml", delete=False
             ) as temp_file:
@@ -624,9 +634,33 @@ def _resolve_and_upload_workflows(
 
                     with open(temp_file.name, "r") as f:
                         content = f.read()
+                        yaml_data = yaml.safe_load(content)
 
-                    resolved_content = resolver.resolve(content)
+                    # Check if this is a workflow YAML and if it's in our workflow list
+                    if not _is_workflow_yaml(yaml_data):
+                        continue
 
+                    # Get workflow name from YAML
+                    workflow_name = next(iter(yaml_data.keys()))
+                    if workflow_name not in workflow_names:
+                        typer.echo(
+                            f"  ⏭️  Skipping {s3_key} (workflow '{workflow_name}' not in manifest)"
+                        )
+                        continue
+
+                    typer.echo(f"  Resolving {s3_key}...")
+
+                    # Resolve variables
+                    try:
+                        resolved_content = resolver.resolve(content)
+                    except ValueError as e:
+                        # Resolution failed - this is a critical error
+                        typer.echo(f"  ❌ Failed to resolve {s3_key}: {e}")
+                        raise Exception(
+                            f"Cannot resolve variables in workflow '{workflow_name}': {e}"
+                        )
+
+                    # Upload resolved content
                     with open(temp_file.name, "w") as f:
                         f.write(resolved_content)
 
@@ -636,7 +670,25 @@ def _resolve_and_upload_workflows(
                     os.unlink(temp_file.name)
 
     except Exception as e:
-        typer.echo(f"  ⚠️ Error resolving workflows: {e}")
+        typer.echo(f"  ❌ Error resolving workflows: {e}")
+        raise
+
+
+def _is_workflow_yaml(yaml_data: dict) -> bool:
+    """Detect if YAML is an Airflow workflow definition."""
+    if not isinstance(yaml_data, dict):
+        return False
+
+    # Skip manifest files
+    if "applicationName" in yaml_data or "content" in yaml_data:
+        return False
+
+    # Check for workflow structure: top-level key with dag_id and tasks
+    for key, value in yaml_data.items():
+        if isinstance(value, dict) and "dag_id" in value and "tasks" in value:
+            return True
+
+    return False
 
 
 def _deploy_local_storage_item(
