@@ -60,6 +60,7 @@ Resources:
       ManagedPolicyArns:
         - !Ref BedrockTestingPolicy
         - !Ref BedrockAgentPassRolePolicy
+        - arn:aws:iam::aws:policy/SageMakerStudioUserIAMPermissiveExecutionPolicy
       Tags:
         - Key: CreatedBy
           Value: SMUS-CICD
