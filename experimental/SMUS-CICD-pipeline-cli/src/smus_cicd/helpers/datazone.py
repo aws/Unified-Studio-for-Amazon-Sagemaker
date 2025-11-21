@@ -109,25 +109,37 @@ def resolve_domain_id(
 
 def get_project_user_role_arn(project_name: str, domain_name: str, region: str) -> str:
     """Get the user role ARN for a DataZone project from its tooling environment."""
+    from .logger import get_logger
+    import typer
+    
+    logger = get_logger("datazone")
+    typer.echo(f"🔍 DEBUG: get_project_user_role_arn(project={project_name}, domain={domain_name}, region={region})")
+    
     try:
         # Get domain and project IDs
         domain_id = get_domain_id_by_name(domain_name, region)
+        typer.echo(f"🔍 DEBUG: Resolved domain_id={domain_id}")
         if not domain_id:
-            return None
+            raise ValueError(f"Domain '{domain_name}' not found in region {region}")
 
         project_id = get_project_id_by_name(project_name, domain_id, region)
+        typer.echo(f"🔍 DEBUG: Resolved project_id={project_id}")
         if not project_id:
-            return None
+            raise ValueError(f"Project '{project_name}' not found in domain {domain_id}")
 
         # List environments to find tooling environment
         datazone_client = _get_datazone_client(region)
         environments_response = datazone_client.list_environments(
             domainIdentifier=domain_id, projectIdentifier=project_id
         )
+        
+        env_names = [env.get("name") for env in environments_response.get("items", [])]
+        typer.echo(f"🔍 DEBUG: Found environments: {env_names}")
 
         # Find tooling environment
         for env in environments_response.get("items", []):
             if "tooling" in env.get("name", "").lower():
+                typer.echo(f"🔍 DEBUG: Found tooling environment: {env.get('name')}")
                 # Get environment details
                 env_detail = datazone_client.get_environment(
                     domainIdentifier=domain_id, identifier=env.get("id")
@@ -136,16 +148,15 @@ def get_project_user_role_arn(project_name: str, domain_name: str, region: str) 
                 # Look for userRoleArn in provisioned resources
                 for resource in env_detail.get("provisionedResources", []):
                     if resource.get("name") == "userRoleArn":
-                        return resource.get("value")
+                        role_arn = resource.get("value")
+                        typer.echo(f"✅ DEBUG: Found userRoleArn={role_arn}")
+                        return role_arn
 
-        return None
+        raise ValueError(f"No tooling environment with userRoleArn found for project '{project_name}'")
 
     except Exception as e:
-        from .logger import get_logger
-
-        logger = get_logger("datazone")
         logger.error(f"Failed to get project user role ARN for {project_name}: {e}")
-        return None
+        raise
 
 
 def get_domain_id_by_name(domain_name, region):
