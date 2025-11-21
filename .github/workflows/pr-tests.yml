@@ -76,6 +76,8 @@ jobs:
           xargs -I {} dirname {} | \
           sort -u | \
           sed 's|^\./||' | \
+          grep -v '^$' | \
+          grep -v '^\.$' | \
           jq -R -s -c 'split("\n") | map(select(length > 0))')
         
         echo "test-dirs=$test_dirs" >> $GITHUB_OUTPUT
