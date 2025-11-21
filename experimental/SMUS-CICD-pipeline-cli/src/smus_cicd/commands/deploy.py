@@ -539,10 +539,12 @@ def _deploy_bundle_to_target(
         metadata["bundle_path"] = bundle_path
 
     # Resolve and re-upload workflow YAML files with variables resolved
-    if s3_bucket and s3_prefix:
-        _resolve_and_upload_workflows(
-            s3_bucket, s3_prefix, target_config, config, stage_name
-        )
+    if s3_bucket and s3_prefix and metadata:
+        project_info = metadata.get("project_info", {})
+        if project_info:
+            _resolve_and_upload_workflows(
+                s3_bucket, s3_prefix, target_config, config, stage_name, project_info
+            )
 
     # Process catalog assets if configured
     asset_success = _process_catalog_assets(
@@ -561,6 +563,7 @@ def _resolve_and_upload_workflows(
     target_config,
     config: Dict[str, Any],
     stage_name: Optional[str] = None,
+    project_info: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Resolve variables in workflow YAML files and re-upload to S3."""
     import boto3
@@ -573,10 +576,16 @@ def _resolve_and_upload_workflows(
     s3_client = boto3.client("s3", region_name=region)
     project_name = target_config.project.name
 
+    # Get domain_id from project_info
+    domain_id = project_info.get("domain_id") if project_info else None
+    if not domain_id:
+        typer.echo("  ⚠️ No domain_id available, skipping workflow resolution")
+        return
+
     # Initialize resolver
     resolver = ContextResolver(
         project_name=project_name,
-        domain_id=config.get("domain_id"),
+        domain_id=domain_id,
         region=region,
         domain_name=config.get("domain_name"),
         stage_name=stage_name or target_config.name,
