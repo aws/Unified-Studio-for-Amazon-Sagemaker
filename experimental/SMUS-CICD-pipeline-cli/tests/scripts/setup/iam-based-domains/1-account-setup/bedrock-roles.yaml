@@ -1,0 +1,160 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'IAM Roles for Bedrock agent testing - includes agent role, Lambda role, and policies'
+
+Resources:
+  BedrockAgentRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: DEFAULT_AgentExecutionRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowBedrock
+            Effect: Allow
+            Principal:
+              Service: bedrock.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: bedrock_allow_policy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: AmazonBedrockAgentInferencProfilePolicy1
+                Effect: Allow
+                Action:
+                  - bedrock:InvokeModel*
+                  - bedrock:CreateInferenceProfile
+                Resource:
+                  - arn:aws:bedrock:*::foundation-model/*
+                  - arn:aws:bedrock:*:*:inference-profile/*
+                  - arn:aws:bedrock:*:*:application-inference-profile/*
+              - Sid: AmazonBedrockAgentInferencProfilePolicy2
+                Effect: Allow
+                Action:
+                  - bedrock:GetInferenceProfile
+                  - bedrock:ListInferenceProfiles
+                  - bedrock:DeleteInferenceProfile
+                  - bedrock:TagResource
+                  - bedrock:UntagResource
+                  - bedrock:ListTagsForResource
+                Resource:
+                  - arn:aws:bedrock:*:*:inference-profile/*
+                  - arn:aws:bedrock:*:*:application-inference-profile/*
+              - Sid: AmazonBedrockAgentBedrockFoundationModelPolicy
+                Effect: Allow
+                Action:
+                  - bedrock:GetAgentAlias
+                  - bedrock:InvokeAgent
+                Resource:
+                  - arn:aws:bedrock:*:*:agent/*
+                  - arn:aws:bedrock:*:*:agent-alias/*
+              - Sid: AmazonBedrockAgentBedrockInvokeGuardrailModelPolicy
+                Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:GetGuardrail
+                  - bedrock:ApplyGuardrail
+                Resource: arn:aws:bedrock:*:*:guardrail/*
+              - Sid: QueryKB
+                Effect: Allow
+                Action:
+                  - bedrock:Retrieve
+                  - bedrock:RetrieveAndGenerate
+                Resource: arn:aws:bedrock:*:*:knowledge-base/*
+              - Sid: LambdaInvoke
+                Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: '*'
+
+  BedrockAgentLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'test_agent-lambda-role-${AWS::Region}-${AWS::AccountId}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: BedrockInvokeModel
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeAgent
+                  - bedrock:GetAgent
+                  - bedrock:GetAgentAlias
+                Resource: '*'
+
+  BedrockTestingPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: BedrockTestingPolicy
+      Description: Permissions for Bedrock agent testing (Lambda and IAM role management)
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: LambdaManagement
+            Effect: Allow
+            Action:
+              - lambda:CreateFunction
+              - lambda:DeleteFunction
+              - lambda:GetFunction
+              - lambda:AddPermission
+              - lambda:RemovePermission
+              - lambda:UpdateFunctionCode
+              - lambda:UpdateFunctionConfiguration
+            Resource: 
+              - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:*_ag'
+              - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:*-agent-*'
+          - Sid: LambdaRoleManagement
+            Effect: Allow
+            Action:
+              - iam:CreateRole
+              - iam:DeleteRole
+              - iam:AttachRolePolicy
+              - iam:DetachRolePolicy
+              - iam:PutRolePolicy
+              - iam:DeleteRolePolicy
+            Resource: 
+              - !Sub 'arn:aws:iam::${AWS::AccountId}:role/*-lambda-role-*'
+
+  BedrockAgentPassRolePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: BedrockAgentPassRolePolicy
+      Description: Allows passing the Bedrock Agent role to Bedrock service
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - iam:PassRole
+            Resource: !GetAtt BedrockAgentRole.Arn
+            Condition:
+              StringEquals:
+                'iam:PassedToService': bedrock.amazonaws.com
+
+Outputs:
+  BedrockAgentRoleArn:
+    Description: ARN of the Bedrock Agent Role
+    Value: !GetAtt BedrockAgentRole.Arn
+  
+  BedrockAgentLambdaRoleArn:
+    Description: ARN of the Bedrock Agent Lambda Role
+    Value: !GetAtt BedrockAgentLambdaRole.Arn
+  
+  BedrockTestingPolicyArn:
+    Description: ARN of the Bedrock Testing Policy
+    Value: !Ref BedrockTestingPolicy
+  
+  BedrockAgentPassRolePolicyArn:
+    Description: ARN of the Bedrock Agent PassRole Policy
+    Value: !Ref BedrockAgentPassRolePolicy
