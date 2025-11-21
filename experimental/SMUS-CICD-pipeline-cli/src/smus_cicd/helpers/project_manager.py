@@ -280,24 +280,19 @@ class ProjectManager:
         self, stage_name: str, target_config, project_name: str, region: str
     ):
         """Update existing project stack tags, memberships, and ensure role exists."""
-        typer.echo("Updating project stack tags...")
-
-        # Construct stack name and tags
-        stack_name = f"{self.manifest.application_name}-{stage_name}-{project_name}"
-        tags = [
-            {"Key": "Bundle", "Value": self.manifest.application_name},
-            {"Key": "Target", "Value": stage_name},
-            {"Key": "Project", "Value": project_name},
-            {"Key": "Stage", "Value": target_config.stage},
-        ]
-
-        cloudformation.update_project_stack_tags(stack_name, region, tags)
+        typer.echo("Updating project configuration...")
 
         owners, contributors = self._extract_memberships(target_config)
         if owners or contributors:
-            typer.echo(
-                "⚠️ Project memberships cannot be updated for existing projects - use CloudFormation console to modify memberships"
-            )
+            typer.echo("🔧 Managing project memberships...")
+            domain_name = target_config.domain.name
+            domain_id = datazone.get_domain_id_by_name(domain_name, region)
+            if domain_id:
+                project_id = datazone.get_project_id_by_name(project_name, domain_id, region)
+                if project_id:
+                    datazone.manage_project_memberships(
+                        project_id, domain_id, region, owners, contributors
+                    )
 
         # Ensure role exists with correct policies (idempotent)
         role_arn = self._get_role_arn(target_config)
