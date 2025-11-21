@@ -97,7 +97,7 @@ def handle_workflow_create(
         project_name=project_name,
         domain_id=domain_id,
         region=region,
-        domain_name=None,  # Not available in bootstrap context
+        domain_name=domain_name,
         stage_name=stage_name,
         env_vars=target_config.environment_variables or {},
     )

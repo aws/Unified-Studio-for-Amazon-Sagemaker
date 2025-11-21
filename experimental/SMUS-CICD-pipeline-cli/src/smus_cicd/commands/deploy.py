@@ -1832,10 +1832,18 @@ def _deploy_quicksight_dashboards(
                 viewers = []
 
                 if qs_config:
-                    items = qs_config.get("items", []) if isinstance(qs_config, dict) else getattr(qs_config, "items", [])
+                    items = (
+                        qs_config.get("items", [])
+                        if isinstance(qs_config, dict)
+                        else getattr(qs_config, "items", [])
+                    )
                     # Find matching item by dashboard name
                     for item in items:
-                        item_name = item.get("name") if isinstance(item, dict) else getattr(item, "name", None)
+                        item_name = (
+                            item.get("name")
+                            if isinstance(item, dict)
+                            else getattr(item, "name", None)
+                        )
                         if item_name == dashboard_name:
                             if isinstance(item, dict):
                                 owners = item.get("owners", []) or []
