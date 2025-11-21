@@ -9,7 +9,6 @@ import typer
 
 from ...helpers import airflow_serverless, datazone
 from ...helpers.bundle_storage import ensure_bundle_local
-from ...helpers.context_resolver import ContextResolver
 from ..models import BootstrapAction
 
 
@@ -92,22 +91,6 @@ def handle_workflow_create(
         typer.echo("❌ No project user role found")
         return False
 
-    # Initialize context resolver
-    resolver = ContextResolver(
-        project_name=project_name,
-        domain_id=domain_id,
-        region=region,
-        domain_name=domain_name,
-        stage_name=stage_name,
-        env_vars=target_config.environment_variables or {},
-    )
-
-    # Debug: Show what's in the resolver context
-    context = resolver._build_context()
-    typer.echo(
-        f"🔍 DEBUG: Resolver context proj.iam_role_name = {context['proj'].get('iam_role_name', 'NOT FOUND')}"
-    )
-
     s3_client = boto3.client("s3", region_name=region)
     workflows_created = []
 
@@ -137,36 +120,9 @@ def handle_workflow_create(
             target_config,
         )
 
-        # Download, resolve variables, upload
-        temp_yaml = tempfile.NamedTemporaryFile(mode="w+", suffix=".yaml", delete=False)
-        try:
-            s3_client.download_file(s3_bucket, s3_key, temp_yaml.name)
-
-            with open(temp_yaml.name, "r") as f:
-                original_content = f.read()
-
-            typer.echo(f"🔍 DEBUG: Original content length: {len(original_content)}")
-            resolved_content = resolver.resolve(original_content)
-
-            with open(temp_yaml.name, "w") as f:
-                f.write(resolved_content)
-
-            s3_client.upload_file(temp_yaml.name, s3_bucket, s3_key)
-            typer.echo(f"✅ Resolved variables in {s3_key}")
-            typer.echo(
-                f"🔍 DEBUG: Resolved content preview (first 500 chars):\n{resolved_content[:500]}"
-            )
-        except Exception as e:
-            typer.echo(f"❌ Error resolving variables in {s3_key}: {e}")
-            return False
-        finally:
-            os.unlink(temp_yaml.name)
-
-        # Create workflow
+        # Workflow YAML already resolved by deploy - just use it from S3
         s3_location = f"s3://{s3_bucket}/{s3_key}"
-
-        # Verify the YAML in S3 before creating workflow
-        typer.echo(f"🔍 DEBUG: About to create/update workflow from S3: {s3_location}")
+        typer.echo(f"🔍 DEBUG: Creating workflow from S3: {s3_location}")
         verify_temp = tempfile.NamedTemporaryFile(
             mode="r", suffix=".yaml", delete=False
         )

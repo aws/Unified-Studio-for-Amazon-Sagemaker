@@ -460,7 +460,6 @@ def _deploy_bundle_to_target(
                     storage_config,
                     target_config.project.name,
                     config,
-                    stage_name,
                 )
             elif bundle_path:
                 # Deploy from bundle
@@ -539,6 +538,12 @@ def _deploy_bundle_to_target(
         metadata["s3_prefix"] = s3_prefix
         metadata["bundle_path"] = bundle_path
 
+    # Resolve and re-upload workflow YAML files with variables resolved
+    if s3_bucket and s3_prefix:
+        _resolve_and_upload_workflows(
+            s3_bucket, s3_prefix, target_config, config, stage_name
+        )
+
     # Process catalog assets if configured
     asset_success = _process_catalog_assets(
         target_config, manifest, config, emitter, metadata
@@ -550,35 +555,69 @@ def _deploy_bundle_to_target(
     return storage_success and git_success and asset_success
 
 
-def _copy_and_resolve_yaml(
-    source_path: str,
-    dest_path: str,
-    project_name: str,
+def _resolve_and_upload_workflows(
+    s3_bucket: str,
+    s3_prefix: str,
+    target_config,
     config: Dict[str, Any],
     stage_name: Optional[str] = None,
 ) -> None:
-    """Copy YAML file and resolve context variables."""
+    """Resolve variables in workflow YAML files and re-upload to S3."""
+    import boto3
+    import tempfile
     from ..helpers.context_resolver import ContextResolver
 
-    # Read source file
-    with open(source_path, "r") as f:
-        content = f.read()
+    typer.echo("\n🔄 Resolving workflow variables...")
 
-    # Build resolver and resolve variables
+    region = config.get("region", "us-east-1")
+    s3_client = boto3.client("s3", region_name=region)
+    project_name = target_config.project.name
+
+    # Initialize resolver
     resolver = ContextResolver(
         project_name=project_name,
         domain_id=config.get("domain_id"),
-        region=config.get("region"),
+        region=region,
         domain_name=config.get("domain_name"),
-        stage_name=stage_name or "test",
-        env_vars={},
+        stage_name=stage_name or target_config.name,
+        env_vars=target_config.environment_variables or {},
     )
 
-    content = resolver.resolve(content)
+    # List all YAML files in S3 prefix
+    try:
+        response = s3_client.list_objects_v2(Bucket=s3_bucket, Prefix=s3_prefix)
+        if "Contents" not in response:
+            return
 
-    # Write resolved content
-    with open(dest_path, "w") as f:
-        f.write(content)
+        for obj in response["Contents"]:
+            s3_key = obj["Key"]
+            if not s3_key.endswith((".yaml", ".yml")):
+                continue
+
+            typer.echo(f"  Resolving {s3_key}...")
+
+            # Download, resolve, upload
+            with tempfile.NamedTemporaryFile(
+                mode="w+", suffix=".yaml", delete=False
+            ) as temp_file:
+                try:
+                    s3_client.download_file(s3_bucket, s3_key, temp_file.name)
+
+                    with open(temp_file.name, "r") as f:
+                        content = f.read()
+
+                    resolved_content = resolver.resolve(content)
+
+                    with open(temp_file.name, "w") as f:
+                        f.write(resolved_content)
+
+                    s3_client.upload_file(temp_file.name, s3_bucket, s3_key)
+                    typer.echo(f"  ✅ Resolved and uploaded {s3_key}")
+                finally:
+                    os.unlink(temp_file.name)
+
+    except Exception as e:
+        typer.echo(f"  ⚠️ Error resolving workflows: {e}")
 
 
 def _deploy_local_storage_item(
@@ -587,7 +626,6 @@ def _deploy_local_storage_item(
     storage_config,
     project_name: str,
     config: Dict[str, Any],
-    stage_name: Optional[str] = None,
 ) -> Tuple[Optional[List[str]], Optional[str]]:
     """Deploy a storage item from local filesystem."""
     import glob
@@ -647,13 +685,7 @@ def _deploy_local_storage_item(
 
             import shutil
 
-            # For YAML files, resolve variables before copying
-            if file_path.endswith((".yaml", ".yml")):
-                _copy_and_resolve_yaml(
-                    file_path, dest_path, project_name, config, stage_name
-                )
-            else:
-                shutil.copy2(file_path, dest_path)
+            shutil.copy2(file_path, dest_path)
 
         # Deploy to S3
         success = deployment.deploy_files(
