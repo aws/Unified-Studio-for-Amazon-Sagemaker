@@ -102,7 +102,7 @@ def main():
     parser = argparse.ArgumentParser(description="Combine coverage reports from GitHub artifacts")
     parser.add_argument(
         "--coverage-dir",
-        default="coverage-artifacts",
+        default="tests/test-outputs/coverage-artifacts",
         help="Directory containing downloaded coverage artifacts"
     )
     parser.add_argument(

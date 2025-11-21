@@ -252,7 +252,7 @@ gh run view <RUN-ID> --job <JOB-NAME> --log
 
 # Download combined coverage report
 gh run download <RUN-ID> -n test-summary-combined
-python tests/scripts/combine_coverage.py --coverage-dir coverage-artifacts
+python tests/scripts/combine_coverage.py --coverage-dir tests/test-outputs/coverage-artifacts
 
 # Analyze failures and provide summary:
 # - What tests are failing and why

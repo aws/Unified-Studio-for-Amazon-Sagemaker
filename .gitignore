@@ -20,8 +20,21 @@ override.tf.json
 *_override.tf.json
 .terraformrc
 terraform.rc
-experimental/SMUS-CICD-pipeline-cli/tests/reports/test-results.html
-experimental/SMUS-CICD-pipeline-cli/tests/reports/test-results.html
+
+# Test outputs and reports - should only be in tests/test-outputs/
+experimental/SMUS-CICD-pipeline-cli/tests/test-outputs/
+tests/reports/
+tests/test-outputs/
+coverage-artifacts/
+artifacts/
+test_results.txt
+.coverage
+.coverage.*
+
+# Build artifacts at repo root
+/genai/
+/ml-workflow/
+
 q-tasks.txt
 smus-feedback.txt
 
