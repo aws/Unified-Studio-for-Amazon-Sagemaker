@@ -81,7 +81,7 @@ tasks:
 
 
 def test_copy_and_resolve_yaml_without_variables():
-    """Test that YAML files without variables are copied as-is."""
+    """Test that YAML files without variables are copied correctly."""
     # Create a temporary source YAML file without placeholders
     with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as src:
         src.write(
@@ -108,14 +108,24 @@ tasks:
                 "domain_name": "test-domain",
             }
 
-            # Call the function - should not call ContextResolver
+            # Mock ContextResolver - resolver is always called now
             with patch(
                 "smus_cicd.helpers.context_resolver.ContextResolver"
             ) as mock_resolver_class:
+                mock_resolver = MagicMock()
+                # Return content unchanged when no variables present
+                mock_resolver.resolve.return_value = """
+tasks:
+  - name: test_task
+    iam_role_name: 'StaticRole'
+"""
+                mock_resolver_class.return_value = mock_resolver
+
                 _copy_and_resolve_yaml(src_path, dest_path, "test-project", config)
 
-                # Verify resolver was NOT called since no {proj. patterns
-                mock_resolver_class.assert_not_called()
+                # Verify resolver was called (always called now)
+                mock_resolver_class.assert_called_once()
+                mock_resolver.resolve.assert_called_once()
 
             # Verify the destination file has same content
             with open(dest_path, "r") as f:

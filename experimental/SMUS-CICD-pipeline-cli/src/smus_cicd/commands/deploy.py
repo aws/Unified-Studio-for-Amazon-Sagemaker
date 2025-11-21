@@ -557,28 +557,24 @@ def _copy_and_resolve_yaml(
     config: Dict[str, Any],
     stage_name: Optional[str] = None,
 ) -> None:
-    """Copy YAML file and resolve {proj.*} variables."""
+    """Copy YAML file and resolve context variables."""
     from ..helpers.context_resolver import ContextResolver
 
     # Read source file
     with open(source_path, "r") as f:
         content = f.read()
 
-    # Only resolve if file contains {proj. patterns
-    if "{proj." in content:
-        # Build resolver context
-        resolver = ContextResolver(
-            project_name=project_name,
-            domain_id=config.get("domain_id"),
-            region=config.get("region"),
-            domain_name=config.get("domain_name"),
-            stage_name=stage_name or "test",
-            env_vars={},
-        )
+    # Build resolver and resolve variables
+    resolver = ContextResolver(
+        project_name=project_name,
+        domain_id=config.get("domain_id"),
+        region=config.get("region"),
+        domain_name=config.get("domain_name"),
+        stage_name=stage_name or "test",
+        env_vars={},
+    )
 
-        # Resolve variables
-        content = resolver.resolve(content)
-        typer.echo(f"  ✓ Resolved variables in {os.path.basename(source_path)}")
+    content = resolver.resolve(content)
 
     # Write resolved content
     with open(dest_path, "w") as f:
