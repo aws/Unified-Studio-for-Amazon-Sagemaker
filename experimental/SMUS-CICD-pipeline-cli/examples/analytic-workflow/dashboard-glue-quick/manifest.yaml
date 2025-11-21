@@ -57,6 +57,7 @@ stages:
       owners:
       - Eng1
       - arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
+      - arn:aws:iam::${AWS_ACCOUNT_ID}:role/Admin
     environment_variables:
       S3_PREFIX: test
       AWS_REGION: ${TEST_DOMAIN_REGION:us-east-2}

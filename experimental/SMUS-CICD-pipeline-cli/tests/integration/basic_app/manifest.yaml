@@ -36,6 +36,7 @@ stages:
       owners:
       - Eng1
       - arn:aws:iam::*:role/GitHubActionsRole-SMUS-CLI-Tests
+      - arn:aws:iam::${AWS_ACCOUNT_ID}:role/Admin
       contributors: []
       role:
         arn: arn:aws:iam::*:role/GitHubActionsRole-SMUS-CLI-Tests
@@ -51,6 +52,7 @@ stages:
       owners:
       - Eng1
       - arn:aws:iam::*:role/GitHubActionsRole-SMUS-CLI-Tests
+      - arn:aws:iam::${AWS_ACCOUNT_ID}:role/Admin
       contributors: []
       role:
         policies:
