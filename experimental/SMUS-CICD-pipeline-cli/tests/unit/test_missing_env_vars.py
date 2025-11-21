@@ -4,6 +4,7 @@ import os
 import pytest
 import tempfile
 from pathlib import Path
+from unittest.mock import patch, MagicMock
 from smus_cicd.application.application_manifest import ApplicationManifest
 
 
@@ -143,9 +144,18 @@ stages:
         manifest_file = f.name
 
     try:
-        # Should not raise error for pseudo env vars
-        manifest = ApplicationManifest.from_file(manifest_file)
-        assert manifest.application_name == "TestApp"
+        # Mock boto3 calls for pseudo env vars
+        with patch('boto3.client') as mock_client:
+            mock_sts = MagicMock()
+            mock_sts.get_caller_identity.return_value = {'Account': '123456789012'}
+            mock_client.return_value = mock_sts
+            
+            with patch('boto3.Session') as mock_session:
+                mock_session.return_value.region_name = 'us-east-1'
+                
+                # Should not raise error for pseudo env vars
+                manifest = ApplicationManifest.from_file(manifest_file)
+                assert manifest.application_name == "TestApp"
     finally:
         Path(manifest_file).unlink()
 
