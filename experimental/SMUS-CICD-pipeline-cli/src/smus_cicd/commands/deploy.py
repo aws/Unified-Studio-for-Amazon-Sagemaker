@@ -521,7 +521,7 @@ def _deploy_bundle_to_target(
     # Create serverless Airflow workflows if configured
     effective_target_name = stage_name or target_config.name
 
-    # Get S3 location from first successful storage deployment
+    # Get S3 location from first successful storage deployment for backward compatibility
     s3_bucket = None
     s3_prefix = None
     for files_list, s3_uri in storage_results:
@@ -538,13 +538,18 @@ def _deploy_bundle_to_target(
         metadata["s3_prefix"] = s3_prefix
         metadata["bundle_path"] = bundle_path
 
-    # Resolve and re-upload workflow YAML files with variables resolved
-    if s3_bucket and s3_prefix and metadata:
+    # Resolve and re-upload workflow YAML files for ALL storage deployments
+    if metadata:
         project_info = metadata.get("project_info", {})
         if project_info and "error" not in project_info:
-            _resolve_and_upload_workflows(
-                s3_bucket, s3_prefix, target_config, config, stage_name, project_info
-            )
+            for files_list, s3_uri in storage_results:
+                if s3_uri and s3_uri.startswith("s3://"):
+                    parts = s3_uri[5:].split("/", 1)
+                    bucket = parts[0]
+                    prefix = parts[1] if len(parts) > 1 else ""
+                    _resolve_and_upload_workflows(
+                        bucket, prefix, target_config, config, stage_name, project_info
+                    )
 
     # Process catalog assets if configured
     asset_success = _process_catalog_assets(
