@@ -244,9 +244,19 @@ tests/
 │   ├── examples-analytics-workflows/  # Analytics workflow tests
 │   └── PARALLEL_TESTING.md # Parallel execution guide
 ├── run_tests.py            # Test runner with parallel support
-└── scripts/                # Setup and utility scripts
+└── scripts/                # Test utility scripts
+    ├── setup/              # Domain and project setup scripts
     ├── combine_coverage.py # Combine coverage from parallel runs
+    ├── trigger-workflows.sh # Trigger MWAA workflows for testing
+    ├── get-workflow-logs.sh # Retrieve workflow execution logs
     └── README-coverage.md  # Coverage combining guide
+
+docs/
+└── scripts/                # Documentation utility scripts
+    ├── translate-readme-batch.py    # Batch translation
+    ├── translate-readme-chunked.py  # Chunked translation
+    ├── translate-hebrew-only.py     # Hebrew-specific translation
+    └── fix-hebrew-code-blocks.py    # Fix Hebrew code formatting
 ```
 
 ### 5.2 Base Test Class
@@ -846,6 +856,23 @@ aws cloudformation delete-stack --stack-name sagemaker-unified-studio-vpc
 ```
 
 ## 13. Resources
+
+### 13.1 Script Organization
+
+**Test Scripts** (`tests/scripts/`):
+- `setup/` - Domain and project setup CloudFormation templates
+- `trigger-workflows.sh` - Trigger MWAA workflows for testing
+- `get-workflow-logs.sh` - Retrieve workflow execution logs
+- `combine_coverage.py` - Combine coverage from parallel test runs
+- `check-hardcoded-values.sh` - Validate no hardcoded values in code
+
+**Documentation Scripts** (`docs/scripts/`):
+- `translate-readme-batch.py` - Batch translation for documentation
+- `translate-readme-chunked.py` - Chunked translation for large docs
+- `translate-hebrew-only.py` - Hebrew-specific translation
+- `fix-hebrew-code-blocks.py` - Fix Hebrew code block formatting
+
+### 13.2 Documentation
 
 - **User Documentation**: `docs/` directory
 - **Examples**: `examples/` directory

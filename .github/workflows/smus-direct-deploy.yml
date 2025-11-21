@@ -77,6 +77,7 @@ jobs:
           TEST_DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
           DEV_DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
           MLFLOW_TRACKING_SERVER_NAME: smus-integration-mlflow-use1
+          MLFLOW_ARTIFACT_LOCATION: s3://amazon-sagemaker-${{ steps.aws-account.outputs.account-id }}-${{ vars.DOMAIN_REGION }}-${{ vars.PROJECT_ID }}/shared/ml/mlflow-artifacts
           STS_REGION: ${{ vars.DOMAIN_REGION }}
           STS_ACCOUNT_ID: ${{ steps.aws-account.outputs.account-id }}
           AWS_ACCOUNT_ID: ${{ steps.aws-account.outputs.account-id }}
@@ -199,6 +200,7 @@ jobs:
           TEST_DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
           DEV_DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
           MLFLOW_TRACKING_SERVER_NAME: smus-integration-mlflow-use1
+          MLFLOW_ARTIFACT_LOCATION: s3://amazon-sagemaker-${{ steps.aws-account-test.outputs.account-id }}-${{ vars.DOMAIN_REGION }}-${{ vars.PROJECT_ID }}/shared/ml/mlflow-artifacts
           STS_REGION: ${{ vars.DOMAIN_REGION }}
           STS_ACCOUNT_ID: ${{ steps.aws-account-test.outputs.account-id }}
           AWS_ACCOUNT_ID: ${{ steps.aws-account-test.outputs.account-id }}

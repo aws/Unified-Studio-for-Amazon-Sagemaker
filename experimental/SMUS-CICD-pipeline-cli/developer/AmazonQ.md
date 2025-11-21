@@ -739,11 +739,11 @@ endpoint = os.environ.get('AIRFLOW_SERVERLESS_ENDPOINT',
 ### Triggering Workflows
 ```bash
 # Trigger all workflows
-bash experimental/SMUS-CICD-pipeline-cli/scripts/trigger-workflows.sh all
+bash tests/scripts/trigger-workflows.sh all
 
 # Trigger specific workflow
-bash experimental/SMUS-CICD-pipeline-cli/scripts/trigger-workflows.sh genai
-bash experimental/SMUS-CICD-pipeline-cli/scripts/trigger-workflows.sh ml-training
+bash tests/scripts/trigger-workflows.sh genai
+bash tests/scripts/trigger-workflows.sh ml-training
 ```
 
 ### Monitoring Workflows

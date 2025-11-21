@@ -43,6 +43,7 @@ stages:
           value: analytic_workflow_test_db
     environment_variables:
       S3_PREFIX: test
+      MLFLOW_ARTIFACT_LOCATION: s3://amazon-sagemaker-${AWS_ACCOUNT_ID}-${TEST_DOMAIN_REGION}-{proj.id}/shared/ml/mlflow-artifacts
     deployment_configuration:
       storage:
       - name: training-code
