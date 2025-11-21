@@ -694,9 +694,7 @@ def _is_workflow_yaml(yaml_data: dict) -> bool:
     return False
 
 
-def _create_compressed_archive(
-    source_path: str, item_name: str, temp_dir: str
-) -> str:
+def _create_compressed_archive(source_path: str, item_name: str, temp_dir: str) -> str:
     """Create a tar.gz archive from source path and return archive-only directory."""
     import tarfile
     import shutil
