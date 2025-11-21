@@ -26,9 +26,9 @@ class DomainConfig:
         if self.name:
             return self.name
         if self.tags:
-            from ..helpers.datazone import get_domain_id_and_name
+            from ..helpers.datazone import resolve_domain_id
 
-            _, resolved_name = get_domain_id_and_name(
+            _, resolved_name = resolve_domain_id(
                 domain_tags=self.tags, region=self.region
             )
             return resolved_name
