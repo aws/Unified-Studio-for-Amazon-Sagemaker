@@ -1,6 +1,7 @@
 """QuickSight dashboard deployment helper."""
 
 import json
+import re
 import time
 from typing import Any, Dict, List, Optional
 
@@ -16,6 +17,29 @@ class QuickSightDeploymentError(Exception):
     """Exception raised for QuickSight deployment errors."""
 
     pass
+
+
+def sanitize_job_id(name: str, max_length: int = 50) -> str:
+    """
+    Sanitize string for use in QuickSight job ID.
+    
+    AWS QuickSight job IDs must:
+    - Contain only alphanumeric characters, hyphens, and underscores
+    - Be 1-512 characters long
+    
+    Args:
+        name: String to sanitize
+        max_length: Maximum length for the sanitized string
+        
+    Returns:
+        Sanitized string safe for job ID
+    """
+    # Replace invalid characters with hyphens
+    sanitized = re.sub(r'[^a-zA-Z0-9_-]', '-', name)
+    # Remove consecutive hyphens
+    sanitized = re.sub(r'-+', '-', sanitized)
+    # Trim to max length
+    return sanitized[:max_length].strip('-')
 
 
 def lookup_dashboard_by_name(
@@ -153,6 +177,7 @@ def import_dashboard(
     aws_account_id: str,
     region: str,
     override_parameters: Optional[Dict[str, Any]] = None,
+    application_name: Optional[str] = None,
 ) -> str:
     """
     Import QuickSight dashboard from asset bundle.
@@ -162,6 +187,7 @@ def import_dashboard(
         aws_account_id: AWS account ID
         region: AWS region
         override_parameters: Optional parameters to override
+        application_name: Optional application name to include in job ID
 
     Returns:
         Job ID for the import operation
@@ -172,10 +198,24 @@ def import_dashboard(
     try:
         client = boto3.client("quicksight", region_name=region)
 
+        # Build job ID with application name if provided
+        timestamp = int(time.time())
+        if application_name:
+            sanitized_name = sanitize_job_id(application_name, max_length=30)
+            job_id = f"{sanitized_name}-{timestamp}"
+        else:
+            job_id = f"import-{timestamp}"
+
         import_params = {
             "AwsAccountId": aws_account_id,
-            "AssetBundleImportJobId": f"import-{int(time.time())}",
+            "AssetBundleImportJobId": job_id,
             "AssetBundleImportSource": {"Body": _download_bundle(bundle_url)},
+            "FailureAction": "ROLLBACK",
+            "OverridePermissions": {
+                "DataSources": "OVERWRITE_PERMITTED",
+                "DataSets": "OVERWRITE_PERMITTED",
+                "Dashboards": "OVERWRITE_PERMITTED",
+            },
         }
 
         if override_parameters:
@@ -230,9 +270,9 @@ def poll_import_job(
 
             if status == "SUCCESSFUL":
                 return response
-            elif status == "FAILED":
+            elif status.startswith("FAILED"):
                 errors = response.get("Errors", [])
-                raise QuickSightDeploymentError(f"Import failed: {errors}")
+                raise QuickSightDeploymentError(f"Import failed with status {status}: {errors}")
 
             time.sleep(5)
 

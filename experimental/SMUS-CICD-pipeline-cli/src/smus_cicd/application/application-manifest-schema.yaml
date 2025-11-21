@@ -9,10 +9,10 @@ required:
 properties:
   applicationName:
     type: string
-    description: "Unique name for the application"
-    pattern: "^[A-Za-z][A-Za-z0-9_-]*$"
+    description: "Unique name for the application (alphanumeric, hyphens, underscores only)"
+    pattern: "^[A-Za-z0-9][A-Za-z0-9_-]*$"
     minLength: 1
-    maxLength: 64
+    maxLength: 50
   
   content:
     type: object

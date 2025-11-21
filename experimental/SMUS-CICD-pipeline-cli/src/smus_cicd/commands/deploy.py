@@ -1755,6 +1755,7 @@ def _deploy_quicksight_dashboards(
                 aws_account_id,
                 region,
                 override_params,
+                application_name=manifest.application_name,
             )
             result = poll_import_job(job_id, aws_account_id, region)
 
