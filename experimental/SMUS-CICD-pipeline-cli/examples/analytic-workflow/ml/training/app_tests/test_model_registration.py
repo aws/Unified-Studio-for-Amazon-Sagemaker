@@ -1,11 +1,13 @@
 """Test that the ML training model was registered in SageMaker."""
+import os
 import boto3
 from datetime import datetime, timedelta
 
 
 def test_model_registered():
     """Verify that a model was registered in SageMaker recently."""
-    client = boto3.client("sagemaker")
+    region = os.environ.get("DOMAIN_REGION", "us-east-1")
+    client = boto3.client("sagemaker", region_name=region)
     
     # List models created in the last hour
     cutoff_time = datetime.now() - timedelta(hours=1)
@@ -29,3 +31,4 @@ def test_model_registered():
     
     print(f"✓ Model registered: {model_name}")
     print(f"✓ Creation time: {creation_time}")
+    print(f"✓ Region: {region}")
