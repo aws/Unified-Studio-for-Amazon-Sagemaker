@@ -108,12 +108,19 @@ jobs:
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
     
+    - name: Generate test name
+      id: test-name
+      run: |
+        # Convert path to safe name: basic_app -> basic-app, test_file.py -> test-file
+        test_name=$(echo "${{ matrix.test-path }}" | sed 's|/|-|g' | sed 's|_|-|g' | sed 's|\.py$||')
+        echo "name=$test_name" >> $GITHUB_OUTPUT
+    
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
         role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         aws-region: ${{ vars.DOMAIN_REGION }}
-        role-session-name: test-${{ matrix.test-path }}
+        role-session-name: test-${{ steps.test-name.outputs.name }}
         role-duration-seconds: 43200
     
     - name: Register AWS CLI model
@@ -138,13 +145,6 @@ jobs:
         echo ""
         echo "Available domains:"
         aws datazone list-domains --region ${{ vars.DOMAIN_REGION }} --query 'items[].{id:id,name:name}' --output table
-    
-    - name: Generate test name
-      id: test-name
-      run: |
-        # Convert path to safe name: basic_app -> basic-app, test_file.py -> test-file
-        test_name=$(echo "${{ matrix.test-path }}" | sed 's|/|-|g' | sed 's|_|-|g' | sed 's|\.py$||')
-        echo "name=$test_name" >> $GITHUB_OUTPUT
     
     - name: Run test
       env:
