@@ -203,6 +203,41 @@ ls tests/test-outputs/notebooks/_*.ipynb
 grep -i "error\|failed\|exception" tests/test-outputs/*.log
 ```
 
+**Workflow Output Validation (After Test Completion)**
+
+After a workflow test completes, validate notebook outputs for errors:
+
+```bash
+# Download and analyze workflow outputs in one command
+./tests/scripts/validate_workflow_run.sh <workflow_name> [region]
+
+# Example:
+./tests/scripts/validate_workflow_run.sh IntegrationTestMLTraining_test_marketing_ml_training_workflow us-east-1
+
+# Or run steps separately:
+
+# Step 1: Download notebook outputs from workflow
+python3 tests/scripts/download_workflow_outputs_from_xcom.py <workflow_name> --region us-east-1
+
+# Step 2: Analyze notebooks for errors
+python3 tests/scripts/analyze_notebook_errors.py tests/test-outputs/notebooks --verbose
+
+# Step 3: Open notebooks with errors for inspection
+python3 tests/scripts/analyze_notebook_errors.py tests/test-outputs/notebooks --open-errors
+```
+
+**What the validation does:**
+1. Downloads executed notebook outputs from Airflow XCom (S3)
+2. Analyzes notebooks for errors (error output types, display errors, stream errors)
+3. Reports cell numbers and error details
+4. Optionally opens notebooks with errors in your editor
+
+**When to use:**
+- After any workflow test completes (pass or fail)
+- When debugging workflow execution issues
+- To verify notebook cells executed correctly
+- To inspect actual error messages from failed cells
+
 **CRITICAL: Integration Tests Are Slow (10-15 min) - Test Fixes Quickly First**
 
 1. Identify issue from logs/notebooks
