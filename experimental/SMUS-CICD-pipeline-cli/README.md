@@ -1,3 +1,5 @@
+# SMUS CI/CD Pipeline CLI
+
 [![en](https://img.shields.io/badge/lang-en-brightgreen.svg?style=for-the-badge)](README.md)
 [![pt](https://img.shields.io/badge/lang-pt-gray.svg)](docs/langs/pt/README.md)
 [![fr](https://img.shields.io/badge/lang-fr-gray.svg)](docs/langs/fr/README.md)
@@ -5,8 +7,6 @@
 [![ja](https://img.shields.io/badge/lang-ja-gray.svg)](docs/langs/ja/README.md)
 [![zh](https://img.shields.io/badge/lang-zh-gray.svg)](docs/langs/zh/README.md)
 [![he](https://img.shields.io/badge/lang-he-gray.svg)](docs/langs/he/README.md)
-
-# SMUS CI/CD Pipeline CLI
 
 **Automate deployment of data applications across SageMaker Unified Studio environments**
 
@@ -759,7 +759,8 @@ stages:
 - **[GenAI Application](docs/examples-guide.md#-generative-ai)** - Bedrock agents and knowledge bases
 
 ### Development
-- **[Development Guide](docs/development.md)** - Contributing and testing
+- **[Developer Guide](developer/developer-guide.md)** - Complete development guide with architecture, testing, and workflows
+- **[AI Assistant Context](developer/AmazonQ.md)** - Context for AI assistants (Amazon Q, Kiro)
 - **[Tests Overview](tests/README.md)** - Testing infrastructure
 
 ### Support
