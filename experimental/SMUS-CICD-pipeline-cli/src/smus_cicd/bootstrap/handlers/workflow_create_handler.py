@@ -151,15 +151,14 @@ def handle_workflow_create(
 
             resolved_content = resolver.resolve(original_content)
 
-            # Upload resolved version
-            resolved_key = s3_key.replace(".yaml", "-resolved.yaml")
+            # Overwrite original file with resolved version
             s3_client.put_object(
                 Bucket=s3_bucket,
-                Key=resolved_key,
+                Key=s3_key,
                 Body=resolved_content.encode("utf-8"),
             )
 
-            resolved_location = f"s3://{s3_bucket}/{resolved_key}"
+            resolved_location = f"s3://{s3_bucket}/{s3_key}"
             typer.echo(f"✅ Resolved workflow uploaded to: {resolved_location}")
 
         finally:
