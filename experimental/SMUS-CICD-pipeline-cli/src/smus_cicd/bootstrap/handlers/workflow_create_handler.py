@@ -120,31 +120,54 @@ def handle_workflow_create(
             target_config,
         )
 
-        # Workflow YAML already resolved by deploy - just use it from S3
+        # Download original workflow YAML from S3
         s3_location = f"s3://{s3_bucket}/{s3_key}"
-        typer.echo(f"🔍 DEBUG: Creating workflow from S3: {s3_location}")
-        verify_temp = tempfile.NamedTemporaryFile(
-            mode="r", suffix=".yaml", delete=False
-        )
+        typer.echo(f"🔍 Reading workflow from S3: {s3_location}")
+        
+        with tempfile.NamedTemporaryFile(mode="w+", suffix=".yaml", delete=False) as temp_file:
+            temp_path = temp_file.name
+        
         try:
-            s3_client.download_file(s3_bucket, s3_key, verify_temp.name)
-            with open(verify_temp.name, "r") as f:
-                s3_content = f.read()
-            typer.echo(
-                f"🔍 DEBUG: S3 YAML content (first 800 chars):\n{s3_content[:800]}"
+            # Download original
+            s3_client.download_file(s3_bucket, s3_key, temp_path)
+            
+            # Resolve variables
+            from ...helpers.context_resolver import ContextResolver
+            
+            resolver = ContextResolver(
+                project_name=project_name,
+                domain_id=domain_id,
+                region=region,
+                domain_name=domain_name,
+                stage_name=stage_name,
+                env_vars=target_config.environment_variables or {},
             )
-            if "SMUSCICDTestRole" in s3_content:
-                typer.echo("⚠️ WARNING: S3 YAML still contains 'SMUSCICDTestRole'!")
-            if "{proj.iam_role_name}" in s3_content:
-                typer.echo(
-                    "⚠️ WARNING: S3 YAML still contains unresolved '{proj.iam_role_name}'!"
-                )
+            
+            typer.echo(f"🔄 Resolving variables in {workflow_name}")
+            with open(temp_path, "r") as f:
+                original_content = f.read()
+            
+            resolved_content = resolver.resolve(original_content)
+            
+            # Upload resolved version
+            resolved_key = s3_key.replace(".yaml", "-resolved.yaml")
+            s3_client.put_object(
+                Bucket=s3_bucket,
+                Key=resolved_key,
+                Body=resolved_content.encode("utf-8")
+            )
+            
+            resolved_location = f"s3://{s3_bucket}/{resolved_key}"
+            typer.echo(f"✅ Resolved workflow uploaded to: {resolved_location}")
+            
         finally:
-            os.unlink(verify_temp.name)
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
 
+        # Create workflow using resolved YAML
         result = airflow_serverless.create_workflow(
             workflow_name=workflow_name,
-            dag_s3_location=s3_location,
+            dag_s3_location=resolved_location,
             role_arn=role_arn,
             description=f"SMUS CI/CD workflow for {manifest.application_name}",
             tags={

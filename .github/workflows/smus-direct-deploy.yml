@@ -64,10 +64,22 @@ jobs:
             --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/mwaaserverless-2024-07-26.normal-edited-2.json \
             --service-name mwaaserverless-internal
       
+      - name: Get AWS Account ID
+        id: aws-account
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          echo "account-id=$ACCOUNT_ID" >> $GITHUB_OUTPUT
+          echo "✓ AWS Account ID: $ACCOUNT_ID"
+      
       - name: smus-cli deploy to test (direct from branch)
         env:
           DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
           TEST_DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+          DEV_DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+          MLFLOW_TRACKING_SERVER_NAME: smus-integration-mlflow-use1
+          STS_REGION: ${{ vars.DOMAIN_REGION }}
+          STS_ACCOUNT_ID: ${{ steps.aws-account.outputs.account-id }}
+          AWS_ACCOUNT_ID: ${{ steps.aws-account.outputs.account-id }}
         run: |
           echo "🚀 Deploying directly from branch to test"
           cd experimental/SMUS-CICD-pipeline-cli
@@ -174,10 +186,22 @@ jobs:
             --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/mwaaserverless-2024-07-26.normal-edited-2.json \
             --service-name mwaaserverless-internal
       
+      - name: Get AWS Account ID
+        id: aws-account-test
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          echo "account-id=$ACCOUNT_ID" >> $GITHUB_OUTPUT
+          echo "✓ AWS Account ID: $ACCOUNT_ID"
+      
       - name: smus-cli test
         env:
           DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
           TEST_DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+          DEV_DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+          MLFLOW_TRACKING_SERVER_NAME: smus-integration-mlflow-use1
+          STS_REGION: ${{ vars.DOMAIN_REGION }}
+          STS_ACCOUNT_ID: ${{ steps.aws-account-test.outputs.account-id }}
+          AWS_ACCOUNT_ID: ${{ steps.aws-account-test.outputs.account-id }}
         run: |
           cd experimental/SMUS-CICD-pipeline-cli
           smus-cli test \

@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="3.418" timestamp="2025-11-21T15:47:57.603749+00:00" hostname="runnervmg1sw1"><testcase classname="tests.integration.basic_app.test_basic_app.TestBasicApp" name="test_basic_app_workflow" time="3.253"><failure message="AssertionError: Describe --connect failed: Pipeline: BasicTestBundle&#10;  Domain: None (us-east-2)&#10;  &#10;  Targets:&#10;    - dev: dev-marketing&#10;  2025-11-21 15:48:00,435 - smus_cicd.utils - ERROR - Error getting DataZone project info for dev-marketing: Domain not found - check domain name/tags in manifest or CloudFormation stack&#10;      ❌ Error connecting to AWS: Cannot connect to target 'dev': Domain not found.&#10;  Please check:&#10;    - Domain tags in manifest match an existing domain&#10;    - Domain region is correct&#10;    - AWS credentials have access to the domain&#10;    - test: test-project-basic&#10;  2025-11-21 15:48:00,932 - smus_cicd.utils - ERROR - Error getting DataZone project info for test-project-basic: Domain not found - check domain name/tags in manifest or CloudFormation stack&#10;      ❌ Error connecting to AWS: Cannot connect to target 'test': Domain not found.&#10;  Please check:&#10;    - Domain tags in manifest match an existing domain&#10;    - Domain region is correct&#10;    - AWS credentials have access to the domain&#10;  &#10;  Bootstrap Actions:&#10;    Target: test&#10;      - datazone.create_connection&#10;        name: mlflow-server&#10;        connection_type: MLFLOW&#10;        properties: {'trackingServerName': 'smus-integration-mlflow-use2', 'trackingServerArn': 'arn:aws:sagemaker:us-east-2:019900059033:mlflow-tracking-server/smus-integration-mlflow-use2'}&#10;  &#10;  ❌ Command failed due to errors above&#10;  &#10;assert False">tests/integration/basic_app/test_basic_app.py:123: in test_basic_app_workflow
+    assert result["success"], f"Describe --connect failed: {result['output']}"
+E   AssertionError: Describe --connect failed: Pipeline: BasicTestBundle
+E     Domain: None (us-east-2)
+E     
+E     Targets:
+E       - dev: dev-marketing
+E     2025-11-21 15:48:00,435 - smus_cicd.utils - ERROR - Error getting DataZone project info for dev-marketing: Domain not found - check domain name/tags in manifest or CloudFormation stack
+E         ❌ Error connecting to AWS: Cannot connect to target 'dev': Domain not found.
+E     Please check:
+E       - Domain tags in manifest match an existing domain
+E       - Domain region is correct
+E       - AWS credentials have access to the domain
+E       - test: test-project-basic
+E     2025-11-21 15:48:00,932 - smus_cicd.utils - ERROR - Error getting DataZone project info for test-project-basic: Domain not found - check domain name/tags in manifest or CloudFormation stack
+E         ❌ Error connecting to AWS: Cannot connect to target 'test': Domain not found.
+E     Please check:
+E       - Domain tags in manifest match an existing domain
+E       - Domain region is correct
+E       - AWS credentials have access to the domain
+E     
+E     Bootstrap Actions:
+E       Target: test
+E         - datazone.create_connection
+E           name: mlflow-server
+E           connection_type: MLFLOW
+E           properties: {'trackingServerName': 'smus-integration-mlflow-use2', 'trackingServerArn': 'arn:aws:sagemaker:us-east-2:019900059033:mlflow-tracking-server/smus-integration-mlflow-use2'}
+E     
+E     ❌ Command failed due to errors above
+E     
+E   assert False</failure></testcase></testsuite></testsuites>

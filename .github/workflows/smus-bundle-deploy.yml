@@ -199,6 +199,13 @@ jobs:
             --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/mwaaserverless-2024-07-26.normal-edited-2.json \
             --service-name mwaaserverless-internal
       
+      - name: Get AWS Account ID
+        id: aws-account-test
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          echo "account-id=$ACCOUNT_ID" >> $GITHUB_OUTPUT
+          echo "✓ AWS Account ID: $ACCOUNT_ID"
+      
       - name: smus-cli describe (validate test target)
         env:
           DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
@@ -212,6 +219,11 @@ jobs:
         env:
           DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
           TEST_DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+          DEV_DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+          MLFLOW_TRACKING_SERVER_NAME: smus-integration-mlflow-use1
+          STS_REGION: ${{ vars.DOMAIN_REGION }}
+          STS_ACCOUNT_ID: ${{ steps.aws-account-test.outputs.account-id }}
+          AWS_ACCOUNT_ID: ${{ steps.aws-account-test.outputs.account-id }}
         run: |
           echo "🔍 DOMAIN_REGION: $DOMAIN_REGION"
           echo "🔍 TEST_DOMAIN_REGION: $TEST_DOMAIN_REGION"
@@ -328,6 +340,13 @@ jobs:
             --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/mwaaserverless-2024-07-26.normal-edited-2.json \
             --service-name mwaaserverless-internal
       
+      - name: Get AWS Account ID
+        id: aws-account-prod
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          echo "account-id=$ACCOUNT_ID" >> $GITHUB_OUTPUT
+          echo "✓ AWS Account ID: $ACCOUNT_ID"
+      
       - name: smus-cli describe (validate prod target)
         env:
           DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
@@ -341,6 +360,11 @@ jobs:
         env:
           DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
           PROD_DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+          DEV_DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+          MLFLOW_TRACKING_SERVER_NAME: smus-integration-mlflow-use1
+          STS_REGION: ${{ vars.DOMAIN_REGION }}
+          STS_ACCOUNT_ID: ${{ steps.aws-account-prod.outputs.account-id }}
+          AWS_ACCOUNT_ID: ${{ steps.aws-account-prod.outputs.account-id }}
         run: |
           echo "🔍 DOMAIN_REGION: $DOMAIN_REGION"
           echo "🔍 PROD_DOMAIN_REGION: $PROD_DOMAIN_REGION"
