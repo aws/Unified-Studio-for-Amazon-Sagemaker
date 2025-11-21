@@ -67,14 +67,17 @@ if __name__ == '__main__':
         mlflow.set_tracking_uri(mlflow_tracking_uri)
         print(f"MLflow tracking URI set to: {mlflow_tracking_uri}")
         
-        # Set custom artifact location to project S3 bucket
+        # Get custom artifact location for project S3 bucket
         artifact_location = os.environ.get('MLFLOW_ARTIFACT_LOCATION')
-        if artifact_location:
-            os.environ['MLFLOW_ARTIFACT_URI'] = artifact_location
-            print(f"MLflow artifact location set to: {artifact_location}")
         
         # Start MLflow run
-        with mlflow.start_run():
+        run_kwargs = {}
+        if artifact_location:
+            # Set artifact_uri to override default tracking server location
+            run_kwargs['artifact_uri'] = artifact_location
+            print(f"MLflow artifact location set to: {artifact_location}")
+        
+        with mlflow.start_run(**run_kwargs):
             # Log parameters
             mlflow.log_param("n_estimators", args.n_estimators)
             mlflow.log_param("max_depth", args.max_depth)
