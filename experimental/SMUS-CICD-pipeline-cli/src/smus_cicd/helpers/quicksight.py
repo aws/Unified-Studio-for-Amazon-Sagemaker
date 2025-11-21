@@ -22,24 +22,24 @@ class QuickSightDeploymentError(Exception):
 def sanitize_job_id(name: str, max_length: int = 50) -> str:
     """
     Sanitize string for use in QuickSight job ID.
-    
+
     AWS QuickSight job IDs must:
     - Contain only alphanumeric characters, hyphens, and underscores
     - Be 1-512 characters long
-    
+
     Args:
         name: String to sanitize
         max_length: Maximum length for the sanitized string
-        
+
     Returns:
         Sanitized string safe for job ID
     """
     # Replace invalid characters with hyphens
-    sanitized = re.sub(r'[^a-zA-Z0-9_-]', '-', name)
+    sanitized = re.sub(r"[^a-zA-Z0-9_-]", "-", name)
     # Remove consecutive hyphens
-    sanitized = re.sub(r'-+', '-', sanitized)
+    sanitized = re.sub(r"-+", "-", sanitized)
     # Trim to max length
-    return sanitized[:max_length].strip('-')
+    return sanitized[:max_length].strip("-")
 
 
 def lookup_dashboard_by_name(
@@ -272,7 +272,9 @@ def poll_import_job(
                 return response
             elif status.startswith("FAILED"):
                 errors = response.get("Errors", [])
-                raise QuickSightDeploymentError(f"Import failed with status {status}: {errors}")
+                raise QuickSightDeploymentError(
+                    f"Import failed with status {status}: {errors}"
+                )
 
             time.sleep(5)
 
