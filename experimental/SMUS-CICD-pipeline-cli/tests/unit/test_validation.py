@@ -372,3 +372,4 @@ stages:
             assert "YAML syntax error" in error_message
         finally:
             os.unlink(manifest_file)
+
