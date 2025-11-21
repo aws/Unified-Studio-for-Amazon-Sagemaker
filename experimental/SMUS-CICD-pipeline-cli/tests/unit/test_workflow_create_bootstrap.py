@@ -99,7 +99,7 @@ def test_handle_workflow_create_specific_workflow(mock_action, mock_context):
                     mock_get_role.return_value = "arn:aws:iam::123:role/test"
                     
                     with patch("smus_cicd.helpers.connections.get_project_connections") as mock_get_conns:
-                        mock_get_conns.return_value = []
+                        mock_get_conns.return_value = {}
                         
                         with patch("smus_cicd.commands.deploy._find_dag_files_in_s3") as mock_find:
                             mock_find.return_value = []  # No DAG files
