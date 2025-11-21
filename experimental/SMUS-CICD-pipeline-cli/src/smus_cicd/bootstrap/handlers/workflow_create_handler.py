@@ -123,17 +123,19 @@ def handle_workflow_create(
         # Download original workflow YAML from S3
         s3_location = f"s3://{s3_bucket}/{s3_key}"
         typer.echo(f"🔍 Reading workflow from S3: {s3_location}")
-        
-        with tempfile.NamedTemporaryFile(mode="w+", suffix=".yaml", delete=False) as temp_file:
+
+        with tempfile.NamedTemporaryFile(
+            mode="w+", suffix=".yaml", delete=False
+        ) as temp_file:
             temp_path = temp_file.name
-        
+
         try:
             # Download original
             s3_client.download_file(s3_bucket, s3_key, temp_path)
-            
+
             # Resolve variables
             from ...helpers.context_resolver import ContextResolver
-            
+
             resolver = ContextResolver(
                 project_name=project_name,
                 domain_id=domain_id,
@@ -142,24 +144,24 @@ def handle_workflow_create(
                 stage_name=stage_name,
                 env_vars=target_config.environment_variables or {},
             )
-            
+
             typer.echo(f"🔄 Resolving variables in {workflow_name}")
             with open(temp_path, "r") as f:
                 original_content = f.read()
-            
+
             resolved_content = resolver.resolve(original_content)
-            
+
             # Upload resolved version
             resolved_key = s3_key.replace(".yaml", "-resolved.yaml")
             s3_client.put_object(
                 Bucket=s3_bucket,
                 Key=resolved_key,
-                Body=resolved_content.encode("utf-8")
+                Body=resolved_content.encode("utf-8"),
             )
-            
+
             resolved_location = f"s3://{s3_bucket}/{resolved_key}"
             typer.echo(f"✅ Resolved workflow uploaded to: {resolved_location}")
-            
+
         finally:
             if os.path.exists(temp_path):
                 os.unlink(temp_path)
