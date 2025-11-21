@@ -146,6 +146,16 @@ jobs:
         echo "Available domains:"
         aws datazone list-domains --region ${{ vars.DOMAIN_REGION }} --query 'items[].{id:id,name:name}' --output table
     
+    - name: Test describe --connect with basic_app manifest
+      env:
+        DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+        DEV_DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+        AWS_ACCOUNT_ID: ${{ steps.aws-account.outputs.account-id }}
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli
+        echo "Testing describe --connect with basic_app manifest"
+        smus-cli describe --connect --targets dev tests/integration/basic_app/manifest.yaml || echo "Describe failed"
+    
     - name: Run test
       env:
         DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
