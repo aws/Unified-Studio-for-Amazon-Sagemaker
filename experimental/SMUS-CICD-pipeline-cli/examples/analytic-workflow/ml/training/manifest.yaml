@@ -58,7 +58,7 @@ stages:
         name: mlflow-server
         connection_type: MLFLOW
         properties:
-          trackingServerArn: arn:aws:sagemaker:${STS_REGION}:${STS_ACCOUNT_ID}:mlflow-tracking-server/${MLFLOW_TRACKING_SERVER_NAME:smus-integration-mlflow-use2}
+          trackingServerArn: arn:aws:sagemaker:${STS_REGION}:${STS_ACCOUNT_ID}:mlflow-tracking-server/${MLFLOW_TRACKING_SERVER_NAME:smus-integration-mlflow-use1}
       - type: workflow.create
         workflowName: ml_training_workflow
       - type: workflow.run
