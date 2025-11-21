@@ -551,33 +551,37 @@ def _deploy_bundle_to_target(
 
 
 def _copy_and_resolve_yaml(
-    source_path: str, dest_path: str, project_name: str, config: Dict[str, Any], stage_name: Optional[str] = None
+    source_path: str,
+    dest_path: str,
+    project_name: str,
+    config: Dict[str, Any],
+    stage_name: Optional[str] = None,
 ) -> None:
     """Copy YAML file and resolve {proj.*} variables."""
-    from ..bootstrap.context_resolver import ContextResolver
-    
+    from ..helpers.context_resolver import ContextResolver
+
     # Read source file
-    with open(source_path, 'r') as f:
+    with open(source_path, "r") as f:
         content = f.read()
-    
+
     # Only resolve if file contains {proj. patterns
-    if '{proj.' in content:
+    if "{proj." in content:
         # Build resolver context
         resolver = ContextResolver(
             project_name=project_name,
-            domain_id=config.get('domain_id'),
-            region=config.get('region'),
-            domain_name=config.get('domain_name'),
-            stage_name=stage_name or 'test',
-            env_vars={}
+            domain_id=config.get("domain_id"),
+            region=config.get("region"),
+            domain_name=config.get("domain_name"),
+            stage_name=stage_name or "test",
+            env_vars={},
         )
-        
+
         # Resolve variables
         content = resolver.resolve(content)
         typer.echo(f"  ✓ Resolved variables in {os.path.basename(source_path)}")
-    
+
     # Write resolved content
-    with open(dest_path, 'w') as f:
+    with open(dest_path, "w") as f:
         f.write(content)
 
 
@@ -648,8 +652,10 @@ def _deploy_local_storage_item(
             import shutil
 
             # For YAML files, resolve variables before copying
-            if file_path.endswith(('.yaml', '.yml')):
-                _copy_and_resolve_yaml(file_path, dest_path, project_name, config, stage_name)
+            if file_path.endswith((".yaml", ".yml")):
+                _copy_and_resolve_yaml(
+                    file_path, dest_path, project_name, config, stage_name
+                )
             else:
                 shutil.copy2(file_path, dest_path)
 
