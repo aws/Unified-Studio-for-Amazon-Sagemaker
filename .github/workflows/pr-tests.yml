@@ -72,7 +72,7 @@ jobs:
         cd experimental/SMUS-CICD-pipeline-cli/tests/integration
         
         # Find all directories with test_*.py files, excluding current dir
-        test_dirs=$(find . -mindepth 1 -maxdepth 2 -name "test_*.py" | \
+        test_dirs=$(find . -mindepth 1 -maxdepth 3 -name "test_*.py" | \
           xargs -I {} dirname {} | \
           sort -u | \
           sed 's|^\./||' | \
@@ -128,6 +128,21 @@ jobs:
         ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
         echo "account-id=$ACCOUNT_ID" >> $GITHUB_OUTPUT
         echo "✓ AWS Account ID: $ACCOUNT_ID"
+    
+    - name: Verify DataZone domain exists
+      run: |
+        echo "🔍 Checking for DataZone domain with tag purpose=smus-cicd-testing in ${{ vars.DOMAIN_REGION }}"
+        DOMAIN_ID=$(aws datazone list-domains --region ${{ vars.DOMAIN_REGION }} --query 'items[?tags.purpose==`smus-cicd-testing`].id' --output text)
+        if [ -z "$DOMAIN_ID" ]; then
+          echo "❌ No DataZone domain found with tag purpose=smus-cicd-testing"
+          echo "   Region: ${{ vars.DOMAIN_REGION }}"
+          echo "   Account: $(aws sts get-caller-identity --query Account --output text)"
+          echo ""
+          echo "Available domains:"
+          aws datazone list-domains --region ${{ vars.DOMAIN_REGION }} --query 'items[].{id:id,name:name,tags:tags}' --output table || echo "No domains found"
+          exit 1
+        fi
+        echo "✓ Found DataZone domain: $DOMAIN_ID"
     
     - name: Generate test name
       id: test-name
