@@ -21,6 +21,19 @@ class DomainConfig:
     name: Optional[str] = None
     tags: Optional[Dict[str, str]] = None
 
+    def get_name(self) -> Optional[str]:
+        """Get domain name, resolving from tags if needed."""
+        if self.name:
+            return self.name
+        if self.tags:
+            from ..helpers.datazone import get_domain_id_and_name
+
+            _, resolved_name = get_domain_id_and_name(
+                domain_tags=self.tags, region=self.region
+            )
+            return resolved_name
+        return None
+
 
 @dataclass
 class AssetSearchConfig:
