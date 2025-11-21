@@ -154,7 +154,7 @@ jobs:
       run: |
         cd experimental/SMUS-CICD-pipeline-cli
         echo "Testing describe --connect with basic_app manifest"
-        smus-cli describe --connect --targets dev --manifest tests/integration/basic_app/manifest.yaml || echo "Describe failed"
+        smus-cli describe --connect --targets test --manifest tests/integration/basic_app/manifest.yaml || echo "Describe failed"
     
     - name: Run test
       env:
