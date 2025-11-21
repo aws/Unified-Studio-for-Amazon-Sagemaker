@@ -1671,8 +1671,8 @@ def _deploy_quicksight_dashboards(
     imported_dataset_ids = []
 
     for dashboard_config in dashboards:
-        dashboard_id = dashboard_config.dashboardId
-        typer.echo(f"  Deploying dashboard: {dashboard_id}")
+        dashboard_name = dashboard_config.name
+        typer.echo(f"  Deploying dashboard: {dashboard_name}")
 
         # Get assetBundle (with fallback to 'source' for backward compatibility during transition)
         asset_bundle = getattr(dashboard_config, "assetBundle", None) or getattr(
@@ -1684,7 +1684,7 @@ def _deploy_quicksight_dashboards(
             # Determine bundle source
             if not bundle:
                 typer.echo(
-                    f"    Warning: No bundle specified, skipping {dashboard_id}",
+                    f"    Warning: No bundle specified, skipping {dashboard_name}",
                     err=True,
                 )
                 continue
@@ -1696,7 +1696,7 @@ def _deploy_quicksight_dashboards(
 
             # Determine file path in zip
             if asset_bundle == "export":
-                dashboard_file_in_zip = f"quicksight/{dashboard_id}.qs"
+                dashboard_file_in_zip = f"quicksight/{dashboard_name}.qs"
             else:
                 # Use provided asset bundle path
                 dashboard_file_in_zip = asset_bundle
@@ -1758,8 +1758,8 @@ def _deploy_quicksight_dashboards(
             )
             result = poll_import_job(job_id, aws_account_id, region)
 
-            # Initialize with original dashboard ID
-            imported_dashboard_id = dashboard_id
+            # Initialize imported dashboard ID
+            imported_dashboard_id = None
 
             # Print imported assets
             if result.get("JobStatus") == "SUCCESSFUL":
@@ -1767,7 +1767,6 @@ def _deploy_quicksight_dashboards(
 
                 # Get the actual imported dashboard ID from override parameters
                 # The imported ID is: prefix + dashboard_id_from_overrides
-                imported_dashboard_id = dashboard_id
                 prefix = ""
                 if (
                     override_params
@@ -1828,20 +1827,31 @@ def _deploy_quicksight_dashboards(
                 except Exception as e:
                     typer.echo(f"      ⚠️  Could not list data sources: {e}")
 
-                # Grant permissions from deployment_configuration
-                permissions = []
+                # Get permissions from deployment_configuration.quicksight.items
+                owners = []
+                viewers = []
+
                 if qs_config:
-                    permissions = getattr(qs_config, "permissions", []) or []
+                    items = qs_config.get("items", []) if isinstance(qs_config, dict) else getattr(qs_config, "items", [])
+                    # Find matching item by dashboard name
+                    for item in items:
+                        item_name = item.get("name") if isinstance(item, dict) else getattr(item, "name", None)
+                        if item_name == dashboard_name:
+                            if isinstance(item, dict):
+                                owners = item.get("owners", []) or []
+                                viewers = item.get("viewers", []) or []
+                            else:
+                                owners = getattr(item, "owners", []) or []
+                                viewers = getattr(item, "viewers", []) or []
+                            break
 
-                # Add owner and viewer permissions from dashboard config
-                owners = getattr(dashboard_config, "owners", []) or []
-                viewers = getattr(dashboard_config, "viewers", []) or []
-
-                typer.echo(f"🔍 Dashboard config owners: {owners}")
-                typer.echo(f"🔍 Dashboard config viewers: {viewers}")
+                typer.echo(f"🔍 Dashboard permissions from deployment_configuration:")
+                typer.echo(f"    Owners: {owners}")
+                typer.echo(f"    Viewers: {viewers}")
 
                 # Track principals to avoid duplicates (owners take precedence over viewers)
                 principal_actions = {}
+                permissions = []
 
                 for owner in owners:
                     principal_actions[owner] = [

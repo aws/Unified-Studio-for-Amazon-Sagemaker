@@ -41,20 +41,19 @@ class TestDashboardGlueQuickWorkflow(IntegrationTestBase):
 
     def setup_quicksight_test_dashboard(self):
         """Import test dashboard if it doesn't exist."""
+        from src.smus_cicd.helpers.quicksight import lookup_dashboard_by_name
+        
         quicksight_client = boto3.client('quicksight', region_name='us-east-2')
         account_id = boto3.client('sts').get_caller_identity()['Account']
-        dashboard_id = 'test-covid-dashboard'
+        dashboard_name = 'TotalDeathByCountry'
         
         try:
-            # Check if dashboard exists
-            quicksight_client.describe_dashboard(
-                AwsAccountId=account_id,
-                DashboardId=dashboard_id
-            )
-            self.logger.info(f"✅ Test dashboard already exists: {dashboard_id}")
-        except quicksight_client.exceptions.ResourceNotFoundException:
+            # Check if dashboard exists by name
+            dashboard_id = lookup_dashboard_by_name(dashboard_name, account_id, 'us-east-2')
+            self.logger.info(f"✅ Test dashboard already exists: {dashboard_name} (ID: {dashboard_id})")
+        except Exception:
             # Dashboard doesn't exist, import it
-            self.logger.info(f"📊 Importing test dashboard: {dashboard_id}")
+            self.logger.info(f"📊 Importing test dashboard: {dashboard_name}")
             setup_script = os.path.join(
                 os.path.dirname(__file__),
                 "../../../../examples/analytic-workflow/dashboard-glue-quick/quicksight/setup_test_dashboard.py"
@@ -65,7 +64,7 @@ class TestDashboardGlueQuickWorkflow(IntegrationTestBase):
                 text=True
             )
             if result.returncode == 0:
-                self.logger.info(f"✅ Test dashboard imported: {dashboard_id}")
+                self.logger.info(f"✅ Test dashboard imported: {dashboard_name}")
             else:
                 self.logger.warning(f"⚠️ Failed to import test dashboard: {result.stderr}")
 
@@ -155,8 +154,8 @@ class TestDashboardGlueQuickWorkflow(IntegrationTestBase):
             )
             self.logger.info(f"   Version: {detail_response['Dashboard']['Version']['VersionNumber']}")
             
-            # Verify it's different from source dashboard
-            assert dashboard_id != 'test-covid-dashboard', "Dashboard ID should be different from source"
+            # Verify dashboard name has deployment prefix
+            assert deployed_dashboard['Name'].startswith('deployed-test-'), "Dashboard name should have deployment prefix"
             
             # Check datasets exist
             datasets = quicksight_client.list_data_sets(AwsAccountId=account_id)

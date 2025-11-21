@@ -38,7 +38,7 @@ stages:
       - arn:aws:iam::*:role/GitHubActionsRole-SMUS-CLI-Tests
       contributors: []
       role:
-        arn: arn:aws:iam::*:role/SMUSCICDTestRole
+        arn: arn:aws:iam::*:role/GitHubActionsRole-SMUS-CLI-Tests
   test:
     stage: TEST
     domain:

@@ -18,6 +18,43 @@ class QuickSightDeploymentError(Exception):
     pass
 
 
+def lookup_dashboard_by_name(
+    name: str,
+    aws_account_id: str,
+    region: str,
+) -> str:
+    """
+    Lookup dashboard ID by name.
+
+    Args:
+        name: Dashboard name to lookup
+        aws_account_id: AWS account ID
+        region: AWS region
+
+    Returns:
+        Dashboard ID
+
+    Raises:
+        QuickSightDeploymentError: If dashboard not found
+    """
+    try:
+        client = boto3.client("quicksight", region_name=region)
+        response = client.list_dashboards(AwsAccountId=aws_account_id)
+
+        for dashboard in response.get("DashboardSummaryList", []):
+            if dashboard.get("Name") == name:
+                logger.info(
+                    f"Found dashboard '{name}' with ID: {dashboard['DashboardId']}"
+                )
+                return dashboard["DashboardId"]
+
+        raise QuickSightDeploymentError(
+            f"Dashboard with name '{name}' not found in account {aws_account_id}"
+        )
+    except ClientError as e:
+        raise QuickSightDeploymentError(f"Failed to lookup dashboard: {e}")
+
+
 def export_dashboard(
     dashboard_id: str,
     aws_account_id: str,

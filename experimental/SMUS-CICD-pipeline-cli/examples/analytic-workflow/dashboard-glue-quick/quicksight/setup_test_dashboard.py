@@ -36,11 +36,11 @@ def setup_test_dashboard():
     
     # Configuration
     dashboard_bundle = os.path.join(os.path.dirname(__file__), "sample-dashboard.qs")
-    dashboard_id = "test-covid-dashboard"
+    dashboard_name = "TotalDeathByCountry"
     quicksight_user = os.environ.get("QUICKSIGHT_USER", "default-user")
     principal = f"arn:aws:quicksight:{dev_region}:{account_id}:user/default/{quicksight_user}"
     
-    print(f"Setting up test dashboard: {dashboard_id}")
+    print(f"Setting up test dashboard: {dashboard_name}")
     print(f"  Bundle: {dashboard_bundle}")
     print(f"  Region: {dev_region}")
     print(f"  Account: {account_id}")
@@ -59,7 +59,7 @@ def setup_test_dashboard():
     
     result = poll_import_job(job_id, account_id, dev_region)
     
-    print(f"✓ Dashboard imported successfully: {dashboard_id}")
+    print(f"✓ Dashboard imported successfully: {dashboard_name}")
     
     # Grant permissions to all imported assets (dashboard, datasets, data sources)
     print("\nGranting permissions to all imported assets...")
@@ -69,9 +69,9 @@ def setup_test_dashboard():
     print(f"\n✅ Test dashboard setup complete!")
     print(f"\nNext steps:")
     print(f"  1. Run: smus-cli bundle --targets dev")
-    print(f"     → Will export '{dashboard_id}' as 'bundled-test-covid-dashboard'")
+    print(f"     → Will export '{dashboard_name}' by name lookup")
     print(f"  2. Run: smus-cli deploy --targets test")
-    print(f"     → Will import as 'deployed-test-covid-dashboard' in us-east-1")
+    print(f"     → Will import as 'deployed-test-{dashboard_name}' in us-east-1")
 
 
 if __name__ == "__main__":

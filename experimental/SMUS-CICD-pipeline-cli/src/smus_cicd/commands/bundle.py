@@ -240,14 +240,34 @@ def bundle_command(
                         asset_bundle = getattr(
                             dashboard_config, "assetBundle", "export"
                         )
-                        dashboard_id = dashboard_config.dashboardId
+                        # Use name for lookup
+                        dashboard_name = getattr(dashboard_config, "name", None)
+
+                        if not dashboard_name:
+                            typer.echo(
+                                "Error: 'name' field is required for QuickSight dashboards",
+                                err=True,
+                            )
+                            continue
 
                         if asset_bundle == "export":
                             # Export from QuickSight service
-                            typer.echo(
-                                f"Exporting QuickSight dashboard: {dashboard_id}"
-                            )
                             try:
+                                # Lookup dashboard ID by name
+                                from ..helpers.quicksight import (
+                                    lookup_dashboard_by_name,
+                                )
+
+                                typer.echo(
+                                    f"Looking up QuickSight dashboard by name: {dashboard_name}"
+                                )
+                                dashboard_id = lookup_dashboard_by_name(
+                                    dashboard_name, aws_account_id, region
+                                )
+
+                                typer.echo(
+                                    f"Exporting QuickSight dashboard: {dashboard_name}"
+                                )
                                 job_id = export_dashboard(
                                     dashboard_id, aws_account_id, region
                                 )
@@ -264,7 +284,7 @@ def bundle_command(
                                 bundle_path = os.path.join(
                                     temp_bundle_dir,
                                     "quicksight",
-                                    f"{dashboard_id}.qs",
+                                    f"{dashboard_name}.qs",
                                 )
                                 os.makedirs(os.path.dirname(bundle_path), exist_ok=True)
                                 with open(bundle_path, "wb") as f:
@@ -299,11 +319,11 @@ def bundle_command(
                                     )
                                     continue
 
-                                # Copy to bundle at quicksight/{dashboardId}.qs
+                                # Copy to bundle at quicksight/{name}.qs
                                 bundle_path = os.path.join(
                                     temp_bundle_dir,
                                     "quicksight",
-                                    f"{dashboard_id}.qs",
+                                    f"{dashboard_name}.qs",
                                 )
                                 os.makedirs(os.path.dirname(bundle_path), exist_ok=True)
 

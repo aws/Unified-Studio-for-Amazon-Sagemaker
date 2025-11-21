@@ -96,29 +96,28 @@ properties:
         additionalProperties: false
       quicksight:
         type: array
-        description: "QuickSight dashboards to deploy (dashboardId and assetBundle only)"
+        description: "QuickSight assets to deploy (use name for lookup, not ID)"
         items:
           type: object
           required:
-            - dashboardId
+            - name
+            - type
           properties:
-            dashboardId:
+            name:
               type: string
-              description: "QuickSight dashboard ID"
+              description: "Dashboard/dataset name (used for lookup in QuickSight)"
+            type:
+              type: string
+              description: "Asset type: dashboard, dataset, analysis, datasource"
+              enum: [dashboard, dataset, analysis, datasource]
+              default: dashboard
             assetBundle:
               type: string
-              description: "Dashboard asset bundle path in bundle zip (e.g., quicksight/dashboard.qs) or 'export' to export from source environment"
-              default: "export"
-            owners:
-              type: array
-              description: "List of QuickSight user ARNs with owner permissions (supports wildcards)"
-              items:
-                type: string
-            viewers:
-              type: array
-              description: "List of QuickSight user ARNs with viewer permissions (supports wildcards)"
-              items:
-                type: string
+              description: "Local asset bundle file path (e.g., quicksight/dashboard.qs). If not provided, exports from QuickSight by name"
+            recursive:
+              type: boolean
+              description: "Export with all dependencies (datasets, datasources)"
+              default: false
           additionalProperties: false
       workflows:
         type: array
@@ -517,28 +516,32 @@ definitions:
             type: object
             description: "QuickSight deployment configuration for this stage"
             properties:
+              items:
+                type: array
+                description: "Per-dashboard permissions configuration"
+                items:
+                  type: object
+                  required:
+                    - name
+                  properties:
+                    name:
+                      type: string
+                      description: "Dashboard name (must match content.quicksight.name)"
+                    owners:
+                      type: array
+                      description: "List of QuickSight user ARNs with owner permissions"
+                      items:
+                        type: string
+                    viewers:
+                      type: array
+                      description: "List of QuickSight user ARNs with viewer permissions"
+                      items:
+                        type: string
+                  additionalProperties: false
               overrideParameters:
                 type: object
                 description: "Parameters to override during dashboard import (AWS QuickSight OverrideParameters structure)"
                 additionalProperties: true
-              permissions:
-                type: array
-                description: "Dashboard permissions to grant"
-                items:
-                  type: object
-                  required:
-                    - principal
-                    - actions
-                  properties:
-                    principal:
-                      type: string
-                      description: "User or group ARN"
-                    actions:
-                      type: array
-                      description: "QuickSight permission actions"
-                      items:
-                        type: string
-                  additionalProperties: false
             additionalProperties: false
         additionalProperties: false
       environment_variables:
