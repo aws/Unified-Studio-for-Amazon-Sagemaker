@@ -111,7 +111,7 @@ jobs:
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
         aws-region: ${{ vars.DOMAIN_REGION }}
         role-session-name: test-${{ matrix.test-path }}
         role-duration-seconds: 43200
