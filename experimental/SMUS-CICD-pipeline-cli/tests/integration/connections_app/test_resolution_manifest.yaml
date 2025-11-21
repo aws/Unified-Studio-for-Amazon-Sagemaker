@@ -1,0 +1,20 @@
+applicationName: TestVariableResolution
+content:
+  workflows:
+  - workflowName: test_workflow
+    connectionName: default.workflow_serverless
+
+stages:
+  test:
+    stage: TEST
+    domain:
+      region: us-east-1
+    project:
+      name: test-marketing
+    environment_variables:
+      TEST_VAR: test_value
+      AWS_ACCOUNT_ID: "019900059033"
+    bootstrap:
+      actions:
+      - type: custom.debug_resolve
+        s3_location: "{proj.connection.default.s3_shared.s3Uri}ml/bundle/training-workflows/ml_training_workflow.yaml"

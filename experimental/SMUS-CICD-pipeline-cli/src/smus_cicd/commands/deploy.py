@@ -184,6 +184,14 @@ def deploy_command(
                 metadata = {}
             metadata["project_info"] = project_info
 
+            # Add project_info to config for bootstrap actions
+            if project_info and not project_info.get("error"):
+                config["project_info"] = project_info
+                if project_info.get("domain_id"):
+                    config["domain_id"] = project_info["domain_id"]
+                if project_info.get("domain_name"):
+                    config["domain_name"] = project_info["domain_name"]
+
             # Emit project init completed
             project_info_event = {
                 "name": target_config.project.name,
@@ -219,17 +227,21 @@ def deploy_command(
         if imported_dataset_ids:
             config["imported_quicksight_datasets"] = imported_dataset_ids
 
-        # Deploy bundle and track errors
-        deployment_success = _deploy_bundle_to_target(
-            target_config,
-            manifest,
-            config,
-            bundle,
-            stage_name,
-            emitter,
-            metadata,
-            manifest_file,
-        )
+        # Deploy bundle and track errors (skip if no deployment_configuration)
+        deployment_success = True
+        if target_config.deployment_configuration:
+            deployment_success = _deploy_bundle_to_target(
+                target_config,
+                manifest,
+                config,
+                bundle,
+                stage_name,
+                emitter,
+                metadata,
+                manifest_file,
+            )
+        else:
+            typer.echo("No deployment_configuration - skipping bundle deployment")
 
         if deployment_success:
             # Process bootstrap actions (after deployment completes)
@@ -333,8 +345,31 @@ def _get_target_config(stage_name: str, manifest: ApplicationManifest):
     if not target_config:
         handle_error(f"Target '{stage_name}' not found in manifest")
 
-    if not target_config.deployment_configuration:
-        handle_error(f"No deployment_configuration found for target '{stage_name}'")
+    # If no deployment_configuration, create default using all content.storage with default.s3_shared
+    # Only create if there's actually content to deploy
+    if (
+        not target_config.deployment_configuration
+        and manifest.content
+        and manifest.content.storage
+    ):
+        from ..application.application_manifest import (
+            DeploymentConfiguration,
+            StorageConfig,
+        )
+
+        storage_configs = []
+        for storage_item in manifest.content.storage:
+            storage_configs.append(
+                StorageConfig(
+                    name=storage_item.name,
+                    connectionName="default.s3_shared",
+                    targetDirectory=f"bundle/{storage_item.name}",
+                )
+            )
+
+        target_config.deployment_configuration = DeploymentConfiguration(
+            storage=storage_configs
+        )
 
     return target_config
 
@@ -1723,11 +1758,17 @@ def _process_bootstrap_actions(
     context = {
         "stage": stage_name,
         "project": {"name": target_config.project.name},
+        "project_name": target_config.project.name,  # Add for ContextResolver
         "domain": {
             "name": target_config.domain.name,
             "region": target_config.domain.region,
         },
+        "domain_id": config.get("domain_id"),  # Add for ContextResolver
+        "domain_name": config.get("domain_name"),  # Add for ContextResolver
         "region": config.get("region"),
+        "stage_name": stage_name,  # Add for ContextResolver
+        "env_vars": target_config.environment_variables
+        or {},  # Add for ContextResolver
         "config": config,  # Pass full config including imported_quicksight_datasets
         "manifest": manifest,  # Add manifest to context
         "target_config": target_config,  # Add target_config to context
@@ -1740,6 +1781,15 @@ def _process_bootstrap_actions(
 
         # Log results
         success_count = sum(1 for r in results if r["status"] == "success")
+
+        # Print log.debug results
+        for result in results:
+            if result.get("action") == "log.debug":
+                inner_result = result.get("result", {})
+                resolved = inner_result.get("resolved")
+                if resolved:
+                    typer.echo(f"  📝 {resolved}")
+
         typer.echo(f"  ✓ Processed {success_count} actions successfully")
     except Exception as e:
         handle_error(f"Bootstrap action failed: {e}")

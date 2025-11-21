@@ -43,7 +43,6 @@ stages:
           value: analytic_workflow_test_db
     environment_variables:
       S3_PREFIX: test
-      MLFLOW_ARTIFACT_LOCATION: s3://amazon-sagemaker-${AWS_ACCOUNT_ID}-${TEST_DOMAIN_REGION}-{proj.id}/shared/ml/mlflow-artifacts
     deployment_configuration:
       storage:
       - name: training-code
@@ -55,6 +54,8 @@ stages:
         targetDirectory: ml/bundle/training-workflows
     bootstrap:
       actions:
+      - type: log.debug
+        message: "MLFLOW_ARTIFACTS: {proj.connection.default.s3_shared.s3Uri}ml/mlflow-artifacts"
       - type: datazone.create_connection
         name: mlflow-server
         connection_type: MLFLOW

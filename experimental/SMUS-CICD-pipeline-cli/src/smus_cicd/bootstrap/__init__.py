@@ -4,6 +4,7 @@ from .action_registry import registry
 from .executor import BootstrapExecutor
 from .handlers.custom_handler import handle_custom_action
 from .handlers.datazone_handler import handle_datazone_action
+from .handlers.log_handler import handle_log_action
 from .handlers.mwaaserverless_handler import handle_mwaaserverless_action
 from .handlers.quicksight_handler import handle_quicksight_action
 from .handlers.workflow_handler import handle_workflow_action
@@ -14,6 +15,7 @@ from .models import BootstrapAction, BootstrapConfig
 registry.register("datazone", handle_datazone_action)
 registry.register("mwaaserverless", handle_mwaaserverless_action)
 registry.register("custom", handle_custom_action)
+registry.register("log", handle_log_action)
 registry.register("workflow", handle_workflow_action)
 registry.register("workflow.create", handle_workflow_create)
 registry.register("quicksight", handle_quicksight_action)
