@@ -596,7 +596,10 @@ def _resolve_and_upload_workflows(
     # Get workflow names from manifest content.workflows
     workflow_names = set()
     if manifest and manifest.content and manifest.content.workflows:
-        workflow_names = {wf.workflowName for wf in manifest.content.workflows}
+        workflow_names = {
+            wf.get("workflowName") if isinstance(wf, dict) else wf.workflowName
+            for wf in manifest.content.workflows
+        }
         typer.echo(
             f"\n🔄 Resolving variables for workflows: {', '.join(workflow_names)}"
         )
