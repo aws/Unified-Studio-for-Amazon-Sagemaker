@@ -42,8 +42,7 @@ jobs:
     - name: Run unit tests with coverage
       run: |
         cd experimental/SMUS-CICD-pipeline-cli
-        pytest tests/unit/ -v --tb=short --cov=src/smus_cicd --cov-report=xml:coverage-unit.xml --cov-report=html:htmlcov-unit --junit-xml=test-results-unit.xml
-        cp .coverage coverage-unit.data
+        pytest tests/unit/ -v --tb=short --cov=src/smus_cicd --cov-report=xml --cov-report=html --junit-xml=tests/test-outputs/test-results-unit.xml
     
     - name: Upload unit test coverage
       uses: actions/upload-artifact@v4
@@ -51,10 +50,10 @@ jobs:
       with:
         name: coverage-unit
         path: |
-          experimental/SMUS-CICD-pipeline-cli/coverage-unit.xml
-          experimental/SMUS-CICD-pipeline-cli/coverage-unit.data
-          experimental/SMUS-CICD-pipeline-cli/htmlcov-unit/
-          experimental/SMUS-CICD-pipeline-cli/test-results-unit.xml
+          experimental/SMUS-CICD-pipeline-cli/tests/test-outputs/coverage.xml
+          experimental/SMUS-CICD-pipeline-cli/tests/test-outputs/.coverage
+          experimental/SMUS-CICD-pipeline-cli/tests/test-outputs/coverage/
+          experimental/SMUS-CICD-pipeline-cli/tests/test-outputs/test-results-unit.xml
         retention-days: 30
 
   discover-tests:
