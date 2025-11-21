@@ -112,7 +112,7 @@ jobs:
       uses: aws-actions/configure-aws-credentials@v4
       with:
         role-to-assume: ${{ secrets.AWS_ROLE_ARN_TEST }}
-        aws-region: ${{ vars.TEST_DOMAIN_REGION }}
+        aws-region: ${{ vars.DOMAIN_REGION }}
         role-session-name: test-${{ matrix.test-path }}
         role-duration-seconds: 43200
     
