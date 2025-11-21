@@ -116,12 +116,15 @@ jobs:
                           '--output-dir', 'tests/test-outputs/notebooks'
                       ], capture_output=True, text=True)
                       
+                      if result.stdout:
+                          print(result.stdout)
+                      if result.stderr:
+                          print(result.stderr)
+                      
                       if result.returncode == 0:
                           print(f"✅ Downloaded outputs for {workflow_name}")
                       else:
                           print(f"⚠️ No outputs found for {workflow_name}")
-                          if result.stdout:
-                              print(result.stdout)
           
           except Exception as e:
               print(f"❌ Error downloading notebooks: {e}")

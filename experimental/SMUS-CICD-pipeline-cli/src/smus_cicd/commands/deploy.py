@@ -694,6 +694,35 @@ def _is_workflow_yaml(yaml_data: dict) -> bool:
     return False
 
 
+def _create_compressed_archive(
+    source_path: str, item_name: str, temp_dir: str
+) -> str:
+    """Create a tar.gz archive from source path and return archive-only directory."""
+    import tarfile
+    import shutil
+
+    archive_name = f"{item_name}.tar.gz"
+    archive_path = os.path.join(temp_dir, archive_name)
+
+    typer.echo(f"  Creating compressed archive: {archive_name}")
+    with tarfile.open(archive_path, "w:gz") as tar:
+        if os.path.isdir(source_path):
+            for root, dirs, files in os.walk(source_path):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, source_path)
+                    tar.add(file_path, arcname=arcname)
+        else:
+            tar.add(source_path, arcname=os.path.basename(source_path))
+
+    # Create directory with only the archive
+    archive_only_dir = os.path.join(temp_dir, "_archive_deploy")
+    os.makedirs(archive_only_dir, exist_ok=True)
+    shutil.copy(archive_path, os.path.join(archive_only_dir, archive_name))
+
+    return archive_only_dir
+
+
 def _deploy_local_storage_item(
     manifest_dir: str,
     content_item,
@@ -761,15 +790,30 @@ def _deploy_local_storage_item(
 
             shutil.copy2(file_path, dest_path)
 
-        # Deploy to S3
-        success = deployment.deploy_files(
-            temp_dir, connection, target_dir, region, temp_dir
+        # Check if compression is requested
+        compression = (
+            storage_config.compression
+            if hasattr(storage_config, "compression")
+            else None
         )
 
+        if compression in ["gz", "tar.gz"]:
+            # Create compressed archive
+            archive_dir = _create_compressed_archive(temp_dir, name, temp_dir)
+            success = deployment.deploy_files(
+                archive_dir, connection, target_dir, region, archive_dir
+            )
+            deployed_files = [f"{name}.tar.gz"] if success else None
+        else:
+            # Deploy files directly
+            success = deployment.deploy_files(
+                temp_dir, connection, target_dir, region, temp_dir
+            )
+            deployed_files = (
+                [os.path.relpath(f, temp_dir) for f in all_files] if success else None
+            )
+
         s3_uri = connection.get("s3Uri", "")
-        deployed_files = (
-            [os.path.relpath(f, temp_dir) for f in all_files] if success else None
-        )
         return deployed_files, s3_uri
 
 
@@ -1005,8 +1049,6 @@ def _deploy_named_item_from_bundle(
     target_dir: str,
 ) -> Tuple[Optional[List[str]], Optional[str]]:
     """Deploy a named item from bundle to target directory."""
-    import tarfile
-
     from ..helpers.bundle_storage import ensure_bundle_local, is_s3_url
 
     local_bundle_path = ensure_bundle_local(bundle_file, config["region"])
@@ -1029,38 +1071,13 @@ def _deploy_named_item_from_bundle(
                     else None
                 )
                 if compression in ["gz", "tar.gz"]:
-                    # Create tar.gz archive
-                    archive_name = f"{item_name}.tar.gz"
-                    archive_path = os.path.join(temp_dir, archive_name)
-
-                    typer.echo(f"  Creating compressed archive: {archive_name}")
-                    with tarfile.open(archive_path, "w:gz") as tar:
-                        # Add all contents of item_path to archive
-                        if os.path.isdir(item_path):
-                            for root, dirs, files in os.walk(item_path):
-                                for file in files:
-                                    file_path = os.path.join(root, file)
-                                    arcname = os.path.relpath(file_path, item_path)
-                                    tar.add(file_path, arcname=arcname)
-                        else:
-                            tar.add(item_path, arcname=os.path.basename(item_path))
-
-                    # Deploy the archive
-                    deployed_files = [archive_name]
-                    # Create a temp directory with only the archive file
-                    archive_only_dir = os.path.join(temp_dir, "_archive_deploy")
-                    os.makedirs(archive_only_dir, exist_ok=True)
-                    archive_deploy_path = os.path.join(archive_only_dir, archive_name)
-                    import shutil
-
-                    shutil.copy(archive_path, archive_deploy_path)
-
+                    # Create compressed archive
+                    archive_dir = _create_compressed_archive(
+                        item_path, item_name, temp_dir
+                    )
+                    deployed_files = [f"{item_name}.tar.gz"]
                     success = deployment.deploy_files(
-                        archive_only_dir,
-                        connection,
-                        target_dir,
-                        region,
-                        archive_only_dir,
+                        archive_dir, connection, target_dir, region, archive_dir
                     )
                 else:
                     # Original behavior - deploy directory contents

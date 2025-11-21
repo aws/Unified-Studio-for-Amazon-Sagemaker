@@ -1,4 +1,4 @@
-applicationName: IntegrationTestMultiTarget
+applicationName: GlueMwaaCatalogApp
 content:
   storage:
   - connectionName: default.s3_shared
@@ -26,7 +26,7 @@ content:
           assetType: GlueTable
           identifier: covid19_db.countries_aggregated
       permission: READ
-      requestReason: Required access for pipeline IntegrationTestMultiTarget
+      requestReason: Required access for pipeline GlueMwaaCatalogApp
     - selector:
         search:
           assetType: GlueTable
@@ -57,7 +57,7 @@ stages:
         purpose: smus-cicd-testing
       region: ${DEV_DOMAIN_REGION:us-east-2}
     project:
-      name: integration-test-test
+      name: test-glue-mwaa-catalog-app
       create: true
       profile_name: All capabilities
       owners:
@@ -69,7 +69,7 @@ stages:
       - environment_configuration_name: Lakehouse Database
         parameters:
         - name: glueDbName
-          value: multi_target_test_db
+          value: glue_mwaa_catalog_app_test_db
     deployment_configuration:
       storage:
       - connectionName: default.s3_shared
@@ -89,7 +89,7 @@ stages:
         purpose: smus-cicd-testing
       region: ${DEV_DOMAIN_REGION:us-east-2}
     project:
-      name: integration-test-prod
+      name: prod-glue-mwaa-catalog-app
       create: true
       profile_name: All capabilities
       owners:
@@ -100,7 +100,7 @@ stages:
       - environment_configuration_name: Lakehouse Database
         parameters:
         - name: glueDbName
-          value: multi_target_prod_db
+          value: glue_mwaa_catalog_app_prod_db
     deployment_configuration:
       storage:
       - connectionName: default.s3_shared
@@ -114,4 +114,4 @@ stages:
       - type: datazone.create_environment
         environment_configuration_name: OnDemand Workflows
 tests:
-  folder: tests/integration/multi_target_bundle/pipeline_tests/
+  folder: tests/integration/glue-mwaa-catalog-app/pipeline_tests/

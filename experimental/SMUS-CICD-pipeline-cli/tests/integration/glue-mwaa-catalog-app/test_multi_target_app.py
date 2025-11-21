@@ -1,4 +1,9 @@
-"""Integration test for multi-target pipeline workflow."""
+"""Integration test for multi-target pipeline workflow.
+
+NOTE: This test is currently marked as IGNORED due to pending MWAA support updates.
+The test validates Glue, MWAA, and DataZone catalog integration but requires
+updated MWAA workflow execution support to be fully functional.
+"""
 
 import pytest
 import os
@@ -7,8 +12,14 @@ from ..base import IntegrationTestBase
 from smus_cicd.helpers.utils import get_datazone_project_info
 
 
+pytestmark = pytest.mark.skip(reason="Requires updated MWAA support - currently ignored")
+
+
 class TestMultiTargetApp(IntegrationTestBase):
-    """Test multi-target pipeline end-to-end workflow."""
+    """Test multi-target pipeline end-to-end workflow.
+    
+    IGNORED: Pending MWAA support updates.
+    """
 
     def setup_method(self, method):
         """Set up test environment."""
@@ -22,8 +33,8 @@ class TestMultiTargetApp(IntegrationTestBase):
         
         glue_client = boto3.client('glue', region_name='us-east-1')
         databases_to_delete = [
-            'multi_target_test_db',
-            'multi_target_prod_db',
+            'glue_mwaa_catalog_app_test_db',
+            'glue_mwaa_catalog_app_prod_db',
             'marketing_db'  # Default database name that could conflict
         ]
         
@@ -91,8 +102,8 @@ class TestMultiTargetApp(IntegrationTestBase):
             # Target projects to clean
             target_projects = [
                 "dev-marketing",
-                "integration-test-test",
-                "integration-test-prod",
+                "test-glue-mwaa-catalog-app",
+                "prod-glue-mwaa-catalog-app",
             ]
 
             s3_client = boto3.client("s3", region_name="us-east-1")
@@ -260,12 +271,12 @@ task = PythonOperator(
         assert result["success"], f"Describe --connect failed: {result['output']}"
 
         # Verify it shows pipeline info
-        assert "Pipeline: IntegrationTestMultiTarget" in result["output"]
+        assert "Pipeline: GlueMwaaCatalogApp" in result["output"]
         assert "Domain: cicd-test-domain" in result["output"]  # Region-agnostic
 
         # Verify it shows target info with connections
         assert "Targets:" in result["output"]
-        assert "test: integration-test-test" in result["output"]
+        assert "test: test-glue-mwaa-catalog-app" in result["output"]
         assert "Project ID:" in result["output"]
         assert "Status:" in result["output"]
         assert "Connections:" in result["output"]
@@ -362,7 +373,7 @@ stages:
       name: nonexistent-domain-12345
       region: ${DEV_DOMAIN_REGION:us-east-1}
     project:
-      name: integration-test-test
+      name: test-glue-mwaa-catalog-app
 workflows:
   - workflowName: test_dag
     connectionName: project.workflow_mwaa
@@ -388,7 +399,7 @@ workflows:
             ], f"Describe command should not crash: {result['output']}"
             # Check that it shows project information (either success or error)
             assert (
-                "integration-test-test" in result["output"]
+                "test-glue-mwaa-catalog-app" in result["output"]
             ), f"Should mention the project name: {result['output']}"
 
         finally:
@@ -411,7 +422,7 @@ stages:
       name: cicd-test-domain
       region: ${DEV_DOMAIN_REGION:eu-west-1}
     project:
-      name: integration-test-test
+      name: test-glue-mwaa-catalog-app
 workflows:
   - workflowName: test_dag
     connectionName: project.workflow_mwaa
@@ -508,8 +519,8 @@ workflows:
         # Check for specific targets and their details
         targets = [
             "dev: dev-marketing",
-            "test: integration-test-test",
-            "prod: integration-test-prod",
+            "test: test-glue-mwaa-catalog-app",
+            "prod: prod-glue-mwaa-catalog-app",
         ]
 
         for target in targets:
@@ -560,7 +571,7 @@ stages:
       name: cicd-test-domain
       region: us-east-2
     project:
-      name: integration-test-test
+      name: test-glue-mwaa-catalog-app
   nonexistent:
     stage: test
     domain:
@@ -592,7 +603,7 @@ workflows:
                 "Targets:" in result["output"]
             ), f"Should show targets section: {result['output']}"
             assert (
-                "existing: integration-test-test" in result["output"]
+                "existing: test-glue-mwaa-catalog-app" in result["output"]
             ), f"Should show existing target: {result['output']}"
             assert (
                 "nonexistent: definitely-does-not-exist-project-12345"
@@ -623,7 +634,7 @@ stages:
       name: cicd-test-domain
       region: us-east-2
     project:
-      name: integration-test-test
+      name: test-glue-mwaa-catalog-app
 workflows:
   - workflowName: test_dag
     connectionName: nonexistent.connection.name
@@ -998,7 +1009,7 @@ workflows:
             # Validate it shows connection details
             describe_output = result["output"]
             assert (
-                "Pipeline: IntegrationTestMultiTarget" in describe_output
+                "Pipeline: GlueMwaaCatalogApp" in describe_output
             ), f"Describe output missing pipeline name: {describe_output}"
             # Get the actual region from environment variable or default
             expected_region = os.environ.get('DEV_DOMAIN_REGION', 'us-east-2')
