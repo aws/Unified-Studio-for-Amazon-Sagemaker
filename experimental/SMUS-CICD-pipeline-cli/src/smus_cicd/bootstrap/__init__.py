@@ -13,12 +13,12 @@ from .models import BootstrapAction, BootstrapConfig
 
 # Register handlers
 registry.register("datazone", handle_datazone_action)
-registry.register("mwaaserverless", handle_mwaaserverless_action)
+registry.register("workflow", handle_workflow_action)
+registry.register("workflow.create", handle_workflow_create)
+registry.register("mwaaserverless", handle_workflow_action)  # Backward compatibility
 registry.register("cli", handle_cli_action)
 registry.register("custom", handle_cli_action)  # Backward compatibility
 registry.register("log", handle_cli_action)  # Merged into cli.print
-registry.register("workflow", handle_workflow_action)
-registry.register("workflow.create", handle_workflow_create)
 registry.register("quicksight", handle_quicksight_action)
 
 # Create global executor

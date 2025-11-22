@@ -378,7 +378,7 @@ class TestBasicApp(IntegrationTestBase):
         import os
         
         try:
-            expected_failure_name = f'BasicTestBundle_test_project_basic_{failure_workflow_name}'
+            expected_failure_name = f'BasicTestBundle_test_project_basic_expected_failure_workflow'
             try:
                 failure_workflow_arn = self.get_workflow_arn(expected_failure_name)
                 print(f"📋 Failure Workflow ARN: {failure_workflow_arn}")

@@ -12,10 +12,10 @@ Bootstrap actions allow you to execute automated tasks during deployment, includ
 | **workflow** | run | Trigger workflow execution |
 | **workflow** | logs | Fetch workflow execution logs |
 | **workflow** | monitor | Monitor workflow status |
+| **workflow** | start_workflow_run | Start MWAA Serverless workflow (legacy) |
 | **datazone** | create_environment | Create DataZone environment |
 | **datazone** | create_connection | Create DataZone connection |
 | **datazone** | create_domain | Create DataZone domain |
-| **mwaaserverless** | start_workflow_run | Start MWAA Serverless workflow |
 | **quicksight** | refresh_dataset | Refresh QuickSight dataset |
 | **cli** | print | Print message to console or log (replaces log action) |
 | **cli** | wait | Wait for specified duration |

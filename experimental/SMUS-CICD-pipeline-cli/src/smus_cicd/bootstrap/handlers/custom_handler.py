@@ -8,7 +8,9 @@ from ..models import BootstrapAction
 logger = get_logger("bootstrap.handlers.cli")
 
 
-def handle_cli_action(action: BootstrapAction, context: Dict[str, Any]) -> Dict[str, Any]:
+def handle_cli_action(
+    action: BootstrapAction, context: Dict[str, Any]
+) -> Dict[str, Any]:
     """Handle CLI actions."""
     service, action_name = action.type.split(".", 1)
 
@@ -29,11 +31,11 @@ def print_action(action: BootstrapAction, context: Dict[str, Any]) -> Dict[str, 
     message = action.parameters.get("message", "Bootstrap action executed")
     level = action.parameters.get("level", "info")  # info, debug, warning, error
     output = action.parameters.get("output", "console")  # console, log, both
-    
+
     # Output to console
     if output in ("console", "both"):
         print(f"[BOOTSTRAP] {message}")
-    
+
     # Output to log
     if output in ("log", "both"):
         if level == "debug":
