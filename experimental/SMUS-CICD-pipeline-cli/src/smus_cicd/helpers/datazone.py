@@ -983,26 +983,28 @@ def get_group_id_for_role_arn(role_arn, domain_id, region):
     try:
         datazone_client = _get_datazone_client(region)
         print(f"🔍 Searching for group profile with role ARN: {role_arn}")
-        
+
         next_token = None
         page_num = 0
         total_groups = 0
-        
+
         while True:
             page_num += 1
             params = {
                 "domainIdentifier": domain_id,
-                "groupType": "IAM_ROLE_SESSION_GROUP"
+                "groupType": "IAM_ROLE_SESSION_GROUP",
             }
             if next_token:
                 params["nextToken"] = next_token
-            
+
             response = datazone_client.search_group_profiles(**params)
             items = response.get("items", [])
             total_groups += len(items)
-            
-            print(f"🔍 Page {page_num}: Found {len(items)} groups (total so far: {total_groups})")
-            
+
+            print(
+                f"🔍 Page {page_num}: Found {len(items)} groups (total so far: {total_groups})"
+            )
+
             for group in items:
                 group_arn = group.get("rolePrincipalArn")
                 group_id = group.get("id")
@@ -1010,12 +1012,14 @@ def get_group_id_for_role_arn(role_arn, domain_id, region):
                 if group_arn == role_arn:
                     print(f"✅ Found matching group ID: {group_id}")
                     return group_id
-            
+
             next_token = response.get("nextToken")
             if not next_token:
                 break
-        
-        print(f"⚠️ No group found for role ARN '{role_arn}' after searching {total_groups} groups across {page_num} pages")
+
+        print(
+            f"⚠️ No group found for role ARN '{role_arn}' after searching {total_groups} groups across {page_num} pages"
+        )
         return None
     except Exception as e:
         print(f"❌ Error getting group ID for role ARN {role_arn}: {str(e)}")
