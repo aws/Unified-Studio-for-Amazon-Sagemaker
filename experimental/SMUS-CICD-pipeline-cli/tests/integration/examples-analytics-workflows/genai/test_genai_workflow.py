@@ -42,15 +42,36 @@ class TestGenAIWorkflow(IntegrationTestBase):
         assert result["success"], f"Describe --connect failed: {result['output']}"
         self.logger.info("✅ Describe --connect successful")
 
-        # Step 2: Deploy directly from local filesystem (no upload or bundle needed)
+        # Step 2: Clean S3 target location before deployment
+        self.logger.info("\n=== Step 2: Clean S3 Target Location ===")
+        describe_result = self.run_cli_command(["describe", "--manifest", pipeline_file, "--connect"])
+        test_s3_uri_match = re.search(
+            r"test: test-[\w-]+.*?default\.s3_shared:.*?s3Uri: (s3://[^\s]+)",
+            describe_result["output"],
+            re.DOTALL
+        )
+        if test_s3_uri_match:
+            test_s3_uri = test_s3_uri_match.group(1).rstrip('/')
+            s3_target = f"{test_s3_uri}/genai/bundle/"
+            self.logger.info(f"🧹 Cleaning S3 location: {s3_target}")
+            cleanup_cmd = ["aws", "s3", "rm", s3_target, "--recursive"]
+            cleanup_result = subprocess.run(cleanup_cmd, capture_output=True, text=True)
+            if cleanup_result.returncode == 0:
+                self.logger.info(f"✅ S3 cleanup successful: {cleanup_result.stdout}")
+            else:
+                self.logger.info(f"⚠️ S3 cleanup warning: {cleanup_result.stderr}")
+        else:
+            self.logger.info("⚠️ Could not determine S3 URI for cleanup")
+
+        # Step 3: Deploy directly from local filesystem (no upload or bundle needed)
         # Bootstrap action will auto-trigger workflow and wait for completion
-        self.logger.info("\n=== Step 2: Deploy (Direct from Local) ===")
+        self.logger.info("\n=== Step 3: Deploy (Direct from Local) ===")
         result = self.run_cli_command(["deploy", "test", "--manifest", pipeline_file])
         assert result["success"], f"Deploy failed: {result['output']}"
         self.logger.info("✅ Deploy successful (bootstrap triggered workflow)")
 
-        # Step 3: Get workflow ARN and run_id from deploy output
-        self.logger.info("\n=== Step 3: Extract Workflow Info ===")
+        # Step 4: Get workflow ARN and run_id from deploy output
+        self.logger.info("\n=== Step 4: Extract Workflow Info ===")
         expected_name = 'IntegrationTestGenAIWorkflow_test_marketing_genai_dev_workflow'
         workflow_arn = self.get_workflow_arn(expected_name)
         self.logger.info(f"✅ Workflow ARN: {workflow_arn}")
@@ -67,8 +88,8 @@ class TestGenAIWorkflow(IntegrationTestBase):
         
         self.logger.info("✅ Workflow completed successfully")
 
-        # Step 4: Download and validate notebooks
-        self.logger.info("\n=== Step 9: Download and Validate Notebooks ===")
+        # Step 5: Download and validate notebooks
+        self.logger.info("\n=== Step 5: Download and Validate Notebooks ===")
         
         # Extract S3 bucket from test project (not dev)
         describe_result = self.run_cli_command(["describe", "--manifest", pipeline_file, "--connect"])
@@ -108,8 +129,8 @@ class TestGenAIWorkflow(IntegrationTestBase):
             self.logger.info("❌ Could not determine S3 bucket or run_id")
             assert False, "Could not determine S3 bucket or run_id for notebook validation"
         
-        # Step 10: Check final workflow status
-        self.logger.info("\n=== Step 10: Verify Final Workflow Status ===")
+        # Step 6: Check final workflow status
+        self.logger.info("\n=== Step 6: Verify Final Workflow Status ===")
         if run_id:
             self.verify_workflow_status(workflow_arn, run_id)
         else:
