@@ -983,7 +983,7 @@ def get_group_id_for_role_arn(role_arn, domain_id, region):
     try:
         datazone_client = _get_datazone_client(region)
         response = datazone_client.search_group_profiles(
-            domainIdentifier=domain_id, groupType="IAM_ROLE"
+            domainIdentifier=domain_id, groupType="IAM_ROLE_SESSION_GROUP"
         )
 
         for group in response.get("items", []):
