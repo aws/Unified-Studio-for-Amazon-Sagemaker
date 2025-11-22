@@ -74,7 +74,7 @@ def substitute_env_vars(data: Union[Dict, List, str]) -> Union[Dict, List, str]:
     """
     Recursively substitute environment variables in YAML data.
 
-    Supports ${VAR_NAME} syntax for environment variable substitution.
+    Supports ${VAR_NAME} or ${VAR_NAME:default_value} syntax for environment variable substitution.
 
     Pseudo environment variables (auto-resolved from AWS credentials):
     - AWS_ACCOUNT_ID: Current AWS account ID from STS
@@ -86,6 +86,9 @@ def substitute_env_vars(data: Union[Dict, List, str]) -> Union[Dict, List, str]:
 
     Returns:
         Data with environment variables substituted
+
+    Raises:
+        ValueError: If a required variable (without default) is not found
     """
     if isinstance(data, dict):
         return {key: substitute_env_vars(value) for key, value in data.items()}
@@ -97,7 +100,8 @@ def substitute_env_vars(data: Union[Dict, List, str]) -> Union[Dict, List, str]:
 
         def replace_var(match):
             var_name = match.group(1)
-            default_value = match.group(2) if match.group(2) is not None else ""
+            has_default = match.group(2) is not None
+            default_value = match.group(2) if has_default else None
 
             # Handle pseudo environment variables
             if var_name == "STS_ACCOUNT_ID" or var_name == "AWS_ACCOUNT_ID":
@@ -107,10 +111,26 @@ def substitute_env_vars(data: Union[Dict, List, str]) -> Union[Dict, List, str]:
             elif var_name == "STS_REGION":
                 import boto3
 
-                return boto3.Session().region_name or default_value
+                region = boto3.Session().region_name
+                if region:
+                    return region
+                elif has_default:
+                    return default_value
+                else:
+                    raise ValueError(
+                        f"Variable ${{{var_name}}} could not be resolved: No AWS region configured"
+                    )
 
             # Regular environment variable lookup
-            return os.getenv(var_name, default_value)
+            value = os.getenv(var_name)
+            if value is not None:
+                return value
+            elif has_default:
+                return default_value
+            else:
+                raise ValueError(
+                    f"Variable ${{{var_name}}} is not set and has no default value"
+                )
 
         return re.sub(pattern, replace_var, data)
     else:

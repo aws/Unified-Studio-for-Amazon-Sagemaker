@@ -29,10 +29,10 @@ class TestSubstituteEnvVars:
             assert result == "default_value"
 
     def test_substitute_env_var_missing_no_default(self):
-        """Test missing environment variable without default."""
+        """Test missing environment variable without default raises ValueError."""
         with patch.dict(os.environ, {}, clear=True):
-            result = substitute_env_vars("${MISSING_VAR}")
-            assert result == ""
+            with pytest.raises(ValueError, match="Variable.*MISSING_VAR.*is not set"):
+                substitute_env_vars("${MISSING_VAR}")
 
     def test_substitute_in_string_context(self):
         """Test substitution within larger strings."""

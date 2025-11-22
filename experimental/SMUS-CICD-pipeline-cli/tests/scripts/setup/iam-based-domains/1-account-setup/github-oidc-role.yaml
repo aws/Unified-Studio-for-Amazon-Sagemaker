@@ -52,6 +52,12 @@ Resources:
                   - !Sub 'repo:${GitHubOrg}/${GitHubRepo}:environment:prod-aws-account'
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/PowerUserAccess
+        # TEMPORARY: AdministratorAccess added to workaround DataZone bug where project role
+        # cannot call iam:GetRole on itself during environment deployment, even though
+        # SageMakerStudioUserIAMPermissiveExecutionPolicy grants this permission.
+        # TODO: Remove once DataZone bug is fixed (the role should only need the specific
+        # IAM permissions in the inline policy below)
+        - arn:aws:iam::aws:policy/AdministratorAccess
       Policies:
         - PolicyName: SMUSCLITestPolicy
           PolicyDocument:
