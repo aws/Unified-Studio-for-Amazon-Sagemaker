@@ -1,4 +1,5 @@
 # GenAI Workflow Example - Unified IAM role setup
+# Testing STS caller identity logging
 applicationName: IntegrationTestGenAIWorkflow
 content:
   storage:
