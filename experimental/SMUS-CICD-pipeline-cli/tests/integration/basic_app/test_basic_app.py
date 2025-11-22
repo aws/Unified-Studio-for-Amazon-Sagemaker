@@ -179,15 +179,9 @@ class TestBasicApp(IntegrationTestBase):
         result = self.run_cli_command(["deploy", "test", "--manifest", pipeline_file])
         results.append(result)
         
-        # Deploy should fail because expected_failure_workflow fails
-        assert not result["success"], f"Deploy should have failed but succeeded: {result['output']}"
-        print("✅ Deploy failed as expected (due to expected_failure_workflow)")
-        
-        # Check that the failure was due to workflow failure
-        deploy_output = result.get("output", "")
-        assert "expected_failure_workflow" in deploy_output and "FAILED" in deploy_output, \
-            f"Deploy should have failed due to expected_failure_workflow, but got: {deploy_output}"
-        print("✅ Deploy failed due to expected_failure_workflow as expected")
+        # Deploy should succeed (workflows run async)
+        assert result["success"], f"Deploy failed: {result['output']}"
+        print("✅ Deploy succeeded (workflows run asynchronously)")
 
         # Step 4.5: Verify project owners match manifest
         print("\n=== Step 4.5: Verify Project Owners ===")
@@ -267,24 +261,16 @@ class TestBasicApp(IntegrationTestBase):
         # Check workflow statuses from monitor output
         monitor_output = result.get("output", "")
         
-        # Verify basic_test_workflow succeeded
-        assert "basic_test_workflow" in monitor_output, "basic_test_workflow not found in monitor output"
-        # Check for success indicators (SUCCEEDED, COMPLETED, etc.)
-        basic_workflow_succeeded = "SUCCEEDED" in monitor_output or "COMPLETED" in monitor_output
-        
         # Verify expected_failure_workflow failed
         assert "expected_failure_workflow" in monitor_output, "expected_failure_workflow not found in monitor output"
-        expected_workflow_failed = "FAILED" in monitor_output
+        assert "FAILED" in monitor_output, f"expected_failure_workflow should have FAILED status in monitor output: {monitor_output}"
+        print("✅ expected_failure_workflow failed as expected")
         
-        if basic_workflow_succeeded:
-            print("✅ basic_test_workflow succeeded as expected")
-        else:
-            print("⚠️ basic_test_workflow status unclear from monitor output")
-            
-        if expected_workflow_failed:
-            print("✅ expected_failure_workflow failed as expected")
-        else:
-            print("⚠️ expected_failure_workflow status unclear from monitor output")
+        # Verify basic_test_workflow succeeded
+        assert "basic_test_workflow" in monitor_output, "basic_test_workflow not found in monitor output"
+        assert "SUCCEEDED" in monitor_output or "COMPLETED" in monitor_output, \
+            f"basic_test_workflow should have SUCCEEDED/COMPLETED status: {monitor_output}"
+        print("✅ basic_test_workflow succeeded as expected")
 
         # Step 6-8: Workflows already ran during deploy, skip manual start
         print("\n=== Steps 6-8: Workflows Already Executed During Deploy ===")
