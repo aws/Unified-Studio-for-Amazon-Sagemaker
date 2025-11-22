@@ -68,6 +68,10 @@ Resources:
                   - iam:TagRole
                   - iam:PutRolePolicy
                   - iam:UpdateAssumeRolePolicy
+                  - iam:ListAttachedRolePolicies
+                  - iam:DeleteRole
+                  - iam:DetachRolePolicy
+                  - iam:DeleteRolePolicy
                   - cloudformation:*
                   - s3:*
                   - datazone:*

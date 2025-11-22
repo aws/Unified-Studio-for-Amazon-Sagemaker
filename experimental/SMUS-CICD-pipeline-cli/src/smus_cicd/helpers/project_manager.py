@@ -288,7 +288,9 @@ class ProjectManager:
             domain_name = target_config.domain.name
             domain_id = datazone.get_domain_id_by_name(domain_name, region)
             if domain_id:
-                project_id = datazone.get_project_id_by_name(project_name, domain_id, region)
+                project_id = datazone.get_project_id_by_name(
+                    project_name, domain_id, region
+                )
                 if project_id:
                     datazone.manage_project_memberships(
                         project_id, domain_id, region, owners, contributors

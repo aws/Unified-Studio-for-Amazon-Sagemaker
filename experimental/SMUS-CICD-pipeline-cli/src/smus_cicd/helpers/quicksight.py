@@ -212,9 +212,9 @@ def import_dashboard(
             "AssetBundleImportSource": {"Body": _download_bundle(bundle_url)},
             "FailureAction": "ROLLBACK",
             "OverridePermissions": {
-                "DataSources": "OVERWRITE_PERMITTED",
-                "DataSets": "OVERWRITE_PERMITTED",
-                "Dashboards": "OVERWRITE_PERMITTED",
+                "DataSources": [{"DataSourceIds": ["*"], "Permissions": {}}],
+                "DataSets": [{"DataSetIds": ["*"], "Permissions": {}}],
+                "Dashboards": [{"DashboardIds": ["*"], "Permissions": {}}],
             },
         }
 

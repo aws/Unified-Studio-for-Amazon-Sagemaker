@@ -3,7 +3,7 @@ content:
   storage:
   - name: dashboard-glue-quick
     include:
-    - dashboard-glue-quick
+    - "*.py"
     exclude:
     - .ipynb_checkpoints/
     - __pycache__/

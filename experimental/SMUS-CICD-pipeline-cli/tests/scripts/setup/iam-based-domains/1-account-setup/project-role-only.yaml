@@ -1,0 +1,60 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'IAM Role for SMUS project - simplified version with just project role'
+
+Parameters:
+  ProjectRoleName:
+    Type: String
+    Description: Name of the project role (e.g., test-marketing-role, prod-marketing-role)
+    AllowedPattern: ^[a-z0-9-]+-role$
+
+Resources:
+  ProjectRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref ProjectRoleName
+      Description: !Sub 'SMUS project role ${ProjectRoleName}'
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - emr-serverless.amazonaws.com
+                - athena.amazonaws.com
+                - redshift.amazonaws.com
+                - glue.amazonaws.com
+                - lakeformation.amazonaws.com
+                - sagemaker.amazonaws.com
+                - scheduler.amazonaws.com
+                - bedrock.amazonaws.com
+                - datazone.amazonaws.com
+                - airflow-serverless.amazonaws.com
+            Action:
+              - sts:AssumeRole
+              - sts:TagSession
+              - sts:SetContext
+              - sts:SetSourceIdentity
+            Condition:
+              StringEquals:
+                'aws:SourceAccount': !Ref 'AWS::AccountId'
+      Policies:
+        - PolicyName: SelfPassRolePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:role/${ProjectRoleName}'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/SageMakerStudioUserIAMPermissiveExecutionPolicy
+      Tags:
+        - Key: CreatedBy
+          Value: SMUS-CICD
+        - Key: ManagedBy
+          Value: CloudFormation
+
+Outputs:
+  ProjectRoleArn:
+    Description: ARN of the project role
+    Value: !GetAtt ProjectRole.Arn
