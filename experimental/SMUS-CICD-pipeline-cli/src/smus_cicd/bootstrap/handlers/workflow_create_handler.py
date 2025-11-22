@@ -91,6 +91,8 @@ def handle_workflow_create(
         typer.echo("❌ No project user role found")
         return False
 
+    typer.echo(f"🔍 Using execution role for workflows: {role_arn}")
+
     s3_client = boto3.client("s3", region_name=region)
     workflows_created = []
 
@@ -166,6 +168,7 @@ def handle_workflow_create(
                 os.unlink(temp_path)
 
         # Create workflow using resolved YAML
+        typer.echo(f"🔧 Creating workflow '{workflow_name}' with role: {role_arn}")
         result = airflow_serverless.create_workflow(
             workflow_name=workflow_name,
             dag_s3_location=resolved_location,
