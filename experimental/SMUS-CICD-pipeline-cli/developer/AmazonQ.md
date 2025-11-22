@@ -103,13 +103,31 @@ cd testing-data && ./deploy.sh us-east-1
 
 ### Environment Variables
 
-After setup, export these for integration tests:
+After setup, configure environment variables for integration tests:
+
 ```bash
-export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-export TEST_DOMAIN_REGION=us-east-1
-export DEV_DOMAIN_REGION=us-east-1
-export AWS_DEFAULT_REGION=us-east-1
+# Copy template and customize for your account
+cp env-example.env env-local.env
+
+# Edit env-local.env with your account-specific values:
+# - AWS_ACCOUNT_ID
+# - Domain IDs and regions
+# - Project IDs
+# - MLflow server names
+# - S3 bucket names
+
+# Source before running tests
+source env-local.env
+
+# Verify configuration
+python tests/run_tests.py --type integration
 ```
+
+**Configuration approach:**
+- All test configuration comes from environment variables only
+- No config files loaded by test infrastructure (conftest.py)
+- Use `env-*.env` files for account-specific values (git-ignored)
+- Template provided in `env-example.env`
 
 ## Automated Workflow for Code Changes
 
@@ -143,6 +161,8 @@ git status
   - Avoid unused imports and variables
   - Use regular strings instead of f-strings when no placeholders are needed
 - **For DataZone catalog asset features**: Ensure proper exception handling - DataZone helper functions should raise exceptions instead of returning None/False to ensure proper CLI exit codes
+- **For DataZone API pagination**: Always handle pagination when searching/listing resources - check for `nextToken` and iterate through all pages
+- **For DataZone API field compatibility**: Handle both new and legacy API fields (e.g., `rolePrincipalArn` vs `groupName` for IAM role groups)
 - **Always run linting checks after code changes:**
   ```bash
   # Check code formatting and imports
@@ -410,7 +430,7 @@ pytest tests/integration/examples-analytics-workflows/etl/test_etl_workflow.py -
 - Pipeline: `examples/analytic-workflow/etl/etl_pipeline.yaml`
 
 #### Basic Pipeline Test
-**Purpose**: Tests parameter passing from workflow to notebook via Papermill
+**Purpose**: Tests bootstrap actions (workflow.create, workflow.run) and expected workflow failures
 **Location**: `tests/integration/basic_pipeline/test_basic_app.py`
 **Duration**: ~15 minutes
 
@@ -420,10 +440,16 @@ pytest tests/integration/basic_pipeline/test_basic_app.py -v -s
 ```
 
 **What it validates**:
-- Variable substitution: `{proj.connection.mlflow-server.trackingServerArn}`
-- Papermill parameter injection to notebooks
-- Parameters cell tagging and injection
-- Workflow execution and completion
+- Bootstrap actions execute in correct order (workflow.create before workflow.run)
+- Deploy fails when workflow execution fails (expected_failure_workflow)
+- Workflow status correctly reported in monitor output
+- Parameter substitution with environment variables (${AWS_ACCOUNT_ID})
+- MLflow connection configuration without trackingServerName field
+
+**Key behaviors**:
+- expected_failure_workflow is designed to fail - deploy should fail and test verifies this
+- Test checks workflow statuses from monitor output, not by manually starting workflows
+- Uses environment variables for account-specific values (no hardcoded ARNs)
 
 ### Unit Tests
 ```bash
@@ -507,6 +533,9 @@ Important Note: These are pytest-based integration tests, NOT Hydra tests. Do no
 - [ ] Mock objects match real implementation
 - [ ] CLI parameter usage is consistent
 - [ ] Documentation reflects actual behavior
+- [ ] **DataZone API calls handle pagination** (check for nextToken)
+- [ ] **DataZone API calls handle field compatibility** (new vs legacy fields)
+- [ ] **Environment variables used instead of hardcoded values** (account IDs, ARNs, regions)
 - [ ] Check that the code and markdown files don't contain aws account ids, web addresses, or host names. Mask all of these before committing.
   ```bash
   # Run automated check for hardcoded values
@@ -539,7 +568,7 @@ Important Note: These are pytest-based integration tests, NOT Hydra tests. Do no
   - [ ] Summary of failures provided before additional changes
   - [ ] Approval received before pushing fixes
 
-## Common Test Patterns to Maintain
+### Common Test Patterns to Maintain
 
 ### Unit Test Patterns
 - Mock objects need proper attributes, not dictionaries
@@ -550,12 +579,22 @@ Important Note: These are pytest-based integration tests, NOT Hydra tests. Do no
 - Use `["describe", "--pipeline", file]` not `["describe", file]`
 - Expected exit codes should match test framework expectations
 - Rename DAG files to avoid pytest collection (`.dag` extension)
+- Source environment variables before running tests (`source env-local.env`)
+- Verify workflow failures when expected (e.g., expected_failure_workflow)
+- Check workflow statuses from monitor output, not manual workflow starts
+
+### DataZone API Patterns
+- Always handle pagination when searching/listing (check `nextToken`)
+- Handle both new and legacy API fields for backward compatibility
+- Example: `rolePrincipalArn` (new) vs `groupName` (old) for IAM role groups
+- boto3 DataZone client may use older service models missing newer fields
 
 ### README Patterns
 - All CLI examples use correct parameter syntax
 - Include realistic command outputs
 - Keep examples concise but informative
 - Verify examples actually work before documenting
+- Use environment variables instead of hardcoded account IDs/ARNs
 
 ## Project Structure (Python-Native)
 

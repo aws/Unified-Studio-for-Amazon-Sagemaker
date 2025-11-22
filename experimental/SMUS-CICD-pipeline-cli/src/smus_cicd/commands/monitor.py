@@ -565,7 +565,7 @@ def _monitor_airflow_serverless_workflows(
 
                 serverlessairflow_data["workflows"][workflow_name] = workflow_data
 
-                # Truncate workflow name for display
+                # Truncate workflow name for table display only
                 display_name = (
                     workflow_name
                     if len(workflow_name) <= 40
@@ -574,7 +574,8 @@ def _monitor_airflow_serverless_workflows(
 
                 table_rows.append(
                     [
-                        display_name,
+                        workflow_name,  # Store full name for vertical display
+                        display_name,  # Store truncated name for table display
                         workflow_status.get("status", "UNKNOWN"),
                         workflow_status.get("trigger_mode", "scheduled"),
                         run_id[:8] + "..." if len(run_id) > 8 else run_id,
@@ -585,19 +586,14 @@ def _monitor_airflow_serverless_workflows(
                 )
 
             if output.upper() != "JSON":
-                # Print table header
-                typer.echo(
-                    f"\n      {'Workflow':<40} {'Status':<10} {'Trigger':<12} {'Run ID':<12} {'Run Status':<12} {'Start Time':<20} {'Duration':<10}"
-                )
-                typer.echo(
-                    f"      {'-' * 40} {'-' * 10} {'-' * 12} {'-' * 12} {'-' * 12} {'-' * 20} {'-' * 10}"
-                )
-
-                # Print table rows
+                # Print workflows in vertical layout with full names
                 for row in table_rows:
-                    typer.echo(
-                        f"      {row[0]:<40} {row[1]:<10} {row[2]:<12} {row[3]:<12} {row[4]:<12} {row[5]:<20} {row[6]:<10}"
-                    )
+                    typer.echo(f"\n      📋 Workflow: {row[0]}")
+                    typer.echo(f"         Status: {row[2]}")
+                    typer.echo(f"         Trigger: {row[3]} | Run ID: {row[4]}")
+                    typer.echo(f"         Run Status: {row[5]}")
+                    typer.echo(f"         Start Time: {row[6]} | Duration: {row[7]}")
+                    typer.echo(f"      {'-' * 60}")
 
             workflows_data["mwaa-serverless"] = serverlessairflow_data
         else:

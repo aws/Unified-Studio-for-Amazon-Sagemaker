@@ -77,13 +77,13 @@ def create_or_update_project_role(
     try:
         response = iam.get_role(RoleName=role_name)
         existing_role_arn = response["Role"]["Arn"]
-        
+
         # Check if role was created by SMUS CLI
         tags = response["Role"].get("Tags", [])
         is_smus_managed = any(
             tag["Key"] == "ManagedBy" and tag["Value"] == "SMUS-CLI" for tag in tags
         )
-        
+
         if is_smus_managed:
             typer.echo(f"🔄 Deleting existing SMUS-managed role: {role_name}")
             _delete_role(iam, role_name)
@@ -139,8 +139,8 @@ def create_or_update_project_role(
     # Wait for IAM role to propagate
     import time
 
-    typer.echo("⏳ Waiting for IAM role to propagate...")
-    time.sleep(30)
+    typer.echo("⏳ Waiting 90s for IAM role to propagate...")
+    time.sleep(90)
 
     return created_role_arn
 
@@ -178,7 +178,9 @@ def _delete_role(iam, role_name: str):
         paginator = iam.get_paginator("list_attached_role_policies")
         for page in paginator.paginate(RoleName=role_name):
             for policy in page["AttachedPolicies"]:
-                iam.detach_role_policy(RoleName=role_name, PolicyArn=policy["PolicyArn"])
+                iam.detach_role_policy(
+                    RoleName=role_name, PolicyArn=policy["PolicyArn"]
+                )
     except Exception:
         pass
 

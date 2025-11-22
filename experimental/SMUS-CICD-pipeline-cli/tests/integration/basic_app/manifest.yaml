@@ -63,8 +63,8 @@ stages:
         name: mlflow-server
         connection_type: MLFLOW
         properties:
-          trackingServerName: smus-integration-mlflow-use2
-          trackingServerArn: arn:aws:sagemaker:us-east-2:${AWS_ACCOUNT_ID}:mlflow-tracking-server/smus-integration-mlflow-use2
+          trackingServerName: ${MLFLOW_TRACKING_SERVER_NAME:smus-integration-mlflow-use2}
+          trackingServerArn: arn:aws:sagemaker:${DEV_DOMAIN_REGION:us-east-2}:${AWS_ACCOUNT_ID}:mlflow-tracking-server/${MLFLOW_TRACKING_SERVER_NAME:smus-integration-mlflow-use2}
       - type: workflow.create
         workflowName: basic_test_workflow
       - type: workflow.run

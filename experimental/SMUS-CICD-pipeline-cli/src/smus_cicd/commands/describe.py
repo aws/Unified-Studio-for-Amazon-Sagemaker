@@ -153,6 +153,9 @@ def describe_command(
                         target_data["project"]["owners"] = project_info.get(
                             "owners", []
                         )
+                        target_data["project"]["contributors"] = project_info.get(
+                            "contributors", []
+                        )
                         target_data["connections"] = project_connections
 
                         # Validate that project has connections when using --connect
@@ -172,6 +175,11 @@ def describe_command(
                             if project_info.get("owners"):
                                 owners_str = ", ".join(project_info["owners"])
                                 typer.echo(f"    Owners: {owners_str}")
+                            if project_info.get("contributors"):
+                                contributors_str = ", ".join(
+                                    project_info["contributors"]
+                                )
+                                typer.echo(f"    Contributors: {contributors_str}")
 
                             if connections or connect:
                                 typer.echo(

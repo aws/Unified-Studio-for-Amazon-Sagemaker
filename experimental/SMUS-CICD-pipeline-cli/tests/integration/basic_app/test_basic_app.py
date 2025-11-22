@@ -189,6 +189,72 @@ class TestBasicApp(IntegrationTestBase):
             f"Deploy should have failed due to expected_failure_workflow, but got: {deploy_output}"
         print("✅ Deploy failed due to expected_failure_workflow as expected")
 
+        # Step 4.5: Verify project owners match manifest
+        print("\n=== Step 4.5: Verify Project Owners ===")
+        self.logger.info("=== STEP 4.5: Verify Project Owners ===")
+        import boto3
+        import yaml
+        
+        with open(pipeline_file, 'r') as f:
+            manifest = yaml.safe_load(f)
+        
+        region = os.environ.get('DEV_DOMAIN_REGION', 'us-east-2')
+        datazone = boto3.client('datazone', region_name=region)
+        
+        # Get domain ID
+        domains = datazone.list_domains()
+        assert domains['items'], "No domains found"
+        domain_id = domains['items'][0]['id']
+        
+        # Get dev project name and expected owners
+        dev_project_name = manifest['stages']['dev']['project']['name']
+        expected_owners = manifest['stages']['dev']['project'].get('owners', [])
+        
+        if expected_owners:
+            # Get project ID
+            projects = datazone.list_projects(domainIdentifier=domain_id)
+            project_id = next(
+                (p['id'] for p in projects['items'] if p['name'] == dev_project_name),
+                None
+            )
+            assert project_id, f"Project {dev_project_name} not found"
+            
+            # Get actual owners
+            members = datazone.list_project_memberships(
+                domainIdentifier=domain_id,
+                projectIdentifier=project_id
+            )
+            
+            owner_group_ids = [
+                m['memberDetails']['group']['groupId']
+                for m in members.get('members', [])
+                if m.get('designation') == 'PROJECT_OWNER' and 'group' in m.get('memberDetails', {})
+            ]
+            
+            # Map group IDs to ARNs
+            actual_owners = []
+            for group_id in owner_group_ids:
+                profile = datazone.get_group_profile(
+                    domainIdentifier=domain_id,
+                    groupIdentifier=group_id
+                )
+                owner_id = profile.get('rolePrincipalArn') or profile.get('groupName') or profile.get('id')
+                actual_owners.append(owner_id)
+            
+            # Expand ${AWS_ACCOUNT_ID} in expected owners
+            sts = boto3.client('sts')
+            account_id = sts.get_caller_identity()['Account']
+            
+            # Verify ARN-based owners
+            verified_count = 0
+            for owner in expected_owners:
+                expanded = owner.replace('${AWS_ACCOUNT_ID}', account_id)
+                if expanded.startswith('arn:'):
+                    assert expanded in actual_owners, f"Owner {expanded} not found in project"
+                    verified_count += 1
+            
+            print(f"✅ Verified {verified_count} ARN-based owners in project {dev_project_name}")
+
         # Step 5: Monitor - Check workflow statuses
         print("\n=== Step 5: Monitor - Check Workflow Statuses ===")
         self.logger.info("=== STEP 5: Monitor - Check Workflow Statuses ===")

@@ -40,3 +40,6 @@ smus-feedback.txt
 
 # Local integration test workflows (contain hardcoded credentials)
 .github/workflows/run-integration-local.yml
+
+# Integration test environment files
+experimental/SMUS-CICD-pipeline-cli/env-*.env

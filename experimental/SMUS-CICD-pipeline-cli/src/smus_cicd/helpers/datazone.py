@@ -979,7 +979,7 @@ def get_user_id_by_username(username, domain_id, region):
 
 
 def get_group_id_for_role_arn(role_arn, domain_id, region):
-    """Get DataZone group ID for an IAM role ARN."""
+    """Get DataZone group ID for an IAM role ARN, creating if possible."""
     try:
         datazone_client = _get_datazone_client(region)
         print(f"🔍 Searching for group profile with role ARN: {role_arn}")
@@ -1019,9 +1019,30 @@ def get_group_id_for_role_arn(role_arn, domain_id, region):
                 break
 
         print(
-            f"⚠️ No group found for role ARN '{role_arn}' after searching {total_groups} groups across {page_num} pages"
+            f"⚠️ Group not found, attempting to create group profile for role: {role_arn}"
         )
-        return None
+
+        # Try to create group profile for the IAM role
+        try:
+            response = datazone_client.create_group_profile(
+                domainIdentifier=domain_id, groupIdentifier=role_arn
+            )
+            group_id = response.get("id")
+            print(f"✅ Created group profile with ID: {group_id}")
+            return group_id
+        except Exception as create_error:
+            error_msg = str(create_error)
+            if "IAM Identity Center" in error_msg or "IdP" in error_msg:
+                print(
+                    f"⚠️ Cannot auto-create group profile (IAM Identity Center not enabled)"
+                )
+                print(
+                    f"⚠️ The role must be used at least once in DataZone to create its group profile"
+                )
+            else:
+                print(f"❌ Failed to create group profile: {error_msg}")
+            return None
+
     except Exception as e:
         print(f"❌ Error getting group ID for role ARN {role_arn}: {str(e)}")
         return None
