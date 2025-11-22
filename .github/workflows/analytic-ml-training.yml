@@ -10,6 +10,10 @@ on:
       - 'experimental/SMUS-CICD-pipeline-cli/examples/analytic-workflow/ml/training/**'
   workflow_dispatch:
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   deploy:
     uses: ./.github/workflows/smus-direct-deploy.yml

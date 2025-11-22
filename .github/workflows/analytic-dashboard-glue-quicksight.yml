@@ -11,6 +11,10 @@ on:
       - 'experimental/SMUS-CICD-pipeline-cli/examples/analytic-workflow/dashboard-glue-quick/**'
   workflow_dispatch:
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   deploy:
     uses: ./.github/workflows/smus-bundle-deploy.yml
