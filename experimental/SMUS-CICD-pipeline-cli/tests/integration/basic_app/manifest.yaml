@@ -75,6 +75,8 @@ stages:
       - type: workflow.run
         workflowName: expected_failure_workflow
         trailLogs: false
+      - type: workflow.log
+        workflowName: expected_failure_workflow
     deployment_configuration:
       storage:
       - name: code
