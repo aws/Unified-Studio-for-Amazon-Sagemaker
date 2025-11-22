@@ -180,6 +180,13 @@ class TestBasicApp(IntegrationTestBase):
         results.append(result)
         assert result["success"], f"Deploy test failed: {result['output']}"
         print("✅ Deploy test successful")
+        
+        # Check if deploy triggered workflow runs
+        deploy_output = result.get("output", "")
+        if "Run ID:" in deploy_output or "workflow run" in deploy_output.lower():
+            print("✅ Deploy triggered workflow runs")
+        else:
+            print("⚠️ Deploy did not trigger workflow runs - will start manually")
 
         # Step 5: Monitor
         print("\n=== Step 5: Monitor ===")
@@ -191,7 +198,7 @@ class TestBasicApp(IntegrationTestBase):
         assert result["success"], f"Monitor failed: {result['output']}"
         print("✅ Monitor successful")
 
-        # Step 6: Start basic_test_workflow
+        # Step 6: Start basic_test_workflow (if not already started by deploy)
         print("\n=== Step 6: Start Basic Test Workflow ===")
         self.logger.info("=== STEP 6: Start Basic Test Workflow ===")
         result = self.run_cli_command(
@@ -201,7 +208,7 @@ class TestBasicApp(IntegrationTestBase):
         assert result["success"], f"Run workflow failed: {result['output']}"
         print("✅ Basic workflow started")
 
-        # Step 7: Start expected failure workflow
+        # Step 7: Start expected failure workflow (if not already started by deploy)
         print("\n=== Step 7: Start Expected Failure Workflow ===")
         self.logger.info("=== STEP 7: Start Expected Failure Workflow ===")
         failure_workflow_name = "expected_failure_workflow"
