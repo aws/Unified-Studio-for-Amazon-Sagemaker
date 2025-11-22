@@ -12,7 +12,8 @@ from .handlers.workflow_create_handler import handle_workflow_create
 from .models import BootstrapAction, BootstrapConfig
 
 # Register handlers
-registry.register("datazone", handle_datazone_action)
+registry.register("project", handle_datazone_action)
+registry.register("datazone", handle_datazone_action)  # Backward compatibility
 registry.register("workflow", handle_workflow_action)
 registry.register("workflow.create", handle_workflow_create)
 registry.register("mwaaserverless", handle_workflow_action)  # Backward compatibility

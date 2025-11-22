@@ -12,12 +12,10 @@ Bootstrap actions allow you to execute automated tasks during deployment, includ
 | **workflow** | run | Trigger workflow execution |
 | **workflow** | logs | Fetch workflow execution logs |
 | **workflow** | monitor | Monitor workflow status |
-| **workflow** | start_workflow_run | Start MWAA Serverless workflow (legacy) |
-| **datazone** | create_environment | Create DataZone environment |
-| **datazone** | create_connection | Create DataZone connection |
-| **datazone** | create_domain | Create DataZone domain |
+| **project** | create_environment | Create DataZone environment |
+| **project** | create_connection | Create DataZone connection |
 | **quicksight** | refresh_dataset | Refresh QuickSight dataset |
-| **cli** | print | Print message to console or log (replaces log action) |
+| **cli** | print | Print message to console or log |
 | **cli** | wait | Wait for specified duration |
 | **cli** | validate_deployment | Validate deployment status |
 | **cli** | notify | Send notification |
@@ -49,7 +47,7 @@ stages:
   test:
     bootstrap:
       actions:
-        - type: datazone.create_connection
+        - type: project.create_connection
           name: mlflow-server
           # ... connection config
         
