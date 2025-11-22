@@ -1006,7 +1006,8 @@ def get_group_id_for_role_arn(role_arn, domain_id, region):
             )
 
             for group in items:
-                group_arn = group.get("rolePrincipalArn")
+                # Try rolePrincipalArn first (newer API), fall back to groupName (older API)
+                group_arn = group.get("rolePrincipalArn") or group.get("groupName")
                 group_id = group.get("id")
                 print(f"🔍   Checking group {group_id}: {group_arn}")
                 if group_arn == role_arn:
