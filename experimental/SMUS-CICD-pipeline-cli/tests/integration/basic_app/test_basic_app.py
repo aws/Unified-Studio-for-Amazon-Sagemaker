@@ -255,11 +255,11 @@ class TestBasicApp(IntegrationTestBase):
             
             print(f"✅ Verified {verified_count} ARN-based owners in project {dev_project_name}")
 
-        # Step 5: Monitor - Check workflow statuses
-        print("\n=== Step 5: Monitor - Check Workflow Statuses ===")
-        self.logger.info("=== STEP 5: Monitor - Check Workflow Statuses ===")
+        # Step 5: Monitor with --live to wait for workflows to complete
+        print("\n=== Step 5: Monitor Workflows with --live ===")
+        self.logger.info("=== STEP 5: Monitor Workflows with --live ===")
         result = self.run_cli_command(
-            ["monitor", "--targets", "test", "--manifest", pipeline_file]
+            ["monitor", "--targets", "test", "--manifest", pipeline_file, "--live"]
         )
         results.append(result)
         assert result["success"], f"Monitor failed: {result['output']}"

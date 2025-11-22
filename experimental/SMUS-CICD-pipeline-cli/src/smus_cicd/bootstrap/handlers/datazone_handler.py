@@ -155,6 +155,3 @@ def create_connection(
         except Exception as e:
             typer.echo(f"❌ Failed to create connection '{name}': {e}")
             raise
-
-
-

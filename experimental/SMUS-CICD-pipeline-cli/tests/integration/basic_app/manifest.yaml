@@ -69,12 +69,12 @@ stages:
         workflowName: basic_test_workflow
       - type: workflow.run
         workflowName: basic_test_workflow
-        trailLogs: true
+        trailLogs: false
       - type: workflow.create
         workflowName: expected_failure_workflow
       - type: workflow.run
         workflowName: expected_failure_workflow
-        trailLogs: true
+        trailLogs: false
     deployment_configuration:
       storage:
       - name: code

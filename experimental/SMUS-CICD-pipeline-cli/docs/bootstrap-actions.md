@@ -6,19 +6,19 @@ Bootstrap actions allow you to execute automated tasks during deployment, includ
 
 ## Quick Reference
 
-| Action Type | API | Description |
-|------------|-----|-------------|
-| **workflow.create** | - | Create MWAA Serverless workflows from manifest |
-| **workflow** | run | Trigger workflow execution |
-| **workflow** | logs | Fetch workflow execution logs |
-| **workflow** | monitor | Monitor workflow status |
-| **project** | create_environment | Create DataZone environment |
-| **project** | create_connection | Create DataZone connection |
-| **quicksight** | refresh_dataset | Refresh QuickSight dataset |
-| **cli** | print | Print message to console or log |
-| **cli** | wait | Wait for specified duration |
-| **cli** | validate_deployment | Validate deployment status |
-| **cli** | notify | Send notification |
+| Action Type | Description |
+|------------|-------------|
+| **workflow.create** | Create MWAA Serverless workflows from manifest |
+| **workflow.run** | Trigger workflow execution |
+| **workflow.logs** | Fetch workflow execution logs |
+| **workflow.monitor** | Monitor workflow status |
+| **project.create_environment** | Create DataZone environment |
+| **project.create_connection** | Create DataZone connection |
+| **quicksight.refresh_dataset** | Refresh QuickSight dataset |
+| **cli.print** | Print message to console or log |
+| **cli.wait** | Wait for specified duration |
+| **cli.validate_deployment** | Validate deployment status |
+| **cli.notify** | Send notification |
 
 ## Overview
 
