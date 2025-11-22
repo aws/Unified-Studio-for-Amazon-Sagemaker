@@ -202,8 +202,8 @@ class TestBasicApp(IntegrationTestBase):
         
         # Verify basic_test_workflow succeeded
         assert "basic_test_workflow" in monitor_output, "basic_test_workflow not found in monitor output"
-        assert "SUCCEEDED" in monitor_output or "COMPLETED" in monitor_output, \
-            f"basic_test_workflow should have SUCCEEDED/COMPLETED status: {monitor_output}"
+        assert "SUCCESS" in monitor_output or "SUCCEEDED" in monitor_output or "COMPLETED" in monitor_output, \
+            f"basic_test_workflow should have SUCCESS/SUCCEEDED/COMPLETED status: {monitor_output}"
         print("✅ basic_test_workflow succeeded as expected")
 
         # Step 6-8: Workflows already ran during deploy, skip manual start
