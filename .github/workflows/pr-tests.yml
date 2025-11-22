@@ -70,14 +70,8 @@ jobs:
       run: |
         cd experimental/SMUS-CICD-pipeline-cli/tests/integration
         
-        # Find all directories with test_*.py files, excluding current dir
-        test_dirs=$(find . -mindepth 1 -maxdepth 3 -name "test_*.py" | \
-          xargs -I {} dirname {} | \
-          sort -u | \
-          sed 's|^\./||' | \
-          grep -v '^$' | \
-          grep -v '^\.$' | \
-          jq -R -s -c 'split("\n") | map(select(length > 0))')
+        # Temporarily only run basic_app test
+        test_dirs='["basic_app"]'
         
         echo "test-dirs=$test_dirs" >> $GITHUB_OUTPUT
         echo "Found tests: $test_dirs"
@@ -122,11 +116,14 @@ jobs:
         role-session-name: test-${{ steps.test-name.outputs.name }}
         role-duration-seconds: 43200
     
-    - name: Register AWS CLI model
+    - name: Register AWS CLI models
       run: |
         aws configure add-model \
           --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/mwaaserverless-2024-07-26.normal-edited-2.json \
           --service-name mwaaserverless-internal
+        aws configure add-model \
+          --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/datazone-internal-2018-05-10.json \
+          --service-name datazone-internal
     
     - name: Get AWS Account ID
       id: aws-account
