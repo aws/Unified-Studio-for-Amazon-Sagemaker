@@ -73,29 +73,34 @@ def create_or_update_project_role(
 
         return role_arn
 
-    # Check if role already exists (idempotent)
+    # Check if role already exists
     try:
         response = iam.get_role(RoleName=role_name)
         existing_role_arn = response["Role"]["Arn"]
-        typer.echo(f"✓ Role already exists: {existing_role_arn}")
-
-        # Attach any new policies
-        if policy_arns:
-            _attach_policies(iam, role_name, policy_arns)
-
-        # Ensure inline PassRole policy exists
-        pass_role_policy = _load_pass_role_policy(existing_role_arn)
-        iam.put_role_policy(
-            RoleName=role_name,
-            PolicyName="SelfPassRolePolicy",
-            PolicyDocument=pass_role_policy,
+        
+        # Check if role was created by SMUS CLI
+        tags = response["Role"].get("Tags", [])
+        is_smus_managed = any(
+            tag["Key"] == "ManagedBy" and tag["Value"] == "SMUS-CLI" for tag in tags
         )
-        typer.echo(f"✅ Ensured inline PassRole policy on {role_name}")
-
-        return existing_role_arn
+        
+        if is_smus_managed:
+            typer.echo(f"🔄 Deleting existing SMUS-managed role: {role_name}")
+            _delete_role(iam, role_name)
+        else:
+            typer.echo(f"✓ Role already exists: {existing_role_arn}")
+            if policy_arns:
+                _attach_policies(iam, role_name, policy_arns)
+            pass_role_policy = _load_pass_role_policy(existing_role_arn)
+            iam.put_role_policy(
+                RoleName=role_name,
+                PolicyName="SelfPassRolePolicy",
+                PolicyDocument=pass_role_policy,
+            )
+            typer.echo(f"✅ Ensured inline PassRole policy on {role_name}")
+            return existing_role_arn
 
     except iam.exceptions.NoSuchEntityException:
-        # Role doesn't exist, create it
         pass
 
     # Create new role
@@ -164,3 +169,28 @@ def _attach_policies(iam, role_name: str, policy_arns: List[str]):
         except Exception as e:
             typer.echo(f"  ❌ Failed to attach policy {policy_arn}: {e}")
             raise
+
+
+def _delete_role(iam, role_name: str):
+    """Delete role and all its policies."""
+    # Detach managed policies
+    try:
+        paginator = iam.get_paginator("list_attached_role_policies")
+        for page in paginator.paginate(RoleName=role_name):
+            for policy in page["AttachedPolicies"]:
+                iam.detach_role_policy(RoleName=role_name, PolicyArn=policy["PolicyArn"])
+    except Exception:
+        pass
+
+    # Delete inline policies
+    try:
+        paginator = iam.get_paginator("list_role_policies")
+        for page in paginator.paginate(RoleName=role_name):
+            for policy_name in page["PolicyNames"]:
+                iam.delete_role_policy(RoleName=role_name, PolicyName=policy_name)
+    except Exception:
+        pass
+
+    # Delete role
+    iam.delete_role(RoleName=role_name)
+    typer.echo(f"✅ Deleted role: {role_name}")
