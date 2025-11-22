@@ -232,8 +232,11 @@ class TestBasicApp(IntegrationTestBase):
                     domainIdentifier=domain_id,
                     groupIdentifier=group_id
                 )
+                print(f"DEBUG: Group profile for {group_id}: {profile}")
                 owner_id = profile.get('rolePrincipalArn') or profile.get('groupName') or profile.get('id')
                 actual_owners.append(owner_id)
+            
+            print(f"DEBUG: actual_owners = {actual_owners}")
             
             # Expand ${AWS_ACCOUNT_ID} in expected owners
             sts = boto3.client('sts')
