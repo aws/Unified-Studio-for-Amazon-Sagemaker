@@ -113,8 +113,6 @@ def deploy_files(
                 ".DS_Store",
             ]
 
-            typer.echo(f"  🔍 DEBUG: Running command: {' '.join(cmd)}")
-
             result = subprocess.run(cmd, capture_output=True, text=True)
 
             if result.returncode == 0:

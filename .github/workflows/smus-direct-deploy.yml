@@ -40,13 +40,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      # DEBUG: Verify notebook after checkout
-      - name: "[DEBUG] Verify notebook after git checkout"
-        run: |
-          python3 experimental/SMUS-CICD-pipeline-cli/.github/verify_notebook.py \
-            experimental/SMUS-CICD-pipeline-cli/examples/analytic-workflow/genai/workflows/bedrock_agent_notebook.ipynb \
-            "After git checkout"
-      
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -97,14 +90,6 @@ jobs:
           smus-cli deploy \
             --manifest ../../${{ inputs.manifest_path }} \
             --targets ${{ inputs.test_target }}
-      
-      # DEBUG: Verify notebook in S3 after deploy
-      - name: "[DEBUG] Verify notebook in S3 after deploy"
-        run: |
-          aws s3 cp s3://amazon-sagemaker-${{ steps.aws-account.outputs.account-id }}-${{ vars.DOMAIN_REGION }}-${{ vars.PROJECT_ID }}/shared/genai/bundle/workflows/bedrock_agent_notebook.ipynb /tmp/s3_notebook.ipynb
-          python3 experimental/SMUS-CICD-pipeline-cli/.github/verify_notebook.py \
-            /tmp/s3_notebook.ipynb \
-            "After S3 upload"
       
       - name: Download workflow output notebooks
         if: always()
