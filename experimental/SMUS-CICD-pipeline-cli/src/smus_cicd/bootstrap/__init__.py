@@ -4,7 +4,6 @@ from .action_registry import registry
 from .executor import BootstrapExecutor
 from .handlers.custom_handler import handle_cli_action
 from .handlers.datazone_handler import handle_datazone_action
-from .handlers.log_handler import handle_log_action
 from .handlers.mwaaserverless_handler import handle_mwaaserverless_action
 from .handlers.quicksight_handler import handle_quicksight_action
 from .handlers.workflow_create_handler import handle_workflow_create
@@ -19,7 +18,6 @@ registry.register("workflow.create", handle_workflow_create)
 registry.register("mwaaserverless", handle_workflow_action)  # Backward compatibility
 registry.register("cli", handle_cli_action)
 registry.register("custom", handle_cli_action)  # Backward compatibility
-registry.register("log", handle_cli_action)  # Merged into cli.print
 registry.register("quicksight", handle_quicksight_action)
 
 # Create global executor

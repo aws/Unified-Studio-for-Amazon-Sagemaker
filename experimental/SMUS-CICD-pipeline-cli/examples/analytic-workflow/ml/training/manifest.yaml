@@ -56,8 +56,6 @@ stages:
         targetDirectory: ml/bundle/training-workflows
     bootstrap:
       actions:
-      - type: log.debug
-        message: "MLFLOW_ARTIFACTS: {proj.connection.default.s3_shared.s3Uri}ml/mlflow-artifacts"
       - type: datazone.create_connection
         name: mlflow-server
         connection_type: MLFLOW

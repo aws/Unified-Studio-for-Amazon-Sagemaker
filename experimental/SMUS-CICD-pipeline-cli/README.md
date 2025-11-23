@@ -344,10 +344,11 @@ stages:
       GRANT_TO: Admin,service-role/aws-quicksight-service-role-v0
     bootstrap:
       actions:
-        - type: workflow.logs
+        - type: workflow.create
           workflowName: covid_dashboard_glue_quick_pipeline
-          live: true
-          lines: 10000
+        - type: workflow.run
+          workflowName: covid_dashboard_glue_quick_pipeline
+          trailLogs: true
         - type: quicksight.refresh_dataset
           refreshScope: IMPORTED
           ingestionType: FULL_REFRESH
@@ -446,6 +447,11 @@ stages:
           properties:
             trackingServerArn: arn:aws:sagemaker:${STS_REGION}:${STS_ACCOUNT_ID}:mlflow-tracking-server/smus-integration-mlflow-use2
             trackingServerName: smus-integration-mlflow-use2
+        - type: workflow.create
+          workflowName: parallel_notebooks_execution
+        - type: workflow.run
+          workflowName: parallel_notebooks_execution
+          trailLogs: true
 ```
 
 </details>
@@ -511,6 +517,11 @@ stages:
           connection_type: MLFLOW
           properties:
             trackingServerArn: arn:aws:sagemaker:${STS_REGION}:${STS_ACCOUNT_ID}:mlflow-tracking-server/smus-integration-mlflow-use2
+        - type: workflow.create
+          workflowName: ml_training_workflow
+        - type: workflow.run
+          workflowName: ml_training_workflow
+          trailLogs: true
 ```
 
 </details>
@@ -575,6 +586,13 @@ stages:
         - name: model-artifacts
           connectionName: default.s3_shared
           targetDirectory: ml/bundle/model-artifacts
+    bootstrap:
+      actions:
+        - type: workflow.create
+          workflowName: ml_deployment_workflow
+        - type: workflow.run
+          workflowName: ml_deployment_workflow
+          trailLogs: true
 ```
 
 </details>
