@@ -58,7 +58,12 @@ Resources:
                 Resource:
                   - !Sub 'arn:aws:iam::${AWS::AccountId}:role/${ProjectRoleName}'
                   - !Sub 'arn:aws:iam::${AWS::AccountId}:role/DEFAULT_AgentExecutionRole'
-                  - !Sub 'arn:aws:iam::${AWS::AccountId}:role/test_agent-lambda-role-${AWS::Region}-${AWS::AccountId}'
+                  - !Sub 'arn:aws:iam::${AWS::AccountId}:role/*-lambda-role-${AWS::Region}-${AWS::AccountId}'
+                Condition:
+                  StringEquals:
+                    'iam:PassedToService': 
+                      - 'lambda.amazonaws.com'
+                      - 'bedrock.amazonaws.com'
         - PolicyName: BedrockInvokeAgentPolicy
           PolicyDocument:
             Version: '2012-10-17'

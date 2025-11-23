@@ -597,9 +597,11 @@ def _resolve_and_upload_workflows(
     manifest=None,
 ) -> None:
     """Resolve variables in workflow YAML files and re-upload to S3."""
-    import boto3
     import tempfile
+
+    import boto3
     import yaml
+
     from ..helpers.context_resolver import ContextResolver
 
     region = config.get("region", "us-east-1")
@@ -715,8 +717,8 @@ def _is_workflow_yaml(yaml_data: dict) -> bool:
 
 def _create_compressed_archive(source_path: str, item_name: str, temp_dir: str) -> str:
     """Create a tar.gz archive from source path and return archive-only directory."""
-    import tarfile
     import shutil
+    import tarfile
 
     archive_name = f"{item_name}.tar.gz"
     archive_path = os.path.join(temp_dir, archive_name)

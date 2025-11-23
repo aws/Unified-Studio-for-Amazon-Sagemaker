@@ -93,7 +93,7 @@ jobs:
     - name: Validate documentation manifests
       run: |
         cd experimental/SMUS-CICD-pipeline-cli
-        python tests/scripts/validate_doc_manifests.py
+        python docs/scripts/validate_doc_manifests.py
     
     - name: Validate documentation back links
       run: |

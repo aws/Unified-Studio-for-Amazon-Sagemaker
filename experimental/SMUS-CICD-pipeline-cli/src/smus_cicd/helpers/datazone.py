@@ -109,8 +109,9 @@ def resolve_domain_id(
 
 def get_project_user_role_arn(project_name: str, domain_name: str, region: str) -> str:
     """Get the user role ARN for a DataZone project from its tooling environment."""
-    from .logger import get_logger
     import typer
+
+    from .logger import get_logger
 
     logger = get_logger("datazone")
     typer.echo(

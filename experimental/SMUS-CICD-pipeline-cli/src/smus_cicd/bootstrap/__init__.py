@@ -7,8 +7,8 @@ from .handlers.datazone_handler import handle_datazone_action
 from .handlers.log_handler import handle_log_action
 from .handlers.mwaaserverless_handler import handle_mwaaserverless_action
 from .handlers.quicksight_handler import handle_quicksight_action
-from .handlers.workflow_handler import handle_workflow_action
 from .handlers.workflow_create_handler import handle_workflow_create
+from .handlers.workflow_handler import handle_workflow_action
 from .models import BootstrapAction, BootstrapConfig
 
 # Register handlers
