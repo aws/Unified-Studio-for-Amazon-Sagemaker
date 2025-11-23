@@ -296,38 +296,39 @@ class ProjectManager:
                         project_id, domain_id, region, owners, contributors
                     )
 
-        # Ensure role exists with correct policies (idempotent)
-        role_arn = self._get_role_arn(target_config)
-        policy_arns = self._get_policy_arns(target_config)
+        # Ensure role exists with correct policies (idempotent) - only if project.create is true
+        if target_config.project.create:
+            role_arn = self._get_role_arn(target_config)
+            policy_arns = self._get_policy_arns(target_config)
 
-        if policy_arns or not role_arn:
-            import boto3
+            if policy_arns or not role_arn:
+                import boto3
 
-            from . import iam
+                from . import iam
 
-            sts = boto3.client("sts")
-            account_id = sts.get_caller_identity()["Account"]
+                sts = boto3.client("sts")
+                account_id = sts.get_caller_identity()["Account"]
 
-            if not role_arn:
-                # No role specified, create default role
-                role_name = self._get_role_name(target_config, project_name)
-                typer.echo(f"🔧 Ensuring IAM role exists: {role_name}")
-                role_arn = iam.create_or_update_project_role(
-                    role_name=role_name,
-                    policy_arns=policy_arns,
-                    account_id=account_id,
-                    region=region,
-                )
-            else:
-                # Role specified, ensure policies are attached
-                typer.echo(f"🔧 Ensuring policies on existing role: {role_arn}")
-                role_arn = iam.create_or_update_project_role(
-                    role_name="",  # Not used when role_arn provided
-                    policy_arns=policy_arns,
-                    account_id=account_id,
-                    region=region,
-                    role_arn=role_arn,
-                )
+                if not role_arn:
+                    # No role specified, create default role
+                    role_name = self._get_role_name(target_config, project_name)
+                    typer.echo(f"🔧 Ensuring IAM role exists: {role_name}")
+                    role_arn = iam.create_or_update_project_role(
+                        role_name=role_name,
+                        policy_arns=policy_arns,
+                        account_id=account_id,
+                        region=region,
+                    )
+                else:
+                    # Role specified, ensure policies are attached
+                    typer.echo(f"🔧 Ensuring policies on existing role: {role_arn}")
+                    role_arn = iam.create_or_update_project_role(
+                        role_name="",  # Not used when role_arn provided
+                        policy_arns=policy_arns,
+                        account_id=account_id,
+                        region=region,
+                        role_arn=role_arn,
+                    )
 
     def _get_profile_name(self, target_config) -> str:
         """Extract profile name from target configuration."""

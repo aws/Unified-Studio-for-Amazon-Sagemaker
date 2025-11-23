@@ -81,14 +81,12 @@ def create_or_update_project_role(
         # Check if role was created by SMUS CLI
         tags = response["Role"].get("Tags", [])
         is_smus_managed = any(
-            tag["Key"] == "ManagedBy" and tag["Value"] == "SMUS-CLI" for tag in tags
+            tag["Key"] == "CreatedBy" and tag["Value"] == "SMUS-CICD" for tag in tags
         )
 
         if is_smus_managed:
-            typer.echo(f"🔄 Deleting existing SMUS-managed role: {role_name}")
-            _delete_role(iam, role_name)
-        else:
-            typer.echo(f"✓ Role already exists: {existing_role_arn}")
+            # Update existing SMUS-managed role (don't delete/recreate)
+            typer.echo(f"✓ SMUS-managed role exists: {existing_role_arn}")
             if policy_arns:
                 _attach_policies(iam, role_name, policy_arns)
             pass_role_policy = _load_pass_role_policy(existing_role_arn)
@@ -97,7 +95,11 @@ def create_or_update_project_role(
                 PolicyName="SelfPassRolePolicy",
                 PolicyDocument=pass_role_policy,
             )
-            typer.echo(f"✅ Ensured inline PassRole policy on {role_name}")
+            typer.echo(f"✅ Updated policies on {role_name}")
+            return existing_role_arn
+        else:
+            # Role exists but not managed by SMUS - don't touch it
+            typer.echo(f"✓ Role exists (not SMUS-managed): {existing_role_arn}")
             return existing_role_arn
 
     except iam.exceptions.NoSuchEntityException:
