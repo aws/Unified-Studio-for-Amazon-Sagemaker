@@ -281,6 +281,30 @@ Deploy interactive BI dashboards with automated Glue ETL pipelines for data prep
 **What happens during deployment:** Application code is deployed to S3, Glue jobs and Airflow workflows are created and executed, QuickSight dashboard/data source/dataset are created, and QuickSight ingestion is initiated to refresh the dashboard with latest data.
 
 <details>
+<summary><b>📁 App Structure</b></summary>
+
+```
+dashboard-glue-quick/
+├── manifest.yaml                      # Deployment configuration
+├── covid_etl_workflow.yaml           # Airflow workflow definition
+├── glue_setup_covid_db.py            # Glue job: Create database & tables
+├── glue_covid_summary_job.py         # Glue job: ETL transformations
+├── glue_set_permission_check.py      # Glue job: Permission validation
+├── quicksight/
+│   └── sample-dashboard.qs           # QuickSight dashboard bundle
+└── app_tests/
+    └── test_covid_data.py            # Integration tests
+```
+
+**Key Files:**
+- **Glue Jobs**: Python scripts for database setup, ETL, and validation
+- **Workflow**: YAML defining Airflow DAG for orchestration
+- **QuickSight Bundle**: Dashboard, datasets, and data sources
+- **Tests**: Validate data quality and dashboard functionality
+
+</details>
+
+<details>
 <summary><b>View Manifest</b></summary>
 
 ```yaml
@@ -347,6 +371,35 @@ Deploy Jupyter notebooks with parallel execution orchestration for data analysis
 **AWS Services:** SageMaker Notebooks • MLflow • S3 • MWAA Serverless
 
 **What happens during deployment:** Notebooks and workflow definitions are uploaded to S3, Airflow DAG is created for parallel notebook execution, MLflow connection is provisioned for experiment tracking, and notebooks are ready to run on-demand or scheduled.
+
+<details>
+<summary><b>📁 App Structure</b></summary>
+
+```
+data-notebooks/
+├── manifest.yaml                              # Deployment configuration
+├── notebooks/
+│   ├── 00_basic_python_pandas.ipynb          # Basic data analysis
+│   ├── 04_gdc_athena.ipynb                   # Athena queries
+│   ├── 05_customer_churn_spark.ipynb         # Spark ML
+│   ├── 06_purchase_analytics_duckdb.ipynb    # DuckDB analytics
+│   ├── 08_genai_etl_pandas.ipynb             # GenAI ETL
+│   ├── 09_city_temperature_spark.ipynb       # Spark ETL
+│   ├── 10_time_series_chronos.ipynb          # Time series
+│   ├── 11_movie_sales_dynamodb.ipynb         # DynamoDB
+│   └── 12_classification_mlflow.ipynb        # MLflow tracking
+├── workflows/
+│   └── parallel_notebooks_workflow.yaml      # Airflow orchestration
+└── app_tests/
+    └── test_notebooks_execution.py           # Integration tests
+```
+
+**Key Files:**
+- **Notebooks**: 9 Jupyter notebooks covering various data engineering patterns
+- **Workflow**: Parallel execution orchestration with Airflow
+- **Tests**: Validate notebook execution and outputs
+
+</details>
 
 <details>
 <summary><b>View Manifest</b></summary>
