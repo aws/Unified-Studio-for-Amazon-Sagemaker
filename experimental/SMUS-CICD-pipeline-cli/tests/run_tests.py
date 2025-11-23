@@ -43,7 +43,7 @@ def check_aws_setup():
 
 def clean_reports_directory():
     """Clean the reports directory before running tests."""
-    reports_dir = Path("tests/reports")
+    reports_dir = Path("tests/test-outputs")
     if reports_dir.exists():
         shutil.rmtree(reports_dir)
         print("🧹 Cleaned reports directory")
@@ -57,11 +57,11 @@ def run_unit_tests(coverage=True, html_report=False):
     if coverage:
         cmd.extend(["--cov=src/smus_cicd", "--cov-report=term-missing"])
         if html_report:
-            cmd.extend(["--cov-report=html:tests/reports/coverage"])
+            cmd.extend(["--cov-report=html:tests/test-outputs/coverage"])
 
     if html_report:
         cmd.extend(
-            ["--html=tests/reports/unit-test-results.html", "--self-contained-html"]
+            ["--html=tests/test-outputs/unit-test-results.html", "--self-contained-html"]
         )
 
     print("🧪 Running unit tests...")
@@ -82,7 +82,7 @@ def run_integration_tests(coverage=True, html_report=False, skip_slow=False, par
     if coverage:
         cmd.extend(["--cov=src/smus_cicd", "--cov-append", "--cov-report=term-missing"])
         if html_report:
-            cmd.extend(["--cov-report=html:tests/reports/coverage"])
+            cmd.extend(["--cov-report=html:tests/test-outputs/coverage"])
 
     if skip_slow:
         cmd.extend(["-m", "not slow"])
@@ -90,7 +90,7 @@ def run_integration_tests(coverage=True, html_report=False, skip_slow=False, par
     if html_report:
         cmd.extend(
             [
-                "--html=tests/reports/integration-test-results.html",
+                "--html=tests/test-outputs/integration-test-results.html",
                 "--self-contained-html",
             ]
         )
@@ -118,14 +118,14 @@ def run_all_tests(coverage=True, html_report=False, skip_slow=False, parallel=Fa
     if coverage:
         cmd.extend(["--cov=src/smus_cicd", "--cov-report=term-missing"])
         if html_report:
-            cmd.extend(["--cov-report=html:tests/reports/coverage"])
+            cmd.extend(["--cov-report=html:tests/test-outputs/coverage"])
 
     if skip_slow:
         cmd.extend(["-m", "not slow"])
 
     if html_report:
         cmd.extend(
-            ["--html=tests/reports/all-test-results.html", "--self-contained-html"]
+            ["--html=tests/test-outputs/all-test-results.html", "--self-contained-html"]
         )
 
     print("🚀 Running all tests...")
@@ -144,14 +144,14 @@ def generate_coverage_report():
     print("📊 Generating coverage report...")
 
     # Ensure reports directory exists
-    Path("tests/reports").mkdir(parents=True, exist_ok=True)
+    Path("tests/test-outputs").mkdir(parents=True, exist_ok=True)
 
     # Generate HTML report
-    subprocess.run(["python", "-m", "coverage", "html", "-d", "tests/reports/coverage"])
+    subprocess.run(["python", "-m", "coverage", "html", "-d", "tests/test-outputs/coverage"])
 
     # Generate XML report for CI
     subprocess.run(
-        ["python", "-m", "coverage", "xml", "-o", "tests/reports/coverage.xml"]
+        ["python", "-m", "coverage", "xml", "-o", "tests/test-outputs/coverage.xml"]
     )
 
     # Show coverage summary
@@ -160,8 +160,8 @@ def generate_coverage_report():
     )
     print(result.stdout)
 
-    print("📁 HTML coverage report generated in: tests/reports/coverage/index.html")
-    print("📄 XML coverage report generated in: tests/reports/coverage.xml")
+    print("📁 HTML coverage report generated in: tests/test-outputs/coverage/index.html")
+    print("📄 XML coverage report generated in: tests/test-outputs/coverage.xml")
 
 
 def main():
@@ -205,7 +205,7 @@ def main():
     args = parser.parse_args()
 
     # Ensure reports directory exists
-    Path("tests/reports").mkdir(parents=True, exist_ok=True)
+    Path("tests/test-outputs").mkdir(parents=True, exist_ok=True)
 
     if args.coverage_only:
         generate_coverage_report()
@@ -243,16 +243,16 @@ def main():
         if args.parallel:
             print(f"⚡ Tests ran in parallel with {args.workers or 'auto'} workers")
         if html_report:
-            print(f"📁 Test results available in: tests/reports/")
+            print(f"📁 Test results available in: tests/test-outputs/")
             if args.type == "unit":
-                print(f"📊 Unit test results: tests/reports/unit-test-results.html")
+                print(f"📊 Unit test results: tests/test-outputs/unit-test-results.html")
             elif args.type == "integration":
                 print(
-                    f"📊 Integration test results: tests/reports/integration-test-results.html"
+                    f"📊 Integration test results: tests/test-outputs/integration-test-results.html"
                 )
             else:
-                print(f"📊 All test results: tests/reports/all-test-results.html")
-            print(f"📈 Coverage report: tests/reports/coverage/index.html")
+                print(f"📊 All test results: tests/test-outputs/all-test-results.html")
+            print(f"📈 Coverage report: tests/test-outputs/coverage/index.html")
     else:
         print("❌ Some tests failed!")
 

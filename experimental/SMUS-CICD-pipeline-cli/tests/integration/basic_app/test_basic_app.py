@@ -173,52 +173,43 @@ class TestBasicApp(IntegrationTestBase):
         assert result["success"], f"Bundle failed: {result['output']}"
         print("✅ Bundle successful")
 
-        # Step 4: Deploy test target
+        # Step 4: Deploy test target (EXPECTED TO FAIL due to expected_failure_workflow)
         print("\n=== Step 4: Deploy Test Target ===")
         self.logger.info("=== STEP 4: Deploy Test Target ===")
         result = self.run_cli_command(["deploy", "test", "--manifest", pipeline_file])
         results.append(result)
-        assert result["success"], f"Deploy test failed: {result['output']}"
-        print("✅ Deploy test successful")
+        
+        # Deploy should succeed (workflows run async)
+        assert result["success"], f"Deploy failed: {result['output']}"
+        print("✅ Deploy succeeded (workflows run asynchronously)")
 
-        # Step 5: Monitor
-        print("\n=== Step 5: Monitor ===")
-        self.logger.info("=== STEP 5: Monitor ===")
+        # Step 5: Monitor with --live to wait for workflows to complete
+        print("\n=== Step 5: Monitor Workflows with --live ===")
+        self.logger.info("=== STEP 5: Monitor Workflows with --live ===")
         result = self.run_cli_command(
-            ["monitor", "--targets", "test", "--manifest", pipeline_file]
+            ["monitor", "--targets", "test", "--manifest", pipeline_file, "--live"]
         )
         results.append(result)
         assert result["success"], f"Monitor failed: {result['output']}"
-        print("✅ Monitor successful")
+        
+        # Check workflow statuses from monitor output
+        monitor_output = result.get("output", "")
+        
+        # Verify expected_failure_workflow failed
+        assert "expected_failure_workflow" in monitor_output, "expected_failure_workflow not found in monitor output"
+        assert "FAILED" in monitor_output, f"expected_failure_workflow should have FAILED status in monitor output: {monitor_output}"
+        print("✅ expected_failure_workflow failed as expected")
+        
+        # Verify basic_test_workflow succeeded
+        assert "basic_test_workflow" in monitor_output, "basic_test_workflow not found in monitor output"
+        assert "SUCCESS" in monitor_output or "SUCCEEDED" in monitor_output or "COMPLETED" in monitor_output, \
+            f"basic_test_workflow should have SUCCESS/SUCCEEDED/COMPLETED status: {monitor_output}"
+        print("✅ basic_test_workflow succeeded as expected")
 
-        # Step 6: Start basic_test_workflow
-        print("\n=== Step 6: Start Basic Test Workflow ===")
-        self.logger.info("=== STEP 6: Start Basic Test Workflow ===")
-        result = self.run_cli_command(
-            ["run", "--workflow", workflow_name, "--targets", "test", "--manifest", pipeline_file]
-        )
-        results.append(result)
-        assert result["success"], f"Run workflow failed: {result['output']}"
-        print("✅ Basic workflow started")
+        # Step 6-8: Workflows already ran during deploy, skip manual start
+        print("\n=== Steps 6-8: Workflows Already Executed During Deploy ===")
+        print("✅ Workflows were created and run during deploy bootstrap")
 
-        # Step 7: Start expected failure workflow
-        print("\n=== Step 7: Start Expected Failure Workflow ===")
-        self.logger.info("=== STEP 7: Start Expected Failure Workflow ===")
-        failure_workflow_name = "expected_failure_workflow"
-        result = self.run_cli_command(
-            ["run", "--workflow", failure_workflow_name, "--targets", "test", "--manifest", pipeline_file]
-        )
-        results.append(result)
-        assert result["success"], f"Run failure workflow failed: {result['output']}"
-        print("✅ Failure workflow started")
-
-        # Step 8: Monitor both workflows until completion
-        print("\n=== Step 8: Monitor Workflows Until Complete ===")
-        self.logger.info("=== STEP 8: Monitor Workflows Until Complete ===")
-        result = self.run_cli_command(["monitor", "--live", "--targets", "test", "--manifest", pipeline_file])
-        results.append(result)
-        assert result["success"], f"Monitor --live failed: {result['output']}"
-        print("✅ All workflows completed")
 
         # Step 9: Download and validate notebook outputs
         print("\n=== Step 9: Download and Validate Notebook Outputs ===")
@@ -307,7 +298,7 @@ class TestBasicApp(IntegrationTestBase):
         import os
         
         try:
-            expected_failure_name = f'BasicTestBundle_test_project_basic_{failure_workflow_name}'
+            expected_failure_name = f'BasicTestBundle_test_project_basic_expected_failure_workflow'
             try:
                 failure_workflow_arn = self.get_workflow_arn(expected_failure_name)
                 print(f"📋 Failure Workflow ARN: {failure_workflow_arn}")

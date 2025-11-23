@@ -74,7 +74,7 @@ def substitute_env_vars(data: Union[Dict, List, str]) -> Union[Dict, List, str]:
     """
     Recursively substitute environment variables in YAML data.
 
-    Supports ${VAR_NAME} syntax for environment variable substitution.
+    Supports ${VAR_NAME} or ${VAR_NAME:default_value} syntax for environment variable substitution.
 
     Pseudo environment variables (auto-resolved from AWS credentials):
     - AWS_ACCOUNT_ID: Current AWS account ID from STS
@@ -86,6 +86,9 @@ def substitute_env_vars(data: Union[Dict, List, str]) -> Union[Dict, List, str]:
 
     Returns:
         Data with environment variables substituted
+
+    Raises:
+        ValueError: If a required variable (without default) is not found
     """
     if isinstance(data, dict):
         return {key: substitute_env_vars(value) for key, value in data.items()}
@@ -97,7 +100,8 @@ def substitute_env_vars(data: Union[Dict, List, str]) -> Union[Dict, List, str]:
 
         def replace_var(match):
             var_name = match.group(1)
-            default_value = match.group(2) if match.group(2) is not None else ""
+            has_default = match.group(2) is not None
+            default_value = match.group(2) if has_default else None
 
             # Handle pseudo environment variables
             if var_name == "STS_ACCOUNT_ID" or var_name == "AWS_ACCOUNT_ID":
@@ -107,10 +111,26 @@ def substitute_env_vars(data: Union[Dict, List, str]) -> Union[Dict, List, str]:
             elif var_name == "STS_REGION":
                 import boto3
 
-                return boto3.Session().region_name or default_value
+                region = boto3.Session().region_name
+                if region:
+                    return region
+                elif has_default:
+                    return default_value
+                else:
+                    raise ValueError(
+                        f"Variable ${{{var_name}}} could not be resolved: No AWS region configured"
+                    )
 
             # Regular environment variable lookup
-            return os.getenv(var_name, default_value)
+            value = os.getenv(var_name)
+            if value is not None:
+                return value
+            elif has_default:
+                return default_value
+            else:
+                raise ValueError(
+                    f"Variable ${{{var_name}}} is not set and has no default value"
+                )
 
         return re.sub(pattern, replace_var, data)
     else:
@@ -300,7 +320,7 @@ def get_datazone_project_info(
             }
 
         project_details = _get_project_details(domain_id, project_id, region)
-        project_owners = _get_project_owners(domain_id, project_id, region)
+        project_members = _get_project_owners(domain_id, project_id, region)
         project_connections = _get_project_connections(
             project_name, domain_id, project_id, region
         )
@@ -310,7 +330,8 @@ def get_datazone_project_info(
             "project_id": project_id,  # Keep backward compatibility
             "domain_id": domain_id,  # Add for bootstrap handlers
             "status": project_details.get("status", "Unknown"),
-            "owners": project_owners,
+            "owners": project_members.get("owners", []),
+            "contributors": project_members.get("contributors", []),
             "connections": project_connections,
         }
         return result
@@ -391,8 +412,9 @@ def _get_project_details(
 
 
 def _get_project_owners(domain_id: str, project_id: str, region: str) -> List[str]:
-    """Get list of project owners."""
+    """Get list of project owners and contributors."""
     owners = []
+    contributors = []
 
     try:
         datazone_client = datazone._get_datazone_client(region)
@@ -401,39 +423,69 @@ def _get_project_owners(domain_id: str, project_id: str, region: str) -> List[st
         )
 
         for member in memberships_response.get("members", []):
-            if member.get("designation") == "PROJECT_OWNER":
-                owner_name = _extract_owner_name(member, domain_id, datazone_client)
-                if owner_name:
-                    owners.append(owner_name)
+            designation = member.get("designation")
+            member_name = _extract_member_name(member, domain_id, datazone_client)
+
+            if member_name:
+                if designation == "PROJECT_OWNER":
+                    owners.append(member_name)
+                elif designation == "PROJECT_CONTRIBUTOR":
+                    contributors.append(member_name)
 
     except Exception as e:
         from .logger import get_logger
 
         logger = get_logger("utils")
-        logger.warning(f"Failed to get project owners (non-critical): {e}")
+        logger.warning(f"Failed to get project members (non-critical): {e}")
 
-    return owners
+    return {"owners": owners, "contributors": contributors}
 
 
-def _extract_owner_name(
+def _extract_member_name(
     member: Dict[str, Any], domain_id: str, datazone_client
 ) -> Optional[str]:
-    """Extract readable owner name from member details."""
+    """Extract readable member name from member details (user or group)."""
     member_details = member.get("memberDetails", {})
-    if "user" not in member_details:
-        return None
 
-    user_id = member_details["user"].get("userId")
-    if not user_id:
-        return None
+    # Check for user
+    if "user" in member_details:
+        user_id = member_details["user"].get("userId")
+        if user_id:
+            return _extract_owner_name_from_user(user_id, domain_id, datazone_client)
 
+    # Check for group (IAM role)
+    if "group" in member_details:
+        group_id = member_details["group"].get("groupId")
+        if group_id:
+            try:
+                profile = datazone_client.get_group_profile(
+                    domainIdentifier=domain_id, groupIdentifier=group_id
+                )
+                # Return role ARN if available, otherwise group name or ID
+                return (
+                    profile.get("rolePrincipalArn")
+                    or profile.get("groupName")
+                    or group_id
+                )
+            except Exception as e:
+                from .logger import get_logger
+
+                logger = get_logger("utils")
+                logger.warning(f"Failed to get group profile for {group_id}: {e}")
+                return group_id
+
+    return None
+
+
+def _extract_owner_name_from_user(
+    user_id: str, domain_id: str, datazone_client
+) -> Optional[str]:
+    """Extract readable owner name from user ID."""
     try:
         user_profile = datazone_client.get_user_profile(
             domainIdentifier=domain_id, userIdentifier=user_id
         )
-
         return _get_readable_user_name(user_profile, user_id)
-
     except Exception as e:
         from .logger import get_logger
 
@@ -442,6 +494,13 @@ def _extract_owner_name(
             f"Failed to get user profile for {user_id}, using ID as fallback: {e}"
         )
         return user_id
+
+
+def _extract_owner_name(
+    member: Dict[str, Any], domain_id: str, datazone_client
+) -> Optional[str]:
+    """Extract readable owner name from member details (backward compatibility)."""
+    return _extract_member_name(member, domain_id, datazone_client)
 
 
 def _get_readable_user_name(user_profile: Dict[str, Any], fallback_id: str) -> str:

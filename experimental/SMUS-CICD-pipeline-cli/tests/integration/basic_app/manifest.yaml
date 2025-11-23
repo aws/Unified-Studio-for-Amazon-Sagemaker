@@ -35,10 +35,11 @@ stages:
       create: true
       owners:
       - Eng1
-      - arn:aws:iam::*:role/GitHubActionsRole-SMUS-CLI-Tests
+      - arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
+      - arn:aws:iam::${AWS_ACCOUNT_ID}:role/Admin
       contributors: []
       role:
-        arn: arn:aws:iam::*:role/SMUSCICDTestRole
+        arn: arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
   test:
     stage: TEST
     domain:
@@ -50,7 +51,8 @@ stages:
       create: true
       owners:
       - Eng1
-      - arn:aws:iam::*:role/GitHubActionsRole-SMUS-CLI-Tests
+      - arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
+      - arn:aws:iam::${AWS_ACCOUNT_ID}:role/Admin
       contributors: []
       role:
         policies:
@@ -61,8 +63,20 @@ stages:
         name: mlflow-server
         connection_type: MLFLOW
         properties:
-          trackingServerName: smus-integration-mlflow-use2
-          trackingServerArn: arn:aws:sagemaker:us-east-2:${AWS_ACCOUNT_ID}:mlflow-tracking-server/smus-integration-mlflow-use2
+          trackingServerName: ${MLFLOW_TRACKING_SERVER_NAME:smus-integration-mlflow-use2}
+          trackingServerArn: arn:aws:sagemaker:${DEV_DOMAIN_REGION:us-east-2}:${AWS_ACCOUNT_ID}:mlflow-tracking-server/${MLFLOW_TRACKING_SERVER_NAME:smus-integration-mlflow-use2}
+      - type: workflow.create
+        workflowName: basic_test_workflow
+      - type: workflow.run
+        workflowName: basic_test_workflow
+        trailLogs: false
+      - type: workflow.create
+        workflowName: expected_failure_workflow
+      - type: workflow.run
+        workflowName: expected_failure_workflow
+        trailLogs: false
+      - type: workflow.logs
+        workflowName: expected_failure_workflow
     deployment_configuration:
       storage:
       - name: code

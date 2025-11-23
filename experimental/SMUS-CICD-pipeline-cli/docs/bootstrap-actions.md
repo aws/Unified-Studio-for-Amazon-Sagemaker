@@ -4,6 +4,22 @@
 
 Bootstrap actions allow you to execute automated tasks during deployment, including triggering workflows, fetching logs, and emitting custom EventBridge events to integrate with CI/CD pipelines and event-driven automation.
 
+## Quick Reference
+
+| Action Type | Description |
+|------------|-------------|
+| **workflow.create** | Create MWAA Serverless workflows from manifest |
+| **workflow.run** | Trigger workflow execution |
+| **workflow.logs** | Fetch workflow execution logs |
+| **workflow.monitor** | Monitor workflow status |
+| **project.create_environment** | Create DataZone environment |
+| **project.create_connection** | Create DataZone connection |
+| **quicksight.refresh_dataset** | Refresh QuickSight dataset |
+| **cli.print** | Print message to console or log |
+| **cli.wait** | Wait for specified duration |
+| **cli.validate_deployment** | Validate deployment status |
+| **cli.notify** | Send notification |
+
 ## Overview
 
 When you deploy your application, the SMUS CLI can automatically execute bootstrap actions. These actions can:
@@ -31,7 +47,7 @@ stages:
   test:
     bootstrap:
       actions:
-        - type: datazone.create_connection
+        - type: project.create_connection
           name: mlflow-server
           # ... connection config
         

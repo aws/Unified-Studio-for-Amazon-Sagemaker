@@ -280,57 +280,55 @@ class ProjectManager:
         self, stage_name: str, target_config, project_name: str, region: str
     ):
         """Update existing project stack tags, memberships, and ensure role exists."""
-        typer.echo("Updating project stack tags...")
-
-        # Construct stack name and tags
-        stack_name = f"{self.manifest.application_name}-{stage_name}-{project_name}"
-        tags = [
-            {"Key": "Bundle", "Value": self.manifest.application_name},
-            {"Key": "Target", "Value": stage_name},
-            {"Key": "Project", "Value": project_name},
-            {"Key": "Stage", "Value": target_config.stage},
-        ]
-
-        cloudformation.update_project_stack_tags(stack_name, region, tags)
+        typer.echo("Updating project configuration...")
 
         owners, contributors = self._extract_memberships(target_config)
         if owners or contributors:
-            typer.echo(
-                "⚠️ Project memberships cannot be updated for existing projects - use CloudFormation console to modify memberships"
-            )
-
-        # Ensure role exists with correct policies (idempotent)
-        role_arn = self._get_role_arn(target_config)
-        policy_arns = self._get_policy_arns(target_config)
-
-        if policy_arns or not role_arn:
-            import boto3
-
-            from . import iam
-
-            sts = boto3.client("sts")
-            account_id = sts.get_caller_identity()["Account"]
-
-            if not role_arn:
-                # No role specified, create default role
-                role_name = self._get_role_name(target_config, project_name)
-                typer.echo(f"🔧 Ensuring IAM role exists: {role_name}")
-                role_arn = iam.create_or_update_project_role(
-                    role_name=role_name,
-                    policy_arns=policy_arns,
-                    account_id=account_id,
-                    region=region,
+            typer.echo("🔧 Managing project memberships...")
+            domain_name = target_config.domain.name
+            domain_id = datazone.get_domain_id_by_name(domain_name, region)
+            if domain_id:
+                project_id = datazone.get_project_id_by_name(
+                    project_name, domain_id, region
                 )
-            else:
-                # Role specified, ensure policies are attached
-                typer.echo(f"🔧 Ensuring policies on existing role: {role_arn}")
-                role_arn = iam.create_or_update_project_role(
-                    role_name="",  # Not used when role_arn provided
-                    policy_arns=policy_arns,
-                    account_id=account_id,
-                    region=region,
-                    role_arn=role_arn,
-                )
+                if project_id:
+                    datazone.manage_project_memberships(
+                        project_id, domain_id, region, owners, contributors
+                    )
+
+        # Ensure role exists with correct policies (idempotent) - only if project.create is true
+        if target_config.project.create:
+            role_arn = self._get_role_arn(target_config)
+            policy_arns = self._get_policy_arns(target_config)
+
+            if policy_arns or not role_arn:
+                import boto3
+
+                from . import iam
+
+                sts = boto3.client("sts")
+                account_id = sts.get_caller_identity()["Account"]
+
+                if not role_arn:
+                    # No role specified, create default role
+                    role_name = self._get_role_name(target_config, project_name)
+                    typer.echo(f"🔧 Ensuring IAM role exists: {role_name}")
+                    role_arn = iam.create_or_update_project_role(
+                        role_name=role_name,
+                        policy_arns=policy_arns,
+                        account_id=account_id,
+                        region=region,
+                    )
+                else:
+                    # Role specified, ensure policies are attached
+                    typer.echo(f"🔧 Ensuring policies on existing role: {role_arn}")
+                    role_arn = iam.create_or_update_project_role(
+                        role_name="",  # Not used when role_arn provided
+                        policy_arns=policy_arns,
+                        account_id=account_id,
+                        region=region,
+                        role_arn=role_arn,
+                    )
 
     def _get_profile_name(self, target_config) -> str:
         """Extract profile name from target configuration."""

@@ -1,14 +1,13 @@
+# ML Training Application Manifest
 applicationName: IntegrationTestMLTraining
 content:
   storage:
   - name: training-code
-    connectionName: default.s3_shared
     include:
-    - ml/training/code
+    - code
   - name: training-workflows
-    connectionName: default.s3_shared
     include:
-    - ml/training/workflows
+    - workflows
   workflows:
   - workflowName: ml_training_workflow
     connectionName: default.workflow_serverless
@@ -35,9 +34,10 @@ stages:
       owners:
       - Eng1
       - arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
+      - arn:aws:iam::${AWS_ACCOUNT_ID}:role/Admin
       contributors: []
       role:
-        arn: arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
+        arn: arn:aws:iam::${AWS_ACCOUNT_ID}:role/test-marketing-role
       user_parameters:
       - environment_configuration_name: Lakehouse Database
         parameters:
@@ -68,4 +68,5 @@ stages:
         trailLogs: true
 tests:
   folder: examples/analytic-workflow/ml/training/app_tests/
-# Trigger workflow
+# Trigger workflow - test domain_name fix
+# Trigger workflow - Fri Nov 21 08:13:13 EST 2025

@@ -199,6 +199,13 @@ jobs:
             --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/mwaaserverless-2024-07-26.normal-edited-2.json \
             --service-name mwaaserverless-internal
       
+      - name: Get AWS Account ID
+        id: aws-account-test
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          echo "account-id=$ACCOUNT_ID" >> $GITHUB_OUTPUT
+          echo "✓ AWS Account ID: $ACCOUNT_ID"
+      
       - name: smus-cli describe (validate test target)
         env:
           DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
@@ -212,6 +219,11 @@ jobs:
         env:
           DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
           TEST_DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+          DEV_DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+          MLFLOW_TRACKING_SERVER_NAME: smus-integration-mlflow-use1
+          STS_REGION: ${{ vars.DOMAIN_REGION }}
+          STS_ACCOUNT_ID: ${{ steps.aws-account-test.outputs.account-id }}
+          AWS_ACCOUNT_ID: ${{ steps.aws-account-test.outputs.account-id }}
         run: |
           echo "🔍 DOMAIN_REGION: $DOMAIN_REGION"
           echo "🔍 TEST_DOMAIN_REGION: $TEST_DOMAIN_REGION"
@@ -222,6 +234,22 @@ jobs:
             --manifest ../../${{ inputs.manifest_path }} \
             --targets ${{ inputs.test_target }} \
             --bundle-archive-path "$BUNDLE_FILE"
+      
+      - name: Download workflow output notebooks
+        if: always()
+        continue-on-error: true
+        run: |
+          cd experimental/SMUS-CICD-pipeline-cli
+          
+          # Extract workflow name from manifest path
+          WORKFLOW_NAME=$(basename $(dirname ${{ inputs.manifest_path }}))
+          FULL_WORKFLOW_NAME="IntegrationTest${WORKFLOW_NAME^}_test_marketing_*"
+          
+          echo "📥 Downloading outputs for workflow: $FULL_WORKFLOW_NAME"
+          python3 tests/scripts/download_workflow_outputs_from_xcom.py \
+            "$FULL_WORKFLOW_NAME" \
+            --region ${{ vars.DOMAIN_REGION }} \
+            --output-dir tests/test-outputs/notebooks || echo "⚠️ No outputs found or download failed"
 
   test:
     name: Run Tests
@@ -312,6 +340,13 @@ jobs:
             --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/mwaaserverless-2024-07-26.normal-edited-2.json \
             --service-name mwaaserverless-internal
       
+      - name: Get AWS Account ID
+        id: aws-account-prod
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          echo "account-id=$ACCOUNT_ID" >> $GITHUB_OUTPUT
+          echo "✓ AWS Account ID: $ACCOUNT_ID"
+      
       - name: smus-cli describe (validate prod target)
         env:
           DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
@@ -325,6 +360,11 @@ jobs:
         env:
           DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
           PROD_DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+          DEV_DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+          MLFLOW_TRACKING_SERVER_NAME: smus-integration-mlflow-use1
+          STS_REGION: ${{ vars.DOMAIN_REGION }}
+          STS_ACCOUNT_ID: ${{ steps.aws-account-prod.outputs.account-id }}
+          AWS_ACCOUNT_ID: ${{ steps.aws-account-prod.outputs.account-id }}
         run: |
           echo "🔍 DOMAIN_REGION: $DOMAIN_REGION"
           echo "🔍 PROD_DOMAIN_REGION: $PROD_DOMAIN_REGION"

@@ -16,17 +16,15 @@ logger = get_logger("bootstrap.handlers.datazone")
 def handle_datazone_action(
     action: BootstrapAction, context: Dict[str, Any]
 ) -> Dict[str, Any]:
-    """Handle DataZone actions."""
+    """Handle DataZone/Project actions."""
     service, api = action.type.split(".", 1)
 
     if api == "create_environment":
         return create_environment(action, context)
     elif api == "create_connection":
         return create_connection(action, context)
-    elif api == "create_domain":
-        return create_domain(action, context)
     else:
-        raise ValueError(f"Unknown DataZone action: {api}")
+        raise ValueError(f"Unknown DataZone/Project action: {api}")
 
 
 def create_environment(
@@ -38,7 +36,7 @@ def create_environment(
     # TODO: Implement environment creation
     # This will use existing logic from initialization_handler.py
 
-    return {"action": "datazone.create_environment", "status": "not_implemented"}
+    return {"action": "project.create_environment", "status": "not_implemented"}
 
 
 def create_connection(
@@ -157,12 +155,3 @@ def create_connection(
         except Exception as e:
             typer.echo(f"❌ Failed to create connection '{name}': {e}")
             raise
-
-
-def create_domain(action: BootstrapAction, context: Dict[str, Any]) -> Dict[str, Any]:
-    """Create DataZone domain."""
-    logger.info("Creating DataZone domain")
-
-    # TODO: Implement domain creation
-
-    return {"action": "datazone.create_domain", "status": "not_implemented"}

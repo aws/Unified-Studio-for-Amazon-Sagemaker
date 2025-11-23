@@ -15,90 +15,30 @@ on:
         type: string
         default: 'test'
       
-      prod_target:
-        description: 'Production environment target name'
-        required: false
-        type: string
-        default: 'prod'
-      
       python_version:
         description: 'Python version'
         required: false
         type: string
         default: '3.12'
       
-      aws_region:
-        description: 'AWS region'
-        required: false
-        type: string
-        default: 'us-east-1'
-      
       skip_tests:
         description: 'Skip test execution'
         required: false
         type: boolean
         default: false
-      
-      deploy_to_prod:
-        description: 'Deploy to production after test'
-        required: false
-        type: boolean
-        default: true
-    
-    # No secrets needed - use environment secrets instead
 
 permissions:
   id-token: write
   contents: read
 
 jobs:
-  validate:
-    name: Validate Manifest
-    runs-on: ubuntu-latest
-    environment: test-aws-account
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ inputs.python_version }}
-      
-      - name: Install SMUS CLI
-        run: |
-          cd experimental/SMUS-CICD-pipeline-cli
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-      
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          # TODO: Replace with secrets.AWS_ROLE_ARN_TEST once configured
-          role-to-assume: arn:aws:iam::019900059033:role/GitHubActionsRole-SMUS-CLI-Tests
-          aws-region: ${{ vars.DOMAIN_REGION }}
-          role-session-name: smus-validate-session
-      
-      - name: smus-cli describe (validate test target)
-        env:
-          DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
-          TEST_DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
-        run: |
-          echo "🔍 DOMAIN_REGION: $DOMAIN_REGION"
-          echo "🔍 TEST_DOMAIN_REGION: $TEST_DOMAIN_REGION"
-          echo "🔍 AWS_REGION: $AWS_REGION"
-          cd experimental/SMUS-CICD-pipeline-cli
-          smus-cli describe --manifest ../../${{ inputs.manifest_path }} --targets test --connect
-
   deploy-test:
     name: Deploy to Test
     runs-on: ubuntu-latest
-    needs: validate
     environment: test-aws-account
     
     steps:
       - uses: actions/checkout@v4
-      
       
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -114,45 +54,107 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          # TODO: Replace with secrets.AWS_ROLE_ARN_TEST once configured
-          # TODO: Replace with secrets.AWS_ROLE_ARN_TEST once configured
           role-to-assume: arn:aws:iam::019900059033:role/GitHubActionsRole-SMUS-CLI-Tests
           aws-region: ${{ vars.DOMAIN_REGION }}
           role-session-name: smus-deploy-test-session
       
-      # Temporary: Register mwaaserverless-internal model until service is GA
       - name: Register AWS CLI model patch
         run: |
           aws configure add-model \
             --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/mwaaserverless-2024-07-26.normal-edited-2.json \
             --service-name mwaaserverless-internal
           aws configure add-model \
-            --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/datazone-2018-05-10.json \
-            --service-name datazone
-          aws configure add-model \
             --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/datazone-internal-2018-05-10.json \
             --service-name datazone-internal
       
-      - name: smus-cli describe (validate test target)
-        env:
-          DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
-          TEST_DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+      - name: Get AWS Account ID
+        id: aws-account
         run: |
-          echo "🔍 Validating test target: ${{ inputs.test_target }}"
-          cd experimental/SMUS-CICD-pipeline-cli
-          smus-cli describe --manifest ../../${{ inputs.manifest_path }} --targets ${{ inputs.test_target }} --connect
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          echo "account-id=$ACCOUNT_ID" >> $GITHUB_OUTPUT
+          echo "✓ AWS Account ID: $ACCOUNT_ID"
       
-      - name: smus-cli deploy to test
+      - name: smus-cli deploy to test (direct from branch)
         env:
           DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
           TEST_DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+          DEV_DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+          MLFLOW_TRACKING_SERVER_NAME: smus-integration-mlflow-use1
+          MLFLOW_ARTIFACT_LOCATION: s3://amazon-sagemaker-${{ steps.aws-account.outputs.account-id }}-${{ vars.DOMAIN_REGION }}-${{ vars.PROJECT_ID }}/shared/ml/mlflow-artifacts
+          STS_REGION: ${{ vars.DOMAIN_REGION }}
+          STS_ACCOUNT_ID: ${{ steps.aws-account.outputs.account-id }}
+          AWS_ACCOUNT_ID: ${{ steps.aws-account.outputs.account-id }}
         run: |
-          echo "🔍 DOMAIN_REGION: $DOMAIN_REGION"
-          echo "🔍 TEST_DOMAIN_REGION: $TEST_DOMAIN_REGION"
+          echo "🚀 Deploying directly from branch to test"
           cd experimental/SMUS-CICD-pipeline-cli
           smus-cli deploy \
             --manifest ../../${{ inputs.manifest_path }} \
             --targets ${{ inputs.test_target }}
+      
+      - name: Download workflow output notebooks
+        if: always()
+        continue-on-error: true
+        run: |
+          cd experimental/SMUS-CICD-pipeline-cli
+          
+          # Extract workflow names from manifest
+          python3 << 'EOF'
+          import yaml
+          import sys
+          
+          manifest_path = "../../${{ inputs.manifest_path }}"
+          try:
+              with open(manifest_path, 'r') as f:
+                  manifest = yaml.safe_load(f)
+              
+              app_name = manifest.get('applicationName', '')
+              workflows = manifest.get('content', {}).get('workflows', [])
+              
+              if not workflows:
+                  print("No workflows found in manifest")
+                  sys.exit(0)
+              
+              # Get project name from test target
+              project_name = "${{ inputs.test_target }}-marketing"
+              
+              # Download outputs for each workflow
+              for workflow in workflows:
+                  workflow_name = workflow.get('workflowName', '')
+                  if workflow_name:
+                      full_name = f"{app_name}_{project_name}_{workflow_name}"
+                      print(f"📥 Downloading outputs for workflow: {full_name}")
+                      
+                      import subprocess
+                      result = subprocess.run([
+                          'python3', 'tests/scripts/download_workflow_outputs_from_xcom.py',
+                          full_name,
+                          '--region', '${{ vars.DOMAIN_REGION }}',
+                          '--output-dir', 'tests/test-outputs/notebooks'
+                      ], capture_output=True, text=True)
+                      
+                      if result.stdout:
+                          print(result.stdout)
+                      if result.stderr:
+                          print(result.stderr)
+                      
+                      if result.returncode == 0:
+                          print(f"✅ Downloaded outputs for {workflow_name}")
+                      else:
+                          print(f"⚠️ No outputs found for {workflow_name}")
+          
+          except Exception as e:
+              print(f"❌ Error downloading notebooks: {e}")
+              sys.exit(0)  # Don't fail the workflow
+          EOF
+
+      - name: Upload workflow output notebooks
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workflow-output-notebooks-${{ github.run_id }}
+          path: experimental/SMUS-CICD-pipeline-cli/tests/test-outputs/notebooks/**
+          if-no-files-found: ignore
+          retention-days: 7
 
   test:
     name: Run Tests
@@ -178,95 +180,38 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          # TODO: Replace with secrets.AWS_ROLE_ARN_TEST once configured
           role-to-assume: arn:aws:iam::019900059033:role/GitHubActionsRole-SMUS-CLI-Tests
           aws-region: ${{ vars.DOMAIN_REGION }}
           role-session-name: smus-test-session
       
-      # Temporary: Register mwaaserverless-internal model until service is GA
       - name: Register AWS CLI model patch
         run: |
           aws configure add-model \
             --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/mwaaserverless-2024-07-26.normal-edited-2.json \
             --service-name mwaaserverless-internal
           aws configure add-model \
-            --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/datazone-2018-05-10.json \
-            --service-name datazone
-          aws configure add-model \
             --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/datazone-internal-2018-05-10.json \
             --service-name datazone-internal
+      
+      - name: Get AWS Account ID
+        id: aws-account-test
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          echo "account-id=$ACCOUNT_ID" >> $GITHUB_OUTPUT
+          echo "✓ AWS Account ID: $ACCOUNT_ID"
       
       - name: smus-cli test
         env:
           DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
           TEST_DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+          DEV_DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+          MLFLOW_TRACKING_SERVER_NAME: smus-integration-mlflow-use1
+          MLFLOW_ARTIFACT_LOCATION: s3://amazon-sagemaker-${{ steps.aws-account-test.outputs.account-id }}-${{ vars.DOMAIN_REGION }}-${{ vars.PROJECT_ID }}/shared/ml/mlflow-artifacts
+          STS_REGION: ${{ vars.DOMAIN_REGION }}
+          STS_ACCOUNT_ID: ${{ steps.aws-account-test.outputs.account-id }}
+          AWS_ACCOUNT_ID: ${{ steps.aws-account-test.outputs.account-id }}
         run: |
-          echo "🔍 DOMAIN_REGION: $DOMAIN_REGION"
-          echo "🔍 TEST_DOMAIN_REGION: $TEST_DOMAIN_REGION"
           cd experimental/SMUS-CICD-pipeline-cli
           smus-cli test \
             --manifest ../../${{ inputs.manifest_path }} \
             --targets ${{ inputs.test_target }}
-
-  deploy-prod:
-    name: Deploy to Production
-    runs-on: ubuntu-latest
-    needs: [deploy-test, test]
-    if: ${{ inputs.deploy_to_prod && (success() || inputs.skip_tests) }}
-    environment: prod-aws-account
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ inputs.python_version }}
-      
-      - name: Install SMUS CLI
-        run: |
-          cd experimental/SMUS-CICD-pipeline-cli
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-      
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
-          aws-region: ${{ vars.DOMAIN_REGION }}
-          role-session-name: smus-deploy-prod-session
-      
-      # Temporary: Register mwaaserverless-internal model until service is GA
-      - name: Register AWS CLI model patch
-        run: |
-          aws configure add-model \
-            --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/mwaaserverless-2024-07-26.normal-edited-2.json \
-            --service-name mwaaserverless-internal
-          aws configure add-model \
-            --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/datazone-2018-05-10.json \
-            --service-name datazone
-          aws configure add-model \
-            --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/datazone-internal-2018-05-10.json \
-            --service-name datazone-internal
-      
-      - name: smus-cli describe (validate prod target)
-        env:
-          DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
-          PROD_DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
-        run: |
-          echo "🔍 Validating prod target: ${{ inputs.prod_target }}"
-          cd experimental/SMUS-CICD-pipeline-cli
-          smus-cli describe --manifest ../../${{ inputs.manifest_path }} --targets ${{ inputs.prod_target }} --connect
-      
-      - name: smus-cli deploy to production
-        env:
-          DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
-          PROD_DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
-        run: |
-          echo "🔍 DOMAIN_REGION: $DOMAIN_REGION"
-          echo "🔍 PROD_DOMAIN_REGION: $PROD_DOMAIN_REGION"
-          cd experimental/SMUS-CICD-pipeline-cli
-          smus-cli deploy \
-            --manifest ../../${{ inputs.manifest_path }} \
-            --targets ${{ inputs.prod_target }}

@@ -109,15 +109,28 @@ def resolve_domain_id(
 
 def get_project_user_role_arn(project_name: str, domain_name: str, region: str) -> str:
     """Get the user role ARN for a DataZone project from its tooling environment."""
+    import typer
+
+    from .logger import get_logger
+
+    logger = get_logger("datazone")
+    typer.echo(
+        f"🔍 DEBUG: get_project_user_role_arn(project={project_name}, domain={domain_name}, region={region})"
+    )
+
     try:
         # Get domain and project IDs
         domain_id = get_domain_id_by_name(domain_name, region)
+        typer.echo(f"🔍 DEBUG: Resolved domain_id={domain_id}")
         if not domain_id:
-            return None
+            raise ValueError(f"Domain '{domain_name}' not found in region {region}")
 
         project_id = get_project_id_by_name(project_name, domain_id, region)
+        typer.echo(f"🔍 DEBUG: Resolved project_id={project_id}")
         if not project_id:
-            return None
+            raise ValueError(
+                f"Project '{project_name}' not found in domain {domain_id}"
+            )
 
         # List environments to find tooling environment
         datazone_client = _get_datazone_client(region)
@@ -125,9 +138,13 @@ def get_project_user_role_arn(project_name: str, domain_name: str, region: str) 
             domainIdentifier=domain_id, projectIdentifier=project_id
         )
 
+        env_names = [env.get("name") for env in environments_response.get("items", [])]
+        typer.echo(f"🔍 DEBUG: Found environments: {env_names}")
+
         # Find tooling environment
         for env in environments_response.get("items", []):
             if "tooling" in env.get("name", "").lower():
+                typer.echo(f"🔍 DEBUG: Found tooling environment: {env.get('name')}")
                 # Get environment details
                 env_detail = datazone_client.get_environment(
                     domainIdentifier=domain_id, identifier=env.get("id")
@@ -136,16 +153,17 @@ def get_project_user_role_arn(project_name: str, domain_name: str, region: str) 
                 # Look for userRoleArn in provisioned resources
                 for resource in env_detail.get("provisionedResources", []):
                     if resource.get("name") == "userRoleArn":
-                        return resource.get("value")
+                        role_arn = resource.get("value")
+                        typer.echo(f"✅ DEBUG: Found userRoleArn={role_arn}")
+                        return role_arn
 
-        return None
+        raise ValueError(
+            f"No tooling environment with userRoleArn found for project '{project_name}'"
+        )
 
     except Exception as e:
-        from .logger import get_logger
-
-        logger = get_logger("datazone")
         logger.error(f"Failed to get project user role ARN for {project_name}: {e}")
-        return None
+        raise
 
 
 def get_domain_id_by_name(domain_name, region):
@@ -961,6 +979,76 @@ def get_user_id_by_username(username, domain_id, region):
         return None
 
 
+def get_group_id_for_role_arn(role_arn, domain_id, region):
+    """Get DataZone group ID for an IAM role ARN, creating if possible."""
+    try:
+        datazone_client = _get_datazone_client(region)
+        print(f"🔍 Searching for group profile with role ARN: {role_arn}")
+
+        next_token = None
+        page_num = 0
+        total_groups = 0
+
+        while True:
+            page_num += 1
+            params = {
+                "domainIdentifier": domain_id,
+                "groupType": "IAM_ROLE_SESSION_GROUP",
+            }
+            if next_token:
+                params["nextToken"] = next_token
+
+            response = datazone_client.search_group_profiles(**params)
+            items = response.get("items", [])
+            total_groups += len(items)
+
+            print(
+                f"🔍 Page {page_num}: Found {len(items)} groups (total so far: {total_groups})"
+            )
+
+            for group in items:
+                # Try rolePrincipalArn first (newer API), fall back to groupName (older API)
+                group_arn = group.get("rolePrincipalArn") or group.get("groupName")
+                group_id = group.get("id")
+                print(f"🔍   Checking group {group_id}: {group_arn}")
+                if group_arn == role_arn:
+                    print(f"✅ Found matching group ID: {group_id}")
+                    return group_id
+
+            next_token = response.get("nextToken")
+            if not next_token:
+                break
+
+        print(
+            f"⚠️ Group not found, attempting to create group profile for role: {role_arn}"
+        )
+
+        # Try to create group profile for the IAM role
+        try:
+            response = datazone_client.create_group_profile(
+                domainIdentifier=domain_id, groupIdentifier=role_arn
+            )
+            group_id = response.get("id")
+            print(f"✅ Created group profile with ID: {group_id}")
+            return group_id
+        except Exception as create_error:
+            error_msg = str(create_error)
+            if "IAM Identity Center" in error_msg or "IdP" in error_msg:
+                print(
+                    f"⚠️ Cannot auto-create group profile (IAM Identity Center not enabled)"
+                )
+                print(
+                    f"⚠️ The role must be used at least once in DataZone to create its group profile"
+                )
+            else:
+                print(f"❌ Failed to create group profile: {error_msg}")
+            return None
+
+    except Exception as e:
+        print(f"❌ Error getting group ID for role ARN {role_arn}: {str(e)}")
+        return None
+
+
 def resolve_usernames_to_ids(usernames, domain_id, region):
     """Resolve list of usernames to IDC user identifiers."""
     user_ids = []
@@ -995,7 +1083,7 @@ def manage_project_memberships(
     try:
         datazone_client = _get_datazone_client(region)
 
-        # Get existing memberships
+        # Get existing memberships (both users and groups)
         response = datazone_client.list_project_memberships(
             domainIdentifier=domain_id, projectIdentifier=project_id
         )
@@ -1007,70 +1095,96 @@ def manage_project_memberships(
                 user_id = member_details["user"].get("userIdentifier")
                 if user_id:
                     existing_members[user_id] = member.get("designation")
+            elif "group" in member_details:
+                group_id = member_details["group"].get("groupId")
+                if group_id:
+                    existing_members[group_id] = member.get("designation")
 
         typer.echo(f"🔍 Found {len(existing_members)} existing members")
 
         # Add owners
         if owners:
-            owner_ids = resolve_usernames_to_ids(owners, domain_id, region)
-            for i, owner_id in enumerate(owner_ids):
-                if not owner_id:  # Skip if resolution failed
+            for owner in owners:
+                # Determine if it's an IAM role ARN or username
+                if owner.startswith("arn:aws:iam::"):
+                    # It's an IAM role - get group ID
+                    member_id = get_group_id_for_role_arn(owner, domain_id, region)
+                    member_spec = {"groupIdentifier": member_id}
+                    member_type = "role"
+                else:
+                    # It's a username - resolve to user ID
+                    member_id = get_user_id_by_username(owner, domain_id, region)
+                    member_spec = {"userIdentifier": member_id}
+                    member_type = "user"
+
+                if not member_id:
+                    typer.echo(f"⚠️ Could not resolve owner: {owner}")
                     continue
 
-                if owner_id not in existing_members:
+                if member_id not in existing_members:
                     try:
                         datazone_client.create_project_membership(
                             domainIdentifier=domain_id,
                             projectIdentifier=project_id,
-                            member={"userIdentifier": owner_id},
+                            member=member_spec,
                             designation="PROJECT_OWNER",
                         )
-                        typer.echo(f"✅ Added owner: {owner_id}")
+                        typer.echo(f"✅ Added owner ({member_type}): {owner}")
                     except Exception as e:
-                        if "User is already in the project" in str(e):
-                            typer.echo(f"✓ Owner already exists: {owner_id}")
+                        if "already in the project" in str(e):
+                            typer.echo(f"✓ Owner already exists: {owner}")
                         else:
-                            typer.echo(f"❌ Failed to add owner {owner_id}: {e}")
-                            return False
-                elif existing_members[owner_id] != "PROJECT_OWNER":
+                            typer.echo(f"❌ Failed to add owner {owner}: {e}")
+                elif existing_members[member_id] != "PROJECT_OWNER":
                     typer.echo(
-                        f"⚠️ User {owner_id} exists with different role: {existing_members[owner_id]}"
+                        f"⚠️ {owner} exists with different role: {existing_members[member_id]}"
                     )
                 else:
-                    typer.echo(f"✓ Owner already exists: {owner_id}")
+                    typer.echo(f"✓ Owner already exists: {owner}")
 
         # Add contributors
         if contributors:
-            contributor_ids = resolve_usernames_to_ids(contributors, domain_id, region)
-            for contributor_id in contributor_ids:
-                if not contributor_id:  # Skip if resolution failed
+            for contributor in contributors:
+                # Determine if it's an IAM role ARN or username
+                if contributor.startswith("arn:aws:iam::"):
+                    member_id = get_group_id_for_role_arn(
+                        contributor, domain_id, region
+                    )
+                    member_spec = {"groupIdentifier": member_id}
+                    member_type = "role"
+                else:
+                    member_id = get_user_id_by_username(contributor, domain_id, region)
+                    member_spec = {"userIdentifier": member_id}
+                    member_type = "user"
+
+                if not member_id:
+                    typer.echo(f"⚠️ Could not resolve contributor: {contributor}")
                     continue
 
-                if contributor_id not in existing_members:
+                if member_id not in existing_members:
                     try:
                         datazone_client.create_project_membership(
                             domainIdentifier=domain_id,
                             projectIdentifier=project_id,
-                            member={"userIdentifier": contributor_id},
+                            member=member_spec,
                             designation="PROJECT_CONTRIBUTOR",
                         )
-                        typer.echo(f"✅ Added contributor: {contributor_id}")
+                        typer.echo(
+                            f"✅ Added contributor ({member_type}): {contributor}"
+                        )
                     except Exception as e:
-                        if "User is already in the project" in str(e):
-                            typer.echo(
-                                f"✓ Contributor already exists: {contributor_id}"
-                            )
+                        if "already in the project" in str(e):
+                            typer.echo(f"✓ Contributor already exists: {contributor}")
                         else:
                             typer.echo(
-                                f"❌ Failed to add contributor {contributor_id}: {e}"
+                                f"❌ Failed to add contributor {contributor}: {e}"
                             )
-                            return False
-                elif existing_members[contributor_id] != "PROJECT_CONTRIBUTOR":
+                elif existing_members[member_id] != "PROJECT_CONTRIBUTOR":
                     typer.echo(
-                        f"⚠️ User {contributor_id} exists with different role: {existing_members[contributor_id]}"
+                        f"⚠️ {contributor} exists with different role: {existing_members[member_id]}"
                     )
                 else:
-                    typer.echo(f"✓ Contributor already exists: {contributor_id}")
+                    typer.echo(f"✓ Contributor already exists: {contributor}")
 
         return True
 

@@ -86,12 +86,15 @@ jobs:
           aws-region: ${{ vars.aws_region }}
           role-session-name: smus-bundle-session
       
-      # Temporary: Register mwaaserverless-internal model until service is GA
+      # Temporary: Register internal service models
       - name: Register AWS CLI model patch
         run: |
           aws configure add-model \
             --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/mwaaserverless-2024-07-26.normal-edited-2.json \
             --service-name mwaaserverless-internal
+          aws configure add-model \
+            --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/datazone-internal-2018-05-10.json \
+            --service-name datazone-internal
       
       - name: smus-cli describe (validate dev target)
         env:
@@ -198,12 +201,15 @@ jobs:
           aws-region: ${{ vars.aws_region }}
           role-session-name: smus-deploy-test-session
       
-      # Temporary: Register mwaaserverless-internal model until service is GA
+      # Temporary: Register internal service models
       - name: Register AWS CLI model patch
         run: |
           aws configure add-model \
             --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/mwaaserverless-2024-07-26.normal-edited-2.json \
             --service-name mwaaserverless-internal
+          aws configure add-model \
+            --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/datazone-internal-2018-05-10.json \
+            --service-name datazone-internal
       
       - name: smus-cli describe (validate test target)
         env:
@@ -263,12 +269,15 @@ jobs:
           aws-region: ${{ vars.aws_region }}
           role-session-name: smus-test-session
       
-      # Temporary: Register mwaaserverless-internal model until service is GA
+      # Temporary: Register internal service models
       - name: Register AWS CLI model patch
         run: |
           aws configure add-model \
             --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/mwaaserverless-2024-07-26.normal-edited-2.json \
             --service-name mwaaserverless-internal
+          aws configure add-model \
+            --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/datazone-internal-2018-05-10.json \
+            --service-name datazone-internal
       
       - name: smus-cli test
         env:
@@ -317,12 +326,15 @@ jobs:
           aws-region: ${{ vars.aws_region }}
           role-session-name: smus-deploy-prod-session
       
-      # Temporary: Register mwaaserverless-internal model until service is GA
+      # Temporary: Register internal service models
       - name: Register AWS CLI model patch
         run: |
           aws configure add-model \
             --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/mwaaserverless-2024-07-26.normal-edited-2.json \
             --service-name mwaaserverless-internal
+          aws configure add-model \
+            --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/datazone-internal-2018-05-10.json \
+            --service-name datazone-internal
       
       - name: smus-cli describe (validate prod target)
         env:

@@ -15,8 +15,9 @@ class TestQuickSightParsing(unittest.TestCase):
             "content": {
                 "quicksight": [
                     {
-                        "dashboardId": "dashboard-123",
-                        "source": "export",
+                        "name": "dashboard-123",
+                        "type": "dashboard",
+                        "assetBundle": "export",
                         "overrideParameters": {"param1": "value1"},
                         "permissions": [
                             {"principal": "user1", "actions": ["READ"]}
@@ -35,8 +36,8 @@ class TestQuickSightParsing(unittest.TestCase):
         manifest = ApplicationManifest.from_dict(manifest_data)
         self.assertEqual(len(manifest.content.quicksight), 1)
         qs = manifest.content.quicksight[0]
-        self.assertEqual(qs.dashboardId, "dashboard-123")
-        self.assertEqual(qs.source, "export")
+        self.assertEqual(qs.name, "dashboard-123")
+        self.assertEqual(qs.assetBundle, "export")
         self.assertEqual(qs.overrideParameters, {"param1": "value1"})
         self.assertEqual(len(qs.permissions), 1)
 
@@ -51,8 +52,9 @@ class TestQuickSightParsing(unittest.TestCase):
                     "project": {"name": "test-project"},
                     "quicksight": [
                         {
-                            "dashboardId": "dashboard-456",
-                            "source": "bundle",
+                            "name": "dashboard-456",
+                            "type": "dashboard",
+                            "assetBundle": "quicksight/bundle.qs",
                             "overrideParameters": {"env": "dev"},
                         }
                     ],
@@ -64,8 +66,8 @@ class TestQuickSightParsing(unittest.TestCase):
         stage = manifest.get_stage("dev")
         self.assertEqual(len(stage.quicksight), 1)
         qs = stage.quicksight[0]
-        self.assertEqual(qs.dashboardId, "dashboard-456")
-        self.assertEqual(qs.source, "bundle")
+        self.assertEqual(qs.name, "dashboard-456")
+        self.assertEqual(qs.assetBundle, "quicksight/bundle.qs")
         self.assertEqual(qs.overrideParameters, {"env": "dev"})
 
     def test_parse_multiple_quicksight_dashboards(self):
@@ -74,8 +76,8 @@ class TestQuickSightParsing(unittest.TestCase):
             "applicationName": "test-app",
             "content": {
                 "quicksight": [
-                    {"dashboardId": "dash-1", "source": "export"},
-                    {"dashboardId": "dash-2", "source": "bundle"},
+                    {"name": "dash-1", "type": "dashboard", "assetBundle": "export"},
+                    {"name": "dash-2", "type": "dashboard", "assetBundle": "quicksight/dash2.qs"},
                 ]
             },
             "stages": {
@@ -88,8 +90,8 @@ class TestQuickSightParsing(unittest.TestCase):
 
         manifest = ApplicationManifest.from_dict(manifest_data)
         self.assertEqual(len(manifest.content.quicksight), 2)
-        self.assertEqual(manifest.content.quicksight[0].dashboardId, "dash-1")
-        self.assertEqual(manifest.content.quicksight[1].dashboardId, "dash-2")
+        self.assertEqual(manifest.content.quicksight[0].name, "dash-1")
+        self.assertEqual(manifest.content.quicksight[1].name, "dash-2")
 
     def test_parse_quicksight_defaults(self):
         """Test QuickSight default values."""
@@ -97,7 +99,7 @@ class TestQuickSightParsing(unittest.TestCase):
             "applicationName": "test-app",
             "content": {
                 "quicksight": [
-                    {"dashboardId": "dashboard-789"}  # Minimal config
+                    {"name": "dashboard-789", "type": "dashboard"}  # Minimal config
                 ]
             },
             "stages": {
@@ -110,7 +112,7 @@ class TestQuickSightParsing(unittest.TestCase):
 
         manifest = ApplicationManifest.from_dict(manifest_data)
         qs = manifest.content.quicksight[0]
-        self.assertEqual(qs.source, "export")  # Default
+        self.assertEqual(qs.assetBundle, "export")  # Default
         self.assertEqual(qs.overrideParameters, {})  # Default
         self.assertEqual(qs.permissions, [])  # Default
 

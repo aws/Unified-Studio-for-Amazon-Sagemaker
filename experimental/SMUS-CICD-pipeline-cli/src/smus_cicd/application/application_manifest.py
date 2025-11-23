@@ -21,6 +21,19 @@ class DomainConfig:
     name: Optional[str] = None
     tags: Optional[Dict[str, str]] = None
 
+    def get_name(self) -> Optional[str]:
+        """Get domain name, resolving from tags if needed."""
+        if self.name:
+            return self.name
+        if self.tags:
+            from ..helpers.datazone import resolve_domain_id
+
+            _, resolved_name = resolve_domain_id(
+                domain_tags=self.tags, region=self.region
+            )
+            return resolved_name
+        return None
+
 
 @dataclass
 class AssetSearchConfig:
@@ -82,8 +95,10 @@ class GitConfig:
 class QuickSightDashboardConfig:
     """QuickSight dashboard configuration."""
 
-    dashboardId: str
-    source: str = "export"  # export or bundle
+    name: str
+    type: str = "dashboard"  # dashboard, dataset, analysis
+    assetBundle: str = "export"  # export, or path to local .qs file
+    recursive: bool = False  # export with dependencies
     overrideParameters: Dict[str, Any] = field(default_factory=dict)
     permissions: List[Dict[str, str]] = field(default_factory=list)
     owners: List[str] = field(default_factory=list)
@@ -283,8 +298,10 @@ class ApplicationManifest:
         for qs_data in content_data.get("quicksight", []):
             quicksight_dashboards.append(
                 QuickSightDashboardConfig(
-                    dashboardId=qs_data.get("dashboardId", ""),
-                    source=qs_data.get("source", "export"),
+                    name=qs_data.get("name", ""),
+                    type=qs_data.get("type", "dashboard"),
+                    assetBundle=qs_data.get("assetBundle", "export"),
+                    recursive=qs_data.get("recursive", False),
                     overrideParameters=qs_data.get("overrideParameters", {}),
                     permissions=qs_data.get("permissions", []),
                     owners=qs_data.get("owners", []),
@@ -433,8 +450,10 @@ class ApplicationManifest:
             for qs_data in stage_data.get("quicksight", []):
                 stage_quicksight.append(
                     QuickSightDashboardConfig(
-                        dashboardId=qs_data.get("dashboardId", ""),
-                        source=qs_data.get("source", "export"),
+                        name=qs_data.get("name", ""),
+                        type=qs_data.get("type", "dashboard"),
+                        assetBundle=qs_data.get("assetBundle", "export"),
+                        recursive=qs_data.get("recursive", False),
                         overrideParameters=qs_data.get("overrideParameters", {}),
                         permissions=qs_data.get("permissions", []),
                         owners=qs_data.get("owners", []),

@@ -39,9 +39,10 @@ stages:
       owners:
       - Eng1
       - arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
+      - arn:aws:iam::${AWS_ACCOUNT_ID}:role/Admin
       contributors: []
       role:
-        arn: arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
+        arn: arn:aws:iam::${AWS_ACCOUNT_ID}:role/test-marketing-role
     environment_variables:
       S3_PREFIX: test
     deployment_configuration:

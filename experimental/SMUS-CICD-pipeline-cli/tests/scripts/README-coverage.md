@@ -41,13 +41,13 @@ gh run list --workflow=pr-tests.yml --limit 5
 # Download specific run
 gh run download <RUN-ID> -n test-summary-combined
 
-# This creates: coverage-artifacts/
+# This creates: tests/test-outputs/coverage-artifacts/
 ```
 
 ### Combine Coverage
 
 ```bash
-# Default (uses coverage-artifacts/ directory)
+# Default (uses tests/test-outputs/coverage-artifacts/ directory)
 python tests/scripts/combine_coverage.py
 
 # Custom directories
@@ -74,7 +74,7 @@ cd coverage-combined && coverage report
 The test-summary job also generates a markdown summary:
 
 ```bash
-cat coverage-artifacts/test-summary.md
+cat tests/test-outputs/coverage-artifacts/test-summary.md
 ```
 
 Example output:

@@ -1,0 +1,56 @@
+{
+  "notebook_06_duckdb": {
+    "number": "06",
+    "name": "duckdb",
+    "execution_id": "380a6120-4689-47e7-8452-535c3a715fa4",
+    "status": "FAILED"
+  },
+  "notebook_05_spark": {
+    "number": "05",
+    "name": "spark",
+    "execution_id": "7a70255a-c595-42ec-a40a-c99e763aee7e",
+    "status": "FAILED"
+  },
+  "notebook_08_genai": {
+    "number": "08",
+    "name": "genai",
+    "execution_id": "4715d103-1359-4a6b-accf-2dd7ef2d03ce",
+    "status": "FAILED"
+  },
+  "notebook_11_dynamodb": {
+    "number": "11",
+    "name": "dynamodb",
+    "execution_id": "3a1a76c9-ee21-4a63-8d03-1c6997d280c0",
+    "status": "FAILED"
+  },
+  "notebook_00_pandas": {
+    "number": "00",
+    "name": "pandas",
+    "execution_id": "1611a538-2328-44b6-a246-757923f86ad7",
+    "status": "COMPLETED"
+  },
+  "notebook_10_chronos": {
+    "number": "10",
+    "name": "chronos",
+    "execution_id": "44afeeae-e733-4e89-872a-1c3562ba3baa",
+    "status": "FAILED"
+  },
+  "notebook_12_mlflow": {
+    "number": "12",
+    "name": "mlflow",
+    "execution_id": "a44441f0-9bf9-43af-ac82-d231dc522ef9",
+    "status": "FAILED"
+  },
+  "notebook_09_temperature": {
+    "number": "09",
+    "name": "temperature",
+    "execution_id": "0badc75d-acd1-4d35-ba5b-4df50ec27c28",
+    "status": "FAILED"
+  },
+  "notebook_04_athena": {
+    "number": "04",
+    "name": "athena",
+    "execution_id": "276e4932-e3e3-4b9a-927f-a49451ec3d74",
+    "status": "FAILED"
+  }
+}

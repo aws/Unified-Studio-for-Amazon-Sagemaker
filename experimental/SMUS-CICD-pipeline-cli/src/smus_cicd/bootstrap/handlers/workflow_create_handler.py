@@ -9,7 +9,6 @@ import typer
 
 from ...helpers import airflow_serverless, datazone
 from ...helpers.bundle_storage import ensure_bundle_local
-from ...helpers.context_resolver import ContextResolver
 from ..models import BootstrapAction
 
 
@@ -85,21 +84,14 @@ def handle_workflow_create(
     if bundle_path:
         ensure_bundle_local(bundle_path, region)
 
-    # Get role ARN
-    role_arn = datazone.get_project_user_role_arn(project_name, domain_id, region)
+    # Get role ARN - need domain_name not domain_id
+    domain_name = target_config.domain.name
+    role_arn = datazone.get_project_user_role_arn(project_name, domain_name, region)
     if not role_arn:
         typer.echo("❌ No project user role found")
         return False
 
-    # Initialize context resolver
-    resolver = ContextResolver(
-        project_name=project_name,
-        domain_id=domain_id,
-        region=region,
-        domain_name=None,  # Not available in bootstrap context
-        stage_name=stage_name,
-        env_vars=target_config.environment_variables or {},
-    )
+    typer.echo(f"🔍 Using execution role for workflows: {role_arn}")
 
     s3_client = boto3.client("s3", region_name=region)
     workflows_created = []
@@ -130,34 +122,56 @@ def handle_workflow_create(
             target_config,
         )
 
-        # Download, resolve variables, upload
-        temp_yaml = tempfile.NamedTemporaryFile(mode="w+", suffix=".yaml", delete=False)
-        try:
-            s3_client.download_file(s3_bucket, s3_key, temp_yaml.name)
+        # Download original workflow YAML from S3
+        s3_location = f"s3://{s3_bucket}/{s3_key}"
+        typer.echo(f"🔍 Reading workflow from S3: {s3_location}")
 
-            with open(temp_yaml.name, "r") as f:
+        with tempfile.NamedTemporaryFile(
+            mode="w+", suffix=".yaml", delete=False
+        ) as temp_file:
+            temp_path = temp_file.name
+
+        try:
+            # Download original
+            s3_client.download_file(s3_bucket, s3_key, temp_path)
+
+            # Resolve variables
+            from ...helpers.context_resolver import ContextResolver
+
+            resolver = ContextResolver(
+                project_name=project_name,
+                domain_id=domain_id,
+                region=region,
+                domain_name=domain_name,
+                stage_name=stage_name,
+                env_vars=target_config.environment_variables or {},
+            )
+
+            typer.echo(f"🔄 Resolving variables in {workflow_name}")
+            with open(temp_path, "r") as f:
                 original_content = f.read()
 
-            typer.echo(f"🔍 DEBUG: Original content length: {len(original_content)}")
             resolved_content = resolver.resolve(original_content)
 
-            with open(temp_yaml.name, "w") as f:
-                f.write(resolved_content)
+            # Overwrite original file with resolved version
+            s3_client.put_object(
+                Bucket=s3_bucket,
+                Key=s3_key,
+                Body=resolved_content.encode("utf-8"),
+            )
 
-            s3_client.upload_file(temp_yaml.name, s3_bucket, s3_key)
-            typer.echo(f"✅ Resolved variables in {s3_key}")
-        except Exception as e:
-            typer.echo(f"❌ Error resolving variables in {s3_key}: {e}")
-            return False
+            resolved_location = f"s3://{s3_bucket}/{s3_key}"
+            typer.echo(f"✅ Resolved workflow uploaded to: {resolved_location}")
+
         finally:
-            os.unlink(temp_yaml.name)
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
 
-        # Create workflow
-        s3_location = f"s3://{s3_bucket}/{s3_key}"
-
+        # Create workflow using resolved YAML
+        typer.echo(f"🔧 Creating workflow '{workflow_name}' with role: {role_arn}")
         result = airflow_serverless.create_workflow(
             workflow_name=workflow_name,
-            dag_s3_location=s3_location,
+            dag_s3_location=resolved_location,
             role_arn=role_arn,
             description=f"SMUS CI/CD workflow for {manifest.application_name}",
             tags={

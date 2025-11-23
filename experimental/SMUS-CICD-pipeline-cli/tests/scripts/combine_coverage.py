@@ -13,22 +13,35 @@ from pathlib import Path
 
 
 def combine_coverage_files(coverage_dir: str, output_dir: str):
-    """Combine multiple .coverage files into a single report."""
-    coverage_files = glob.glob(f"{coverage_dir}/**/.coverage.*", recursive=True)
+    """Combine multiple coverage data files into a single report."""
+    
+    # Debug: Show what we're looking for
+    print(f"🔍 Searching in: {os.path.abspath(coverage_dir)}")
+    print(f"🔍 Output to: {os.path.abspath(output_dir)}")
+    print()
+    
+    coverage_files = glob.glob(f"{coverage_dir}/**/coverage-*.data", recursive=True)
     
     if not coverage_files:
-        print("⚠️  No .coverage data files found")
+        print("⚠️  No coverage data files found")
         print("   Falling back to XML-only reports")
         xml_files = glob.glob(f"{coverage_dir}/**/coverage-*.xml", recursive=True)
         if xml_files:
             print(f"📊 Found {len(xml_files)} XML coverage files:")
             for f in xml_files:
                 print(f"  - {os.path.basename(f)}")
-            return False
-        print("❌ No coverage files found at all")
+        else:
+            print("❌ No coverage files found at all")
+        
+        # Run debug script if available
+        debug_script = os.path.join(os.path.dirname(__file__), "debug_coverage.sh")
+        if os.path.exists(debug_script):
+            print("\n🐛 Running debug script...")
+            subprocess.run(["bash", debug_script], cwd=coverage_dir)
+        
         return False
     
-    print(f"📊 Found {len(coverage_files)} .coverage files:")
+    print(f"📊 Found {len(coverage_files)} coverage data files:")
     for f in coverage_files:
         print(f"  - {os.path.basename(f)}")
     
@@ -36,10 +49,13 @@ def combine_coverage_files(coverage_dir: str, output_dir: str):
     os.makedirs(output_dir, exist_ok=True)
     
     try:
-        # Copy all .coverage files to output directory
+        # Copy and rename all coverage data files to .coverage format
         print("\n📦 Copying coverage data files...")
-        for f in coverage_files:
-            subprocess.run(["cp", f, output_dir], check=True)
+        for i, f in enumerate(coverage_files):
+            basename = os.path.basename(f).replace('.data', '')
+            dest = os.path.join(output_dir, f".coverage.{basename}")
+            subprocess.run(["cp", f, dest], check=True)
+            print(f"  - {basename}")
         
         # Combine coverage data
         print("📦 Combining coverage data...")
@@ -86,7 +102,7 @@ def main():
     parser = argparse.ArgumentParser(description="Combine coverage reports from GitHub artifacts")
     parser.add_argument(
         "--coverage-dir",
-        default="coverage-artifacts",
+        default="tests/test-outputs/coverage-artifacts",
         help="Directory containing downloaded coverage artifacts"
     )
     parser.add_argument(

@@ -103,13 +103,31 @@ cd testing-data && ./deploy.sh us-east-1
 
 ### Environment Variables
 
-After setup, export these for integration tests:
+After setup, configure environment variables for integration tests:
+
 ```bash
-export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-export TEST_DOMAIN_REGION=us-east-1
-export DEV_DOMAIN_REGION=us-east-1
-export AWS_DEFAULT_REGION=us-east-1
+# Copy template and customize for your account
+cp env-example.env env-local.env
+
+# Edit env-local.env with your account-specific values:
+# - AWS_ACCOUNT_ID
+# - Domain IDs and regions
+# - Project IDs
+# - MLflow server names
+# - S3 bucket names
+
+# Source before running tests
+source env-local.env
+
+# Verify configuration
+python tests/run_tests.py --type integration
 ```
+
+**Configuration approach:**
+- All test configuration comes from environment variables only
+- No config files loaded by test infrastructure (conftest.py)
+- Use `env-*.env` files for account-specific values (git-ignored)
+- Template provided in `env-example.env`
 
 ## Automated Workflow for Code Changes
 
@@ -143,6 +161,8 @@ git status
   - Avoid unused imports and variables
   - Use regular strings instead of f-strings when no placeholders are needed
 - **For DataZone catalog asset features**: Ensure proper exception handling - DataZone helper functions should raise exceptions instead of returning None/False to ensure proper CLI exit codes
+- **For DataZone API pagination**: Always handle pagination when searching/listing resources - check for `nextToken` and iterate through all pages
+- **For DataZone API field compatibility**: Handle both new and legacy API fields (e.g., `rolePrincipalArn` vs `groupName` for IAM role groups)
 - **Always run linting checks after code changes:**
   ```bash
   # Check code formatting and imports
@@ -203,6 +223,41 @@ ls tests/test-outputs/notebooks/_*.ipynb
 grep -i "error\|failed\|exception" tests/test-outputs/*.log
 ```
 
+**Workflow Output Validation (After Test Completion)**
+
+After a workflow test completes, validate notebook outputs for errors:
+
+```bash
+# Download and analyze workflow outputs in one command
+./tests/scripts/validate_workflow_run.sh <workflow_name> [region]
+
+# Example:
+./tests/scripts/validate_workflow_run.sh IntegrationTestMLTraining_test_marketing_ml_training_workflow us-east-1
+
+# Or run steps separately:
+
+# Step 1: Download notebook outputs from workflow
+python3 tests/scripts/download_workflow_outputs_from_xcom.py <workflow_name> --region us-east-1
+
+# Step 2: Analyze notebooks for errors
+python3 tests/scripts/analyze_notebook_errors.py tests/test-outputs/notebooks --verbose
+
+# Step 3: Open notebooks with errors for inspection
+python3 tests/scripts/analyze_notebook_errors.py tests/test-outputs/notebooks --open-errors
+```
+
+**What the validation does:**
+1. Downloads executed notebook outputs from Airflow XCom (S3)
+2. Analyzes notebooks for errors (error output types, display errors, stream errors)
+3. Reports cell numbers and error details
+4. Optionally opens notebooks with errors in your editor
+
+**When to use:**
+- After any workflow test completes (pass or fail)
+- When debugging workflow execution issues
+- To verify notebook cells executed correctly
+- To inspect actual error messages from failed cells
+
 **CRITICAL: Integration Tests Are Slow (10-15 min) - Test Fixes Quickly First**
 
 1. Identify issue from logs/notebooks
@@ -252,7 +307,7 @@ gh run view <RUN-ID> --job <JOB-NAME> --log
 
 # Download combined coverage report
 gh run download <RUN-ID> -n test-summary-combined
-python tests/scripts/combine_coverage.py --coverage-dir coverage-artifacts
+python tests/scripts/combine_coverage.py --coverage-dir tests/test-outputs/coverage-artifacts
 
 # Analyze failures and provide summary:
 # - What tests are failing and why
@@ -375,7 +430,7 @@ pytest tests/integration/examples-analytics-workflows/etl/test_etl_workflow.py -
 - Pipeline: `examples/analytic-workflow/etl/etl_pipeline.yaml`
 
 #### Basic Pipeline Test
-**Purpose**: Tests parameter passing from workflow to notebook via Papermill
+**Purpose**: Tests bootstrap actions (workflow.create, workflow.run) and expected workflow failures
 **Location**: `tests/integration/basic_pipeline/test_basic_app.py`
 **Duration**: ~15 minutes
 
@@ -385,10 +440,16 @@ pytest tests/integration/basic_pipeline/test_basic_app.py -v -s
 ```
 
 **What it validates**:
-- Variable substitution: `{proj.connection.mlflow-server.trackingServerArn}`
-- Papermill parameter injection to notebooks
-- Parameters cell tagging and injection
-- Workflow execution and completion
+- Bootstrap actions execute in correct order (workflow.create before workflow.run)
+- Deploy fails when workflow execution fails (expected_failure_workflow)
+- Workflow status correctly reported in monitor output
+- Parameter substitution with environment variables (${AWS_ACCOUNT_ID})
+- MLflow connection configuration without trackingServerName field
+
+**Key behaviors**:
+- expected_failure_workflow is designed to fail - deploy should fail and test verifies this
+- Test checks workflow statuses from monitor output, not by manually starting workflows
+- Uses environment variables for account-specific values (no hardcoded ARNs)
 
 ### Unit Tests
 ```bash
@@ -472,6 +533,9 @@ Important Note: These are pytest-based integration tests, NOT Hydra tests. Do no
 - [ ] Mock objects match real implementation
 - [ ] CLI parameter usage is consistent
 - [ ] Documentation reflects actual behavior
+- [ ] **DataZone API calls handle pagination** (check for nextToken)
+- [ ] **DataZone API calls handle field compatibility** (new vs legacy fields)
+- [ ] **Environment variables used instead of hardcoded values** (account IDs, ARNs, regions)
 - [ ] Check that the code and markdown files don't contain aws account ids, web addresses, or host names. Mask all of these before committing.
   ```bash
   # Run automated check for hardcoded values
@@ -504,7 +568,7 @@ Important Note: These are pytest-based integration tests, NOT Hydra tests. Do no
   - [ ] Summary of failures provided before additional changes
   - [ ] Approval received before pushing fixes
 
-## Common Test Patterns to Maintain
+### Common Test Patterns to Maintain
 
 ### Unit Test Patterns
 - Mock objects need proper attributes, not dictionaries
@@ -515,12 +579,22 @@ Important Note: These are pytest-based integration tests, NOT Hydra tests. Do no
 - Use `["describe", "--pipeline", file]` not `["describe", file]`
 - Expected exit codes should match test framework expectations
 - Rename DAG files to avoid pytest collection (`.dag` extension)
+- Source environment variables before running tests (`source env-local.env`)
+- Verify workflow failures when expected (e.g., expected_failure_workflow)
+- Check workflow statuses from monitor output, not manual workflow starts
+
+### DataZone API Patterns
+- Always handle pagination when searching/listing (check `nextToken`)
+- Handle both new and legacy API fields for backward compatibility
+- Example: `rolePrincipalArn` (new) vs `groupName` (old) for IAM role groups
+- boto3 DataZone client may use older service models missing newer fields
 
 ### README Patterns
 - All CLI examples use correct parameter syntax
 - Include realistic command outputs
 - Keep examples concise but informative
 - Verify examples actually work before documenting
+- Use environment variables instead of hardcoded account IDs/ARNs
 
 ## Project Structure (Python-Native)
 
@@ -711,3 +785,124 @@ endpoint = "https://airflow-serverless.us-east-1.api.aws/"
 endpoint = os.environ.get('AIRFLOW_SERVERLESS_ENDPOINT', 
                          f'https://airflow-serverless.{region}.api.aws/')
 ```
+
+## GitHub Deployment Workflows
+
+### Approval Protocol
+
+**Q Must Ask Before:**
+- ✋ Committing code changes
+- ✋ Pushing to remote repository
+- ✋ Triggering workflows
+- ✋ Deleting files or branches
+- ✋ Merging branches
+
+**Q Can Do Without Asking:**
+- ✅ Reading files
+- ✅ Analyzing logs
+- ✅ Running local tests
+- ✅ Checking git status
+- ✅ Monitoring workflow status
+- ✅ Suggesting fixes
+
+**Approval Keywords:**
+- "yes" / "ok" / "do it" / "fix" / "apply" → Proceed
+- "no" / "wait" / "stop" / "don't" → Do not proceed
+- "show me" / "what would" / "options" → Explain without doing
+
+### Triggering Workflows
+```bash
+# Trigger all workflows
+bash tests/scripts/trigger-workflows.sh all
+
+# Trigger specific workflow
+bash tests/scripts/trigger-workflows.sh genai
+bash tests/scripts/trigger-workflows.sh ml-training
+```
+
+### Monitoring Workflows
+```bash
+# List recent workflow runs
+gh run list --branch <branch-name> --limit 10
+
+# View specific run
+gh run view <run-id>
+
+# View specific job
+gh run view <run-id> --job <job-id>
+
+# Get logs from failed job
+gh api repos/aws/Unified-Studio-for-Amazon-Sagemaker/actions/jobs/<job-id>/logs
+
+# Search for errors in logs
+gh api repos/aws/Unified-Studio-for-Amazon-Sagemaker/actions/jobs/<job-id>/logs | grep -A 20 "Error"
+```
+
+### 4-Phase Workflow Process
+
+**1. Analysis Phase**
+- Monitor GitHub workflow runs
+- Download logs from failed jobs
+- Analyze errors and identify root cause
+- Suggest specific fixes with code examples
+
+**2. Approval Phase**
+- Wait for user approval before committing/pushing/triggering
+- User reviews suggested fixes
+- User explicitly approves with keywords
+
+**3. Implementation Phase**
+- Apply the fix
+- Run unit tests locally
+- Commit with descriptive message
+- Push to branch
+- Trigger workflows if needed
+
+**4. Monitoring Phase**
+- Check workflow status
+- Report success/failure
+- If failure, return to Analysis Phase
+
+### Bundle Artifact Pattern
+
+Use temp directory with unique run ID to prevent stale artifacts:
+
+```yaml
+# Bundle step
+BUNDLE_DIR="${{ runner.temp }}/smus-bundles-${{ github.run_id }}"
+smus-cli bundle --output-dir "$BUNDLE_DIR"
+
+# Upload
+path: ${{ env.BUNDLE_DIR }}/*.zip
+
+# Download
+path: ${{ runner.temp }}/smus-bundles-${{ github.run_id }}
+
+# Deploy
+BUNDLE_FILE=$(ls ${{ runner.temp }}/smus-bundles-${{ github.run_id }}/*.zip | head -1)
+smus-cli deploy --bundle-archive-path "$BUNDLE_FILE"
+```
+
+**Impact:** Clean isolation per run, no stale artifacts, guaranteed only uploads what was just created.
+
+### Common Workflow Failures
+
+**Environment Protection**
+- Error: "Branch not allowed to deploy to dev-aws-account"
+- Cause: Branch not in environment's allowed deployment branches
+- Fix: Add branch to environment protection rules or use different branch
+
+**Bundle Not Found**
+- Error: "No files were found with the provided path"
+- Cause: Bundle path mismatch between creation and upload
+- Fix: Use temp directory approach (see Bundle Artifact Pattern above)
+
+**DataZone API Errors**
+- Error: "Unknown parameter in input: customerProvidedRoleConfigs"
+- Cause: Missing DataZone model registration
+- Fix: Register model with `aws configure add-model`
+
+**Project Creation Failures**
+- Error: "Failed to create project"
+- Cause: Missing project info in metadata or invalid API parameters
+- Fix: Ensure metadata initialization and DataZone model registration

@@ -1,3 +1,5 @@
+# SMUS CI/CD Pipeline CLI
+
 [![en](https://img.shields.io/badge/lang-en-brightgreen.svg?style=for-the-badge)](README.md)
 [![pt](https://img.shields.io/badge/lang-pt-gray.svg)](docs/langs/pt/README.md)
 [![fr](https://img.shields.io/badge/lang-fr-gray.svg)](docs/langs/fr/README.md)
@@ -5,8 +7,6 @@
 [![ja](https://img.shields.io/badge/lang-ja-gray.svg)](docs/langs/ja/README.md)
 [![zh](https://img.shields.io/badge/lang-zh-gray.svg)](docs/langs/zh/README.md)
 [![he](https://img.shields.io/badge/lang-he-gray.svg)](docs/langs/he/README.md)
-
-# SMUS CI/CD Pipeline CLI
 
 **Automate deployment of data applications across SageMaker Unified Studio environments**
 
@@ -79,49 +79,6 @@ smus-cli test --manifest manifest.yaml --targets test
 → **[GitHub Workflow Templates](git-templates/)** - Generic, reusable workflow templates for automated deployment
 
 **The CLI is your abstraction layer:** You just call `smus-cli deploy` - the CLI handles all AWS service interactions (DataZone, Glue, Athena, SageMaker, MWAA, S3, IAM, etc.). Your workflows stay simple and generic.
-
----
-
-## Key Features
-
-### 🚀 Automated Deployment
-- **Application Manifest** - Define your application content, workflows, and deployment targets in YAML
-- **Flexible Deployment** - Bundle-based (artifact) or direct (git-based) deployment modes
-- **Multi-Target Deployment** - Deploy to test and prod with a single command
-- **Environment Variables** - Dynamic configuration using `${VAR}` substitution
-- **Version Control** - Track deployments in S3 or git for deployment history
-
-### 🔍 Testing & Validation
-- **Automated Tests** - Run validation tests before promoting to production
-- **Quality Gates** - Block deployments if tests fail
-- **Workflow Monitoring** - Track execution status and logs
-- **Health Checks** - Verify deployment correctness
-
-### 🔄 CI/CD Pipeline Integration
-- **GitHub Actions** - Pre-built CI/CD pipeline workflows for automated deployment
-- **GitLab CI** - Native support for GitLab CI/CD pipelines
-- **Environment Variables** - Flexible configuration for any CI/CD platform
-- **Webhook Support** - Trigger deployments from external events
-
-### 🏗️ Infrastructure Management
-- **Project Creation** - Automatically provision SageMaker Unified Studio projects
-- **Connection Setup** - Configure S3, Airflow, Athena, and Lakehouse connections
-- **Resource Mapping** - Link AWS resources to project connections
-- **Permission Management** - Control access and collaboration
-
-### ⚡ Bootstrap Actions
-- **Automated Workflow Execution** - Trigger workflows automatically during deployment with `workflow.run` (use `trailLogs: true` to stream logs and wait for completion)
-- **Log Retrieval** - Fetch workflow logs for validation and debugging with `workflow.logs`
-- **QuickSight Dataset Refresh** - Automatically refresh dashboards after ETL deployment with `quicksight.refresh_dataset`
-- **EventBridge Integration** - Emit custom events for downstream automation and CI/CD orchestration with `eventbridge.put_events`
-- **DataZone Connections** - Provision MLflow and other service connections during deployment
-- **Sequential Execution** - Actions run in order during `smus-cli deploy` for reliable initialization and validation
-
-### 📊 Catalog Integration
-- **Asset Discovery** - Automatically find required catalog assets (Glue, Lake Formation, DataZone)
-- **Subscription Management** - Request access to tables and datasets
-- **Approval Workflows** - Handle cross-project data access
-- **Asset Tracking** - Monitor catalog dependencies
 
 ---
 
@@ -223,6 +180,25 @@ manifest.yaml          smus-cli deploy                    GitHub Actions
 - **CI/CD workflows are generic** - same workflow works for Glue apps, SageMaker apps, or Bedrock apps
 - Both teams work independently using their expertise
 
+**Example workflow:**
+
+```
+1. Data Team                    2. DevOps Team                 3. SMUS CLI (The Abstraction)
+   ↓                               ↓                              ↓
+Creates manifest.yaml          Creates generic workflow       Workflow calls:
+- Glue jobs                    - Test on merge                smus-cli deploy --manifest manifest.yaml
+- SageMaker training           - Approval for prod              ↓
+- Athena queries               - Security scans               CLI handles ALL AWS complexity:
+- S3 locations                 - Notification rules           - DataZone APIs
+                                                              - Glue/Athena/SageMaker APIs
+                               Works for ANY app!             - MWAA deployment
+                               No AWS knowledge needed!       - S3 management
+                                                              - IAM configuration
+                                                              - Infrastructure provisioning
+                                                                ↓
+                                                              Success!
+```
+
 ---
 
 ### Application Manifest
@@ -293,33 +269,6 @@ Both modes work with any combination of storage and git content sources.
 
 ---
 
-### How It All Works Together
-
-```
-1. Data Team                    2. DevOps Team                 3. SMUS CLI (The Abstraction)
-   ↓                               ↓                              ↓
-Creates manifest.yaml          Creates generic workflow       Workflow calls:
-- Glue jobs                    - Test on merge                smus-cli deploy --manifest manifest.yaml
-- SageMaker training           - Approval for prod              ↓
-- Athena queries               - Security scans               CLI handles ALL AWS complexity:
-- S3 locations                 - Notification rules           - DataZone APIs
-                                                              - Glue/Athena/SageMaker APIs
-                               Works for ANY app!             - MWAA deployment
-                               No AWS knowledge needed!       - S3 management
-                                                              - IAM configuration
-                                                              - Infrastructure provisioning
-                                                                ↓
-                                                              Success!
-```
-
-**The beauty:** 
-- Data teams never learn GitHub Actions
-- **DevOps teams never call AWS APIs** - the CLI encapsulates all AWS analytics, ML, and SMUS complexity
-- CI/CD workflows are simple: just call `smus-cli deploy`
-- Same workflow works for ANY application, regardless of AWS services used
-
----
-
 ## Example Applications
 
 Real-world examples showing how to deploy different workloads with SMUS CI/CD.
@@ -330,6 +279,30 @@ Deploy interactive BI dashboards with automated Glue ETL pipelines for data prep
 **AWS Services:** QuickSight • Glue • Athena • S3 • MWAA Serverless
 
 **What happens during deployment:** Application code is deployed to S3, Glue jobs and Airflow workflows are created and executed, QuickSight dashboard/data source/dataset are created, and QuickSight ingestion is initiated to refresh the dashboard with latest data.
+
+<details>
+<summary><b>📁 App Structure</b></summary>
+
+```
+dashboard-glue-quick/
+├── manifest.yaml                      # Deployment configuration
+├── covid_etl_workflow.yaml           # Airflow workflow definition
+├── glue_setup_covid_db.py            # Glue job: Create database & tables
+├── glue_covid_summary_job.py         # Glue job: ETL transformations
+├── glue_set_permission_check.py      # Glue job: Permission validation
+├── quicksight/
+│   └── sample-dashboard.qs           # QuickSight dashboard bundle
+└── app_tests/
+    └── test_covid_data.py            # Integration tests
+```
+
+**Key Files:**
+- **Glue Jobs**: Python scripts for database setup, ETL, and validation
+- **Workflow**: YAML defining Airflow DAG for orchestration
+- **QuickSight Bundle**: Dashboard, datasets, and data sources
+- **Tests**: Validate data quality and dashboard functionality
+
+</details>
 
 <details>
 <summary><b>View Manifest</b></summary>
@@ -371,10 +344,11 @@ stages:
       GRANT_TO: Admin,service-role/aws-quicksight-service-role-v0
     bootstrap:
       actions:
-        - type: workflow.logs
+        - type: workflow.create
           workflowName: covid_dashboard_glue_quick_pipeline
-          live: true
-          lines: 10000
+        - type: workflow.run
+          workflowName: covid_dashboard_glue_quick_pipeline
+          trailLogs: true
         - type: quicksight.refresh_dataset
           refreshScope: IMPORTED
           ingestionType: FULL_REFRESH
@@ -398,6 +372,35 @@ Deploy Jupyter notebooks with parallel execution orchestration for data analysis
 **AWS Services:** SageMaker Notebooks • MLflow • S3 • MWAA Serverless
 
 **What happens during deployment:** Notebooks and workflow definitions are uploaded to S3, Airflow DAG is created for parallel notebook execution, MLflow connection is provisioned for experiment tracking, and notebooks are ready to run on-demand or scheduled.
+
+<details>
+<summary><b>📁 App Structure</b></summary>
+
+```
+data-notebooks/
+├── manifest.yaml                              # Deployment configuration
+├── notebooks/
+│   ├── 00_basic_python_pandas.ipynb          # Basic data analysis
+│   ├── 04_gdc_athena.ipynb                   # Athena queries
+│   ├── 05_customer_churn_spark.ipynb         # Spark ML
+│   ├── 06_purchase_analytics_duckdb.ipynb    # DuckDB analytics
+│   ├── 08_genai_etl_pandas.ipynb             # GenAI ETL
+│   ├── 09_city_temperature_spark.ipynb       # Spark ETL
+│   ├── 10_time_series_chronos.ipynb          # Time series
+│   ├── 11_movie_sales_dynamodb.ipynb         # DynamoDB
+│   └── 12_classification_mlflow.ipynb        # MLflow tracking
+├── workflows/
+│   └── parallel_notebooks_workflow.yaml      # Airflow orchestration
+└── app_tests/
+    └── test_notebooks_execution.py           # Integration tests
+```
+
+**Key Files:**
+- **Notebooks**: 9 Jupyter notebooks covering various data engineering patterns
+- **Workflow**: Parallel execution orchestration with Airflow
+- **Tests**: Validate notebook execution and outputs
+
+</details>
 
 <details>
 <summary><b>View Manifest</b></summary>
@@ -444,6 +447,11 @@ stages:
           properties:
             trackingServerArn: arn:aws:sagemaker:${STS_REGION}:${STS_ACCOUNT_ID}:mlflow-tracking-server/smus-integration-mlflow-use2
             trackingServerName: smus-integration-mlflow-use2
+        - type: workflow.create
+          workflowName: parallel_notebooks_execution
+        - type: workflow.run
+          workflowName: parallel_notebooks_execution
+          trailLogs: true
 ```
 
 </details>
@@ -509,6 +517,11 @@ stages:
           connection_type: MLFLOW
           properties:
             trackingServerArn: arn:aws:sagemaker:${STS_REGION}:${STS_ACCOUNT_ID}:mlflow-tracking-server/smus-integration-mlflow-use2
+        - type: workflow.create
+          workflowName: ml_training_workflow
+        - type: workflow.run
+          workflowName: ml_training_workflow
+          trailLogs: true
 ```
 
 </details>
@@ -573,6 +586,13 @@ stages:
         - name: model-artifacts
           connectionName: default.s3_shared
           targetDirectory: ml/bundle/model-artifacts
+    bootstrap:
+      actions:
+        - type: workflow.create
+          workflowName: ml_deployment_workflow
+        - type: workflow.run
+          workflowName: ml_deployment_workflow
+          trailLogs: true
 ```
 
 </details>
@@ -656,6 +676,8 @@ stages:
 | Version control integration | ✅ | [GitHub Actions](docs/github-actions-integration.md) |
 
 ### Deployment & Bundling
+**Automated Deployment** - Define your application content, workflows, and deployment targets in YAML. Bundle-based (artifact) or direct (git-based) deployment modes. Deploy to test and prod with a single command. Dynamic configuration using `${VAR}` substitution. Track deployments in S3 or git for deployment history.
+
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Artifact bundling | ✅ | [Bundle Command](docs/cli-commands.md#bundle) |
@@ -676,6 +698,8 @@ stages:
 | VS Code extension | 🔮 | IntelliSense and validation |
 
 ### Configuration
+**Environment Variables & Dynamic Configuration** - Flexible configuration for any environment using variable substitution. Environment-specific settings with validation and connection management.
+
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Variable substitution | ✅ | [Substitutions Guide](docs/substitutions-and-variables.md) |
@@ -685,6 +709,8 @@ stages:
 | Connection management | ✅ | [Connections Guide](docs/connections.md) |
 
 ### Resources & Workloads
+**Deploy Any AWS Service** - Airflow DAGs, Jupyter notebooks, Glue ETL jobs, Athena queries, SageMaker training and endpoints, QuickSight dashboards, Bedrock agents, Lambda functions, EMR jobs, and Redshift queries.
+
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Airflow DAGs | ✅ | [Workflows](docs/manifest-schema.md#workflows) |
@@ -700,6 +726,8 @@ stages:
 | Redshift queries | ✅ | [RedshiftDataOperator](docs/airflow-aws-operators.md#amazon-redshift) |
 
 ### Bootstrap Actions
+**Automated Workflow Execution & Event-Driven Workflows** - Trigger workflows automatically during deployment with `workflow.run` (use `trailLogs: true` to stream logs and wait for completion). Fetch workflow logs for validation and debugging with `workflow.logs`. Automatically refresh QuickSight dashboards after ETL deployment with `quicksight.refresh_dataset`. Emit custom events for downstream automation and CI/CD orchestration with `eventbridge.put_events`. Provision MLflow and other DataZone connections during deployment. Actions run in order during `smus-cli deploy` for reliable initialization and validation.
+
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Workflow execution | ✅ | [workflow.run](docs/bootstrap-actions.md#workflowrun---trigger-workflow-execution) |
@@ -710,6 +738,8 @@ stages:
 | Sequential execution | ✅ | [Execution Flow](docs/bootstrap-actions.md#execution-flow) |
 
 ### CI/CD Integration
+**Pre-built CI/CD Pipeline Workflows** - GitHub Actions, GitLab CI, Azure DevOps, and Jenkins support for automated deployment. Flexible configuration for any CI/CD platform. Trigger deployments from external events with webhook support.
+
 | Feature | Status | Notes |
 |---------|--------|-------|
 | GitHub Actions | ✅ | [GitHub Actions Guide](docs/github-actions-integration.md) |
@@ -720,6 +750,8 @@ stages:
 | OIDC federation | ✅ | [GitHub Actions Guide](docs/github-actions-integration.md) |
 
 ### Testing & Validation
+**Automated Tests & Quality Gates** - Run validation tests before promoting to production. Block deployments if tests fail. Track execution status and logs. Verify deployment correctness with health checks.
+
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Unit testing | ✅ | [Test Command](docs/cli-commands.md#test) |
@@ -798,7 +830,8 @@ stages:
 - **[GenAI Application](docs/examples-guide.md#-generative-ai)** - Bedrock agents and knowledge bases
 
 ### Development
-- **[Development Guide](docs/development.md)** - Contributing and testing
+- **[Developer Guide](developer/developer-guide.md)** - Complete development guide with architecture, testing, and workflows
+- **[AI Assistant Context](developer/AmazonQ.md)** - Context for AI assistants (Amazon Q, Kiro)
 - **[Tests Overview](tests/README.md)** - Testing infrastructure
 
 ### Support

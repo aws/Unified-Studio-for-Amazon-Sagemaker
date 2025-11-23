@@ -179,10 +179,18 @@ def deploy_command(
             # Get comprehensive project info for bootstrap actions
             from ..helpers.utils import get_datazone_project_info
 
-            project_info = get_datazone_project_info(
-                target_config.project.name, config
-            )
+            project_info = get_datazone_project_info(target_config.project.name, config)
+            if metadata is None:
+                metadata = {}
             metadata["project_info"] = project_info
+
+            # Add project_info to config for bootstrap actions
+            if project_info and not project_info.get("error"):
+                config["project_info"] = project_info
+                if project_info.get("domain_id"):
+                    config["domain_id"] = project_info["domain_id"]
+                if project_info.get("domain_name"):
+                    config["domain_name"] = project_info["domain_name"]
 
             # Emit project init completed
             project_info_event = {
@@ -219,17 +227,21 @@ def deploy_command(
         if imported_dataset_ids:
             config["imported_quicksight_datasets"] = imported_dataset_ids
 
-        # Deploy bundle and track errors
-        deployment_success = _deploy_bundle_to_target(
-            target_config,
-            manifest,
-            config,
-            bundle,
-            stage_name,
-            emitter,
-            metadata,
-            manifest_file,
-        )
+        # Deploy bundle and track errors (skip if no deployment_configuration)
+        deployment_success = True
+        if target_config.deployment_configuration:
+            deployment_success = _deploy_bundle_to_target(
+                target_config,
+                manifest,
+                config,
+                bundle,
+                stage_name,
+                emitter,
+                metadata,
+                manifest_file,
+            )
+        else:
+            typer.echo("No deployment_configuration - skipping bundle deployment")
 
         if deployment_success:
             # Process bootstrap actions (after deployment completes)
@@ -333,8 +345,31 @@ def _get_target_config(stage_name: str, manifest: ApplicationManifest):
     if not target_config:
         handle_error(f"Target '{stage_name}' not found in manifest")
 
-    if not target_config.deployment_configuration:
-        handle_error(f"No deployment_configuration found for target '{stage_name}'")
+    # If no deployment_configuration, create default using all content.storage with default.s3_shared
+    # Only create if there's actually content to deploy
+    if (
+        not target_config.deployment_configuration
+        and manifest.content
+        and manifest.content.storage
+    ):
+        from ..application.application_manifest import (
+            DeploymentConfiguration,
+            StorageConfig,
+        )
+
+        storage_configs = []
+        for storage_item in manifest.content.storage:
+            storage_configs.append(
+                StorageConfig(
+                    name=storage_item.name,
+                    connectionName="default.s3_shared",
+                    targetDirectory=f"bundle/{storage_item.name}",
+                )
+            )
+
+        target_config.deployment_configuration = DeploymentConfiguration(
+            storage=storage_configs
+        )
 
     return target_config
 
@@ -521,7 +556,7 @@ def _deploy_bundle_to_target(
     # Create serverless Airflow workflows if configured
     effective_target_name = stage_name or target_config.name
 
-    # Get S3 location from first successful storage deployment
+    # Get S3 location from first successful storage deployment for backward compatibility
     s3_bucket = None
     s3_prefix = None
     for files_list, s3_uri in storage_results:
@@ -538,6 +573,9 @@ def _deploy_bundle_to_target(
         metadata["s3_prefix"] = s3_prefix
         metadata["bundle_path"] = bundle_path
 
+    # Variable resolution moved to workflow.create bootstrap action
+    # Workflows are uploaded as-is during storage deployment
+
     # Process catalog assets if configured
     asset_success = _process_catalog_assets(
         target_config, manifest, config, emitter, metadata
@@ -547,6 +585,161 @@ def _deploy_bundle_to_target(
     storage_success = all(r[0] is not None for r in storage_results)
     git_success = all(r[0] is not None for r in git_results) if git_results else True
     return storage_success and git_success and asset_success
+
+
+def _resolve_and_upload_workflows(
+    s3_bucket: str,
+    s3_prefix: str,
+    target_config,
+    config: Dict[str, Any],
+    stage_name: Optional[str] = None,
+    project_info: Optional[Dict[str, Any]] = None,
+    manifest=None,
+) -> None:
+    """Resolve variables in workflow YAML files and re-upload to S3."""
+    import tempfile
+
+    import boto3
+    import yaml
+
+    from ..helpers.context_resolver import ContextResolver
+
+    region = config.get("region", "us-east-1")
+    s3_client = boto3.client("s3", region_name=region)
+    project_name = target_config.project.name
+
+    # Get domain_id from project_info
+    domain_id = project_info.get("domain_id") if project_info else None
+    if not domain_id:
+        typer.echo("  ⚠️ No domain_id available, skipping workflow resolution")
+        return
+
+    # Get workflow names from manifest content.workflows
+    workflow_names = set()
+    if manifest and manifest.content and manifest.content.workflows:
+        workflow_names = {
+            wf.get("workflowName") if isinstance(wf, dict) else wf.workflowName
+            for wf in manifest.content.workflows
+        }
+        typer.echo(
+            f"\n🔄 Resolving variables for workflows: {', '.join(workflow_names)}"
+        )
+    else:
+        typer.echo("  ⚠️ No workflows defined in manifest, skipping resolution")
+        return
+
+    # Initialize resolver
+    resolver = ContextResolver(
+        project_name=project_name,
+        domain_id=domain_id,
+        region=region,
+        domain_name=config.get("domain_name"),
+        stage_name=stage_name or target_config.name,
+        env_vars=target_config.environment_variables or {},
+    )
+
+    # List all YAML files in S3 prefix
+    try:
+        response = s3_client.list_objects_v2(Bucket=s3_bucket, Prefix=s3_prefix)
+        if "Contents" not in response:
+            return
+
+        for obj in response["Contents"]:
+            s3_key = obj["Key"]
+            if not s3_key.endswith((".yaml", ".yml")):
+                continue
+
+            # Download and check if it's a workflow YAML
+            with tempfile.NamedTemporaryFile(
+                mode="w+", suffix=".yaml", delete=False
+            ) as temp_file:
+                try:
+                    s3_client.download_file(s3_bucket, s3_key, temp_file.name)
+
+                    with open(temp_file.name, "r") as f:
+                        content = f.read()
+                        yaml_data = yaml.safe_load(content)
+
+                    # Check if this is a workflow YAML and if it's in our workflow list
+                    if not _is_workflow_yaml(yaml_data):
+                        continue
+
+                    # Get workflow name from YAML
+                    workflow_name = next(iter(yaml_data.keys()))
+                    if workflow_name not in workflow_names:
+                        typer.echo(
+                            f"  ⏭️  Skipping {s3_key} (workflow '{workflow_name}' not in manifest)"
+                        )
+                        continue
+
+                    typer.echo(f"  Resolving {s3_key}...")
+
+                    # Resolve variables
+                    try:
+                        resolved_content = resolver.resolve(content)
+                    except ValueError as e:
+                        # Resolution failed - this is a critical error
+                        typer.echo(f"  ❌ Failed to resolve {s3_key}: {e}")
+                        raise Exception(
+                            f"Cannot resolve variables in workflow '{workflow_name}': {e}"
+                        )
+
+                    # Upload resolved content
+                    with open(temp_file.name, "w") as f:
+                        f.write(resolved_content)
+
+                    s3_client.upload_file(temp_file.name, s3_bucket, s3_key)
+                    typer.echo(f"  ✅ Resolved and uploaded {s3_key}")
+                finally:
+                    os.unlink(temp_file.name)
+
+    except Exception as e:
+        typer.echo(f"  ❌ Error resolving workflows: {e}")
+        raise
+
+
+def _is_workflow_yaml(yaml_data: dict) -> bool:
+    """Detect if YAML is an Airflow workflow definition."""
+    if not isinstance(yaml_data, dict):
+        return False
+
+    # Skip manifest files
+    if "applicationName" in yaml_data or "content" in yaml_data:
+        return False
+
+    # Check for workflow structure: top-level key with dag_id and tasks
+    for key, value in yaml_data.items():
+        if isinstance(value, dict) and "dag_id" in value and "tasks" in value:
+            return True
+
+    return False
+
+
+def _create_compressed_archive(source_path: str, item_name: str, temp_dir: str) -> str:
+    """Create a tar.gz archive from source path and return archive-only directory."""
+    import shutil
+    import tarfile
+
+    archive_name = f"{item_name}.tar.gz"
+    archive_path = os.path.join(temp_dir, archive_name)
+
+    typer.echo(f"  Creating compressed archive: {archive_name}")
+    with tarfile.open(archive_path, "w:gz") as tar:
+        if os.path.isdir(source_path):
+            for root, dirs, files in os.walk(source_path):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, source_path)
+                    tar.add(file_path, arcname=arcname)
+        else:
+            tar.add(source_path, arcname=os.path.basename(source_path))
+
+    # Create directory with only the archive
+    archive_only_dir = os.path.join(temp_dir, "_archive_deploy")
+    os.makedirs(archive_only_dir, exist_ok=True)
+    shutil.copy(archive_path, os.path.join(archive_only_dir, archive_name))
+
+    return archive_only_dir
 
 
 def _deploy_local_storage_item(
@@ -616,15 +809,30 @@ def _deploy_local_storage_item(
 
             shutil.copy2(file_path, dest_path)
 
-        # Deploy to S3
-        success = deployment.deploy_files(
-            temp_dir, connection, target_dir, region, temp_dir
+        # Check if compression is requested
+        compression = (
+            storage_config.compression
+            if hasattr(storage_config, "compression")
+            else None
         )
 
+        if compression in ["gz", "tar.gz"]:
+            # Create compressed archive
+            archive_dir = _create_compressed_archive(temp_dir, name, temp_dir)
+            success = deployment.deploy_files(
+                archive_dir, connection, target_dir, region, archive_dir
+            )
+            deployed_files = [f"{name}.tar.gz"] if success else None
+        else:
+            # Deploy files directly
+            success = deployment.deploy_files(
+                temp_dir, connection, target_dir, region, temp_dir
+            )
+            deployed_files = (
+                [os.path.relpath(f, temp_dir) for f in all_files] if success else None
+            )
+
         s3_uri = connection.get("s3Uri", "")
-        deployed_files = (
-            [os.path.relpath(f, temp_dir) for f in all_files] if success else None
-        )
         return deployed_files, s3_uri
 
 
@@ -860,8 +1068,6 @@ def _deploy_named_item_from_bundle(
     target_dir: str,
 ) -> Tuple[Optional[List[str]], Optional[str]]:
     """Deploy a named item from bundle to target directory."""
-    import tarfile
-
     from ..helpers.bundle_storage import ensure_bundle_local, is_s3_url
 
     local_bundle_path = ensure_bundle_local(bundle_file, config["region"])
@@ -884,38 +1090,13 @@ def _deploy_named_item_from_bundle(
                     else None
                 )
                 if compression in ["gz", "tar.gz"]:
-                    # Create tar.gz archive
-                    archive_name = f"{item_name}.tar.gz"
-                    archive_path = os.path.join(temp_dir, archive_name)
-
-                    typer.echo(f"  Creating compressed archive: {archive_name}")
-                    with tarfile.open(archive_path, "w:gz") as tar:
-                        # Add all contents of item_path to archive
-                        if os.path.isdir(item_path):
-                            for root, dirs, files in os.walk(item_path):
-                                for file in files:
-                                    file_path = os.path.join(root, file)
-                                    arcname = os.path.relpath(file_path, item_path)
-                                    tar.add(file_path, arcname=arcname)
-                        else:
-                            tar.add(item_path, arcname=os.path.basename(item_path))
-
-                    # Deploy the archive
-                    deployed_files = [archive_name]
-                    # Create a temp directory with only the archive file
-                    archive_only_dir = os.path.join(temp_dir, "_archive_deploy")
-                    os.makedirs(archive_only_dir, exist_ok=True)
-                    archive_deploy_path = os.path.join(archive_only_dir, archive_name)
-                    import shutil
-
-                    shutil.copy(archive_path, archive_deploy_path)
-
+                    # Create compressed archive
+                    archive_dir = _create_compressed_archive(
+                        item_path, item_name, temp_dir
+                    )
+                    deployed_files = [f"{item_name}.tar.gz"]
                     success = deployment.deploy_files(
-                        archive_only_dir,
-                        connection,
-                        target_dir,
-                        region,
-                        archive_only_dir,
+                        archive_dir, connection, target_dir, region, archive_dir
                     )
                 else:
                     # Original behavior - deploy directory contents
@@ -1579,11 +1760,17 @@ def _process_bootstrap_actions(
     context = {
         "stage": stage_name,
         "project": {"name": target_config.project.name},
+        "project_name": target_config.project.name,  # Add for ContextResolver
         "domain": {
             "name": target_config.domain.name,
             "region": target_config.domain.region,
         },
+        "domain_id": config.get("domain_id"),  # Add for ContextResolver
+        "domain_name": config.get("domain_name"),  # Add for ContextResolver
         "region": config.get("region"),
+        "stage_name": stage_name,  # Add for ContextResolver
+        "env_vars": target_config.environment_variables
+        or {},  # Add for ContextResolver
         "config": config,  # Pass full config including imported_quicksight_datasets
         "manifest": manifest,  # Add manifest to context
         "target_config": target_config,  # Add target_config to context
@@ -1596,6 +1783,15 @@ def _process_bootstrap_actions(
 
         # Log results
         success_count = sum(1 for r in results if r["status"] == "success")
+
+        # Print log.debug results
+        for result in results:
+            if result.get("action") == "log.debug":
+                inner_result = result.get("result", {})
+                resolved = inner_result.get("resolved")
+                if resolved:
+                    typer.echo(f"  📝 {resolved}")
+
         typer.echo(f"  ✓ Processed {success_count} actions successfully")
     except Exception as e:
         handle_error(f"Bootstrap action failed: {e}")
@@ -1671,8 +1867,8 @@ def _deploy_quicksight_dashboards(
     imported_dataset_ids = []
 
     for dashboard_config in dashboards:
-        dashboard_id = dashboard_config.dashboardId
-        typer.echo(f"  Deploying dashboard: {dashboard_id}")
+        dashboard_name = dashboard_config.name
+        typer.echo(f"  Deploying dashboard: {dashboard_name}")
 
         # Get assetBundle (with fallback to 'source' for backward compatibility during transition)
         asset_bundle = getattr(dashboard_config, "assetBundle", None) or getattr(
@@ -1684,7 +1880,7 @@ def _deploy_quicksight_dashboards(
             # Determine bundle source
             if not bundle:
                 typer.echo(
-                    f"    Warning: No bundle specified, skipping {dashboard_id}",
+                    f"    Warning: No bundle specified, skipping {dashboard_name}",
                     err=True,
                 )
                 continue
@@ -1696,7 +1892,7 @@ def _deploy_quicksight_dashboards(
 
             # Determine file path in zip
             if asset_bundle == "export":
-                dashboard_file_in_zip = f"quicksight/{dashboard_id}.qs"
+                dashboard_file_in_zip = f"quicksight/{dashboard_name}.qs"
             else:
                 # Use provided asset bundle path
                 dashboard_file_in_zip = asset_bundle
@@ -1755,11 +1951,12 @@ def _deploy_quicksight_dashboards(
                 aws_account_id,
                 region,
                 override_params,
+                application_name=manifest.application_name,
             )
             result = poll_import_job(job_id, aws_account_id, region)
 
-            # Initialize with original dashboard ID
-            imported_dashboard_id = dashboard_id
+            # Initialize imported dashboard ID
+            imported_dashboard_id = None
 
             # Print imported assets
             if result.get("JobStatus") == "SUCCESSFUL":
@@ -1767,7 +1964,6 @@ def _deploy_quicksight_dashboards(
 
                 # Get the actual imported dashboard ID from override parameters
                 # The imported ID is: prefix + dashboard_id_from_overrides
-                imported_dashboard_id = dashboard_id
                 prefix = ""
                 if (
                     override_params
@@ -1828,20 +2024,39 @@ def _deploy_quicksight_dashboards(
                 except Exception as e:
                     typer.echo(f"      ⚠️  Could not list data sources: {e}")
 
-                # Grant permissions from deployment_configuration
-                permissions = []
+                # Get permissions from deployment_configuration.quicksight.items
+                owners = []
+                viewers = []
+
                 if qs_config:
-                    permissions = getattr(qs_config, "permissions", []) or []
+                    items = (
+                        qs_config.get("items", [])
+                        if isinstance(qs_config, dict)
+                        else getattr(qs_config, "items", [])
+                    )
+                    # Find matching item by dashboard name
+                    for item in items:
+                        item_name = (
+                            item.get("name")
+                            if isinstance(item, dict)
+                            else getattr(item, "name", None)
+                        )
+                        if item_name == dashboard_name:
+                            if isinstance(item, dict):
+                                owners = item.get("owners", []) or []
+                                viewers = item.get("viewers", []) or []
+                            else:
+                                owners = getattr(item, "owners", []) or []
+                                viewers = getattr(item, "viewers", []) or []
+                            break
 
-                # Add owner and viewer permissions from dashboard config
-                owners = getattr(dashboard_config, "owners", []) or []
-                viewers = getattr(dashboard_config, "viewers", []) or []
-
-                typer.echo(f"🔍 Dashboard config owners: {owners}")
-                typer.echo(f"🔍 Dashboard config viewers: {viewers}")
+                typer.echo(f"🔍 Dashboard permissions from deployment_configuration:")
+                typer.echo(f"    Owners: {owners}")
+                typer.echo(f"    Viewers: {viewers}")
 
                 # Track principals to avoid duplicates (owners take precedence over viewers)
                 principal_actions = {}
+                permissions = []
 
                 for owner in owners:
                     principal_actions[owner] = [

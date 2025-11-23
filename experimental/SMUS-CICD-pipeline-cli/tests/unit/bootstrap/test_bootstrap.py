@@ -11,10 +11,10 @@ class TestBootstrapAction:
     def test_create_action(self):
         """Test creating a bootstrap action."""
         action = BootstrapAction(
-            type="custom.print",
+            type="cli.print",
             parameters={"message": "Hello World"}
         )
-        assert action.type == "custom.print"
+        assert action.type == "cli.print"
         assert action.parameters["message"] == "Hello World"
 
     def test_action_type_validation(self):
@@ -29,8 +29,8 @@ class TestBootstrapConfig:
     def test_create_config(self):
         """Test creating a bootstrap config."""
         actions = [
-            BootstrapAction(type="custom.print", parameters={"message": "Test 1"}),
-            BootstrapAction(type="custom.print", parameters={"message": "Test 2"}),
+            BootstrapAction(type="cli.print", parameters={"message": "Test 1"}),
+            BootstrapAction(type="cli.print", parameters={"message": "Test 2"}),
         ]
         config = BootstrapConfig(actions=actions)
         assert len(config.actions) == 2
@@ -41,7 +41,7 @@ class TestActionRegistry:
 
     def test_get_handler(self):
         """Test getting a registered handler."""
-        handler = registry.get_handler("custom.print")
+        handler = registry.get_handler("cli.print")
         assert handler is not None
 
     def test_unknown_service(self):
@@ -52,7 +52,7 @@ class TestActionRegistry:
     def test_execute_action(self):
         """Test executing an action through registry."""
         action = BootstrapAction(
-            type="custom.print",
+            type="cli.print",
             parameters={"message": "Test message"}
         )
         context = {"stage": "test"}
@@ -61,7 +61,7 @@ class TestActionRegistry:
         
         assert result["status"] == "success"
         assert result["message"] == "Test message"
-        assert result["context"]["stage"] == "test"
+        assert result["level"] == "info"
 
 
 class TestBootstrapExecutor:
@@ -70,7 +70,7 @@ class TestBootstrapExecutor:
     def test_execute_single_action(self):
         """Test executing a single action."""
         actions = [
-            BootstrapAction(type="custom.print", parameters={"message": "Test"})
+            BootstrapAction(type="cli.print", parameters={"message": "Test"})
         ]
         context = {"stage": "dev"}
         
@@ -78,14 +78,14 @@ class TestBootstrapExecutor:
         
         assert len(results) == 1
         assert results[0]["status"] == "success"
-        assert results[0]["action"] == "custom.print"
+        assert results[0]["action"] == "cli.print"
 
     def test_execute_multiple_actions(self):
         """Test executing multiple actions sequentially."""
         actions = [
-            BootstrapAction(type="custom.print", parameters={"message": "First"}),
-            BootstrapAction(type="custom.print", parameters={"message": "Second"}),
-            BootstrapAction(type="custom.print", parameters={"message": "Third"}),
+            BootstrapAction(type="cli.print", parameters={"message": "First"}),
+            BootstrapAction(type="cli.print", parameters={"message": "Second"}),
+            BootstrapAction(type="cli.print", parameters={"message": "Third"}),
         ]
         context = {"stage": "test"}
         
@@ -100,9 +100,9 @@ class TestBootstrapExecutor:
     def test_execute_with_failure(self):
         """Test that execution stops on first failure."""
         actions = [
-            BootstrapAction(type="custom.print", parameters={"message": "First"}),
+            BootstrapAction(type="cli.print", parameters={"message": "First"}),
             BootstrapAction(type="invalid.action", parameters={}),
-            BootstrapAction(type="custom.print", parameters={"message": "Third"}),
+            BootstrapAction(type="cli.print", parameters={"message": "Third"}),
         ]
         context = {"stage": "test"}
         
@@ -114,9 +114,9 @@ class TestCustomHandler:
     """Test custom action handler."""
 
     def test_print_action(self):
-        """Test custom.print action."""
+        """Test cli.print action."""
         action = BootstrapAction(
-            type="custom.print",
+            type="cli.print",
             parameters={"message": "Hello Bootstrap"}
         )
         context = {"stage": "dev", "project": {"name": "test-project"}}
@@ -125,12 +125,13 @@ class TestCustomHandler:
         
         assert result["status"] == "success"
         assert result["message"] == "Hello Bootstrap"
-        assert result["context"]["stage"] == "dev"
+        assert result["level"] == "info"
+        assert result["output"] == "console"
 
     def test_wait_action(self):
-        """Test custom.wait action."""
+        """Test cli.wait action."""
         action = BootstrapAction(
-            type="custom.wait",
+            type="cli.wait",
             parameters={"seconds": 0}
         )
         context = {}
@@ -141,9 +142,9 @@ class TestCustomHandler:
         assert result["seconds"] == 0
 
     def test_validate_deployment_action(self):
-        """Test custom.validate_deployment action."""
+        """Test cli.validate_deployment action."""
         action = BootstrapAction(
-            type="custom.validate_deployment",
+            type="cli.validate_deployment",
             parameters={"checks": ["check1", "check2", "check3"]}
         )
         context = {}
@@ -154,9 +155,9 @@ class TestCustomHandler:
         assert result["checks_run"] == 3
 
     def test_notify_action(self):
-        """Test custom.notify action."""
+        """Test cli.notify action."""
         action = BootstrapAction(
-            type="custom.notify",
+            type="cli.notify",
             parameters={"recipient": "team@example.com", "message": "Deployment complete"}
         )
         context = {}

@@ -53,8 +53,14 @@ class ContextResolver:
             self.project_name, self.domain_name, self.region
         )
 
+        if not iam_role:
+            raise ValueError(
+                f"Failed to get IAM role for project '{self.project_name}' "
+                f"in domain '{self.domain_name}'. Cannot proceed with variable resolution."
+            )
+
         # Extract role name from ARN (arn:aws:iam::123:role/RoleName -> RoleName)
-        iam_role_name = iam_role.split("/")[-1] if iam_role else None
+        iam_role_name = iam_role.split("/")[-1]
 
         # Get KMS key (if available)
         kms_key_arn = None

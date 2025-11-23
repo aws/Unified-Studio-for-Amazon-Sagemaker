@@ -66,18 +66,19 @@ def describe_command(
         # Get the first target's domain for display (they should all be the same)
         first_target = next(iter(manifest.stages.values()))
         domain_config = first_target.domain
+        domain_name = domain_config.get_name()
 
         # Prepare output data structure for JSON format
         output_data = {
             "bundle": manifest.application_name,
-            "domain": {"name": domain_config.name, "region": domain_config.region},
+            "domain": {"name": domain_name, "region": domain_config.region},
             "targets": {},
         }
 
         # TEXT output header
         if output.upper() != "JSON":
             typer.echo(f"Pipeline: {manifest.application_name}")
-            typer.echo(f"Domain: {domain_config.name} ({domain_config.region})")
+            typer.echo(f"Domain: {domain_name} ({domain_config.region})")
             typer.echo("\nTargets:")
 
         # Track errors to exit with proper code
@@ -152,6 +153,9 @@ def describe_command(
                         target_data["project"]["owners"] = project_info.get(
                             "owners", []
                         )
+                        target_data["project"]["contributors"] = project_info.get(
+                            "contributors", []
+                        )
                         target_data["connections"] = project_connections
 
                         # Validate that project has connections when using --connect
@@ -171,6 +175,11 @@ def describe_command(
                             if project_info.get("owners"):
                                 owners_str = ", ".join(project_info["owners"])
                                 typer.echo(f"    Owners: {owners_str}")
+                            if project_info.get("contributors"):
+                                contributors_str = ", ".join(
+                                    project_info["contributors"]
+                                )
+                                typer.echo(f"    Contributors: {contributors_str}")
 
                             if connections or connect:
                                 typer.echo(

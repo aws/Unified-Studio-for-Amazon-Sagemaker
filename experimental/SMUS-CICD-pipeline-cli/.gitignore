@@ -166,3 +166,7 @@ tmp/
 
 # Files marked for deletion
 to-delete/
+
+# Coverage artifacts
+coverage-artifacts/
+coverage-combined/

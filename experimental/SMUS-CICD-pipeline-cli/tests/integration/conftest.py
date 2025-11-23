@@ -3,35 +3,15 @@
 import os
 import pytest
 import sys
-import yaml
 from pathlib import Path
 from .base import IntegrationTestBase
 
 
 def pytest_configure(config):
-    """Load test configuration and set environment variables."""
-    # Look for config file in tests/scripts directory
-    config_dir = Path(__file__).parent.parent / "scripts"
-    print(f"🔧 Looking for config in: {config_dir}")
-    
-    # Try to find config file (prefer account-specific config)
-    config_files = list(config_dir.glob("config-*.yaml"))
-    print(f"🔧 Found {len(config_files)} config files: {[f.name for f in config_files]}")
-    
-    if config_files:
-        config_file = config_files[0]  # Use first found config
-        print(f"🔧 Loading config from: {config_file.name}")
-        with open(config_file) as f:
-            test_config = yaml.safe_load(f)
-        
-        # Set service endpoint environment variables
-        if "service_endpoints" in test_config:
-            endpoints = test_config["service_endpoints"]
-            if "datazone" in endpoints:
-                os.environ["DATAZONE_ENDPOINT_URL"] = endpoints["datazone"]
-                print(f"✓ Set DATAZONE_ENDPOINT_URL={endpoints['datazone']}")
-        else:
-            print("⚠️  No service_endpoints found in config")
+    """Configure pytest for integration tests."""
+    # All configuration comes from environment variables
+    # Use env-<account>.env files sourced before running pytest
+    pass
 
 
 def pytest_runtest_logreport(report):

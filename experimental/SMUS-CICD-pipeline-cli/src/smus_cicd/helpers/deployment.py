@@ -102,6 +102,7 @@ def deploy_files(
                 "sync",
                 str(source_path),
                 full_s3_path,
+                "--exact-timestamps",  # Force check timestamps to detect changes
                 "--exclude",
                 "*.pyc",
                 "--exclude",
