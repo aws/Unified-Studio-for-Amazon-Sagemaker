@@ -1,16 +1,13 @@
 applicationName: WorkflowBootstrapExample
-
 content:
   storage:
-    - name: etl-code
-      connectionName: default.s3_shared
-      include:
-        - etl/scripts/
-  
+  - name: etl-code
+    connectionName: default.s3_shared
+    include:
+    - etl/scripts/
   workflows:
-    - workflowName: data_processing_dag
-      connectionName: default.workflow_serverless
-
+  - workflowName: data_processing_dag
+    connectionName: default.workflow_serverless
 stages:
   dev:
     stage: DEV
@@ -20,8 +17,6 @@ stages:
       region: us-east-2
     project:
       name: dev-analytics
-    # No bootstrap actions in dev - just deploy
-    
   test:
     stage: TEST
     domain:
@@ -30,13 +25,13 @@ stages:
       region: us-east-2
     project:
       name: test-analytics
-    # Trigger workflow after deployment for testing
     bootstrap:
       actions:
-        - type: workflow.run
-          workflowName: data_processing_dag
-          wait: false
-    
+      - type: workflow.create
+        workflowName: data_processing_dag
+      - type: workflow.run
+        workflowName: data_processing_dag
+        wait: false
   prod:
     stage: PROD
     domain:
@@ -45,14 +40,15 @@ stages:
       region: us-east-2
     project:
       name: prod-analytics
-    # Monitor workflow status, trigger run, and fetch logs
     bootstrap:
       actions:
-        - type: workflow.monitor
-          workflowName: data_processing_dag
-        - type: workflow.run
-          workflowName: data_processing_dag
-          wait: false
-        - type: workflow.logs
-          workflowName: data_processing_dag
-          lines: 50
+      - type: workflow.create
+        workflowName: data_processing_dag
+      - type: workflow.monitor
+        workflowName: data_processing_dag
+      - type: workflow.run
+        workflowName: data_processing_dag
+        wait: false
+      - type: workflow.logs
+        workflowName: data_processing_dag
+        lines: 50

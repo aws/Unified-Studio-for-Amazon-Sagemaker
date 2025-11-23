@@ -103,17 +103,8 @@ Resources:
         Statement:
           - Sid: LambdaManagement
             Effect: Allow
-            Action:
-              - lambda:CreateFunction
-              - lambda:DeleteFunction
-              - lambda:GetFunction
-              - lambda:AddPermission
-              - lambda:RemovePermission
-              - lambda:UpdateFunctionCode
-              - lambda:UpdateFunctionConfiguration
-            Resource: 
-              - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:*_ag'
-              - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:*-agent-*'
+            Action: lambda:*
+            Resource: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:*'
           - Sid: LambdaRoleManagement
             Effect: Allow
             Action:
@@ -125,6 +116,25 @@ Resources:
               - iam:DeleteRolePolicy
             Resource: 
               - !Sub 'arn:aws:iam::${AWS::AccountId}:role/*-lambda-role-*'
+          - Sid: BedrockAgentManagement
+            Effect: Allow
+            Action:
+              - bedrock:CreateAgent
+              - bedrock:DeleteAgent
+              - bedrock:GetAgent
+              - bedrock:UpdateAgent
+              - bedrock:ListAgents
+              - bedrock:PrepareAgent
+              - bedrock:CreateAgentAlias
+              - bedrock:DeleteAgentAlias
+              - bedrock:GetAgentAlias
+              - bedrock:ListAgentAliases
+              - bedrock:CreateAgentActionGroup
+              - bedrock:GetAgentActionGroup
+              - bedrock:ListAgentActionGroups
+              - bedrock:AssociateAgentKnowledgeBase
+              - bedrock:AssociateAgentCollaborator
+            Resource: '*'
 
   BedrockAgentPassRolePolicy:
     Type: AWS::IAM::ManagedPolicy

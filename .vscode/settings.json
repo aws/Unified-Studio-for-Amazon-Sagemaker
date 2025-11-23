@@ -5,7 +5,7 @@
     "python.testing.unittestEnabled": false,
     "python.testing.pytestEnabled": true,
     "python.testing.cwd": "experimental/SMUS-CICD-pipeline-cli",
-    "kiroAgent.configureMCP": "Disabled",
+    "kiroAgent.configureMCP": "Enabled",
     "workbench.colorCustomizations": {
         "panel.border": "#ffffff80",
         "sideBar.border": "#ffffff80",

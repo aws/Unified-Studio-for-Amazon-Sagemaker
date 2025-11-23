@@ -159,6 +159,42 @@ Creates:
 - IAM roles for GitHub Actions
 - Stage-specific IAM roles (dev/test/prod)
 
+**CloudFormation Stack Architecture:**
+
+The account setup creates two independent CloudFormation stacks:
+
+1. **SMUSBedrockAgentRole Stack** (Shared Bedrock Resources)
+   - `DEFAULT_AgentExecutionRole` - IAM role for Bedrock agents
+   - `test_agent-lambda-role-{region}-{account}` - IAM role for Lambda functions used by agents
+   - `BedrockTestingPolicy` - Managed policy for Lambda and IAM role management
+   - `BedrockAgentPassRolePolicy` - Managed policy for passing agent execution role
+   - **Purpose**: Shared resources used across multiple projects
+   - **Template**: Can be deployed once per account
+
+2. **{ProjectName}-role-stack** (Project-Specific Role)
+   - `{ProjectName}` - IAM role for the SMUS project (e.g., test-marketing-role)
+   - **References** existing Bedrock policies from SMUSBedrockAgentRole stack
+   - **Includes inline policies**:
+     - `SelfPassRolePolicy` - Pass role to itself and DEFAULT_AgentExecutionRole
+     - `BedrockInvokeAgentPolicy` - Invoke Bedrock agents and models
+     - `ManageLambdaRoleInlinePolicies` - Manage inline policies on lambda role (for dynamic policies added by bedrock_agent_helper.py)
+   - **Purpose**: Project-specific permissions and access
+   - **Template**: `stage-roles.yaml` - Deploy once per project/stage
+
+**Why Two Stacks:**
+- **Independence**: Bedrock resources can be shared across projects without duplication
+- **Flexibility**: Project roles can be created/updated without affecting Bedrock resources
+- **Isolation**: Stack updates won't conflict or cause rollbacks
+- **Reusability**: One SMUSBedrockAgentRole stack serves multiple project stacks
+
+**Dynamic Policy Management:**
+The `bedrock_agent_helper.py` code adds inline policies at runtime to the lambda role:
+- `sub_agent_policy` - Permissions for sub-agents (if provided)
+- `additional_function_policy` - Custom permissions (if provided)
+- `{agent_name}-dynamodb-policy` - DynamoDB access (if table name provided)
+
+This is why `ManageLambdaRoleInlinePolicies` grants `iam:PutRolePolicy` permission.
+
 #### Step 2: Domain Creation (IDC only)
 ```bash
 cd tests/scripts/setup/idc-based-domains/2-domain-creation

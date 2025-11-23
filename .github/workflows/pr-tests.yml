@@ -1,16 +1,16 @@
 name: PR Integration Tests
 
 on:
-  pull_request:
-    branches: [main, master]
-    paths:
-      - 'experimental/SMUS-CICD-pipeline-cli/**'
-      - '.github/workflows/pr-tests.yml'
-  push:
-    branches: [amirbo_feature_branch]
-    paths:
-      - 'experimental/SMUS-CICD-pipeline-cli/**'
-      - '.github/workflows/pr-tests.yml'
+  # pull_request:
+  #   branches: [main, master]
+  #   paths:
+  #     - 'experimental/SMUS-CICD-pipeline-cli/**'
+  #     - '.github/workflows/pr-tests.yml'
+  # push:
+  #   branches: [amirbo_feature_branch]
+  #   paths:
+  #     - 'experimental/SMUS-CICD-pipeline-cli/**'
+  #     - '.github/workflows/pr-tests.yml'
   workflow_dispatch:
 
 concurrency:
