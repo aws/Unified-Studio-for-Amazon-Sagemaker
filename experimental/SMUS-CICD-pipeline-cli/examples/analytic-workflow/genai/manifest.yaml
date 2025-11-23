@@ -29,6 +29,8 @@ stages:
       region: ${TEST_DOMAIN_REGION:us-east-1}
     project:
       name: test-marketing
+      create: true
+      role_arn: arn:aws:iam::019900059033:role/test-marketing-role
       owners:
       - Eng1
       - arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
