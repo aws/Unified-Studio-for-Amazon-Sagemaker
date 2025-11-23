@@ -806,23 +806,26 @@ def _deploy_local_storage_item(
             import shutil
 
             shutil.copy2(file_path, dest_path)
-            
+
             # DEBUG: Check file integrity for notebooks
-            if file_path.endswith('.ipynb'):
+            if file_path.endswith(".ipynb"):
                 import hashlib
                 import json
-                with open(file_path, 'rb') as f:
+
+                with open(file_path, "rb") as f:
                     src_checksum = hashlib.md5(f.read()).hexdigest()
-                with open(dest_path, 'rb') as f:
+                with open(dest_path, "rb") as f:
                     dest_checksum = hashlib.md5(f.read()).hexdigest()
                 with open(dest_path) as f:
                     nb = json.load(f)
-                    cell0_len = len(nb['cells'][0]['source']) if nb.get('cells') else 0
+                    cell0_len = len(nb["cells"][0]["source"]) if nb.get("cells") else 0
                 typer.echo(f"  🔍 NOTEBOOK CHECK: {os.path.basename(file_path)}")
                 typer.echo(f"     Source checksum: {src_checksum}")
                 typer.echo(f"     Dest checksum:   {dest_checksum}")
                 typer.echo(f"     Cell 0 length:   {cell0_len}")
-                typer.echo(f"     Match: {'✅' if src_checksum == dest_checksum else '❌ CORRUPTED'}")
+                typer.echo(
+                    f"     Match: {'✅' if src_checksum == dest_checksum else '❌ CORRUPTED'}"
+                )
 
         # Check if compression is requested
         compression = (
