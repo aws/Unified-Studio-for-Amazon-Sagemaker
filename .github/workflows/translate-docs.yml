@@ -1,11 +1,9 @@
 name: Translate Documentation
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'experimental/SMUS-CICD-pipeline-cli/README.md'
+  schedule:
+    - cron: '0 2 * * *'  # Run daily at 2 AM UTC
+  workflow_dispatch:  # Allow manual trigger
 
 permissions:
   id-token: write
@@ -20,19 +18,31 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 2  # Need 2 commits to check for changes
+
+      - name: Check for changes in README or docs
+        id: check-changes
+        run: |
+          if git diff --name-only HEAD~1 HEAD | grep -E '^experimental/SMUS-CICD-pipeline-cli/(README\.md|docs/)'; then
+            echo "has-changes=true" >> $GITHUB_OUTPUT
+          else
+            echo "has-changes=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Set up Python
+        if: steps.check-changes.outputs.has-changes == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
       - name: Install dependencies
+        if: steps.check-changes.outputs.has-changes == 'true'
         run: |
           python -m pip install --upgrade pip
           pip install boto3
 
       - name: Configure AWS credentials
+        if: steps.check-changes.outputs.has-changes == 'true'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
@@ -40,16 +50,19 @@ jobs:
           role-session-name: translate-docs-session
 
       - name: Translate README
+        if: steps.check-changes.outputs.has-changes == 'true'
         working-directory: experimental/SMUS-CICD-pipeline-cli
         run: |
           python docs/scripts/translate-readme-chunked.py
 
       - name: Fix Hebrew code blocks
+        if: steps.check-changes.outputs.has-changes == 'true'
         working-directory: experimental/SMUS-CICD-pipeline-cli
         run: |
           python docs/scripts/fix-hebrew-code-blocks.py
 
       - name: Commit translations
+        if: steps.check-changes.outputs.has-changes == 'true'
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"

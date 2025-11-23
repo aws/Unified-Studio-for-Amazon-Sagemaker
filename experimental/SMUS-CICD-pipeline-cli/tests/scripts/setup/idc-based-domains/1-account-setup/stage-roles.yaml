@@ -43,9 +43,21 @@ Resources:
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
-              - Effect: Allow
+              - Sid: PassRoleSelf
+                Effect: Allow
                 Action: iam:PassRole
                 Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:role/${ProjectRoleName}'
+                Condition:
+                  StringEquals:
+                    iam:PassedToService:
+                      - sagemaker.amazonaws.com
+                      - glue.amazonaws.com
+                      - lakeformation.amazonaws.com
+                      - bedrock.amazonaws.com
+                      - scheduler.amazonaws.com
+                      - airflow-serverless.amazonaws.com
+                      - redshift.amazonaws.com
+                      - emr-serverless.amazonaws.com
         - PolicyName: BedrockInvokeAgentPolicy
           PolicyDocument:
             Version: '2012-10-17'

@@ -43,3 +43,4 @@ smus-feedback.txt
 
 # Integration test environment files
 experimental/SMUS-CICD-pipeline-cli/env-*.env
+bundles/
