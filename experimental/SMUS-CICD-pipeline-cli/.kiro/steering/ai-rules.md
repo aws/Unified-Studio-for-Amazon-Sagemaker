@@ -1,6 +1,8 @@
 # AI Assistant Rules
 
-**CRITICAL: Never commit code or push changes without explicit request from user.**
+**CRITICAL: Never commit code without explicit request from user.**
+
+**CRITICAL: Never push changes to remote repository without explicit approval from user.**
 
 **CRITICAL: For non-trivial changes (beyond syntax errors or simple fixes), request approval before making significant flow or architectural changes.**
 
@@ -14,9 +16,9 @@ Task progress and context are tracked in the `q-tasks/` folder:
 
 ## Approval Protocol
 
-**Q Must Ask Before:**
+**Q Must Ask Before (Require Explicit Approval):**
 - ✋ Committing code changes
-- ✋ Pushing to remote repository
+- ✋ **Pushing to remote repository (NEVER without explicit approval)**
 - ✋ Triggering workflows
 - ✋ Deleting files or branches
 - ✋ Merging branches

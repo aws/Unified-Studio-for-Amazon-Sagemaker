@@ -1,5 +1,3 @@
-# GenAI Workflow Example - Unified IAM role setup
-# Testing STS caller identity logging
 applicationName: IntegrationTestGenAIWorkflow
 content:
   storage:
@@ -48,16 +46,9 @@ stages:
     bootstrap:
       actions:
       - type: workflow.create
-    #     workflowName: genai_dev_workflow
-    #   - type: workflow.run
-    #     workflowName: genai_dev_workflow
-    #     trailLogs: true
+        workflowName: genai_dev_workflow
+      - type: workflow.run
+        workflowName: genai_dev_workflow
+        trailLogs: true
 tests:
   folder: examples/analytic-workflow/genai/app_tests/
-
-
-
-
-
-
-# Trigger workflow
