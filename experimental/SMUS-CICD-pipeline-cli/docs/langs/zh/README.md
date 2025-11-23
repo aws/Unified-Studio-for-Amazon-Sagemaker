@@ -8,6 +8,9 @@
 
 # SMUS CI/CD Pipeline CLI
 
+← [Back to Main README](../../../README.md)
+
+
 **自动化部署数据应用到SageMaker Unified Studio环境**
 
 从开发到生产环境，自信地部署Airflow DAGs、Jupyter notebooks和ML workflow。专为与DevOps团队合作的数据科学家、数据工程师、ML工程师和生成式AI应用开发者打造。

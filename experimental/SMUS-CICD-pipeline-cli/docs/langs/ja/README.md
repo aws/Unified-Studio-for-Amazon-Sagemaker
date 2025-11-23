@@ -8,6 +8,9 @@
 
 # SMUS CI/CD Pipeline CLI
 
+← [Back to Main README](../../../README.md)
+
+
 **SageMaker Unified Studio環境全体でデータアプリケーションのデプロイを自動化**
 
 開発から本番環境まで、Airflow DAG、Jupyterノートブック、MLワークフローを確実にデプロイできます。DevOpsチームと協働するデータサイエンティスト、データエンジニア、MLエンジニア、生成AIアプリ開発者向けに構築されています。

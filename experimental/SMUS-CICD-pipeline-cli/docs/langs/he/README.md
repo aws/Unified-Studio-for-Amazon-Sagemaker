@@ -10,6 +10,9 @@
 
 # SMUS CI/CD Pipeline CLI
 
+← [Back to Main README](../../../README.md)
+
+
 **אוטומציה של פריסת אפליקציות נתונים בסביבות SageMaker Unified Studio**
 
 Deploy Airflow DAGs, Jupyter notebooks, and ML workflows from development to production with confidence

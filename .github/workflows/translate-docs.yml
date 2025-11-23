@@ -1,0 +1,62 @@
+name: Translate Documentation
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'experimental/SMUS-CICD-pipeline-cli/README.md'
+
+permissions:
+  id-token: write
+  contents: write
+
+jobs:
+  translate:
+    runs-on: ubuntu-latest
+    environment: dev-aws-account
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install boto3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: translate-docs-session
+
+      - name: Translate README
+        working-directory: experimental/SMUS-CICD-pipeline-cli
+        run: |
+          python docs/scripts/translate-readme-chunked.py
+
+      - name: Fix Hebrew code blocks
+        working-directory: experimental/SMUS-CICD-pipeline-cli
+        run: |
+          python docs/scripts/fix-hebrew-code-blocks.py
+
+      - name: Commit translations
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add experimental/SMUS-CICD-pipeline-cli/docs/langs/
+          if git diff --staged --quiet; then
+            echo "No translation changes to commit"
+          else
+            git commit -m "chore: auto-translate README to multiple languages [skip ci]"
+            git push
+          fi

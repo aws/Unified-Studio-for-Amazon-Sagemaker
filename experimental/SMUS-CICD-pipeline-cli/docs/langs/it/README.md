@@ -8,6 +8,9 @@
 
 # SMUS CI/CD Pipeline CLI
 
+← [Back to Main README](../../../README.md)
+
+
 **Automatizza il deployment di applicazioni dati tra gli ambienti SageMaker Unified Studio**
 
 Distribuisci DAG Airflow, notebook Jupyter e workflow ML dallo sviluppo alla produzione con sicurezza. Creato per data scientist, data engineer, ML engineer e sviluppatori di app GenAI che lavorano con team DevOps.
