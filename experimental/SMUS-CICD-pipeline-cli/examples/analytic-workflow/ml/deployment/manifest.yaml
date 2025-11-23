@@ -63,4 +63,6 @@ stages:
       - type: workflow.run
         workflowName: ml_deployment_workflow
         trailLogs: true
+tests:
+  folder: examples/analytic-workflow/ml/deployment/app_tests/
 # Trigger workflow
