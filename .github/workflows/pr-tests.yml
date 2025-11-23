@@ -174,7 +174,7 @@ jobs:
           exit 1
         }
         
-        cp .coverage coverage-${test_name}.data
+        [ -f tests/test-outputs/.coverage ] && cp tests/test-outputs/.coverage coverage-${test_name}.data
     
     - name: Upload coverage
       uses: actions/upload-artifact@v4

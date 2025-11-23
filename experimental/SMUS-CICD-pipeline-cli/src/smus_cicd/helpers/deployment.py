@@ -102,6 +102,7 @@ def deploy_files(
                 "sync",
                 str(source_path),
                 full_s3_path,
+                "--exact-timestamps",  # Force check timestamps to detect changes
                 "--exclude",
                 "*.pyc",
                 "--exclude",
@@ -111,6 +112,8 @@ def deploy_files(
                 "--exclude",
                 ".DS_Store",
             ]
+            
+            typer.echo(f"  🔍 DEBUG: Running command: {' '.join(cmd)}")
 
             result = subprocess.run(cmd, capture_output=True, text=True)
 
