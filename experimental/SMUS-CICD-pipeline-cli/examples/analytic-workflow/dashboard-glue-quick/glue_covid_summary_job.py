@@ -30,7 +30,7 @@ except glue_client.exceptions.AlreadyExistsException:
 
 # Read CSV directly using Spark to avoid SerDe issues
 bucket = args['BUCKET_NAME']
-csv_path = f"s3://{bucket}/shared/repos/data/data/time-series-19-covid-combined.csv"
+csv_path = f"s3://{bucket}/shared/repos/data/time-series-19-covid-combined.csv"
 print(f"Reading CSV directly from: {csv_path}")
 
 df = spark.read.format("csv") \
