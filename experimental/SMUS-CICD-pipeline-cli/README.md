@@ -278,6 +278,8 @@ Deploy interactive BI dashboards with automated Glue ETL pipelines for data prep
 
 **AWS Services:** QuickSight • Glue • Athena • S3 • MWAA Serverless
 
+**GitHub Workflow:** [analytic-dashboard-glue-quicksight.yml](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/actions/workflows/analytic-dashboard-glue-quicksight.yml)
+
 **What happens during deployment:** Application code is deployed to S3, Glue jobs and Airflow workflows are created and executed, QuickSight dashboard/data source/dataset are created, and QuickSight ingestion is initiated to refresh the dashboard with latest data.
 
 <details>
@@ -370,6 +372,8 @@ stages:
 Deploy Jupyter notebooks with parallel execution orchestration for data analysis and ETL workflows. Demonstrates notebook deployment with MLflow integration for experiment tracking.
 
 **AWS Services:** SageMaker Notebooks • MLflow • S3 • MWAA Serverless
+
+**GitHub Workflow:** [analytic-data-notebooks.yml](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/actions/workflows/analytic-data-notebooks.yml)
 
 **What happens during deployment:** Notebooks and workflow definitions are uploaded to S3, Airflow DAG is created for parallel notebook execution, MLflow connection is provisioned for experiment tracking, and notebooks are ready to run on-demand or scheduled.
 
@@ -465,6 +469,8 @@ Train ML models with SageMaker using the [SageMaker SDK](https://sagemaker.readt
 
 **AWS Services:** SageMaker Training • MLflow • S3 • MWAA Serverless
 
+**GitHub Workflow:** [analytic-ml-training.yml](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/actions/workflows/analytic-ml-training.yml)
+
 **What happens during deployment:** Training code and workflow definitions are uploaded to S3 with compression, Airflow DAG is created for training orchestration, MLflow connection is provisioned for experiment tracking, and SageMaker training jobs are created and executed using SageMaker Distribution images.
 
 <details>
@@ -534,6 +540,8 @@ stages:
 Deploy trained ML models as SageMaker real-time inference endpoints. Uses SageMaker SDK for endpoint configuration and [SageMaker Distribution](https://github.com/aws/sagemaker-distribution/tree/main/src) images for serving.
 
 **AWS Services:** SageMaker Endpoints • S3 • MWAA Serverless
+
+**GitHub Workflow:** [analytic-ml-deployment.yml](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/actions/workflows/analytic-ml-deployment.yml)
 
 **What happens during deployment:** Model artifacts, deployment code, and workflow definitions are uploaded to S3, Airflow DAG is created for endpoint deployment orchestration, SageMaker endpoint configuration and model are created, and the inference endpoint is deployed and ready to serve predictions.
 
@@ -605,6 +613,8 @@ stages:
 Deploy GenAI applications with Bedrock agents and knowledge bases. Demonstrates RAG (Retrieval Augmented Generation) workflows with automated agent deployment and testing.
 
 **AWS Services:** Amazon Bedrock • S3 • MWAA Serverless
+
+**GitHub Workflow:** [analytic-genai-workflow.yml](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/actions/workflows/analytic-genai-workflow.yml)
 
 **What happens during deployment:** Agent configuration and workflow definitions are uploaded to S3, Airflow DAG is created for agent deployment orchestration, Bedrock agents and knowledge bases are configured, and the GenAI application is ready for inference and testing.
 
