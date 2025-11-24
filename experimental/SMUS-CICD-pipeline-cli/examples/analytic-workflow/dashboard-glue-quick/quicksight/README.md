@@ -4,7 +4,7 @@ This directory contains a sample QuickSight dashboard bundle for integration tes
 
 ## Files
 
-- **`sample-dashboard.qs`** - Exported QuickSight dashboard bundle (stored in git)
+- **`TotalDeathByCountry.qs`** - Exported QuickSight dashboard bundle (stored in git)
 - **`setup_test_dashboard.py`** - Script to import dashboard before testing
 
 ## Test Strategy

@@ -2122,18 +2122,18 @@ def _deploy_quicksight_dashboards(
                 except Exception as e:
                     typer.echo(f"      ⚠️  Could not list data sources: {e}")
 
-                # Get permissions from deployment_configuration.quicksight.items
+                # Get permissions from deployment_configuration.quicksight.assets
                 owners = []
                 viewers = []
 
                 if qs_config:
-                    items = (
-                        qs_config.get("items", [])
+                    assets = (
+                        qs_config.get("assets", [])
                         if isinstance(qs_config, dict)
-                        else getattr(qs_config, "items", [])
+                        else getattr(qs_config, "assets", [])
                     )
-                    # Find matching item by dashboard name
-                    for item in items:
+                    # Find matching asset by dashboard name
+                    for item in assets:
                         item_name = (
                             item.get("name")
                             if isinstance(item, dict)

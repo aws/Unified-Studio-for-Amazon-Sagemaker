@@ -72,7 +72,7 @@ stages:
         connectionName: default.s3_shared
         targetDirectory: repos
       quicksight:
-        items:
+        assets:
         - name: TotalDeathByCountry
           owners:
           - arn:aws:quicksight:${TEST_DOMAIN_REGION:us-east-1}:*:user/default/Admin/*
