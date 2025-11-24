@@ -11,6 +11,10 @@ on:
       - 'experimental/SMUS-CICD-pipeline-cli/examples/analytic-workflow/dashboard-glue-quick/**'
   workflow_dispatch:
 
+concurrency:
+  group: dashboard-glue-quick-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   id-token: write
   contents: read
