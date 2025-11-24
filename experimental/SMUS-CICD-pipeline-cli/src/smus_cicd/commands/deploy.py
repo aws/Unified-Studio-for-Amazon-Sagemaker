@@ -432,6 +432,9 @@ def _deploy_bundle_to_target(
     # Update config with domain info
     config = build_domain_config(target_config)
 
+    # Build target info for events (needed for both bundle and exception handling)
+    target_info = build_target_info(stage_name, target_config)
+
     # Determine if we need a bundle (check if any storage items have connectionName)
     has_bundle_items = any(
         s.connectionName
@@ -454,9 +457,6 @@ def _deploy_bundle_to_target(
                 return False
 
         typer.echo(f"Bundle file: {bundle_path}")
-
-        # Build target info for events
-        target_info = build_target_info(stage_name, target_config)
 
         # Emit bundle upload started
         if emitter:

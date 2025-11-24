@@ -25,6 +25,9 @@ stages:
       - Eng1
       - arn:aws:iam::${AWS_ACCOUNT_ID}:role/Admin
       contributors: []
+      role:
+        policies:
+        - arn:aws:iam::aws:policy/SageMakerStudioUserIAMPermissiveExecutionPolicy
     deployment_configuration:
       storage:
       - name: src
