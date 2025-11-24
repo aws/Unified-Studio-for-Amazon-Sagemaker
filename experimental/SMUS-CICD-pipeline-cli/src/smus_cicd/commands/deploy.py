@@ -455,11 +455,13 @@ def _deploy_bundle_to_target(
 
         typer.echo(f"Bundle file: {bundle_path}")
 
+        # Build target info for events
+        target_info = build_target_info(stage_name, target_config)
+
         # Emit bundle upload started
         if emitter:
             from ..helpers.monitoring import build_bundle_info
 
-            target_info = build_target_info(stage_name, target_config)
             bundle_info = build_bundle_info(bundle_path)
             emitter.bundle_upload_started(
                 manifest.application_name, target_info, bundle_info, metadata

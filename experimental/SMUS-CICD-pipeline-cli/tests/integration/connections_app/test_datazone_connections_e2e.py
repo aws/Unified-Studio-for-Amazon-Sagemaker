@@ -13,20 +13,59 @@ class TestDataZoneConnectionsE2E(IntegrationTestBase):
         super().setup_method(method)
         self.setup_test_directory()
 
-        # Clean up project from previous test run
-        try:
-            manifest_file = os.path.join(os.path.dirname(__file__), "manifest.yaml")
-            
-            print("🧹 Cleaning up existing test project...")
-            result = self.run_cli_command(
-                ["delete", "--targets", "test", "--manifest", manifest_file, "--force"]
-            )
-            if result["success"]:
-                print("✅ Project cleanup successful")
+        # Clean up project from previous test run - CRITICAL for connection tests
+        manifest_file = os.path.join(os.path.dirname(__file__), "manifest.yaml")
+        
+        print("🧹 Cleaning up existing test project...")
+        result = self.run_cli_command(
+            ["delete", "--targets", "test", "--manifest", manifest_file, "--force"]
+        )
+        if result["success"]:
+            print("✅ Delete command completed")
+        else:
+            print(f"⚠️ Delete command had issues: {result['output']}")
+        
+        # Verify project is actually deleted using DataZone API
+        import boto3
+        import time
+        
+        region = os.environ.get('DEV_DOMAIN_REGION', 'us-east-1')
+        datazone_client = boto3.client('datazone', region_name=region)
+        
+        # Find domain
+        domains = datazone_client.list_domains()
+        domain_id = None
+        for domain in domains.get('items', []):
+            domain_detail = datazone_client.get_domain(identifier=domain['id'])
+            tags = domain_detail.get('tags', {})
+            if tags.get('purpose') == 'smus-cicd-testing':
+                domain_id = domain['id']
+                break
+        
+        if domain_id:
+            # Wait for project to be deleted (max 60 seconds)
+            print("⏳ Verifying project deletion...")
+            for i in range(12):  # 12 * 5 = 60 seconds
+                projects = datazone_client.list_projects(
+                    domainIdentifier=domain_id,
+                    maxResults=50
+                )
+                project_exists = any(
+                    p.get('name') == 'connections-test-project' 
+                    for p in projects.get('items', [])
+                )
+                
+                if not project_exists:
+                    print("✅ Project deletion verified")
+                    break
+                    
+                if i < 11:
+                    print(f"  Waiting for project deletion... ({(i+1)*5}s)")
+                    time.sleep(5)
             else:
-                print(f"⚠️ Project cleanup had issues: {result['output']}")
-        except Exception as e:
-            print(f"⚠️ Could not clean up resources: {e}")
+                print("⚠️ Project still exists after 60s, continuing anyway")
+        else:
+            print("⚠️ Could not find test domain to verify deletion")
 
     def teardown_method(self, method):
         """Clean up test environment."""
@@ -44,7 +83,7 @@ class TestDataZoneConnectionsE2E(IntegrationTestBase):
         # Step 1: Deploy manifest (creates project and connections via bootstrap)
         print("\n=== Step 1: Deploy Manifest ===")
         result = self.run_cli_command(
-            ["deploy", "--manifest", manifest_file, "--stage", "test"]
+            ["deploy", "--manifest", manifest_file, "--targets", "test"]
         )
         assert result["success"], f"Deploy failed: {result['output']}"
         print("✅ Deployment successful")
@@ -52,7 +91,7 @@ class TestDataZoneConnectionsE2E(IntegrationTestBase):
         # Step 2: Verify connections were created
         print("\n=== Step 2: Verify Connections Created ===")
         result = self.run_cli_command(
-            ["describe", "--manifest", manifest_file, "--stage", "test", "--connect"]
+            ["describe", "--manifest", manifest_file, "--targets", "test", "--connect"]
         )
         assert result["success"], f"Describe failed: {result['output']}"
         
@@ -91,13 +130,13 @@ class TestDataZoneConnectionsE2E(IntegrationTestBase):
         # Deploy twice - second deploy should be idempotent
         print("\n=== First Deploy ===")
         result = self.run_cli_command(
-            ["deploy", "--manifest", manifest_file, "--stage", "test"]
+            ["deploy", "--manifest", manifest_file, "--targets", "test"]
         )
         assert result["success"], f"First deploy failed: {result['output']}"
         
         print("\n=== Second Deploy (Idempotency Test) ===")
         result = self.run_cli_command(
-            ["deploy", "--manifest", manifest_file, "--stage", "test"]
+            ["deploy", "--manifest", manifest_file, "--targets", "test"]
         )
         assert result["success"], f"Second deploy failed: {result['output']}"
         print("✅ Idempotent deployment successful")
@@ -113,14 +152,14 @@ class TestDataZoneConnectionsE2E(IntegrationTestBase):
         # First deploy
         print("\n=== First Deploy ===")
         result = self.run_cli_command(
-            ["deploy", "--manifest", manifest_file, "--stage", "test"]
+            ["deploy", "--manifest", manifest_file, "--targets", "test"]
         )
         assert result["success"], f"First deploy failed: {result['output']}"
         
         # TODO: Modify manifest to change MLflow ARN, then re-deploy
         # For now, just verify the connection exists
         result = self.run_cli_command(
-            ["describe", "--manifest", manifest_file, "--stage", "test", "--connect"]
+            ["describe", "--manifest", manifest_file, "--targets", "test", "--connect"]
         )
         assert result["success"], f"Describe failed: {result['output']}"
         assert "mlflow-experiments" in result["output"], "MLflow connection not found"
