@@ -2,6 +2,7 @@ import sys
 import boto3
 import time
 from awsglue.utils import getResolvedOptions
+from botocore.exceptions import ClientError
 
 args = getResolvedOptions(sys.argv, ['JOB_NAME', 'BUCKET_NAME', 'REGION_NAME', 'ROLES'])
 
@@ -28,33 +29,57 @@ tables = [
 print("Granting Lake Formation permissions...")
 for role_arn in roles:
     for db in databases:
-        lf.grant_permissions(
-            Principal={'DataLakePrincipalIdentifier': role_arn},
-            Resource={'Database': {'Name': db}},
-            Permissions=['DESCRIBE']
-        )
+        try:
+            lf.grant_permissions(
+                Principal={'DataLakePrincipalIdentifier': role_arn},
+                Resource={'Database': {'Name': db}},
+                Permissions=['DESCRIBE']
+            )
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'AccessDeniedException':
+                print(f"⚠️ WARNING: Could not grant database permissions to {role_arn} on {db}: {e.response['Error']['Message']}")
+            else:
+                raise
     for db, table in tables:
-        lf.grant_permissions(
-            Principal={'DataLakePrincipalIdentifier': role_arn},
-            Resource={'Table': {'DatabaseName': db, 'Name': table}},
-            Permissions=['DESCRIBE']
-        )
-        lf.grant_permissions(
-            Principal={'DataLakePrincipalIdentifier': role_arn},
-            Resource={'TableWithColumns': {'DatabaseName': db, 'Name': table, 'ColumnWildcard': {}}},
-            Permissions=['SELECT']
-        )
-    print(f"✓ Granted permissions to {role_arn}")
+        try:
+            lf.grant_permissions(
+                Principal={'DataLakePrincipalIdentifier': role_arn},
+                Resource={'Table': {'DatabaseName': db, 'Name': table}},
+                Permissions=['DESCRIBE']
+            )
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'AccessDeniedException':
+                print(f"⚠️ WARNING: Could not grant table DESCRIBE permissions to {role_arn} on {db}.{table}: {e.response['Error']['Message']}")
+            else:
+                raise
+        try:
+            lf.grant_permissions(
+                Principal={'DataLakePrincipalIdentifier': role_arn},
+                Resource={'TableWithColumns': {'DatabaseName': db, 'Name': table, 'ColumnWildcard': {}}},
+                Permissions=['SELECT']
+            )
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'AccessDeniedException':
+                print(f"⚠️ WARNING: Could not grant SELECT permissions to {role_arn} on {db}.{table}: {e.response['Error']['Message']}")
+            else:
+                raise
+    print(f"✓ Processed permissions for {role_arn}")
 
 # Grant IAM_ALLOWED_PRINCIPALS for QuickSight UI visibility
 print("Granting IAM_ALLOWED_PRINCIPALS permissions...")
 for db, table in tables:
-    lf.grant_permissions(
-        Principal={'DataLakePrincipalIdentifier': 'IAM_ALLOWED_PRINCIPALS'},
-        Resource={'Table': {'CatalogId': account_id, 'DatabaseName': db, 'Name': table}},
-        Permissions=['ALL']
-    )
-    print(f"✓ Granted IAM_ALLOWED_PRINCIPALS to {db}.{table}")
+    try:
+        lf.grant_permissions(
+            Principal={'DataLakePrincipalIdentifier': 'IAM_ALLOWED_PRINCIPALS'},
+            Resource={'Table': {'CatalogId': account_id, 'DatabaseName': db, 'Name': table}},
+            Permissions=['ALL']
+        )
+        print(f"✓ Granted IAM_ALLOWED_PRINCIPALS to {db}.{table}")
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'AccessDeniedException':
+            print(f"⚠️ WARNING: Could not grant IAM_ALLOWED_PRINCIPALS permissions on {db}.{table}: {e.response['Error']['Message']}")
+        else:
+            raise
 
 print("Validating data with Athena...")
 s3_output = f"s3://{args['BUCKET_NAME']}/athena-results/" if args['REGION_NAME'] == 'us-east-1' else f"s3://sagemaker-{args['REGION_NAME']}-{account_id}/athena-results/"
