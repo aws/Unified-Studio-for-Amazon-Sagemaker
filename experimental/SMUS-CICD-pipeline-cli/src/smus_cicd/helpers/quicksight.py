@@ -209,16 +209,56 @@ def import_dashboard(
             job_id = f"import-{timestamp}"
 
         # Build permissions for OverridePermissions (applies to all asset types)
-        asset_permissions = {}
+        dashboard_permissions = {}
+        datasource_permissions = {}
+        dataset_permissions = {}
+        
         if permissions:
             principals = []
-            actions = []
+            dashboard_actions = []
             for perm in permissions:
-                principals.append(perm["principal"])
-                actions.extend(perm["actions"])
-            # Remove duplicates from actions
-            actions = list(set(actions))
-            asset_permissions = {"Principals": principals, "Actions": actions}
+                # Expand wildcards in principal ARNs
+                expanded = expand_principal_wildcards(
+                    perm["principal"], aws_account_id, region
+                )
+                principals.extend(expanded)
+                dashboard_actions.extend(perm["actions"])
+            
+            # Remove duplicates
+            principals = list(set(principals))
+            dashboard_actions = list(set(dashboard_actions))
+            
+            # Build dashboard permissions
+            dashboard_permissions = {"Principals": principals, "Actions": dashboard_actions}
+            
+            # Use standard read/write permissions for DataSources and DataSets
+            datasource_permissions = {
+                "Principals": principals,
+                "Actions": [
+                    "quicksight:DescribeDataSource",
+                    "quicksight:DescribeDataSourcePermissions",
+                    "quicksight:PassDataSource",
+                    "quicksight:UpdateDataSource",
+                    "quicksight:DeleteDataSource",
+                    "quicksight:UpdateDataSourcePermissions"
+                ]
+            }
+            
+            dataset_permissions = {
+                "Principals": principals,
+                "Actions": [
+                    "quicksight:DescribeDataSet",
+                    "quicksight:DescribeDataSetPermissions",
+                    "quicksight:PassDataSet",
+                    "quicksight:DescribeIngestion",
+                    "quicksight:ListIngestions",
+                    "quicksight:UpdateDataSet",
+                    "quicksight:DeleteDataSet",
+                    "quicksight:CreateIngestion",
+                    "quicksight:CancelIngestion",
+                    "quicksight:UpdateDataSetPermissions"
+                ]
+            }
 
         import_params = {
             "AwsAccountId": aws_account_id,
@@ -226,10 +266,12 @@ def import_dashboard(
             "AssetBundleImportSource": {"Body": _download_bundle(bundle_url)},
             "FailureAction": "ROLLBACK",
             "OverridePermissions": {
-                "DataSources": [{"DataSourceIds": ["*"], "Permissions": asset_permissions}],
-                "DataSets": [{"DataSetIds": ["*"], "Permissions": asset_permissions}],
+                "DataSources": [
+                    {"DataSourceIds": ["*"], "Permissions": datasource_permissions}
+                ],
+                "DataSets": [{"DataSetIds": ["*"], "Permissions": dataset_permissions}],
                 "Dashboards": [
-                    {"DashboardIds": ["*"], "Permissions": asset_permissions}
+                    {"DashboardIds": ["*"], "Permissions": dashboard_permissions}
                 ],
             },
         }

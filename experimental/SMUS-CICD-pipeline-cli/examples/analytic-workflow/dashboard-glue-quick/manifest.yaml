@@ -75,9 +75,9 @@ stages:
         assets:
         - name: TotalDeathByCountry
           owners:
-          - arn:aws:quicksight:${TEST_DOMAIN_REGION:us-east-1}:*:user/default/Admin/*
+          - arn:aws:quicksight:${TEST_DOMAIN_REGION:us-east-1}:${AWS_ACCOUNT_ID}:user/default/Admin/*
           viewers:
-          - arn:aws:quicksight:${TEST_DOMAIN_REGION:us-east-1}:*:user/default/Admin/*
+          - arn:aws:quicksight:${TEST_DOMAIN_REGION:us-east-1}:${AWS_ACCOUNT_ID}:user/default/Admin/*
         overrideParameters:
           ResourceIdOverrideConfiguration:
             PrefixForAllResources: deployed-{stage.name}-covid-
