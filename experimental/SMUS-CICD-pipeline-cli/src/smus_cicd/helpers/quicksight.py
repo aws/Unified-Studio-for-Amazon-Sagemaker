@@ -228,7 +228,9 @@ def import_dashboard(
             "OverridePermissions": {
                 "DataSources": [{"DataSourceIds": ["*"], "Permissions": {}}],
                 "DataSets": [{"DataSetIds": ["*"], "Permissions": {}}],
-                "Dashboards": [{"DashboardIds": ["*"], "Permissions": dashboard_permissions}],
+                "Dashboards": [
+                    {"DashboardIds": ["*"], "Permissions": dashboard_permissions}
+                ],
             },
         }
 

@@ -2184,7 +2184,9 @@ def _deploy_quicksight_dashboards(
 
                 # Permissions already collected and applied during import
                 # Now grant additional dataset and data source permissions
-                typer.echo(f"🔍 Granting additional permissions to datasets and data sources")
+                typer.echo(
+                    f"🔍 Granting additional permissions to datasets and data sources"
+                )
                 if permissions:
                     # Grant dashboard permissions (redundant but ensures consistency)
                     grant_dashboard_permissions(

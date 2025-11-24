@@ -84,3 +84,4 @@ stages:
 tests:
   folder: examples/analytic-workflow/dashboard-glue-quick/app_tests/
 # Trigger workflow
+
