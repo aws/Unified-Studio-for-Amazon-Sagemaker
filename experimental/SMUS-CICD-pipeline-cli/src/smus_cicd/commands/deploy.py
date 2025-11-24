@@ -1140,16 +1140,23 @@ def _deploy_git_from_bundle(
                 typer.echo("⚠️  No repositories directory found in bundle")
                 return None, None
 
+            typer.echo(f"🔍 DEBUG: Found repositories directory: {repositories_dir}")
+            typer.echo(f"🔍 DEBUG: git_config={git_config}")
+            typer.echo(f"🔍 DEBUG: target_dir={target_dir}")
+
             deployed_files = []
             connection = _get_project_connection(project_name, git_config, config)
+            typer.echo(f"🔍 DEBUG: connection={connection}")
             region = config.get("region", "us-east-1")
 
             # Deploy all repositories
             for repo_dir in repositories_dir.iterdir():
                 if repo_dir.is_dir():
+                    typer.echo(f"🔍 DEBUG: Deploying repo_dir={repo_dir}")
                     success = deployment.deploy_files(
                         str(repo_dir), connection, target_dir, region, str(repo_dir)
                     )
+                    typer.echo(f"🔍 DEBUG: deploy_files returned success={success}")
                     if success:
                         deployed_files.extend(_get_files_list(str(repo_dir)))
 

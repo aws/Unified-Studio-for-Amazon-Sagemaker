@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - amirbo_feature_branch
-      - main
+      # - main
       - test
       - amirb_feature_branch
     paths:

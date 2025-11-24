@@ -32,20 +32,6 @@ stages:
       region: ${DEV_DOMAIN_REGION:us-east-2}
     project:
       name: dev-marketing
-    deployment_configuration:
-      quicksight:
-        items:
-        - name: TotalDeathByCountry
-          owners:
-          - arn:aws:quicksight:${DEV_DOMAIN_REGION:us-east-2}:*:user/default/Admin/*
-          viewers:
-          - arn:aws:quicksight:${DEV_DOMAIN_REGION:us-east-2}:*:user/default/Admin/*
-        overrideParameters:
-          ResourceIdOverrideConfiguration:
-            PrefixForAllResources: deployed-dev-covid-
-          Dashboards:
-          - DashboardId: e0772d4e-bd69-444e-a421-cb3f165dbad8
-            Name: TotalDeathByCountry-dev
   test:
     stage: TEST
     domain:
