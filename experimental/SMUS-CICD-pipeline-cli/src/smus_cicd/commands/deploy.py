@@ -1150,9 +1150,7 @@ def _deploy_git_from_bundle(
                 return None, None
 
             # Get repository name from git_config
-            repo_name = (
-                git_config.name if hasattr(git_config, "name") else None
-            )
+            repo_name = git_config.name if hasattr(git_config, "name") else None
             if not repo_name:
                 typer.echo("⚠️  Git config missing 'name' field")
                 return None, None
