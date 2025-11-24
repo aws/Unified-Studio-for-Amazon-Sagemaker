@@ -509,13 +509,16 @@ def _deploy_bundle_to_target(
 
             storage_results.append(result)
 
-        # Deploy git items
+        # Deploy git items (only if bundle exists)
         git_results = []
-        for git_config in git_configs:
-            result = _deploy_git_item(
-                bundle_path, git_config, target_config.project.name, config
-            )
-            git_results.append(result)
+        if bundle_path:
+            for git_config in git_configs:
+                result = _deploy_git_item(
+                    bundle_path, git_config, target_config.project.name, config
+                )
+                git_results.append(result)
+        elif git_configs:
+            typer.echo("⚠️ Skipping git deployment - no bundle available")
 
         # Display deployment summary
         _display_deployment_summary_new(
