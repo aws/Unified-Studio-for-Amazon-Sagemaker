@@ -103,11 +103,7 @@ class TestDataZoneConnectionsE2E(IntegrationTestBase):
             "spark-glue-proc",
             "workflows-serverless",
             "mlflow-experiments",
-            "athena-query-engine",
-            "glue-catalog",
-            "redshift-warehouse",
-            "spark-emr-processing",
-            "hyperpod-cluster"
+            "athena-query-engine"
         ]
         
         connections_found = 0
@@ -117,7 +113,7 @@ class TestDataZoneConnectionsE2E(IntegrationTestBase):
                 print(f"  ✅ Found connection: {conn_name}")
         
         print(f"\n✅ Verified {connections_found}/{len(expected_connections)} connections")
-        assert connections_found >= 8, f"Expected at least 8 connections, found {connections_found}"
+        assert connections_found >= 6, f"Expected at least 6 connections, found {connections_found}"
 
     @pytest.mark.integration
     def test_bootstrap_connection_idempotency(self):

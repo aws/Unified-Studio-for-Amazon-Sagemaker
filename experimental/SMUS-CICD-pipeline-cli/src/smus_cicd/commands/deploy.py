@@ -1149,7 +1149,7 @@ def _deploy_git_from_bundle(
                 typer.echo("⚠️  No repositories directory found in bundle")
                 return None, None
 
-            # Get repository name from git_config
+            # Get repository name from git_config (GitTargetConfig has 'name' field)
             repo_name = git_config.name if hasattr(git_config, "name") else None
             if not repo_name:
                 typer.echo("⚠️  Git config missing 'name' field")
@@ -1192,13 +1192,13 @@ def _deploy_git_direct(
     """Clone git repository directly and deploy to S3."""
     import subprocess
 
-    # Get repository name from git_config
+    # Get repository name from git_config (GitTargetConfig has 'name' field)
     repo_name = git_config.name if hasattr(git_config, "name") else None
     if not repo_name:
         typer.echo("⚠️  Git config missing 'name' field")
         return None, None
 
-    # Find matching content.git entry by name
+    # Find matching content.git entry by repository name
     git_content = None
     if manifest.content and manifest.content.git:
         git_content = next(

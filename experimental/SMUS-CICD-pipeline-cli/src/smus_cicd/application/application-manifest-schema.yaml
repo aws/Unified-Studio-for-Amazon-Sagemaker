@@ -39,6 +39,20 @@ properties:
               type: string
               format: uri
               description: "Git repository URL"
+            branch:
+              type: string
+              description: "Git branch to clone (default: main)"
+              default: "main"
+            include:
+              type: array
+              description: "File patterns to include"
+              items:
+                type: string
+            exclude:
+              type: array
+              description: "File patterns to exclude"
+              items:
+                type: string
           additionalProperties: false
       catalog:
         type: object

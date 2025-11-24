@@ -81,14 +81,23 @@ class StorageConfig:
 
 
 @dataclass
-class GitConfig:
-    """Git repository configuration."""
+class GitContentConfig:
+    """Git repository source configuration (content.git)."""
 
     repository: str
     url: str
     branch: str = "main"
     include: List[str] = field(default_factory=list)
     exclude: List[str] = field(default_factory=list)
+
+
+@dataclass
+class GitTargetConfig:
+    """Git repository deployment configuration (deployment_configuration.git)."""
+
+    name: str
+    connectionName: str
+    targetDirectory: str = ""
 
 
 @dataclass
@@ -110,7 +119,7 @@ class ContentConfig:
     """Application content configuration."""
 
     storage: List[StorageConfig] = field(default_factory=list)
-    git: List[GitConfig] = field(default_factory=list)
+    git: List[GitContentConfig] = field(default_factory=list)
     catalog: Optional[CatalogConfig] = None
     quicksight: List[QuickSightDashboardConfig] = field(default_factory=list)
     workflows: List[Dict[str, Any]] = field(default_factory=list)
@@ -151,7 +160,7 @@ class DeploymentConfiguration:
     """Deployment configuration for a stage."""
 
     storage: List[StorageConfig] = field(default_factory=list)
-    git: List[GitConfig] = field(default_factory=list)
+    git: List[GitTargetConfig] = field(default_factory=list)
     catalog: Optional[Dict[str, Any]] = None
     quicksight: Optional[Dict[str, Any]] = None
 
@@ -284,7 +293,7 @@ class ApplicationManifest:
         git_configs = []
         for git_data in content_data.get("git", []):
             git_configs.append(
-                GitConfig(
+                GitContentConfig(
                     repository=git_data.get("repository", ""),
                     url=git_data.get("url", ""),
                     branch=git_data.get("branch", "main"),
@@ -423,12 +432,10 @@ class ApplicationManifest:
                 git_configs = []
                 for git_data in btc_data.get("git", []):
                     git_configs.append(
-                        GitConfig(
-                            repository=git_data.get("repository", ""),
-                            url=git_data.get("url", ""),
-                            branch=git_data.get("branch", "main"),
-                            include=git_data.get("include", []),
-                            exclude=git_data.get("exclude", []),
+                        GitTargetConfig(
+                            name=git_data.get("name", ""),
+                            connectionName=git_data.get("connectionName", ""),
+                            targetDirectory=git_data.get("targetDirectory", ""),
                         )
                     )
 

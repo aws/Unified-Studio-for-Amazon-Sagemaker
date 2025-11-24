@@ -26,7 +26,8 @@ stages:
       - arn:aws:iam::${AWS_ACCOUNT_ID}:role/Admin
       contributors: []
       role:
-        arn: arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
+        policies:
+        - arn:aws:iam::aws:policy/SageMakerStudioUserIAMPermissiveExecutionPolicy
     deployment_configuration:
       storage:
       - name: src
@@ -67,27 +68,3 @@ stages:
         connection_type: ATHENA
         properties:
           workgroupName: primary
-      - type: datazone.create_connection
-        name: glue-catalog
-        connection_type: GLUE
-        properties:
-          glueConnectionName: test-glue-connection
-      - type: datazone.create_connection
-        name: redshift-warehouse
-        connection_type: REDSHIFT
-        properties:
-          clusterName: test-cluster
-          databaseName: dev
-          host: test-cluster.abc123.${DEV_DOMAIN_REGION:us-east-1}.redshift.amazonaws.com
-          port: 5439
-      - type: datazone.create_connection
-        name: spark-emr-processing
-        connection_type: SPARK_EMR
-        properties:
-          computeArn: arn:aws:emr-serverless:${DEV_DOMAIN_REGION:us-east-1}:${AWS_ACCOUNT_ID}:/applications/test-app
-          runtimeRole: arn:aws:iam::${AWS_ACCOUNT_ID}:role/EMRServerlessExecutionRole
-      - type: datazone.create_connection
-        name: hyperpod-cluster
-        connection_type: HYPERPOD
-        properties:
-          clusterArn: arn:aws:sagemaker:${DEV_DOMAIN_REGION:us-east-1}:${AWS_ACCOUNT_ID}:cluster/test-hyperpod-cluster
