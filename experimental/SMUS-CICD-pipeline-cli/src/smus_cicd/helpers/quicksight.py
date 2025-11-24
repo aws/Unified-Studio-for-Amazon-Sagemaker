@@ -212,7 +212,7 @@ def import_dashboard(
         dashboard_permissions = {}
         datasource_permissions = {}
         dataset_permissions = {}
-        
+
         if permissions:
             principals = []
             dashboard_actions = []
@@ -223,14 +223,17 @@ def import_dashboard(
                 )
                 principals.extend(expanded)
                 dashboard_actions.extend(perm["actions"])
-            
+
             # Remove duplicates
             principals = list(set(principals))
             dashboard_actions = list(set(dashboard_actions))
-            
+
             # Build dashboard permissions
-            dashboard_permissions = {"Principals": principals, "Actions": dashboard_actions}
-            
+            dashboard_permissions = {
+                "Principals": principals,
+                "Actions": dashboard_actions,
+            }
+
             # Use standard read/write permissions for DataSources and DataSets
             datasource_permissions = {
                 "Principals": principals,
@@ -240,10 +243,10 @@ def import_dashboard(
                     "quicksight:PassDataSource",
                     "quicksight:UpdateDataSource",
                     "quicksight:DeleteDataSource",
-                    "quicksight:UpdateDataSourcePermissions"
-                ]
+                    "quicksight:UpdateDataSourcePermissions",
+                ],
             }
-            
+
             dataset_permissions = {
                 "Principals": principals,
                 "Actions": [
@@ -256,8 +259,8 @@ def import_dashboard(
                     "quicksight:DeleteDataSet",
                     "quicksight:CreateIngestion",
                     "quicksight:CancelIngestion",
-                    "quicksight:UpdateDataSetPermissions"
-                ]
+                    "quicksight:UpdateDataSetPermissions",
+                ],
             }
 
         import_params = {
