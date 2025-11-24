@@ -178,6 +178,7 @@ def import_dashboard(
     region: str,
     override_parameters: Optional[Dict[str, Any]] = None,
     application_name: Optional[str] = None,
+    permissions: Optional[List[Dict[str, Any]]] = None,
 ) -> str:
     """
     Import QuickSight dashboard from asset bundle.
@@ -188,6 +189,7 @@ def import_dashboard(
         region: AWS region
         override_parameters: Optional parameters to override
         application_name: Optional application name to include in job ID
+        permissions: Optional list of permissions with 'principal' and 'actions' keys
 
     Returns:
         Job ID for the import operation
@@ -206,6 +208,18 @@ def import_dashboard(
         else:
             job_id = f"import-{timestamp}"
 
+        # Build dashboard permissions for OverridePermissions
+        dashboard_permissions = {}
+        if permissions:
+            principals = []
+            actions = []
+            for perm in permissions:
+                principals.append(perm["principal"])
+                actions.extend(perm["actions"])
+            # Remove duplicates from actions
+            actions = list(set(actions))
+            dashboard_permissions = {"Principals": principals, "Actions": actions}
+
         import_params = {
             "AwsAccountId": aws_account_id,
             "AssetBundleImportJobId": job_id,
@@ -214,7 +228,7 @@ def import_dashboard(
             "OverridePermissions": {
                 "DataSources": [{"DataSourceIds": ["*"], "Permissions": {}}],
                 "DataSets": [{"DataSetIds": ["*"], "Permissions": {}}],
-                "Dashboards": [{"DashboardIds": ["*"], "Permissions": {}}],
+                "Dashboards": [{"DashboardIds": ["*"], "Permissions": dashboard_permissions}],
             },
         }
 
