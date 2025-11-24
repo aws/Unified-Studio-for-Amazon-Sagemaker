@@ -46,15 +46,15 @@ stages:
       - arn:aws:iam::${AWS_ACCOUNT_ID}:role/Admin
     environment_variables:
       S3_PREFIX: test
-      AWS_REGION: ${TEST_DOMAIN_REGION:us-east-2}
+      AWS_REGION: ${TEST_DOMAIN_REGION:us-east-1}
       GRANT_TO: Admin,service-role/aws-quicksight-service-role-v0
     bootstrap:
       actions:
-      - type: workflow.create
-        workflowName: covid_dashboard_glue_quick_pipeline
-      - type: workflow.run
-        workflowName: covid_dashboard_glue_quick_pipeline
-        trailLogs: true
+      # - type: workflow.create
+      #   workflowName: covid_dashboard_glue_quick_pipeline
+      # - type: workflow.run
+      #   workflowName: covid_dashboard_glue_quick_pipeline
+      #   trailLogs: true
       - type: quicksight.refresh_dataset
         refreshScope: IMPORTED
         ingestionType: FULL_REFRESH
