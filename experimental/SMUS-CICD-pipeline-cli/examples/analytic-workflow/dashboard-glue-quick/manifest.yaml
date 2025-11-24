@@ -81,9 +81,6 @@ stages:
         overrideParameters:
           ResourceIdOverrideConfiguration:
             PrefixForAllResources: deployed-{stage.name}-covid-
-          Dashboards:
-          - DashboardId: e0772d4e-bd69-444e-a421-cb3f165dbad8
-            Name: TotalDeathByCountry-{stage.name}
 tests:
   folder: examples/analytic-workflow/dashboard-glue-quick/app_tests/
 # Trigger workflow
