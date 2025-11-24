@@ -510,11 +510,10 @@ def _deploy_bundle_to_target(
         # Deploy git items
         git_results = []
         for git_config in git_configs:
-            if bundle_path:
-                result = _deploy_git_item(
-                    bundle_path, git_config, target_config.project.name, config
-                )
-                git_results.append(result)
+            result = _deploy_git_item(
+                bundle_path, git_config, target_config.project.name, config
+            )
+            git_results.append(result)
 
         # Display deployment summary
         _display_deployment_summary_new(
