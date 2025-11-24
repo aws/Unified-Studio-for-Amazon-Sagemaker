@@ -208,8 +208,8 @@ def import_dashboard(
         else:
             job_id = f"import-{timestamp}"
 
-        # Build dashboard permissions for OverridePermissions
-        dashboard_permissions = {}
+        # Build permissions for OverridePermissions (applies to all asset types)
+        asset_permissions = {}
         if permissions:
             principals = []
             actions = []
@@ -218,7 +218,7 @@ def import_dashboard(
                 actions.extend(perm["actions"])
             # Remove duplicates from actions
             actions = list(set(actions))
-            dashboard_permissions = {"Principals": principals, "Actions": actions}
+            asset_permissions = {"Principals": principals, "Actions": actions}
 
         import_params = {
             "AwsAccountId": aws_account_id,
@@ -226,10 +226,10 @@ def import_dashboard(
             "AssetBundleImportSource": {"Body": _download_bundle(bundle_url)},
             "FailureAction": "ROLLBACK",
             "OverridePermissions": {
-                "DataSources": [{"DataSourceIds": ["*"], "Permissions": {}}],
-                "DataSets": [{"DataSetIds": ["*"], "Permissions": {}}],
+                "DataSources": [{"DataSourceIds": ["*"], "Permissions": asset_permissions}],
+                "DataSets": [{"DataSetIds": ["*"], "Permissions": asset_permissions}],
                 "Dashboards": [
-                    {"DashboardIds": ["*"], "Permissions": dashboard_permissions}
+                    {"DashboardIds": ["*"], "Permissions": asset_permissions}
                 ],
             },
         }
