@@ -83,3 +83,4 @@ stages:
             PrefixForAllResources: deployed-{stage.name}-covid-
 tests:
   folder: examples/analytic-workflow/dashboard-glue-quick/app_tests/
+# Trigger workflow
