@@ -530,7 +530,7 @@ definitions:
             type: object
             description: "QuickSight deployment configuration for this stage"
             properties:
-              items:
+              assets:
                 type: array
                 description: "Per-dashboard permissions configuration"
                 items:

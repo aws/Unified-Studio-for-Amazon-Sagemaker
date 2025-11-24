@@ -228,6 +228,16 @@ A deployment environment (dev, test, prod) mapped to a SageMaker Unified Studio 
 - Environment-specific parameters
 - Optional branch mapping for git-based deployments
 
+### Stage-to-Project Mapping
+
+Each application stage deploys to a dedicated SageMaker Unified Studio (SMUS) project. A project can host a single application or multiple applications depending on your architecture and CI/CD methodology. Stage projects are independent entities with their own governance:
+
+- **Ownership & Access:** Each stage project has its own set of owners and contributors, which may differ from the development project. Production projects typically have restricted access compared to development environments.
+- **Multi-Domain & Multi-Region:** Stage projects can belong to different SMUS domains, AWS accounts, and regions. For example, your dev stage might deploy to a development domain in us-east-1, while prod deploys to a production domain in eu-west-1.
+- **Flexible Architecture:** Organizations can choose between dedicated projects per application (isolation) or shared projects hosting multiple applications (consolidation), based on security, compliance, and operational requirements.
+
+This separation enables true environment isolation with independent access controls, compliance boundaries, and regional data residency requirements.
+
 ### Workflow
 Orchestration logic that executes your application. Workflows serve two purposes:
 

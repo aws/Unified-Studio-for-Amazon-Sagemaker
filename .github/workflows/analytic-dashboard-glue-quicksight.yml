@@ -3,10 +3,9 @@ name: Deploy Dashboard Glue QuickSight
 on:
   push:
     branches:
-      - amirbo_feature_branch
-      # - main
+      - main
       - test
-      - amirb_feature_branch
+      - amirbo_feature_branch
     paths:
       - 'experimental/SMUS-CICD-pipeline-cli/examples/analytic-workflow/dashboard-glue-quick/**'
   workflow_dispatch:

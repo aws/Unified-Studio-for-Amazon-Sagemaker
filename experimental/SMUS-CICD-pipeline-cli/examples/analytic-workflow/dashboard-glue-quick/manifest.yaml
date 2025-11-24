@@ -46,7 +46,7 @@ stages:
       - arn:aws:iam::${AWS_ACCOUNT_ID}:role/Admin
     environment_variables:
       S3_PREFIX: test
-      AWS_REGION: ${TEST_DOMAIN_REGION:us-east-2}
+      AWS_REGION: ${TEST_DOMAIN_REGION:us-east-1}
       GRANT_TO: Admin,service-role/aws-quicksight-service-role-v0
     bootstrap:
       actions:
@@ -72,14 +72,15 @@ stages:
         connectionName: default.s3_shared
         targetDirectory: repos
       quicksight:
-        items:
+        assets:
         - name: TotalDeathByCountry
           owners:
-          - arn:aws:quicksight:${TEST_DOMAIN_REGION:us-east-1}:*:user/default/Admin/*
+          - arn:aws:quicksight:${TEST_DOMAIN_REGION:us-east-1}:${AWS_ACCOUNT_ID}:user/default/Admin/*
           viewers:
-          - arn:aws:quicksight:${TEST_DOMAIN_REGION:us-east-1}:*:user/default/Admin/*
+          - arn:aws:quicksight:${TEST_DOMAIN_REGION:us-east-1}:${AWS_ACCOUNT_ID}:user/default/Admin/*
         overrideParameters:
           ResourceIdOverrideConfiguration:
             PrefixForAllResources: deployed-{stage.name}-covid-
 tests:
   folder: examples/analytic-workflow/dashboard-glue-quick/app_tests/
+

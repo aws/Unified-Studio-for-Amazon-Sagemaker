@@ -2044,12 +2044,72 @@ def _deploy_quicksight_dashboards(
                     f"🔍 Resolved override params: {json.dumps(override_params, indent=2)}"
                 )
 
+            # Collect permissions from deployment_configuration.quicksight.assets BEFORE import
+            owners = []
+            viewers = []
+            permissions = []
+
+            if qs_config:
+                assets = (
+                    qs_config.get("assets", [])
+                    if isinstance(qs_config, dict)
+                    else getattr(qs_config, "assets", [])
+                )
+                # Find matching asset by dashboard name
+                for item in assets:
+                    item_name = (
+                        item.get("name")
+                        if isinstance(item, dict)
+                        else getattr(item, "name", None)
+                    )
+                    if item_name == dashboard_name:
+                        if isinstance(item, dict):
+                            owners = item.get("owners", []) or []
+                            viewers = item.get("viewers", []) or []
+                        else:
+                            owners = getattr(item, "owners", []) or []
+                            viewers = getattr(item, "viewers", []) or []
+                        break
+
+                typer.echo(f"🔍 Dashboard permissions from deployment_configuration:")
+                typer.echo(f"    Owners: {owners}")
+                typer.echo(f"    Viewers: {viewers}")
+
+                # Build permissions list for import
+                principal_actions = {}
+                for owner in owners:
+                    principal_actions[owner] = [
+                        "quicksight:DescribeDashboard",
+                        "quicksight:ListDashboardVersions",
+                        "quicksight:UpdateDashboardPermissions",
+                        "quicksight:QueryDashboard",
+                        "quicksight:UpdateDashboard",
+                        "quicksight:DeleteDashboard",
+                        "quicksight:UpdateDashboardPublishedVersion",
+                        "quicksight:DescribeDashboardPermissions",
+                    ]
+
+                for viewer in viewers:
+                    if viewer not in principal_actions:
+                        principal_actions[viewer] = [
+                            "quicksight:DescribeDashboard",
+                            "quicksight:ListDashboardVersions",
+                            "quicksight:QueryDashboard",
+                        ]
+
+                # Convert to permissions list
+                for principal, actions in principal_actions.items():
+                    permissions.append({"principal": principal, "actions": actions})
+
+                typer.echo(f"🔍 Total permissions for import: {len(permissions)}")
+
             job_id = import_dashboard(
                 bundle_path,
                 aws_account_id,
                 region,
                 override_params,
                 application_name=manifest.application_name,
+                permissions=permissions,
             )
             result = poll_import_job(job_id, aws_account_id, region)
 
@@ -2122,71 +2182,21 @@ def _deploy_quicksight_dashboards(
                 except Exception as e:
                     typer.echo(f"      ⚠️  Could not list data sources: {e}")
 
-                # Get permissions from deployment_configuration.quicksight.items
-                owners = []
-                viewers = []
-
-                if qs_config:
-                    items = (
-                        qs_config.get("items", [])
-                        if isinstance(qs_config, dict)
-                        else getattr(qs_config, "items", [])
-                    )
-                    # Find matching item by dashboard name
-                    for item in items:
-                        item_name = (
-                            item.get("name")
-                            if isinstance(item, dict)
-                            else getattr(item, "name", None)
-                        )
-                        if item_name == dashboard_name:
-                            if isinstance(item, dict):
-                                owners = item.get("owners", []) or []
-                                viewers = item.get("viewers", []) or []
-                            else:
-                                owners = getattr(item, "owners", []) or []
-                                viewers = getattr(item, "viewers", []) or []
-                            break
-
-                typer.echo(f"🔍 Dashboard permissions from deployment_configuration:")
-                typer.echo(f"    Owners: {owners}")
-                typer.echo(f"    Viewers: {viewers}")
-
-                # Track principals to avoid duplicates (owners take precedence over viewers)
-                principal_actions = {}
-                permissions = []
-
-                for owner in owners:
-                    principal_actions[owner] = [
-                        "quicksight:DescribeDashboard",
-                        "quicksight:ListDashboardVersions",
-                        "quicksight:UpdateDashboardPermissions",
-                        "quicksight:QueryDashboard",
-                        "quicksight:UpdateDashboard",
-                        "quicksight:DeleteDashboard",
-                        "quicksight:UpdateDashboardPublishedVersion",
-                        "quicksight:DescribeDashboardPermissions",
-                    ]
-
-                for viewer in viewers:
-                    # Only add viewer if not already an owner
-                    if viewer not in principal_actions:
-                        principal_actions[viewer] = [
-                            "quicksight:DescribeDashboard",
-                            "quicksight:ListDashboardVersions",
-                            "quicksight:QueryDashboard",
-                        ]
-
-                # Convert to permissions list
-                for principal, actions in principal_actions.items():
-                    permissions.append({"principal": principal, "actions": actions})
-
-                typer.echo(f"🔍 Total permissions to grant: {len(permissions)}")
+                # Permissions already collected and applied during import
+                # Now grant additional dataset and data source permissions
+                typer.echo(
+                    f"🔍 Granting additional permissions to datasets and data sources"
+                )
                 if permissions:
-                    # Grant dashboard permissions
+                    # Grant dashboard permissions (redundant but ensures consistency)
                     grant_dashboard_permissions(
                         imported_dashboard_id, aws_account_id, region, permissions
                     )
+
+                    # Build principal_actions map for dataset/datasource permissions
+                    principal_actions = {}
+                    for perm in permissions:
+                        principal_actions[perm["principal"]] = perm["actions"]
 
                     # Grant dataset permissions
                     for dataset_id in imported_dataset_ids:
