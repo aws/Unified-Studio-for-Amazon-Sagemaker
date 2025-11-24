@@ -1,6 +1,7 @@
 """Deploy command implementation."""
 
 import os
+import shutil
 import tempfile
 import zipfile
 from pathlib import Path
@@ -432,7 +433,10 @@ def _deploy_bundle_to_target(
     # Update config with domain info
     config = build_domain_config(target_config)
 
-    # Determine if we need a bundle (check if any storage items have connectionName)
+    # Build target info for events (needed for both bundle and exception handling)
+    target_info = build_target_info(stage_name, target_config)
+
+    # Determine if we need a bundle (check storage items with connectionName or git repos)
     has_bundle_items = any(
         s.connectionName
         for s in (
@@ -440,7 +444,7 @@ def _deploy_bundle_to_target(
             if manifest.content and manifest.content.storage
             else []
         )
-    )
+    ) or bool(manifest.content and manifest.content.git)
 
     bundle_path = None
     if has_bundle_items:
@@ -459,7 +463,6 @@ def _deploy_bundle_to_target(
         if emitter:
             from ..helpers.monitoring import build_bundle_info
 
-            target_info = build_target_info(stage_name, target_config)
             bundle_info = build_bundle_info(bundle_path)
             emitter.bundle_upload_started(
                 manifest.application_name, target_info, bundle_info, metadata
@@ -511,10 +514,16 @@ def _deploy_bundle_to_target(
         git_results = []
         for git_config in git_configs:
             if bundle_path:
+                # Deploy from bundle
                 result = _deploy_git_item(
                     bundle_path, git_config, target_config.project.name, config
                 )
-                git_results.append(result)
+            else:
+                # Clone directly and deploy
+                result = _deploy_git_direct(
+                    git_config, manifest, target_config.project.name, config
+                )
+            git_results.append(result)
 
         # Display deployment summary
         _display_deployment_summary_new(
@@ -1140,18 +1149,30 @@ def _deploy_git_from_bundle(
                 typer.echo("⚠️  No repositories directory found in bundle")
                 return None, None
 
+            # Get repository name from git_config (GitTargetConfig has 'name' field)
+            repo_name = git_config.name if hasattr(git_config, "name") else None
+            if not repo_name:
+                typer.echo("⚠️  Git config missing 'name' field")
+                return None, None
+
+            # Find matching repository directory
+            repo_path = repositories_dir / repo_name
+            if not repo_path.exists():
+                typer.echo(f"⚠️  Repository '{repo_name}' not found in bundle")
+                return None, None
+
+            typer.echo(f"Deploying git repository '{repo_name}' to {target_dir}...")
+
             deployed_files = []
             connection = _get_project_connection(project_name, git_config, config)
             region = config.get("region", "us-east-1")
 
-            # Deploy all repositories
-            for repo_dir in repositories_dir.iterdir():
-                if repo_dir.is_dir():
-                    success = deployment.deploy_files(
-                        str(repo_dir), connection, target_dir, region, str(repo_dir)
-                    )
-                    if success:
-                        deployed_files.extend(_get_files_list(str(repo_dir)))
+            # Deploy this repository
+            success = deployment.deploy_files(
+                str(repo_path), connection, target_dir, region, str(repo_path)
+            )
+            if success:
+                deployed_files.extend(_get_files_list(str(repo_path)))
 
             s3_uri = connection.get("s3Uri", "")
             return deployed_files if deployed_files else None, s3_uri
@@ -1160,6 +1181,83 @@ def _deploy_git_from_bundle(
             os.unlink(local_bundle_path)
 
     return None, None
+
+
+def _deploy_git_direct(
+    git_config: Dict[str, Any],
+    manifest: ApplicationManifest,
+    project_name: str,
+    config: Dict[str, Any],
+) -> Tuple[Optional[List[str]], Optional[str]]:
+    """Clone git repository directly and deploy to S3."""
+    import subprocess
+
+    # Get repository name from git_config (GitTargetConfig has 'name' field)
+    repo_name = git_config.name if hasattr(git_config, "name") else None
+    if not repo_name:
+        typer.echo("⚠️  Git config missing 'name' field")
+        return None, None
+
+    # Find matching content.git entry by repository name
+    git_content = None
+    if manifest.content and manifest.content.git:
+        git_content = next(
+            (g for g in manifest.content.git if g.repository == repo_name),
+            None,
+        )
+
+    if not git_content or not git_content.url:
+        typer.echo(f"⚠️  No git URL found for repository '{repo_name}'")
+        return None, None
+
+    typer.echo(f"Cloning git repository '{repo_name}' from {git_content.url}...")
+
+    try:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            clone_path = os.path.join(temp_dir, repo_name)
+
+            # Clone repository
+            subprocess.run(
+                ["git", "clone", "--depth", "1", git_content.url, clone_path],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=180,
+            )
+
+            # Remove .git directory
+            git_dir = os.path.join(clone_path, ".git")
+            if os.path.exists(git_dir):
+                shutil.rmtree(git_dir)
+
+            typer.echo(f"Deploying cloned repository to S3...")
+
+            # Deploy files
+            connection = _get_project_connection(project_name, git_config, config)
+            target_dir = (
+                git_config.targetDirectory
+                if hasattr(git_config, "targetDirectory")
+                else ""
+            )
+            region = config.get("region", "us-east-1")
+
+            success = deployment.deploy_files(
+                clone_path, connection, target_dir, region, clone_path
+            )
+
+            deployed_files = []
+            if success:
+                deployed_files.extend(_get_files_list(clone_path))
+
+            s3_uri = connection.get("s3Uri", "")
+            return deployed_files if deployed_files else None, s3_uri
+
+    except subprocess.TimeoutExpired:
+        typer.echo("❌ Git clone timed out after 180 seconds", err=True)
+        return None, None
+    except Exception as e:
+        typer.echo(f"❌ Error cloning git repository: {str(e)}", err=True)
+        return None, None
 
 
 def _display_deployment_summary_new(

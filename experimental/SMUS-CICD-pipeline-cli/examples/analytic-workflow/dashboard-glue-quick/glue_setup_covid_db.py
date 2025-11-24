@@ -9,8 +9,8 @@ args = getResolvedOptions(sys.argv, ['JOB_NAME', 'BUCKET_NAME', 'REGION_NAME'])
 glue_client = boto3.client('glue', region_name=args['REGION_NAME'])
 
 bucket = args['BUCKET_NAME']
-# Git repo cloned to 'repos/', CSV files are in repo's 'data/data/' subdirectory
-s3_location = f's3://{bucket}/shared/repos/data/data/'
+# Git repo cloned to 'repos/', CSV files are in repo's 'data/' subdirectory
+s3_location = f's3://{bucket}/shared/repos/data/'
 
 print(f"Setting up COVID-19 database and table")
 print(f"Data location: {s3_location}")

@@ -70,8 +70,8 @@ jobs:
       run: |
         cd experimental/SMUS-CICD-pipeline-cli/tests/integration
         
-        # Temporarily only run basic_app test
-        test_dirs='["basic_app"]'
+        # Run basic_app, connections_app, and bundle_zip_deploy tests
+        test_dirs='["basic_app", "connections_app", "bundle_zip_deploy"]'
         
         echo "test-dirs=$test_dirs" >> $GITHUB_OUTPUT
         echo "Found tests: $test_dirs"

@@ -20,11 +20,14 @@ stages:
     project:
       name: connections-test-project
       create: true
-      profile_name: All capabilities
       owners:
       - Eng1
+      - arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
       - arn:aws:iam::${AWS_ACCOUNT_ID}:role/Admin
       contributors: []
+      role:
+        policies:
+        - arn:aws:iam::aws:policy/SageMakerStudioUserIAMPermissiveExecutionPolicy
     deployment_configuration:
       storage:
       - name: src
@@ -60,3 +63,8 @@ stages:
         connection_type: MLFLOW
         properties:
           trackingServerArn: arn:aws:sagemaker:${DEV_DOMAIN_REGION:us-east-2}:${AWS_ACCOUNT_ID}:mlflow-tracking-server/${MLFLOW_TRACKING_SERVER_NAME:smus-integration-mlflow-use2}
+      - type: datazone.create_connection
+        name: athena-query-engine
+        connection_type: ATHENA
+        properties:
+          workgroupName: primary

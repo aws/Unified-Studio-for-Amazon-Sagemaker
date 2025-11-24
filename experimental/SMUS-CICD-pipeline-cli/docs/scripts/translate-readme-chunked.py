@@ -84,7 +84,7 @@ CRITICAL RULES:
 
 def main():
     script_dir = Path(__file__).parent
-    project_root = script_dir.parent
+    project_root = script_dir.parent.parent
     readme_path = project_root / "README.md"
     
     print(f"Reading {readme_path}...")

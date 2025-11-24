@@ -1,0 +1,41 @@
+applicationName: BundleZipDeployTest
+
+stages:
+  test:
+    stage: TEST
+    domain:
+      tags:
+        purpose: smus-cicd-testing
+      region: ${DEV_DOMAIN_REGION:us-east-2}
+    project:
+      name: test-project-bundle-zip
+      create: true
+      owners:
+      - Eng1
+      - arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
+      - arn:aws:iam::${AWS_ACCOUNT_ID}:role/Admin
+      contributors: []
+      role:
+        policies:
+        - arn:aws:iam::aws:policy/SageMakerStudioUserIAMPermissiveExecutionPolicy
+    deployment_configuration:
+      storage:
+      - connectionName: default.s3_shared
+        name: code
+        targetDirectory: code/src
+      - connectionName: default.s3_shared
+        name: data
+        targetDirectory: code/data
+      - connectionName: default.s3_shared
+        name: workflows
+        targetDirectory: workflows
+    bootstrap:
+      actions:
+      - type: cli.print
+        message: "=== Bundle Zip Deploy Test Started ==="
+      - type: cli.print
+        message: "Deploying to project: test-project-bundle-zip"
+      - type: cli.print
+        message: "Expected files: code/src/*.ipynb, code/data/foo.txt, workflows/dags/*.py"
+      - type: cli.print
+        message: "=== Deployment Complete ==="

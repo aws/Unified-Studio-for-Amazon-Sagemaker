@@ -3,7 +3,7 @@ name: Deploy ML Training
 on:
   push:
     branches:
-      - main
+      # - main
       - test
       - amirbo_feature_branch
     paths:
