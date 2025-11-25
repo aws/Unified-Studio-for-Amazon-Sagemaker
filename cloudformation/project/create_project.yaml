@@ -37,7 +37,7 @@ Resources:
   "Fn::ForEach::Users":
     - User
     - !Ref UsersList
-    - "${User}ProjectMembership":
+    - "ProjectMembership${User}":
         Type: "AWS::DataZone::ProjectMembership"
         Properties:
           DomainIdentifier: !Ref DomainId
