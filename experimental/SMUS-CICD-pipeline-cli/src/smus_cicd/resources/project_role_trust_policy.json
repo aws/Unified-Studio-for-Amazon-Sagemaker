@@ -1,0 +1,33 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Principal": {
+                "Service": [
+                    "athena.amazonaws.com",
+                    "emr-serverless.amazonaws.com",
+                    "glue.amazonaws.com",
+                    "airflow-serverless.amazonaws.com",
+                    "redshift.amazonaws.com",
+                    "bedrock.amazonaws.com",
+                    "datazone.amazonaws.com",
+                    "lakeformation.amazonaws.com",
+                    "sagemaker.amazonaws.com",
+                    "scheduler.amazonaws.com"
+                ]
+            },
+            "Action": [
+                "sts:AssumeRole",
+                "sts:TagSession",
+                "sts:SetContext",
+                "sts:SetSourceIdentity"
+            ],
+            "Condition": {
+                "StringEquals": {
+                    "aws:SourceAccount": "{ACCOUNT_ID}"
+                }
+            }
+        }
+    ]
+}

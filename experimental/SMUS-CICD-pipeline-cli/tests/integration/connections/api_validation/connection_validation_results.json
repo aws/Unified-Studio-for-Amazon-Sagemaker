@@ -1,0 +1,50 @@
+{
+  "working_types": [
+    "S3",
+    "IAM",
+    "SPARK_GLUE",
+    "ATHENA",
+    "REDSHIFT",
+    "SPARK_EMR"
+  ],
+  "failed_types": [
+    "GLUE",
+    "HYPERPOD"
+  ],
+  "total_tested": 8,
+  "success_rate": 0.75,
+  "test_results": {
+    "S3": {
+      "success": true,
+      "result": "b2ic39rwwxn0rr"
+    },
+    "IAM": {
+      "success": true,
+      "result": "c2abdcl5wilxnr"
+    },
+    "SPARK_GLUE": {
+      "success": true,
+      "result": "3sqpuhtrg49ynb"
+    },
+    "ATHENA": {
+      "success": true,
+      "result": "dryc26nha63fhj"
+    },
+    "GLUE": {
+      "success": false,
+      "result": "An error occurred (ValidationException) when calling the CreateConnection operation: 1 validation error detected: Value at 'props.glueProperties.glueConnectionInput.connectionType' failed to satisfy constraint: Member must satisfy enum value set: [ICEBERGRESTCATALOG, MYSQL, DYNAMODB, BIGQUERY, TERADATA, SAPHANA, SQLSERVER, REDSHIFT, OPENSEARCH, SNOWFLAKE, SNOWFLAKEICEBERGRESTCATALOG, POSTGRESQL, VERTICA, DOCUMENTDB, DATABRICKSICEBERGRESTCATALOG, ORACLE]"
+    },
+    "REDSHIFT": {
+      "success": true,
+      "result": "5j8tbhze1quwpz"
+    },
+    "SPARK_EMR": {
+      "success": true,
+      "result": "56yzdz2mq4gwfb"
+    },
+    "HYPERPOD": {
+      "success": false,
+      "result": "An error occurred (ValidationException) when calling the CreateConnection operation: You are not authorized to perform the DescribeCluster operation on this resource. (Service: SageMaker, Status Code: 400, Request ID: 2a5aa430-57a9-4adf-ae58-436a6d6373fd) (SDK Attempt Count: 1)"
+    }
+  }
+}

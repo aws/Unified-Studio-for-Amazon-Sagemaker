@@ -1,0 +1,286 @@
+name: SMUS Application Deployment - Branch-Based
+
+# This is a GENERIC workflow template provided by DevOps
+# Data teams only need to:
+#   1. Copy this file to .github/workflows/
+#   2. Configure GitHub environments (aws-test, aws-prod)
+#   3. Provide their manifest.yaml
+#   4. Set up branch protection rules
+#
+# No application-specific changes needed in this workflow!
+#
+# Branch-Based Deployment Strategy:
+#   - feature/* branches → Dev stage (manual deployment by developers)
+#   - test branch → Test stage (automated deployment)
+#   - main branch → Prod stage (automated deployment with approval)
+#
+# Branch Protection Requirements:
+#   - test branch: Require PR from feature branches
+#   - main branch: Require PR from test branch + approval + all tests passed
+
+on:
+  push:
+    branches:
+      - test
+      - main
+  workflow_dispatch:
+    inputs:
+      manifest_path:
+        description: 'Path to application manifest'
+        required: false
+        default: 'manifest.yaml'
+      stage:
+        description: 'Stage to deploy'
+        required: true
+        type: choice
+        options:
+          - test
+          - prod
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  # ============================================================================
+  # VALIDATE - Check manifest and configuration
+  # ============================================================================
+  validate:
+    name: "Validate Manifest"
+    runs-on: ubuntu-latest
+    outputs:
+      manifest-path: ${{ steps.setup.outputs.manifest-path }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup manifest path
+        id: setup
+        run: |
+          MANIFEST_PATH="${{ inputs.manifest_path || 'manifest.yaml' }}"
+          echo "manifest-path=$MANIFEST_PATH" >> $GITHUB_OUTPUT
+          echo "Using manifest: $MANIFEST_PATH"
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      
+      - name: Install SMUS CLI
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+        working-directory: experimental/SMUS-CICD-pipeline-cli
+      
+      - name: Validate manifest structure
+        run: |
+          echo "📋 Validating manifest structure..."
+          smus-cli describe --manifest ${{ steps.setup.outputs.manifest-path }}
+          echo "✅ Manifest structure is valid"
+        env:
+          SMUS_LOG_LEVEL: WARNING
+
+  # ============================================================================
+  # TEST STAGE - Deploy to test environment (from test branch)
+  # ============================================================================
+  deploy-test:
+    name: "Deploy to Test"
+    runs-on: ubuntu-latest
+    needs: [validate]
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/test') ||
+      (github.event_name == 'workflow_dispatch' && inputs.stage == 'test')
+    environment: aws-test
+    outputs:
+      tests-passed: ${{ steps.run-tests.outcome == 'success' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: us-east-1
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_TEST }}
+          role-session-name: smus-deploy-test-${{ github.run_id }}
+          role-duration-seconds: 3600
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      
+      - name: Install SMUS CLI
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+        working-directory: experimental/SMUS-CICD-pipeline-cli
+      
+      - name: Validate connections
+        run: |
+          echo "� Validatning AWS connections..."
+          smus-cli describe \
+            --manifest ${{ needs.validate.outputs.manifest-path }} \
+            --connect
+          echo "✅ Connections validated"
+        env:
+          TEST_DOMAIN_REGION: ${{ vars.TEST_DOMAIN_REGION }}
+          SMUS_LOG_LEVEL: WARNING
+      
+      - name: Deploy to test
+        run: |
+          echo "🚀 Deploying to test environment..."
+          smus-cli deploy \
+            --manifest ${{ needs.validate.outputs.manifest-path }} \
+            test
+          echo "✅ Deployed to test"
+        env:
+          TEST_DOMAIN_REGION: ${{ vars.TEST_DOMAIN_REGION }}
+          SMUS_LOG_LEVEL: WARNING
+      
+      - name: Run tests
+        id: run-tests
+        run: |
+          echo "🧪 Running tests in test..."
+          smus-cli test \
+            --manifest ${{ needs.validate.outputs.manifest-path }} \
+            test
+          echo "✅ Tests passed"
+        env:
+          TEST_DOMAIN_REGION: ${{ vars.TEST_DOMAIN_REGION }}
+          SMUS_LOG_LEVEL: WARNING
+      
+      - name: Create test results comment
+        if: github.event_name == 'push'
+        run: |
+          echo "✅ Test deployment successful and all tests passed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Ready to promote to production via PR to main branch" >> $GITHUB_STEP_SUMMARY
+
+  # ============================================================================
+  # PROD STAGE - Deploy to production environment (from main branch)
+  # Requires: Test deployment succeeded + Tests passed + Manual approval
+  # ============================================================================
+  deploy-prod:
+    name: "Deploy to Production"
+    runs-on: ubuntu-latest
+    needs: [validate, deploy-test]
+    if: |
+      needs.deploy-test.result == 'success' &&
+      needs.deploy-test.outputs.tests-passed == 'true' &&
+      ((github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+       (github.event_name == 'workflow_dispatch' && inputs.stage == 'prod'))
+    environment: 
+      name: aws-prod
+      url: https://console.aws.amazon.com/
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: us-east-1
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
+          role-session-name: smus-deploy-prod-${{ github.run_id }}
+          role-duration-seconds: 3600
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      
+      - name: Install SMUS CLI
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+        working-directory: experimental/SMUS-CICD-pipeline-cli
+      
+      - name: Validate connections
+        run: |
+          echo "� Validatning AWS connections..."
+          smus-cli describe \
+            --manifest ${{ needs.validate.outputs.manifest-path }} \
+            --connect
+          echo "✅ Connections validated"
+        env:
+          PROD_DOMAIN_REGION: ${{ vars.PROD_DOMAIN_REGION }}
+          SMUS_LOG_LEVEL: WARNING
+      
+      - name: Deploy to production
+        run: |
+          echo "🚀 Deploying to production environment..."
+          smus-cli deploy \
+            --manifest ${{ needs.validate.outputs.manifest-path }} \
+            prod
+          echo "✅ Deployed to production"
+        env:
+          PROD_DOMAIN_REGION: ${{ vars.PROD_DOMAIN_REGION }}
+          SMUS_LOG_LEVEL: WARNING
+      
+      - name: Run smoke tests
+        run: |
+          echo "🧪 Running smoke tests in production..."
+          smus-cli test \
+            --manifest ${{ needs.validate.outputs.manifest-path }} \
+            prod
+          echo "✅ Smoke tests passed"
+        env:
+          PROD_DOMAIN_REGION: ${{ vars.PROD_DOMAIN_REGION }}
+          SMUS_LOG_LEVEL: WARNING
+      
+      - name: Production deployment summary
+        run: |
+          echo "🎉 Production deployment completed successfully" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Deployed from:** \`${{ github.ref_name }}\` branch" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Deployed by:** @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Approved by:** Reviewer (via GitHub environment protection)" >> $GITHUB_STEP_SUMMARY
+
+  # ============================================================================
+  # SUMMARY - Report deployment status
+  # ============================================================================
+  summary:
+    name: "Deployment Summary"
+    runs-on: ubuntu-latest
+    needs: [validate, deploy-test, deploy-prod]
+    if: always()
+    
+    steps:
+      - name: Generate summary
+        run: |
+          echo "# 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Manifest:** \`${{ needs.validate.outputs.manifest-path }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Trigger:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Deployment Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Stage | Branch | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Test | \`test\` | ${{ needs.deploy-test.result == 'success' && '✅ Success' || needs.deploy-test.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Prod | \`main\` | ${{ needs.deploy-prod.result == 'success' && '✅ Success' || needs.deploy-prod.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Branch Strategy" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **feature/*** → Dev stage (manual deployment by developers)" >> $GITHUB_STEP_SUMMARY
+          echo "- **test** → Test stage (automated deployment)" >> $GITHUB_STEP_SUMMARY
+          echo "- **main** → Prod stage (automated deployment with approval)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Promotion Path" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "1. Develop on feature branch → Deploy to dev manually" >> $GITHUB_STEP_SUMMARY
+          echo "2. PR feature → test → Automated deployment to test" >> $GITHUB_STEP_SUMMARY
+          echo "3. PR test → main → Automated deployment to prod (requires approval)" >> $GITHUB_STEP_SUMMARY

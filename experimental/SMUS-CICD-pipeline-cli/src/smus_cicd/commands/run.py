@@ -5,72 +5,158 @@ from typing import Any, Dict, List, Optional
 
 import typer
 
-from ..helpers import mwaa
+from ..application import ApplicationManifest
+from ..helpers import airflow_serverless, mwaa
 from ..helpers.airflow_parser import parse_airflow_output
 from ..helpers.utils import get_datazone_project_info, load_config
-from ..pipeline import PipelineManifest
+
+# Airflow Serverless (MWAA Serverless) configuration
+# TODO: Remove these overrides once service is available in all regions
+AIRFLOW_SERVERLESS_REGION = "us-west-2"  # Force us-west-2 for Airflow Serverless
+AIRFLOW_SERVERLESS_ENDPOINT_URL = "https://airflow-serverless.us-west-2.api.aws/"
 
 
 def run_command(
-    manifest_file: str, workflow: str, command: str, targets: Optional[str], output: str
+    manifest_file: str,
+    workflow: str,
+    command: Optional[str],
+    targets: Optional[str],
+    output: str,
 ) -> None:
     """
-    Run Airflow CLI commands on specified workflow environments.
-
-    For complete Airflow CLI reference, see:
-    https://airflow.apache.org/docs/apache-airflow/stable/cli-and-env-variables-ref.html
+    Run workflow commands in target environment (supports both MWAA and MWAA Serverless).
 
     Args:
         manifest_file: Path to pipeline manifest file
-        workflow: Name of the workflow to run commands on
-        command: Airflow CLI command to execute
+        workflow: Name of the workflow to run
+        command: Optional command to execute (for MWAA only, ignored for MWAA Serverless)
         targets: Comma-separated list of targets (optional, defaults to all)
         output: Output format (TEXT or JSON)
 
     Examples:
-        smus-cli run -w test_dag -c "dags list"
-        smus-cli run -w test_dag -c "dags trigger test_dag"
-        smus-cli run -w test_dag -c "dags state test_dag"
-        smus-cli run -w test_dag -c "tasks list test_dag"
+        smus-cli run -w test_dag
+        smus-cli run -w test_dag -t prod
+        smus-cli run -w test_dag -c "dags list" -t dev  # MWAA only
     """
-    _validate_required_parameters(workflow, command)
+    # Configure logging based on output format
+    import os
+
+    from ..helpers.logger import configure_root_logger
+
+    log_level = os.environ.get("SMUS_LOG_LEVEL", "INFO")
+    json_output = output.upper() == "JSON"
+    configure_root_logger(log_level, json_output)
+
+    _validate_required_parameters(workflow, output)
 
     try:
-        manifest = PipelineManifest.from_file(manifest_file)
+        manifest = ApplicationManifest.from_file(manifest_file)
         targets_to_check = _resolve_targets(targets, manifest)
 
-        results = _execute_commands_on_targets(
-            targets_to_check, manifest, workflow, command, output
-        )
+        # Check if any workflow uses serverless Airflow by looking up connection type
+        uses_airflow_serverless = False
 
-        _output_results(results, workflow, command, output)
+        # Check workflows section and lookup connection types
+        if hasattr(manifest.content, "workflows") and manifest.content.workflows:
+            for wf in manifest.content.workflows:
+                conn_name = wf.get("connectionName", "")
+                if conn_name:
+                    # Get connection type from DataZone
+                    conn_type = _get_connection_type(
+                        conn_name, targets_to_check, manifest
+                    )
+                    if conn_type == "WORKFLOWS_SERVERLESS":
+                        uses_airflow_serverless = True
+                        break
+
+        if uses_airflow_serverless:
+            results = _execute_airflow_serverless_workflows(
+                targets_to_check, manifest, workflow, output
+            )
+        else:
+            # Validate MWAA health for each target before executing commands
+            from ..helpers.mwaa import validate_mwaa_health
+
+            config = load_config()
+            mwaa_healthy = False
+
+            for stage_name in targets_to_check:
+                target_config = manifest.get_stage(stage_name)
+                project_name = target_config.project.name
+
+                # Add domain information from target for proper connection retrieval
+                config["domain"] = {
+                    "name": target_config.domain.name,
+                    "region": target_config.domain.region,
+                }
+                config["region"] = target_config.domain.region
+
+                if output.upper() != "JSON":
+                    typer.echo(
+                        f"🔍 Checking MWAA health for target '{stage_name}' (project: {project_name})"
+                    )
+                if validate_mwaa_health(project_name, config):
+                    mwaa_healthy = True
+                    break
+
+            if not mwaa_healthy:
+                if output.upper() == "JSON":
+                    typer.echo(
+                        json.dumps(
+                            {
+                                "success": False,
+                                "error": "No healthy MWAA environments found",
+                            }
+                        )
+                    )
+                else:
+                    typer.echo(
+                        "❌ No healthy MWAA environments found. Cannot execute workflow commands."
+                    )
+                raise typer.Exit(1)
+
+            # If no command provided, trigger the workflow
+            if not command:
+                command = f"dags trigger {workflow}"
+
+            results = _execute_commands_on_targets(
+                targets_to_check, manifest, workflow, command, output
+            )
+
+        _output_results(results, workflow, command or "trigger", output)
 
     except Exception as e:
-        _handle_execution_error(e, workflow, command, output)
+        _handle_execution_error(e, workflow, command or "trigger", output)
 
 
-def _validate_required_parameters(workflow: str, command: str) -> None:
+def _validate_required_parameters(workflow: str, output: str = "TEXT") -> None:
     """
     Validate that required parameters are provided.
 
     Args:
         workflow: Workflow name
-        command: Command to execute
+        output: Output format (ignored for errors - always plain text)
 
     Raises:
         typer.Exit: If required parameters are missing
     """
-    if not workflow:
-        typer.echo("❌ Error: --workflow parameter is required", err=True)
-        raise typer.Exit(1)
+    from ..helpers.error_handler import handle_error
 
-    if not command:
-        typer.echo("❌ Error: --command parameter is required", err=True)
-        raise typer.Exit(1)
+    if not workflow:
+        if output.upper() == "JSON":
+            typer.echo(
+                json.dumps(
+                    {
+                        "success": False,
+                        "error": "--workflow parameter is required",
+                    }
+                )
+            )
+        handle_error("--workflow parameter is required", exit_code=1)
 
 
 def _resolve_targets(
-    targets: Optional[str], manifest: PipelineManifest
+    targets: Optional[str], manifest: ApplicationManifest
 ) -> Dict[str, Any]:
     """
     Resolve target configurations from manifest.
@@ -89,11 +175,11 @@ def _resolve_targets(
         target_list = [t.strip() for t in targets.split(",")]
         return _validate_and_get_targets(target_list, manifest)
     else:
-        return manifest.targets
+        return manifest.stages
 
 
 def _validate_and_get_targets(
-    target_list: List[str], manifest: PipelineManifest
+    target_list: List[str], manifest: ApplicationManifest
 ) -> Dict[str, Any]:
     """
     Validate target names and return their configurations.
@@ -111,19 +197,19 @@ def _validate_and_get_targets(
     targets_to_check = {}
 
     for target in target_list:
-        if target not in manifest.targets:
-            available_targets = list(manifest.targets.keys())
+        if target not in manifest.stages:
+            available_targets = list(manifest.stages.keys())
             typer.echo(f"❌ Error: Target '{target}' not found in manifest", err=True)
             typer.echo(f"Available targets: {', '.join(available_targets)}", err=True)
             raise typer.Exit(1)
-        targets_to_check[target] = manifest.targets[target]
+        targets_to_check[target] = manifest.stages[target]
 
     return targets_to_check
 
 
 def _execute_commands_on_targets(
     targets_to_check: Dict[str, Any],
-    manifest: PipelineManifest,
+    manifest: ApplicationManifest,
     workflow: str,
     command: str,
     output: str,
@@ -143,27 +229,27 @@ def _execute_commands_on_targets(
     """
     results = []
 
-    for target_name, target_config in targets_to_check.items():
+    for stage_name, target_config in targets_to_check.items():
         if output.upper() != "JSON":
-            typer.echo(f"🎯 Target: {target_name}")
+            typer.echo(f"🎯 Target: {stage_name}")
 
         try:
             target_results = _execute_command_on_target(
-                target_name, target_config, manifest, workflow, command, output
+                stage_name, target_config, manifest, workflow, command, output
             )
             results.extend(target_results)
 
         except Exception as e:
-            error_result = _create_error_result(target_name, str(e), output)
+            error_result = _create_error_result(stage_name, str(e), output)
             results.append(error_result)
 
     return results
 
 
 def _execute_command_on_target(
-    target_name: str,
+    stage_name: str,
     target_config: Any,
-    manifest: PipelineManifest,
+    manifest: ApplicationManifest,
     workflow: str,
     command: str,
     output: str,
@@ -172,7 +258,7 @@ def _execute_command_on_target(
     Execute command on a specific target.
 
     Args:
-        target_name: Name of the target
+        stage_name: Name of the target
         target_config: Target configuration object
         manifest: Pipeline manifest object
         workflow: Workflow name
@@ -182,46 +268,50 @@ def _execute_command_on_target(
     Returns:
         List of execution results for this target
     """
-    config = _prepare_config(manifest)
+    config = _prepare_config(target_config)
     project_info = _get_project_info(target_config.project.name, config)
+
+    if isinstance(project_info, str):
+        # Handle case where project_info is a string (error message)
+        error_result = _create_error_result(stage_name, project_info, output)
+        return [error_result]
 
     if "error" in project_info or not project_info.get("project_id"):
         error_msg = (
             f"Failed to get project info: {project_info.get('error', 'Unknown error')}"
         )
-        error_result = _create_error_result(target_name, error_msg, output)
+        error_result = _create_error_result(stage_name, error_msg, output)
         return [error_result]
 
     workflow_connections = _get_workflow_connections(project_info)
 
     if not workflow_connections:
         error_msg = "No workflow connections found"
-        error_result = _create_error_result(target_name, error_msg, output)
+        error_result = _create_error_result(stage_name, error_msg, output)
         return [error_result]
 
     return _execute_on_workflow_connections(
-        target_name, workflow_connections, command, manifest.domain.region, output
+        stage_name, workflow_connections, command, target_config.domain.region, output
     )
 
 
-def _prepare_config(manifest: PipelineManifest) -> Dict[str, Any]:
+def _prepare_config(target_config) -> Dict[str, Any]:
     """
     Prepare configuration dictionary with domain information.
 
     Args:
-        manifest: Pipeline manifest object
+        target_config: Target configuration object
 
     Returns:
         Configuration dictionary
     """
     config = load_config()
-    config["region"] = manifest.domain.region
-    config["domain_name"] = manifest.domain.name
-
-    # Set domain info in config for proper lookup
-    if "domain" not in config:
-        config["domain"] = {}
-    config["domain"]["name"] = manifest.domain.name
+    config["domain"] = {
+        "name": target_config.domain.name,
+        "region": target_config.domain.region,
+    }
+    config["region"] = target_config.domain.region
+    config["domain_name"] = target_config.domain.name
 
     return config
 
@@ -251,15 +341,20 @@ def _get_workflow_connections(project_info: Dict[str, Any]) -> Dict[str, Any]:
         Dictionary of workflow connections
     """
     connections = project_info.get("connections", {})
-    return {
-        name: info
-        for name, info in connections.items()
-        if info.get("type") in ["MWAA", "WORKFLOWS_MWAA"]
-    }
+
+    result = {}
+    for name, info in connections.items():
+        if isinstance(info, str):
+            continue
+
+        if info.get("type") in ["MWAA", "WORKFLOWS_MWAA"]:
+            result[name] = info
+
+    return result
 
 
 def _execute_on_workflow_connections(
-    target_name: str,
+    stage_name: str,
     workflow_connections: Dict[str, Any],
     command: str,
     region: str,
@@ -269,7 +364,7 @@ def _execute_on_workflow_connections(
     Execute command on all workflow connections.
 
     Args:
-        target_name: Name of the target
+        stage_name: Name of the target
         workflow_connections: Dictionary of workflow connections
         command: Command to execute
         region: AWS region
@@ -293,7 +388,7 @@ def _execute_on_workflow_connections(
         result = mwaa.run_airflow_command(env_name, command, region, conn_info)
 
         execution_result = _process_command_result(
-            target_name, conn_name, env_name, command, result, output
+            stage_name, conn_name, env_name, command, result, output
         )
 
         if execution_result:
@@ -303,7 +398,7 @@ def _execute_on_workflow_connections(
 
 
 def _process_command_result(
-    target_name: str,
+    stage_name: str,
     conn_name: str,
     env_name: str,
     command: str,
@@ -314,7 +409,7 @@ def _process_command_result(
     Process the result of a command execution.
 
     Args:
-        target_name: Name of the target
+        stage_name: Name of the target
         conn_name: Connection name
         env_name: Environment name
         command: Command that was executed
@@ -329,7 +424,7 @@ def _process_command_result(
             command, result["stdout"], result["stderr"]
         )
         return {
-            "target": target_name,
+            "target": stage_name,
             "connection": conn_name,
             "environment": env_name,
             "success": result["success"],
@@ -362,13 +457,13 @@ def _display_command_result(result: Dict[str, Any]) -> None:
 
 
 def _create_error_result(
-    target_name: str, error_msg: str, output: str
+    stage_name: str, error_msg: str, output: str
 ) -> Dict[str, Any]:
     """
     Create error result based on output format.
 
     Args:
-        target_name: Name of the target
+        stage_name: Name of the target
         error_msg: Error message
         output: Output format
 
@@ -378,7 +473,7 @@ def _create_error_result(
     if output.upper() != "JSON":
         typer.echo(f"❌ {error_msg}")
 
-    return {"target": target_name, "success": False, "error": error_msg}
+    return {"target": stage_name, "success": False, "error": error_msg}
 
 
 def _output_results(
@@ -397,17 +492,13 @@ def _output_results(
     failed_results = [r for r in results if not r.get("success", True)]
 
     if output.upper() == "JSON":
-        typer.echo(
-            json.dumps(
-                {
-                    "workflow": workflow,
-                    "command": command,
-                    "results": results,
-                    "success": len(failed_results) == 0,
-                },
-                indent=2,
-            )
-        )
+        output_data = {
+            "workflow": workflow,
+            "command": command,
+            "results": results,
+            "success": len(failed_results) == 0,
+        }
+        typer.echo(json.dumps(output_data))
 
     # Exit with error code if there were failures
     if failed_results:
@@ -418,20 +509,207 @@ def _handle_execution_error(
     error: Exception, workflow: str, command: str, output: str
 ) -> None:
     """
-    Handle execution errors based on output format.
+    Handle execution errors with plain text output.
 
     Args:
         error: Exception that occurred
         workflow: Workflow name
         command: Command that was being executed
-        output: Output format
+        output: Output format (ignored for errors - always plain text)
 
     Raises:
         typer.Exit: Always exits with code 1
     """
-    # Only output error message for text format
-    # JSON format is handled by _output_results
-    if output.upper() != "JSON":
-        typer.echo(f"❌ Error: {str(error)}", err=True)
+    from ..helpers.error_handler import handle_error
 
-    raise typer.Exit(1)
+    error_msg = f"executing workflow '{workflow}' command '{command}': {str(error)}"
+    if output.upper() == "JSON":
+        typer.echo(json.dumps({"success": False, "error": error_msg}))
+    handle_error(error_msg, exit_code=1)
+
+
+def _execute_airflow_serverless_workflows(
+    targets_to_check: Dict[str, Any],
+    manifest: ApplicationManifest,
+    workflow: str,
+    output: str,
+) -> List[Dict[str, Any]]:
+    """
+    Execute serverless Airflow workflow runs on specified targets.
+
+    Args:
+        targets_to_check: Dictionary of target configurations
+        manifest: Pipeline manifest object
+        workflow: Workflow name to trigger
+        output: Output format
+
+    Returns:
+        List of execution results
+    """
+    results = []
+
+    for stage_name, target_config in targets_to_check.items():
+
+        if output.upper() != "JSON":
+            typer.echo(f"🎯 Target: {stage_name} (Serverless Airflow)")
+
+        try:
+            # Generate expected workflow name based on naming pattern from deploy command
+            bundle_name = manifest.application_name
+            dag_name = workflow
+            stage_name = target_config.project.name.replace("-", "_")
+            safe_pipeline = bundle_name.replace("-", "_")
+            safe_dag = dag_name.replace("-", "_")
+            expected_workflow_name = f"{safe_pipeline}_{stage_name}_{safe_dag}"
+
+            # Use target's region instead of hardcoded region
+            region = target_config.domain.region
+
+            # List existing workflows to find the actual ARN
+            workflows = airflow_serverless.list_workflows(region=region)
+
+            # Find the workflow that matches our expected name
+            workflow_arn = None
+            for wf in workflows:
+                if wf["name"] == expected_workflow_name:
+                    workflow_arn = wf["workflow_arn"]
+                    break
+
+            if not workflow_arn:
+                raise Exception(
+                    f"Workflow '{expected_workflow_name}' not found. Available workflows: {[wf['name'] for wf in workflows]}"
+                )
+
+            if output.upper() != "JSON":
+                typer.echo(f"🚀 Starting workflow run: {expected_workflow_name}")
+                typer.echo(f"🔗 ARN: {workflow_arn}")
+
+            # Start workflow run (workflow uses role specified during creation)
+            result = airflow_serverless.start_workflow_run(workflow_arn, region=region)
+
+            if result.get("success"):
+                run_id = result.get("run_id")
+                initial_status = result.get("status")
+
+                if output.upper() != "JSON":
+                    typer.echo("✅ Workflow run started successfully")
+                    typer.echo(f"📋 Run ID: {run_id}")
+                    typer.echo(f"📊 Initial Status: {initial_status}")
+
+                # Verify workflow transitioned from READY state
+                # Valid running states: STARTING, QUEUED, RUNNING
+                if initial_status not in ["STARTING", "QUEUED", "RUNNING"]:
+                    # Wait a moment and check again
+                    import time
+
+                    time.sleep(10)
+                    status_check = airflow_serverless.get_workflow_status(
+                        workflow_arn, region=region
+                    )
+                    current_status = (
+                        status_check.get("status")
+                        if status_check.get("success")
+                        else initial_status
+                    )
+
+                    if current_status not in ["STARTING", "QUEUED", "RUNNING"]:
+                        error_msg = f"Workflow run started but status is '{current_status}' (expected STARTING, QUEUED, or RUNNING). The workflow may not have actually started."
+                        if output.upper() != "JSON":
+                            typer.echo(f"❌ {error_msg}")
+                        else:
+                            typer.echo(
+                                json.dumps(
+                                    {"error": error_msg, "status": current_status},
+                                    indent=2,
+                                )
+                            )
+                        raise typer.Exit(1)
+                    else:
+                        if output.upper() != "JSON":
+                            typer.echo(f"✓ Verified workflow status: {current_status}")
+
+                results.append(
+                    {
+                        "target": stage_name,
+                        "workflow_arn": workflow_arn,
+                        "run_id": run_id,
+                        "status": result.get("status"),
+                        "success": True,
+                    }
+                )
+            else:
+                error_msg = result.get("error", "Unknown error")
+                if output.upper() != "JSON":
+                    typer.echo(f"❌ Failed to start workflow run: {error_msg}")
+
+                results.append(
+                    {
+                        "target": stage_name,
+                        "workflow_arn": workflow_arn,
+                        "success": False,
+                        "error": error_msg,
+                    }
+                )
+
+        except Exception as e:
+            error_msg = f"Error executing MWAA Serverless workflow: {str(e)}"
+            if output.upper() != "JSON":
+                typer.echo(f"❌ {error_msg}")
+
+            results.append({"target": stage_name, "success": False, "error": error_msg})
+
+    return results
+
+
+def _get_connection_type(connection_name: str, targets: dict, manifest) -> str:
+    """Get connection type from DataZone by looking it up in the first target."""
+    import boto3
+
+    from ..helpers.datazone import get_project_id_by_name, resolve_domain_id
+
+    # Get first target to lookup connection
+    first_target = next(iter(targets.values()))
+    region = first_target.domain.region
+    project_name = first_target.project.name
+
+    try:
+        # Get domain and project IDs
+        domain_id, _ = resolve_domain_id(
+            first_target.domain.name,
+            first_target.domain.tags if hasattr(first_target.domain, "tags") else None,
+            region,
+        )
+
+        if not domain_id:
+            return "UNKNOWN"
+
+        project_id = get_project_id_by_name(project_name, domain_id, region)
+        if not project_id:
+            return "UNKNOWN"
+
+        # List connections and find the one matching the name
+        client = boto3.client("datazone", region_name=region)
+        response = client.list_connections(
+            domainIdentifier=domain_id, projectIdentifier=project_id
+        )
+
+        for conn in response.get("items", []):
+            if conn["name"] == connection_name:
+                conn_type = conn["type"]
+                # If type is WORKFLOWS_MWAA, check if it's actually serverless
+                if conn_type == "WORKFLOWS_MWAA":
+                    # Check if physicalEndpoints contains MWAA ARN
+                    physical_endpoints = conn.get("physicalEndpoints", [])
+                    has_mwaa_arn = any(
+                        "glueConnection" in ep
+                        and "arn:aws:airflow" in str(ep.get("glueConnection", ""))
+                        for ep in physical_endpoints
+                    )
+                    # If no MWAA ARN, it's serverless
+                    if not has_mwaa_arn:
+                        return "WORKFLOWS_SERVERLESS"
+                return conn_type
+
+        return "UNKNOWN"
+    except Exception:
+        return "UNKNOWN"

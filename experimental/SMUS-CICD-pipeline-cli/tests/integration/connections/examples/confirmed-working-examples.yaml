@@ -1,0 +1,218 @@
+# Confirmed Working DataZone Connection Examples
+# Tested and validated on dzd_6je2k8b63qse07 in us-east-1
+# Success rate: 8/9 = 89%
+
+# 1. S3 - Object Storage ✅
+s3_basic:
+  name: "s3-data-lake"
+  description: "S3 bucket for data lake storage"
+  props:
+    s3Properties:
+      s3Uri: "s3://my-data-bucket/data/"
+
+s3_analytics:
+  name: "s3-analytics-storage"
+  description: "S3 bucket for analytics data"
+  props:
+    s3Properties:
+      s3Uri: "s3://analytics-bucket/processed/"
+
+# 2. IAM - Identity and Access Management ✅
+iam_basic:
+  name: "iam-lineage-sync"
+  description: "IAM connection for Glue lineage sync"
+  props:
+    iamProperties:
+      glueLineageSyncEnabled: false
+
+iam_with_lineage:
+  name: "iam-lineage-enabled"
+  description: "IAM connection with lineage sync enabled"
+  props:
+    iamProperties:
+      glueLineageSyncEnabled: true
+
+# 3. SPARK_GLUE - Spark on AWS Glue ✅
+spark_glue_minimal:
+  name: "spark-glue-basic"
+  description: "Basic Spark Glue connection"
+  props:
+    sparkGlueProperties:
+      glueVersion: "4.0"
+      workerType: "G.1X"
+      numberOfWorkers: 2
+
+spark_glue_production:
+  name: "spark-glue-analytics"
+  description: "Production Spark Glue connection"
+  props:
+    sparkGlueProperties:
+      glueVersion: "4.0"
+      workerType: "G.2X"
+      numberOfWorkers: 10
+
+# 4. ATHENA - SQL Query Engine ✅
+athena_basic:
+  name: "athena-query-engine"
+  description: "Athena for SQL queries"
+  props:
+    athenaProperties:
+      workgroupName: "primary"
+
+athena_custom:
+  name: "athena-analytics"
+  description: "Athena with custom workgroup"
+  props:
+    athenaProperties:
+      workgroupName: "analytics-workgroup"
+
+# 5. REDSHIFT - Data Warehouse ✅
+redshift_basic:
+  name: "redshift-warehouse"
+  description: "Redshift data warehouse"
+  props:
+    redshiftProperties:
+      storage:
+        clusterName: "analytics-cluster"
+      databaseName: "dev"
+      host: "analytics-cluster.abc123.us-east-1.redshift.amazonaws.com"
+      port: 5439
+
+redshift_serverless:
+  name: "redshift-serverless"
+  description: "Redshift serverless endpoint"
+  props:
+    redshiftProperties:
+      storage:
+        workgroupName: "analytics-workgroup"
+      databaseName: "analytics"
+      host: "analytics-workgroup.123456789012.us-east-1.redshift-serverless.amazonaws.com"
+      port: 5439
+
+# 6. SPARK_EMR - Spark on EMR ✅
+spark_emr_serverless:
+  name: "spark-emr-processing"
+  description: "Spark EMR serverless for data processing"
+  props:
+    sparkEmrProperties:
+      computeArn: "arn:aws:emr-serverless:us-east-1:123456789012:/applications/00abc123def456"
+      runtimeRole: "arn:aws:iam::123456789012:role/EMRServerlessExecutionRole"
+
+spark_emr_cluster:
+  name: "spark-emr-cluster"
+  description: "Spark EMR cluster connection"
+  props:
+    sparkEmrProperties:
+      computeArn: "arn:aws:emr:us-east-1:123456789012:cluster/j-1234567890123"
+      runtimeRole: "arn:aws:iam::123456789012:role/EMRExecutionRole"
+
+# 7. MLFLOW - ML Experiment Tracking ✅
+mlflow_basic:
+  name: "mlflow-tracking"
+  description: "MLflow tracking server for ML experiments"
+  props:
+    mlflowProperties:
+      trackingServerName: "wine-classification-mlflow-v2"
+      trackingServerArn: "arn:aws:sagemaker:us-east-1:058264284947:mlflow-tracking-server/wine-classification-mlflow-v2"
+
+mlflow_experiments:
+  name: "mlflow-model-registry"
+  description: "MLflow for model registry and experiments"
+  props:
+    mlflowProperties:
+      trackingServerName: "ml-experiments-server"
+      trackingServerArn: "arn:aws:sagemaker:us-east-1:123456789012:mlflow-tracking-server/ml-experiments-server"
+
+# 8. WORKFLOWS_MWAA - Apache Airflow Workflows ✅
+mwaa_basic:
+  name: "mwaa-workflows"
+  description: "MWAA environment for workflow orchestration"
+  props:
+    workflowsMwaaProperties:
+      mwaaEnvironmentName: "DataZoneMWAAEnv-dzd_6je2k8b63qse07-4kc6456xevd0h3-dev"
+
+mwaa_production:
+  name: "mwaa-production-workflows"
+  description: "Production MWAA environment"
+  props:
+    workflowsMwaaProperties:
+      mwaaEnvironmentName: "production-airflow-env"
+
+# 9. WORKFLOWS_SERVERLESS - Serverless Airflow Workflows ✅
+workflows_serverless_basic:
+  name: "serverless-workflows"
+  description: "Serverless Airflow workflows"
+  props:
+    workflowsServerlessProperties: {}
+
+workflows_serverless_dev:
+  name: "dev-serverless-workflows"
+  description: "Development serverless workflows"
+  props:
+    workflowsServerlessProperties: {}
+
+# CICD Pipeline Manifest Example
+manifest_example:
+  apiVersion: v1
+  kind: Bundle
+  metadata:
+    name: analytics-pipeline
+    version: 1.0.0
+  
+  initialization:
+    environments:
+      - name: analytics-env
+        type: data-lake
+    
+    connections:
+      - name: raw-data-storage
+        type: S3
+        properties:
+          s3Uri: "s3://raw-data-bucket/incoming/"
+      
+      - name: spark-processing
+        type: SPARK_GLUE
+        properties:
+          glueVersion: "4.0"
+          workerType: "G.1X"
+          numberOfWorkers: 5
+      
+      - name: analytics-queries
+        type: ATHENA
+        properties:
+          workgroupName: "analytics-workgroup"
+      
+      - name: data-warehouse
+        type: REDSHIFT
+        properties:
+          storage:
+            clusterName: "analytics-cluster"
+          databaseName: "analytics"
+          host: "analytics-cluster.abc123.us-east-1.redshift.amazonaws.com"
+          port: 5439
+      
+      - name: identity-management
+        type: IAM
+        properties:
+          glueLineageSyncEnabled: true
+      
+      - name: emr-processing
+        type: SPARK_EMR
+        properties:
+          computeArn: "arn:aws:emr-serverless:us-east-1:123456789012:/applications/00abc123def456"
+          runtimeRole: "arn:aws:iam::123456789012:role/EMRServerlessExecutionRole"
+      
+      - name: ml-experiments
+        type: MLFLOW
+        properties:
+          trackingServerName: "wine-classification-mlflow-v2"
+          trackingServerArn: "arn:aws:sagemaker:us-east-1:058264284947:mlflow-tracking-server/wine-classification-mlflow-v2"
+      
+      - name: workflow-orchestration
+        type: WORKFLOWS_MWAA
+        properties:
+          mwaaEnvironmentName: "DataZoneMWAAEnv-dzd_6je2k8b63qse07-4kc6456xevd0h3-dev"
+      
+      - name: serverless-workflows
+        type: WORKFLOWS_SERVERLESS
+        properties: {}

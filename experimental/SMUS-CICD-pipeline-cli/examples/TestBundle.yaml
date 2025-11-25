@@ -1,0 +1,76 @@
+applicationName: TestBundle
+content:
+  storage:
+  - connectionName: default.s3_shared
+    include:
+    - '*'
+    exclude:
+    - .ipynb_checkpoints/
+    - __pycache__/
+    - '*.pyc'
+    - .libs.json
+    name: code
+  - connectionName: default.s3_shared
+    include:
+    - workflows
+    exclude:
+    - .ipynb_checkpoints/
+    - __pycache__/
+    - '*.pyc'
+    - .libs.json
+    name: workflows
+    append: true
+stages:
+  dev:
+    stage: DEV
+    domain:
+      tags:
+        purpose: smus-cicd-testing
+      region: ${DEV_DOMAIN_REGION:us-east-1}
+    project:
+      name: dev-marketing
+      create: false
+    deployment_configuration:
+      storage:
+      - connectionName: default.s3_shared
+        name: code
+        targetDirectory: src
+      - connectionName: default.s3_shared
+        name: workflows
+        targetDirectory: workflows
+  test:
+    stage: TEST
+    domain:
+      tags:
+        purpose: smus-cicd-testing
+      region: ${DEV_DOMAIN_REGION:us-east-1}
+    project:
+      name: dev-marketing-test
+      create: true
+
+    deployment_configuration:
+      storage:
+      - connectionName: default.s3_shared
+        name: code
+        targetDirectory: src
+      - connectionName: default.s3_shared
+        name: workflows
+        targetDirectory: workflows
+  prod:
+    stage: PROD
+    domain:
+      tags:
+        purpose: smus-cicd-testing
+      region: ${DEV_DOMAIN_REGION:us-east-1}
+    project:
+      name: dev-marketing-prod
+      create: true
+
+    deployment_configuration:
+      storage:
+      - connectionName: default.s3_shared
+        name: code
+        targetDirectory: src
+      - connectionName: default.s3_shared
+        name: workflows
+        targetDirectory: workflows

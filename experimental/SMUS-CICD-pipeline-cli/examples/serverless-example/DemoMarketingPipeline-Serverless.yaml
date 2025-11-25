@@ -1,0 +1,112 @@
+applicationName: DemoMarketingBundle-Serverless
+content:
+  storage:
+  - name: code
+    connectionName: default.s3_shared
+    append: false
+    include:
+    - src
+    exclude:
+    - .ipynb_checkpoints/
+    - __pycache__/
+    - '*.pyc'
+    - .libs.json
+  - name: workflows
+    connectionName: default.s3_shared
+    append: true
+    include:
+    - workflows
+    exclude:
+    - .ipynb_checkpoints/
+    - __pycache__/
+    - '*.pyc'
+    - .libs.json
+stages:
+  dev:
+    stage: DEV
+    domain:
+      name: cicd-test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-1}
+    project:
+      name: dev-marketing
+    environment_variables:
+      ENV_NAME: dev
+      S3_PREFIX: dev-data
+      LOG_LEVEL: INFO
+    deployment_configuration:
+      storage:
+      - name: code
+        connectionName: default.s3_shared
+        targetDirectory: src
+      - name: workflows
+        connectionName: default.s3_shared
+        targetDirectory: workflows
+  test:
+    stage: TEST
+    domain:
+      name: cicd-test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-1}
+    project:
+      name: test-marketing-demo
+    initialization:
+      project:
+        create: true
+        profile_name: All capabilities
+        owners:
+        - arn:aws:iam::123456789012:role/GitHubActionsRole-SMUS-CLI-Tests
+        - Eng1
+        contributors: []
+        userParameters:
+        - EnvironmentConfigurationName: Lakehouse Database
+          parameters:
+          - name: glueDbName
+            value: demo-serverless-db
+      environments: []
+    environment_variables:
+      ENV_NAME: test
+      S3_PREFIX: test-data
+      LOG_LEVEL: INFO
+    deployment_configuration:
+      storage:
+      - name: code
+        connectionName: default.s3_shared
+        targetDirectory: src
+      - name: workflows
+        connectionName: default.s3_shared
+        targetDirectory: workflows
+  prod:
+    stage: PROD
+    domain:
+      name: cicd-test-domain
+      region: ${PROD_DOMAIN_REGION:us-east-1}
+    project:
+      name: prod-marketing-demo
+    initialization:
+      project:
+        create: true
+        profile_name: All capabilities
+        owners:
+        - arn:aws:iam::123456789012:role/GitHubActionsRole-SMUS-CLI-Tests
+        - Eng1
+        contributors: []
+        userParameters:
+        - EnvironmentConfigurationName: Lakehouse Database
+          parameters:
+          - name: glueDbName
+            value: demo-serverless-prod-db
+      environments: []
+    environment_variables:
+      ENV_NAME: prod
+      S3_PREFIX: prod-data
+      LOG_LEVEL: WARN
+    deployment_configuration:
+      storage:
+      - name: code
+        connectionName: default.s3_shared
+        targetDirectory: src
+      - name: workflows
+        connectionName: default.s3_shared
+        targetDirectory: workflows
+
+tests:
+  folder: ./tests

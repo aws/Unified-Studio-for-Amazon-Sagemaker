@@ -1,0 +1,17 @@
+ml_deployment_workflow:
+  dag_id: "ml_deployment_workflow"
+  tasks:
+    ml_deployment_notebook:
+      operator: "airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator"
+      retries: 0
+      input_config:
+        input_path: "ml/bundle/deployment-workflows/ml_deployment_notebook.ipynb"
+        input_params:
+          model_s3_uri: "{proj.connection.default.s3_shared.s3Uri}ml/output/model-artifacts/latest/output/model.tar.gz"
+          sklearn_version: "1.2-1"
+          python_version: "py3"
+          inference_instance_type: "ml.m5.large"
+      output_config:
+        output_formats: 
+          ['NOTEBOOK']
+      wait_for_completion: True

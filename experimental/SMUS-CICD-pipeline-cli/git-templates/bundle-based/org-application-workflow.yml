@@ -1,0 +1,86 @@
+name: Deploy My Application (Bundle-Based)
+
+# This is YOUR application's workflow file
+# Copy this to: .github/workflows/deploy.yml
+#
+# This workflow CALLS the reusable bundle-based workflow
+# You only need to configure the parameters below
+
+on:
+  push:
+    branches:
+      - main           # Create bundle and deploy on push to main
+    tags:
+      - 'v*'           # Create bundle and deploy on version tags
+  workflow_dispatch:
+    inputs:
+      bundle_version:
+        description: 'Bundle version to deploy (leave empty to create new)'
+        required: false
+        type: string
+      deploy_to:
+        description: 'Deploy to which environment'
+        required: false
+        type: choice
+        options:
+          - both
+          - test
+          - prod
+
+jobs:
+  deploy:
+    name: "Bundle & Deploy Application"
+    # Call the reusable workflow from your organization's template repository
+    # Option 1: If reusable workflow is in the same repo
+    uses: ./.github/workflows/smus-bundle-based-reusable.yml
+    
+    # Option 2: If reusable workflow is in a central template repository
+    # uses: your-org/workflows/.github/workflows/smus-bundle-based.yml@v1
+    
+    with:
+      # ========================================================================
+      # REQUIRED: Customize these for your application
+      # ========================================================================
+      
+      # Path to your application manifest
+      manifest_path: 'manifest.yaml'
+      
+      # S3 bucket for storing bundles
+      artifact_repository: 's3://your-org-smus-artifacts'
+      
+      # Path to SMUS CLI (if different from default)
+      smus_cli_path: 'experimental/SMUS-CICD-pipeline-cli'
+      
+      # ========================================================================
+      # OPTIONAL: Customize if needed
+      # ========================================================================
+      
+      # Bundle version (auto-generated if not provided)
+      # bundle_version: ${{ inputs.bundle_version || '' }}
+      
+      # Python version (default: '3.12')
+      # python_version: '3.11'
+      
+      # AWS region for authentication (default: 'us-east-1')
+      # aws_region: 'us-west-2'
+      
+      # GitHub environment names (defaults: 'aws-test' and 'aws-prod')
+      # test_environment: 'aws-test'
+      # prod_environment: 'aws-prod'
+    
+    secrets:
+      # ========================================================================
+      # REQUIRED: AWS IAM Role ARNs for OIDC authentication
+      # These must be configured in your GitHub repository secrets
+      # ========================================================================
+      
+      AWS_ROLE_ARN_TEST: ${{ secrets.AWS_ROLE_ARN_TEST }}
+      AWS_ROLE_ARN_PROD: ${{ secrets.AWS_ROLE_ARN_PROD }}
+      
+      # ========================================================================
+      # OPTIONAL: AWS regions for domains (if using environment variables)
+      # These can be configured in GitHub environment variables instead
+      # ========================================================================
+      
+      TEST_DOMAIN_REGION: ${{ vars.TEST_DOMAIN_REGION }}
+      PROD_DOMAIN_REGION: ${{ vars.PROD_DOMAIN_REGION }}

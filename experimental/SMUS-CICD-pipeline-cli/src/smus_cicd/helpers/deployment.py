@@ -27,8 +27,30 @@ def deploy_files(
         typer.echo(f"  ❌ No S3 URI found for connection {conn_id} (type: {conn_type})")
         return False  # Return False to indicate failure
 
+    typer.echo(
+        f"  🔍 DEBUG deploy_files: target_directory='{target_directory}' (type: {type(target_directory).__name__})"
+    )
+    typer.echo(f"  🔍 DEBUG deploy_files: s3_uri='{s3_uri}'")
+
+    # Normalize target_directory: treat ".", "", or None as root
+    if target_directory in (".", "", None):
+        typer.echo(
+            f"  🔍 DEBUG deploy_files: target_directory normalized to empty (was: '{target_directory}')"
+        )
+        target_directory = ""
+
     # Construct full S3 path
-    full_s3_path = f"{s3_uri.rstrip('/')}/{target_directory}/"
+    if target_directory:
+        full_s3_path = f"{s3_uri.rstrip('/')}/{target_directory}/"
+        typer.echo(
+            f"  🔍 DEBUG deploy_files: Using target_directory, full_s3_path='{full_s3_path}'"
+        )
+    else:
+        full_s3_path = s3_uri if s3_uri.endswith("/") else f"{s3_uri}/"
+        typer.echo(
+            f"  🔍 DEBUG deploy_files: No target_directory, full_s3_path='{full_s3_path}'"
+        )
+
     typer.echo(f"  S3 Location: {full_s3_path}")
 
     # Parse S3 URI for clearing if needed
@@ -37,7 +59,8 @@ def deploy_files(
     s3_prefix = "/".join(s3_parts[1:])
     if s3_prefix and not s3_prefix.endswith("/"):
         s3_prefix += "/"
-    s3_prefix += f"{target_directory}/"
+    if target_directory:
+        s3_prefix += f"{target_directory}/"
 
     # Clear directory if append is False
     if not append_flag:
@@ -58,7 +81,16 @@ def deploy_files(
             typer.echo(f"    Warning: Could not clear directory: {str(e)}")
 
     # Upload files using AWS CLI sync
-    source_path = Path(temp_dir) / source_folder
+    source_path = (
+        Path(source_folder)
+        if os.path.isabs(source_folder)
+        else Path(temp_dir) / source_folder
+    )
+    typer.echo(f"  🔍 DEBUG: temp_dir={temp_dir}, source_folder={source_folder}")
+    typer.echo(
+        f"  🔍 DEBUG: source_path={source_path}, is_abs={os.path.isabs(source_folder)}"
+    )
+    typer.echo(f"  🔍 DEBUG: full_s3_path={full_s3_path}")
     files_synced = 0
 
     if source_path.exists():
@@ -70,12 +102,15 @@ def deploy_files(
                 "sync",
                 str(source_path),
                 full_s3_path,
+                "--exact-timestamps",  # Force check timestamps to detect changes
                 "--exclude",
                 "*.pyc",
                 "--exclude",
                 "__pycache__/*",
                 "--exclude",
                 ".ipynb_checkpoints/*",
+                "--exclude",
+                ".DS_Store",
             ]
 
             result = subprocess.run(cmd, capture_output=True, text=True)
@@ -105,6 +140,7 @@ def deploy_files(
                         for file in files:
                             if (
                                 not file.endswith(".pyc")
+                                and file != ".DS_Store"
                                 and "__pycache__" not in root
                                 and ".ipynb_checkpoints" not in root
                             ):
@@ -219,6 +255,13 @@ def download_s3_files(
         target_dir = Path(temp_bundle_dir) / section_type
         target_dir.mkdir(parents=True, exist_ok=True)
 
+        typer.echo(
+            f"  🔍 DEBUG download_s3_files: section_type={section_type}, target_dir={target_dir}"
+        )
+        typer.echo(
+            f"  🔍 DEBUG download_s3_files: s3_uri={s3_uri}, patterns={include_patterns}"
+        )
+
         # Build AWS CLI sync command
         if include_patterns:
             # Check if we have a wildcard pattern
@@ -265,58 +308,89 @@ def download_s3_files(
                 else:
                     typer.echo(f"  Error syncing: {result.stderr}", err=True)
             else:
-                # Specific patterns - sync each directory
+                # Specific patterns - sync each directory or copy individual files
                 for pattern in include_patterns:
                     pattern_clean = pattern.rstrip("/")
-                    source_s3_uri = f"s3://{bucket_name}/{s3_prefix}{pattern_clean}/"
-                    target_path = target_dir / pattern_clean
-                    target_path.mkdir(parents=True, exist_ok=True)
 
-                    # Use AWS CLI sync
-                    cmd = [
-                        "aws",
-                        "s3",
-                        "sync",
-                        source_s3_uri,
-                        str(target_path),
-                        "--exclude",
-                        "*.pyc",
-                        "--exclude",
-                        "__pycache__/*",
-                        "--exclude",
-                        ".ipynb_checkpoints/*",
-                    ]
+                    # Check if pattern looks like a file (has extension)
+                    is_file = "." in os.path.basename(pattern_clean)
 
-                    result = subprocess.run(cmd, capture_output=True, text=True)
+                    if is_file:
+                        # Individual file - use aws s3 cp
+                        source_s3_uri = f"s3://{bucket_name}/{s3_prefix}{pattern_clean}"
+                        target_file = target_dir / os.path.basename(pattern_clean)
 
-                    if result.returncode == 0:
-                        # Count downloaded files from output
-                        lines = (
-                            result.stdout.strip().split("\n")
-                            if result.stdout.strip()
-                            else []
-                        )
-                        pattern_files = len(
-                            [line for line in lines if "download:" in line]
-                        )
-                        downloaded_files += pattern_files
+                        cmd = [
+                            "aws",
+                            "s3",
+                            "cp",
+                            source_s3_uri,
+                            str(target_file),
+                        ]
 
-                        # Show downloaded files
-                        for line in lines:
-                            if "download:" in line:
-                                # Extract relative path from AWS CLI output
-                                parts = line.split(" to ")
-                                if len(parts) > 1:
-                                    local_path = parts[1]
-                                    relative_path = os.path.relpath(
-                                        local_path, str(target_dir)
-                                    )
-                                    typer.echo(f"  Downloaded: {relative_path}")
+                        typer.echo(f"  🔍 Running: {' '.join(cmd)}")
+                        result = subprocess.run(cmd, capture_output=True, text=True)
+
+                        if result.returncode == 0:
+                            downloaded_files += 1
+                            typer.echo(
+                                f"  Downloaded: {os.path.basename(pattern_clean)}"
+                            )
+                        else:
+                            typer.echo(
+                                f"  Error copying file: {result.stderr}", err=True
+                            )
                     else:
-                        typer.echo(
-                            f"  Error syncing {pattern_clean}: {result.stderr}",
-                            err=True,
+                        # Directory - use aws s3 sync
+                        source_s3_uri = (
+                            f"s3://{bucket_name}/{s3_prefix}{pattern_clean}/"
                         )
+
+                        cmd = [
+                            "aws",
+                            "s3",
+                            "sync",
+                            source_s3_uri,
+                            str(target_dir),
+                            "--exclude",
+                            "*.pyc",
+                            "--exclude",
+                            "__pycache__/*",
+                            "--exclude",
+                            ".ipynb_checkpoints/*",
+                        ]
+
+                        typer.echo(f"  🔍 Running: {' '.join(cmd)}")
+                        result = subprocess.run(cmd, capture_output=True, text=True)
+
+                        if result.returncode == 0:
+                            # Count downloaded files from output
+                            lines = (
+                                result.stdout.strip().split("\n")
+                                if result.stdout.strip()
+                                else []
+                            )
+                            pattern_files = len(
+                                [line for line in lines if "download:" in line]
+                            )
+                            downloaded_files += pattern_files
+
+                            # Show downloaded files
+                            for line in lines:
+                                if "download:" in line:
+                                    # Extract relative path from AWS CLI output
+                                    parts = line.split(" to ")
+                                    if len(parts) > 1:
+                                        local_path = parts[1]
+                                        relative_path = os.path.relpath(
+                                            local_path, str(target_dir)
+                                        )
+                                        typer.echo(f"  Downloaded: {relative_path}")
+                        else:
+                            typer.echo(
+                                f"  Error syncing {pattern_clean}: {result.stderr}",
+                                err=True,
+                            )
         else:
             # No include patterns - sync everything
             source_s3_uri = f"s3://{bucket_name}/{s3_prefix}"
@@ -365,7 +439,6 @@ def clone_git_repository(git_config, temp_bundle_dir):
 
     repository_name = git_config.get("repository", "unknown")
     git_url = git_config.get("url")
-    target_dir = git_config.get("targetDir", "./src")
 
     if not git_url:
         typer.echo(f"⚠️  No Git URL specified for repository {repository_name}")
@@ -373,8 +446,8 @@ def clone_git_repository(git_config, temp_bundle_dir):
 
     typer.echo(f"Cloning Git repository: {repository_name}")
 
-    # Create target directory in temp bundle
-    git_target_path = Path(temp_bundle_dir) / target_dir.lstrip("./")
+    # Always clone to repositories/{repository-name}
+    git_target_path = Path(temp_bundle_dir) / "repositories" / repository_name
     git_target_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:

@@ -1,0 +1,260 @@
+# DataZone Connection Examples - Multiple Variants
+# Showing different authentication and configuration options
+
+# SPARK (Glue) - Multiple variants
+spark_basic:
+  name: "spark-basic"
+  description: "Basic Spark cluster without database"
+  connection_type: "spark_glue"
+  glue_version: "5.0"
+  worker_type: "G.1X"
+  worker_count: 10
+  timeout_minutes: 60
+  role: "arn:aws:iam::123456789012:role/GlueServiceRole"
+
+spark_with_database:
+  name: "spark-with-db"
+  description: "Spark cluster with specific database"
+  connection_type: "spark_glue"
+  glue_version: "5.0"
+  worker_type: "G.2X"
+  worker_count: 5
+  timeout_minutes: 120
+  database: "analytics_db"
+  role: "arn:aws:iam::123456789012:role/GlueServiceRole"
+
+spark_advanced:
+  name: "spark-advanced"
+  description: "Spark with VPC and custom properties"
+  connection_type: "spark_glue"
+  glue_version: "4.0"
+  worker_type: "G.1X"
+  worker_count: 20
+  timeout_minutes: 180
+  vpc_config:
+    subnet_id: "subnet-12345678"
+    security_groups: ["sg-12345678"]
+  custom_properties:
+    spark.sql.adaptive.enabled: "true"
+    spark.serializer: "org.apache.spark.serializer.KryoSerializer"
+
+# GLUE - Multiple authentication methods
+glue_username_password:
+  name: "glue-userpass"
+  description: "Glue with username/password"
+  connection_type: "glue"
+  catalog_id: "123456789012"
+  jdbc_url: "jdbc:mysql://mydb.cluster-xyz.us-west-2.rds.amazonaws.com:3306/mydb"
+  username: "admin"
+  password: "mypassword"
+
+glue_secrets_manager:
+  name: "glue-secrets"
+  description: "Glue with Secrets Manager"
+  connection_type: "glue"
+  catalog_id: "123456789012"
+  jdbc_url: "jdbc:postgresql://postgres.cluster-xyz.us-west-2.rds.amazonaws.com:5432/analytics"
+  secret_arn: "arn:aws:secretsmanager:us-west-2:123456789012:secret:prod/postgres/credentials-AbCdEf"
+
+glue_iam_role:
+  name: "glue-iam"
+  description: "Glue with IAM role authentication"
+  connection_type: "glue"
+  catalog_id: "123456789012"
+  authentication_type: "IAM"
+  role_arn: "arn:aws:iam::123456789012:role/GlueDataCatalogRole"
+
+glue_vpc_connection:
+  name: "glue-vpc"
+  description: "Glue with VPC configuration"
+  connection_type: "glue"
+  catalog_id: "123456789012"
+  jdbc_url: "jdbc:oracle:thin:@oracle.internal.company.com:1521:ORCL"
+  secret_arn: "arn:aws:secretsmanager:us-west-2:123456789012:secret:oracle/credentials-XyZ123"
+  vpc_config:
+    subnet_id: "subnet-87654321"
+    security_groups: ["sg-87654321", "sg-11223344"]
+    availability_zone: "us-west-2a"
+
+# REDSHIFT - Multiple authentication methods
+redshift_username_password:
+  name: "redshift-userpass"
+  description: "Redshift with username/password"
+  connection_type: "redshift"
+  cluster_id: "my-redshift-cluster"
+  database: "analytics"
+  host: "my-cluster.xyz.us-west-2.redshift.amazonaws.com"
+  port: 5439
+  username: "admin"
+  password: "mypassword"
+  ssl_enabled: true
+
+redshift_secrets_manager:
+  name: "redshift-secrets"
+  description: "Redshift with Secrets Manager"
+  connection_type: "redshift"
+  cluster_id: "my-redshift-cluster"
+  database: "dwh"
+  host: "my-cluster.xyz.us-west-2.redshift.amazonaws.com"
+  port: 5439
+  secret_arn: "arn:aws:secretsmanager:us-west-2:123456789012:secret:redshift/admin-credentials-AbC123"
+  ssl_enabled: true
+
+redshift_iam_role:
+  name: "redshift-iam"
+  description: "Redshift with IAM role"
+  connection_type: "redshift"
+  cluster_id: "serverless-cluster"
+  database: "analytics"
+  host: "serverless.xyz.us-west-2.redshift-serverless.amazonaws.com"
+  port: 5439
+  authentication_type: "IAM"
+  role_arn: "arn:aws:iam::123456789012:role/RedshiftQueryRole"
+
+# S3 - Multiple access patterns
+s3_basic:
+  name: "s3-basic"
+  description: "Basic S3 bucket access"
+  connection_type: "s3"
+  bucket: "my-data-lake-bucket"
+  region: "us-west-2"
+
+s3_with_prefix:
+  name: "s3-prefixed"
+  description: "S3 with specific prefix"
+  connection_type: "s3"
+  bucket: "company-data-lake"
+  prefix: "analytics/raw-data/"
+  region: "us-west-2"
+  encryption: "AES256"
+
+s3_cross_account:
+  name: "s3-cross-account"
+  description: "S3 cross-account access"
+  connection_type: "s3"
+  bucket: "external-partner-data"
+  region: "us-east-1"
+  role_arn: "arn:aws:iam::987654321098:role/CrossAccountS3Access"
+  external_id: "unique-partner-id-12345"
+
+s3_with_access_point:
+  name: "s3-access-point"
+  description: "S3 via access point"
+  connection_type: "s3"
+  access_point_arn: "arn:aws:s3:us-west-2:123456789012:accesspoint/analytics-ap"
+  region: "us-west-2"
+  encryption: "aws:kms"
+  kms_key_id: "arn:aws:kms:us-west-2:123456789012:key/12345678-1234-1234-1234-123456789012"
+
+# ATHENA - Multiple configurations
+athena_basic:
+  name: "athena-basic"
+  description: "Basic Athena setup"
+  connection_type: "athena"
+  workgroup: "primary"
+  output_location: "s3://my-athena-results/"
+
+athena_custom_workgroup:
+  name: "athena-custom"
+  description: "Athena with custom workgroup"
+  connection_type: "athena"
+  workgroup: "analytics-team"
+  output_location: "s3://analytics-athena-results/team-queries/"
+  encryption: "SSE_KMS"
+  kms_key: "alias/athena-encryption-key"
+  bytes_scanned_limit: 1000000000
+
+athena_cross_account:
+  name: "athena-cross-account"
+  description: "Athena with cross-account catalog"
+  connection_type: "athena"
+  workgroup: "shared-analytics"
+  output_location: "s3://shared-athena-results/"
+  catalog_name: "external-catalog"
+  role_arn: "arn:aws:iam::123456789012:role/AthenaCrossAccountRole"
+
+# SPARK EMR - Multiple configurations
+spark_emr_existing:
+  name: "emr-existing-cluster"
+  description: "Connect to existing EMR cluster"
+  connection_type: "spark_emr"
+  cluster_id: "j-1234567890123"
+  spark_version: "3.4.0"
+
+spark_emr_auto_create:
+  name: "emr-auto-create"
+  description: "Auto-create EMR cluster"
+  connection_type: "spark_emr"
+  auto_create: true
+  spark_version: "3.5.0"
+  instance_type: "m5.xlarge"
+  instance_count: 3
+  emr_release: "emr-6.15.0"
+  applications: ["Spark", "Hadoop", "Hive", "Zeppelin"]
+
+spark_emr_serverless:
+  name: "emr-serverless"
+  description: "EMR Serverless application"
+  connection_type: "spark_emr"
+  serverless: true
+  application_id: "00f4lkj2l3k4j5l6k7j8h9"
+  spark_version: "3.4.0"
+  execution_role: "arn:aws:iam::123456789012:role/EMRServerlessExecutionRole"
+
+# IAM - Multiple role scenarios
+iam_basic_role:
+  name: "iam-basic"
+  description: "Basic IAM role assumption"
+  connection_type: "iam"
+  role_arn: "arn:aws:iam::123456789012:role/DataZoneAccessRole"
+
+iam_cross_account:
+  name: "iam-cross-account"
+  description: "Cross-account IAM role"
+  connection_type: "iam"
+  role_arn: "arn:aws:iam::987654321098:role/ExternalDataAccess"
+  external_id: "unique-external-id-67890"
+  session_duration: 7200
+
+iam_with_conditions:
+  name: "iam-conditional"
+  description: "IAM role with session conditions"
+  connection_type: "iam"
+  role_arn: "arn:aws:iam::123456789012:role/ConditionalAccessRole"
+  session_name: "DataZoneAnalyticsSession"
+  session_duration: 3600
+  mfa_required: true
+  source_ip_condition: "10.0.0.0/8"
+
+# HYPERPOD - Multiple configurations
+hyperpod_basic:
+  name: "hyperpod-basic"
+  description: "Basic HyperPod cluster"
+  connection_type: "hyperpod"
+  cluster_name: "ml-training-cluster"
+  instance_type: "ml.p4d.24xlarge"
+  instance_count: 2
+
+hyperpod_advanced:
+  name: "hyperpod-advanced"
+  description: "Advanced HyperPod with custom config"
+  connection_type: "hyperpod"
+  cluster_name: "large-ml-cluster"
+  instance_type: "ml.p5.48xlarge"
+  instance_count: 8
+  volume_size_gb: 1000
+  max_runtime_hours: 24
+  vpc_config:
+    subnet_ids: ["subnet-12345678", "subnet-87654321"]
+    security_group_ids: ["sg-12345678"]
+
+hyperpod_spot:
+  name: "hyperpod-spot"
+  description: "HyperPod with spot instances"
+  connection_type: "hyperpod"
+  cluster_name: "cost-optimized-cluster"
+  instance_type: "ml.g5.12xlarge"
+  instance_count: 4
+  use_spot_instances: true
+  spot_max_price: "2.50"
+  volume_size_gb: 500

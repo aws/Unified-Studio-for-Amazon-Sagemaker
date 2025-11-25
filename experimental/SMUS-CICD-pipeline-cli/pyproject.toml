@@ -45,8 +45,9 @@ dev = [
     "flake8>=6.0.0",
     "isort>=5.12.0",
     "mypy>=1.0.0",
-    "safety>=2.3.0",
+    "safety>=3.6.2",
     "bandit>=1.7.0",
+    "pip-audit>=2.9.0",
 ]
 
 [project.scripts]

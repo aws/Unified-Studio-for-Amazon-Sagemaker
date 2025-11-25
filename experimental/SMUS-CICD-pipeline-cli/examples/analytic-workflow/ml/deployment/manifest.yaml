@@ -1,0 +1,68 @@
+applicationName: IntegrationTestMLDeployment
+content:
+  storage:
+  - name: deployment-code
+    connectionName: default.s3_shared
+    include:
+    - ml/deployment/code
+  - name: deployment-workflows
+    connectionName: default.s3_shared
+    include:
+    - ml/deployment/workflows
+  - name: model-artifacts
+    connectionName: default.s3_shared
+    include:
+    - ml/output/model-artifacts/latest
+  workflows:
+  - workflowName: ml_deployment_workflow
+    connectionName: default.workflow_serverless
+stages:
+  dev:
+    stage: DEV
+    domain:
+      tags:
+        purpose: smus-cicd-testing
+      region: ${DEV_DOMAIN_REGION:us-east-2}
+    project:
+      name: dev-marketing
+    environment_variables:
+      S3_PREFIX: dev
+  test:
+    stage: TEST
+    domain:
+      tags:
+        purpose: smus-cicd-testing
+      region: ${TEST_DOMAIN_REGION:us-east-1}
+    project:
+      name: test-marketing
+      create: true
+      owners:
+      - Eng1
+      - arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
+      - arn:aws:iam::${AWS_ACCOUNT_ID}:role/Admin
+      contributors: []
+      role:
+        arn: arn:aws:iam::${AWS_ACCOUNT_ID}:role/test-marketing-role
+    environment_variables:
+      S3_PREFIX: test
+    deployment_configuration:
+      storage:
+      - name: deployment-code
+        connectionName: default.s3_shared
+        targetDirectory: ml/bundle/deployment-code
+      - name: deployment-workflows
+        connectionName: default.s3_shared
+        targetDirectory: ml/bundle/deployment-workflows
+      - name: model-artifacts
+        connectionName: default.s3_shared
+        targetDirectory: ml/bundle/model-artifacts
+    bootstrap:
+      actions:
+      - type: workflow.create
+        workflowName: ml_deployment_workflow
+      - type: workflow.run
+        workflowName: ml_deployment_workflow
+        trailLogs: true
+tests:
+  folder: examples/analytic-workflow/ml/deployment/app_tests/
+# Trigger workflow

@@ -15,8 +15,7 @@ This guide provides step-by-step instructions and example script samples to help
   EMR on EC2 clusters must have a security configuration with in-transit encryption enabled before they can be onboarded to SageMaker Studio. This is a mandatory prerequisite.
 
 **NOTE**: EMR Serverless Integration
-- Console integration: Adding existing EMR Serverless Applications via the SageMaker Studio UI will be available in future releases
-- Current workaround: You can attach existing EMR Serverless Applications using the custom connector script provided in this git page.
+- You can attach existing EMR Serverless Applications using the custom connector script provided in this git page.
 
 
 ## The migration process focuses on three key areas:
@@ -164,8 +163,7 @@ If you plan to use existing EMR compute resource:
 2.1 For existing EMR on EC2 Clusters (Console): Review [AWS docs](https://docs.aws.amazon.com/sagemaker-unified-studio/latest/userguide/adding-existing-emr-on-ec2-clusters.html).
 
 2.2 Adding Existing EMR Serverless Applications (Console)
-Console support for adding existing EMR Serverless applications is planned for future release. 
-For now, use the custom script method described [below](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/blob/main/migration/emr/README.md#optional-setting-up-sagemaker-unified-studio-connector-for-emr-compute) to create connections.
+Use the custom script method described [below](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/blob/main/migration/emr/README.md#optional-setting-up-sagemaker-unified-studio-connector-for-emr-compute) to create connections.
 
 
 ### [Optional] Setting up Sagemaker Unified Studio Connector for EMR Compute

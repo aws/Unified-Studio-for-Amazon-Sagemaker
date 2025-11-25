@@ -48,8 +48,14 @@ nosetests.xml
 coverage.xml
 *.cover
 *.py,cover
+
+# SMUS test auto-generated files
+**/app_tests/.smus_test_config.json
+**/app_tests/conftest.py
+**/tests/reports/
 .hypothesis/
 .pytest_cache/
+tests/test-outputs/
 
 # Translations
 *.mo
@@ -141,11 +147,26 @@ Thumbs.db
 config.local.yaml
 *.local.yaml
 
-# Bundle files
-tests/integration/bundles/*.zip
+# Artifact files
+tests/integration/artifacts/*.zip
 *.zip
 
 # Temporary files and scripts
+q-tasks/
 q-tasks.txt
 create_pdf*.py
 cleanup.py
+
+# Overdrive test folder (private testing)
+tests/airless-test/
+tmp/
+
+# Backup files
+*.bak*
+
+# Files marked for deletion
+to-delete/
+
+# Coverage artifacts
+coverage-artifacts/
+coverage-combined/

@@ -1,0 +1,110 @@
+applicationName: DemoMarketingBundle-MWAA
+content:
+  storage:
+  - connectionName: default.s3_shared
+    include:
+    - src
+    exclude:
+    - .ipynb_checkpoints/
+    - __pycache__/
+    - '*.pyc'
+    - .libs.json
+    name: code
+  - connectionName: default.s3_shared
+    include:
+    - workflows
+    exclude:
+    - .ipynb_checkpoints/
+    - __pycache__/
+    - '*.pyc'
+    - .libs.json
+    name: workflows
+    append: true
+  catalog:
+    assets:
+    - selector:
+        search:
+          assetType: GlueTable
+          identifier: covid19_db.countries_aggregated
+      permission: READ
+      requestReason: Required access for DemoMarketingPipeline analytics
+    - selector:
+        search:
+          assetType: GlueTable
+          identifier: covid19_db.worldwide_aggregate
+      permission: READ
+      requestReason: Global data access for marketing insights
+stages:
+  dev:
+    domain:
+      name: cicd-test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-1}
+    stage: DEV
+    project:
+      name: dev-marketing
+      create: false
+    deployment_configuration:
+      storage:
+      - connectionName: default.s3_shared
+        name: code
+        targetDirectory: src
+      - connectionName: default.s3_shared
+        name: workflows
+        targetDirectory: workflows
+  test:
+    domain:
+      name: cicd-test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-1}
+    stage: TEST
+    project:
+      name: dev-marketing-test
+      create: true
+    initialization:
+      project:
+        create: true
+        profile_name: All capabilities
+        owners:
+        - arn:aws:iam::123456789012:role/GitHubActionsRole-SMUS-CLI-Tests
+        - Eng1
+        contributors: []
+      environments:
+      - EnvironmentConfigurationName: OnDemand Workflows
+    deployment_configuration:
+      storage:
+      - connectionName: default.s3_shared
+        name: code
+        targetDirectory: src
+      - connectionName: default.s3_shared
+        name: workflows
+        targetDirectory: workflows
+  prod:
+    domain:
+      name: cicd-test-domain
+      region: ${PROD_DOMAIN_REGION:us-east-1}
+    stage: PROD
+    project:
+      name: prod-marketing
+      create: true
+    initialization:
+      project:
+        create: true
+        profile_name: All capabilities
+        owners:
+        - arn:aws:iam::123456789012:role/GitHubActionsRole-SMUS-CLI-Tests
+        - Eng1
+        contributors: []
+      environments:
+      - EnvironmentConfigurationName: OnDemand Workflows
+    deployment_configuration:
+      catalog:
+        disable: true
+      storage:
+      - connectionName: default.s3_shared
+        name: code
+        targetDirectory: src
+      - connectionName: default.s3_shared
+        name: workflows
+        targetDirectory: workflows
+
+tests:
+  folder: ./tests

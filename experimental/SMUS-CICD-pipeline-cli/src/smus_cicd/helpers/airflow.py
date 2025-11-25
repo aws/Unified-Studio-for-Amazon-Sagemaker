@@ -7,6 +7,8 @@ import time
 import boto3
 import typer
 
+from .logger import get_logger
+
 
 def capture_workflow_logs(mwaa_client, mwaa_env_name, dag_id, run_id, timeout=300):
     """Verify workflow execution by checking DAG runs before and after trigger."""
@@ -39,12 +41,18 @@ def capture_workflow_logs(mwaa_client, mwaa_env_name, dag_id, run_id, timeout=30
                     if stdout_b64:
                         runs_output = base64.b64decode(stdout_b64).decode("utf-8")
                         return runs_output
-                except Exception:
+                except Exception as parse_error:
                     # If JSON parsing fails, try direct text
+                    from .logger import get_logger
+
+                    logger = get_logger("airflow")
+                    logger.warning(
+                        f"Failed to parse JSON response for DAG {dag_id}, using raw text: {parse_error}"
+                    )
                     return response.text
             return None
-        except Exception:
-            return None
+        except Exception as e:
+            raise Exception(f"Failed to check DAG runs for {dag_id}: {e}")
 
     # Wait and check for the run to appear
     for attempt in range(6):  # Check for 30 seconds
@@ -93,8 +101,8 @@ def get_dag_run_status(mwaa_client, mwaa_env_name, dag_id, run_id):
         else:
             return "success"  # Assume success for demo
 
-    except Exception:
-        return "unknown"
+    except Exception as e:
+        raise Exception(f"Failed to get DAG run status for {dag_id}: {e}")
 
 
 def get_task_logs(mwaa_client, mwaa_env_name, dag_id, run_id):
@@ -153,8 +161,8 @@ def get_task_logs(mwaa_client, mwaa_env_name, dag_id, run_id):
                         ):
                             break
 
-            except Exception:
-                continue
+            except Exception as e:
+                raise Exception(f"Failed to get task logs for run {run_id}: {e}")
 
         if all_logs:
             return all_logs[:15]  # Return up to 15 relevant lines
@@ -181,8 +189,7 @@ def check_mwaa_environment(mwaa_client, mwaa_env_name):
             return False
 
     except Exception as e:
-        typer.echo(f"   ❌ Error checking MWAA environment: {str(e)}")
-        return False
+        raise Exception(f"Failed to check MWAA environment {mwaa_env_name}: {e}")
 
 
 def wait_for_dag_reparsing(mwaa_client, mwaa_env_name, workflows_config, max_wait=120):
@@ -245,8 +252,8 @@ def get_dag_last_parsed_time(mwaa_client, mwaa_env_name, dag_id):
             "%Y-%m-%d %H:%M:%S"
         )
 
-    except Exception:
-        return "Unknown"
+    except Exception as e:
+        raise Exception(f"Failed to get DAG last parsed time for {dag_id}: {e}")
 
 
 def wait_for_dags_available(mwaa_env_name, workflows_config, region, max_wait=90):
@@ -289,23 +296,23 @@ def wait_for_dags_available(mwaa_env_name, workflows_config, region, max_wait=90
 
 def get_dag_status(mwaa_client, mwaa_env_name, dag_id):
     """Get DAG status and schedule information from MWAA."""
+    logger = get_logger("airflow")
+
     try:
         # First check if DAG exists by listing all DAGs
         response = mwaa_client.list_dags(EnvironmentName=mwaa_env_name)
         dags = response.get("Dags", [])
 
         # DEBUG: Print all DAGs found in MWAA environment
-        print(
-            f"🔍 DEBUG: Found {len(dags)} DAGs in MWAA environment '{mwaa_env_name}':"
-        )
+        logger.debug(f"Found {len(dags)} DAGs in MWAA environment '{mwaa_env_name}'")
         for dag in dags[:10]:  # Show first 10 DAGs
             dag_id_found = dag.get("DagId", "Unknown")
             is_paused = dag.get("IsPaused", True)
             status = "Active" if not is_paused else "Paused"
-            print(f"   - {dag_id_found} ({status})")
+            logger.debug(f"   - {dag_id_found} ({status})")
         if len(dags) > 10:
-            print(f"   ... and {len(dags) - 10} more DAGs")
-        print(f"🔍 DEBUG: Looking for DAG: '{dag_id}'")
+            logger.debug(f"   ... and {len(dags) - 10} more DAGs")
+        logger.debug(f"Looking for DAG: '{dag_id}'")
 
         # Check if our DAG exists in the list
         dag_exists = any(dag.get("DagId") == dag_id for dag in dags)
@@ -332,8 +339,8 @@ def get_dag_status(mwaa_client, mwaa_env_name, dag_id):
         }
 
     except Exception as e:
-        print(
-            f"🔍 DEBUG: Error listing DAGs in MWAA environment '{mwaa_env_name}': {str(e)}"
+        logger.debug(
+            f"Error listing DAGs in MWAA environment '{mwaa_env_name}': {str(e)}"
         )
         return {
             "dag_id": dag_id,
@@ -366,8 +373,7 @@ def validate_workflows_in_mwaa(workflows_config, project_name, config):
         return wait_for_dags_available(mwaa_env_name, workflows_config, region)
 
     except Exception as e:
-        print(f"⚠️ Workflow validation failed: {str(e)}")
-        return False
+        raise Exception(f"Workflow validation failed: {e}")
 
 
 def trigger_dag_run(mwaa_client, mwaa_env_name, dag_id, parameters=None):
@@ -408,4 +414,4 @@ def trigger_dag_run(mwaa_client, mwaa_env_name, dag_id, parameters=None):
 
     except Exception as e:
         typer.echo(f"Error triggering DAG {dag_id}: {str(e)}", err=True)
-        return None
+        raise Exception(f"Failed to trigger DAG {dag_id}: {e}")

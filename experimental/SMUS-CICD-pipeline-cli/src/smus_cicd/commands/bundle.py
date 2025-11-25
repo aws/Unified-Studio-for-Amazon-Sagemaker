@@ -11,8 +11,9 @@ from typing import Optional
 import boto3
 import typer
 
+from ..application import ApplicationManifest
 from ..helpers import deployment
-from ..helpers.utils import get_datazone_project_info, load_config, load_yaml
+from ..helpers.utils import get_datazone_project_info, load_config
 
 
 def display_bundle_tree(zip_path: str, output: str):
@@ -22,7 +23,7 @@ def display_bundle_tree(zip_path: str, output: str):
 
     try:
         with zipfile.ZipFile(zip_path, "r") as zipf:
-            # Filter out Python cache files
+            # Filter out Python cache files and dot directories
             file_list = sorted(
                 [
                     f
@@ -30,6 +31,7 @@ def display_bundle_tree(zip_path: str, output: str):
                     if not f.endswith(".pyc")
                     and "__pycache__" not in f
                     and ".ipynb_checkpoints" not in f
+                    and not any(part.startswith(".") for part in f.split("/"))
                 ]
             )
 
@@ -79,7 +81,7 @@ def bundle_command(
     """Create bundle zip files by downloading from S3 connection locations."""
     try:
         config = load_config()
-        manifest = load_yaml(manifest_file)
+        manifest = ApplicationManifest.from_file(manifest_file)
 
         # Parse targets - handle single target or comma-separated list
         target_list = []
@@ -87,59 +89,61 @@ def bundle_command(
             target_list = [t.strip() for t in targets.split(",")]
 
         # Use first target for now (bundle command typically works with single target)
-        target_name = target_list[0] if target_list else None
-        if "domain" in manifest:
-            config["domain"] = manifest["domain"]
-            config["region"] = manifest["domain"].get("region")
-            if not config["region"]:
-                raise ValueError(
-                    "Region must be specified in manifest domain configuration"
-                )
+        stage_name = target_list[0] if target_list else None
 
-        region = config.get("region")
-        if not region:
-            raise ValueError("Region must be specified in configuration or manifest")
-
-        # Check if bundle section exists
-        bundle_config = manifest.get("bundle", {})
-        if not bundle_config:
-            typer.echo("Error: No bundle section found in pipeline manifest", err=True)
-            raise typer.Exit(1)
-
-        # Get target configuration
-        targets = manifest.get("targets", {})
-
-        # If no target specified, find the default target
-        if not target_name:
-            for name, target_config in targets.items():
-                if target_config.get("default", False):
-                    target_name = name
-                    typer.echo(f"Using default target: {target_name}")
+        # If no target specified, default to target with STAGE=DEV
+        if not stage_name:
+            for name in manifest.stages.keys():
+                target_config = manifest.get_stage(name)
+                if target_config.stage and target_config.stage.upper() == "DEV":
+                    stage_name = name
+                    typer.echo(
+                        f"No target specified, defaulting to DEV target: {stage_name}"
+                    )
                     break
 
-            if not target_name:
-                typer.echo(
-                    "Error: No target specified and no default target found", err=True
-                )
-                raise typer.Exit(1)
-
-        if target_name not in targets:
-            typer.echo(f"Error: Target '{target_name}' not found in manifest", err=True)
+        # Require target to be specified or found
+        if not stage_name:
+            typer.echo(
+                "Error: No target specified and no DEV stage target found. Use --targets to specify a target (e.g., --targets dev)",
+                err=True,
+            )
             raise typer.Exit(1)
 
-        target_config = targets[target_name]
-        project_name = target_config.get("project", {}).get("name")
+        if stage_name not in manifest.stages:
+            typer.echo(f"Error: Target '{stage_name}' not found in manifest", err=True)
+            raise typer.Exit(1)
 
-        typer.echo(f"Creating bundle for target: {target_name}")
+        target_config = manifest.get_stage(stage_name)
+        project_name = target_config.project.name
+
+        # Get region and domain name from target's domain configuration
+        if target_config.domain:
+            if "domain" not in config:
+                config["domain"] = {}
+            config["domain"]["region"] = target_config.domain.region
+            if target_config.domain.name:
+                config["domain"]["name"] = target_config.domain.name
+            if target_config.domain.tags:
+                config["domain"]["tags"] = target_config.domain.tags
+
+        region = config.get("domain", {}).get("region") or config.get("aws", {}).get(
+            "region"
+        )
+        if not region:
+            raise ValueError(
+                "Region must be specified in target domain configuration or AWS config"
+            )
+
+        typer.echo(f"Creating bundle for target: {stage_name}")
         typer.echo(f"Project: {project_name}")
 
         # Get project connections to find S3 locations
         project_info = get_datazone_project_info(project_name, config)
         connections = project_info.get("connections", {})
 
-        # Get bundles directory from manifest or use default
-        bundle_config = manifest.get("bundle", {})
-        bundles_directory = bundle_config.get("bundlesDirectory", "./bundles")
+        # Use output_dir parameter as bundles directory
+        bundles_directory = output_dir
 
         # Import bundle storage helper
         from ..helpers.bundle_storage import (
@@ -152,8 +156,8 @@ def bundle_command(
         ensure_bundle_directory_exists(bundles_directory, region)
 
         # Create zip file path (always create locally first, then upload if S3)
-        pipeline_name = manifest.get("pipelineName", "pipeline")
-        zip_filename = f"{pipeline_name}.zip"
+        bundle_name = manifest.application_name
+        zip_filename = f"{bundle_name}.zip"
 
         if is_s3_url(bundles_directory):
             # Create temporary local file for S3 upload
@@ -171,50 +175,20 @@ def bundle_command(
 
             s3_client = boto3.client("s3", region_name=region)
 
-            # Process workflow bundles
-            workflow_config = bundle_config.get("workflow", [])
-            if isinstance(workflow_config, list):
-                workflow_bundles = workflow_config
-            else:
-                workflow_bundles = [workflow_config] if workflow_config else []
-
-            for bundle_def in workflow_bundles:
-                connection_name = bundle_def.get("connectionName")
-                include_patterns = bundle_def.get("include", [])
-                append_flag = bundle_def.get("append", True)
-
-                if not connection_name or connection_name not in connections:
-                    continue
-
-                connection = connections[connection_name]
-                s3_uri = connection.get("s3Uri")
-                if not s3_uri:
-                    continue
-
-                typer.echo(
-                    f"Downloading workflows from S3: {connection_name} (append: {append_flag})"
-                )
-
-                # List S3 contents first
-                deployment.list_s3_contents(s3_client, s3_uri, "Workflows")
-
-                files_added = deployment.download_s3_files(
-                    s3_client, s3_uri, include_patterns, temp_bundle_dir, ""
-                )
-                total_files_added += files_added
-                typer.echo(f"  Downloaded {files_added} workflow files from S3")
-
-            # Process storage bundles
-            storage_config = bundle_config.get("storage", [])
-            if isinstance(storage_config, list):
-                storage_bundles = storage_config
-            else:
-                storage_bundles = [storage_config] if storage_config else []
+            # Process storage bundles (unified - includes workflows)
+            storage_bundles = (
+                manifest.content.storage
+                if manifest.content and manifest.content.storage
+                else []
+            )
 
             for bundle_def in storage_bundles:
-                connection_name = bundle_def.get("connectionName")
-                include_patterns = bundle_def.get("include", [])
-                append_flag = bundle_def.get("append", False)
+                name = bundle_def.name
+                connection_name = bundle_def.connectionName
+                include_patterns = bundle_def.include if bundle_def.include else []
+                append_flag = (
+                    bundle_def.append if hasattr(bundle_def, "append") else False
+                )
 
                 if not connection_name or connection_name not in connections:
                     continue
@@ -225,31 +199,170 @@ def bundle_command(
                     continue
 
                 typer.echo(
-                    f"Downloading storage from S3: {connection_name} (append: {append_flag})"
+                    f"Downloading '{name}' from S3: {connection_name} (append: {append_flag})"
                 )
 
                 # List S3 contents first
-                deployment.list_s3_contents(s3_client, s3_uri, "Storage")
+                deployment.list_s3_contents(s3_client, s3_uri, f"Storage[{name}]")
 
+                # Download to bundle root with name as subdirectory
                 files_added = deployment.download_s3_files(
-                    s3_client, s3_uri, include_patterns, temp_bundle_dir, "storage"
+                    s3_client, s3_uri, include_patterns, temp_bundle_dir, name
                 )
                 total_files_added += files_added
-                typer.echo(f"  Downloaded {files_added} storage files from S3")
+                typer.echo(f"  Downloaded {files_added} files for '{name}'")
 
-            # Process Git repositories
-            git_config = bundle_config.get("git", {})
-            if git_config:
-                repository = git_config.get("repository")
-                url = git_config.get("url")
-                target_dir = git_config.get("targetDir", "git")
+            # Process QuickSight dashboards
+            quicksight_dashboards = (
+                manifest.content.quicksight
+                if manifest.content and manifest.content.quicksight
+                else []
+            )
 
-                if url:
-                    typer.echo(f"Cloning Git repository: {repository or url}")
+            if quicksight_dashboards:
+                from ..helpers.quicksight import export_dashboard, poll_export_job
+
+                aws_account_id = config.get("aws", {}).get("account_id")
+                if not aws_account_id:
+                    # Try to get from STS
+                    try:
+                        sts = boto3.client("sts", region_name=region)
+                        aws_account_id = sts.get_caller_identity()["Account"]
+                    except Exception:
+                        typer.echo(
+                            "Warning: AWS account ID not found, skipping QuickSight export",
+                            err=True,
+                        )
+
+                if aws_account_id:
+                    for dashboard_config in quicksight_dashboards:
+                        # Get assetBundle attribute (defaults to "export" if not provided)
+                        asset_bundle = getattr(
+                            dashboard_config, "assetBundle", "export"
+                        )
+                        # Use name for lookup
+                        dashboard_name = getattr(dashboard_config, "name", None)
+
+                        if not dashboard_name:
+                            typer.echo(
+                                "Error: 'name' field is required for QuickSight dashboards",
+                                err=True,
+                            )
+                            continue
+
+                        if asset_bundle == "export":
+                            # Export from QuickSight service
+                            try:
+                                # Lookup dashboard ID by name
+                                from ..helpers.quicksight import (
+                                    lookup_dashboard_by_name,
+                                )
+
+                                typer.echo(
+                                    f"Looking up QuickSight dashboard by name: {dashboard_name}"
+                                )
+                                dashboard_id = lookup_dashboard_by_name(
+                                    dashboard_name, aws_account_id, region
+                                )
+
+                                typer.echo(
+                                    f"Exporting QuickSight dashboard: {dashboard_name}"
+                                )
+                                job_id = export_dashboard(
+                                    dashboard_id, aws_account_id, region
+                                )
+                                download_url = poll_export_job(
+                                    job_id, aws_account_id, region
+                                )
+
+                                # Download bundle to temp directory
+                                import requests
+
+                                response = requests.get(download_url)
+                                response.raise_for_status()
+
+                                bundle_path = os.path.join(
+                                    temp_bundle_dir,
+                                    "quicksight",
+                                    f"{dashboard_name}.qs",
+                                )
+                                os.makedirs(os.path.dirname(bundle_path), exist_ok=True)
+                                with open(bundle_path, "wb") as f:
+                                    f.write(response.content)
+
+                                total_files_added += 1
+                                typer.echo("  Exported dashboard to bundle")
+                            except Exception as e:
+                                typer.echo(
+                                    f"Error exporting dashboard {dashboard_id}: {e}",
+                                    err=True,
+                                )
+                        else:
+                            # Copy local file to bundle
+                            typer.echo(f"Copying local QuickSight file: {asset_bundle}")
+                            try:
+                                # Resolve path relative to manifest directory
+                                if manifest_file:
+                                    manifest_dir = os.path.dirname(
+                                        os.path.abspath(manifest_file)
+                                    )
+                                    source_path = os.path.join(
+                                        manifest_dir, asset_bundle
+                                    )
+                                else:
+                                    source_path = asset_bundle
+
+                                if not os.path.exists(source_path):
+                                    typer.echo(
+                                        f"  Warning: Local file not found: {source_path}",
+                                        err=True,
+                                    )
+                                    continue
+
+                                # Copy to bundle at quicksight/{name}.qs
+                                bundle_path = os.path.join(
+                                    temp_bundle_dir,
+                                    "quicksight",
+                                    f"{dashboard_name}.qs",
+                                )
+                                os.makedirs(os.path.dirname(bundle_path), exist_ok=True)
+
+                                shutil.copy2(source_path, bundle_path)
+
+                                total_files_added += 1
+                                typer.echo(f"  Copied to bundle: {bundle_path}")
+                            except Exception as e:
+                                typer.echo(
+                                    f"Error copying local file {asset_bundle}: {e}",
+                                    err=True,
+                                )
+
+            # Process Git repositories (supports both dict and list formats)
+            git_repos = (
+                manifest.content.git
+                if manifest.content and manifest.content.git
+                else []
+            )
+
+            for repo_config in git_repos:
+                repository = (
+                    repo_config.get("repository")
+                    if isinstance(repo_config, dict)
+                    else repo_config.repository
+                )
+                url = (
+                    repo_config.get("url")
+                    if isinstance(repo_config, dict)
+                    else repo_config.url
+                )
+
+                if url and repository:
+                    typer.echo(f"Cloning Git repository: {repository}")
 
                     try:
+                        # Always clone to repositories/{repository-name}
                         clone_path = os.path.join(
-                            temp_bundle_dir, target_dir.lstrip("./")
+                            temp_bundle_dir, "repositories", repository
                         )
                         os.makedirs(os.path.dirname(clone_path), exist_ok=True)
 
@@ -258,7 +371,7 @@ def bundle_command(
                             check=True,
                             capture_output=True,
                             text=True,
-                            timeout=60,
+                            timeout=180,
                         )
 
                         # Remove .git directory and Python cache files
@@ -268,18 +381,24 @@ def bundle_command(
 
                         # Remove Python cache files and directories
                         for root, dirs, files in os.walk(clone_path, topdown=False):
-                            # Remove __pycache__ directories
+                            # Remove __pycache__ and dot directories
                             dirs_to_remove = [
                                 d
                                 for d in dirs
-                                if d == "__pycache__" or d == ".ipynb_checkpoints"
+                                if d == "__pycache__"
+                                or d == ".ipynb_checkpoints"
+                                or d.startswith(".")
                             ]
                             for d in dirs_to_remove:
                                 shutil.rmtree(os.path.join(root, d))
                                 dirs.remove(d)
 
-                            # Remove .pyc files
-                            files_to_remove = [f for f in files if f.endswith(".pyc")]
+                            # Remove .pyc and .DS_Store files
+                            files_to_remove = [
+                                f
+                                for f in files
+                                if f.endswith(".pyc") or f == ".DS_Store"
+                            ]
                             for f in files_to_remove:
                                 os.remove(os.path.join(root, f))
 
@@ -290,12 +409,12 @@ def bundle_command(
 
                         total_files_added += git_files_added
                         typer.echo(
-                            f"  Cloned {git_files_added} files from Git repository"
+                            f"  Cloned {git_files_added} files from {repository}"
                         )
 
                     except subprocess.TimeoutExpired:
                         typer.echo(
-                            "Error: Git clone timed out after 60 seconds", err=True
+                            "Error: Git clone timed out after 180 seconds", err=True
                         )
                     except Exception as e:
                         typer.echo(f"Error cloning Git repository: {str(e)}", err=True)
@@ -310,16 +429,18 @@ def bundle_command(
 
                 with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
                     for root, dirs, files in os.walk(temp_bundle_dir):
-                        # Filter out __pycache__ directories
+                        # Filter out __pycache__ and dot directories
                         dirs[:] = [
                             d
                             for d in dirs
-                            if d != "__pycache__" and d != ".ipynb_checkpoints"
+                            if d != "__pycache__"
+                            and d != ".ipynb_checkpoints"
+                            and not d.startswith(".")
                         ]
 
                         for file in files:
-                            # Skip .pyc files
-                            if file.endswith(".pyc"):
+                            # Skip .pyc and .DS_Store files
+                            if file.endswith(".pyc") or file == ".DS_Store":
                                 continue
 
                             file_path = os.path.join(root, file)
@@ -328,7 +449,7 @@ def bundle_command(
 
                 # Upload to final location (S3 or local)
                 final_bundle_path = upload_bundle(
-                    zip_path, bundles_directory, pipeline_name, region
+                    zip_path, bundles_directory, bundle_name, region
                 )
 
                 file_size = os.path.getsize(zip_path)
@@ -346,14 +467,14 @@ def bundle_command(
                 typer.echo("❌ No files found", err=True)
                 raise typer.Exit(1)
 
-        typer.echo(f"Bundle creation complete for target: {target_name}")
+        typer.echo(f"Bundle creation complete for target: {stage_name}")
 
     except Exception as e:
         if output.upper() == "JSON":
             error_result = {
                 "success": False,
                 "error": str(e),
-                "target": target_name,
+                "target": stage_name,
                 "manifest_file": manifest_file,
             }
             typer.echo(json.dumps(error_result, indent=2))

@@ -1,0 +1,114 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'IAM Role for SMUS project stage - project role only (Bedrock resources managed separately in SMUSBedrockAgentRole stack)'
+
+Parameters:
+  ProjectRoleName:
+    Type: String
+    Description: Name of the project role (e.g., test-marketing-role, prod-marketing-role)
+    AllowedPattern: ^[a-z0-9-]+-role$
+  
+  BedrockTestingPolicyArn:
+    Type: String
+    Description: ARN of the existing BedrockTestingPolicy managed policy
+    Default: 'arn:aws:iam::019900059033:policy/BedrockTestingPolicy'
+  
+  BedrockAgentPassRolePolicyArn:
+    Type: String
+    Description: ARN of the existing BedrockAgentPassRolePolicy managed policy
+    Default: 'arn:aws:iam::019900059033:policy/BedrockAgentPassRolePolicy'
+
+Resources:
+  ProjectRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref ProjectRoleName
+      Description: !Sub 'SMUS project role ${ProjectRoleName}'
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - emr-serverless.amazonaws.com
+                - athena.amazonaws.com
+                - redshift.amazonaws.com
+                - glue.amazonaws.com
+                - lakeformation.amazonaws.com
+                - sagemaker.amazonaws.com
+                - scheduler.amazonaws.com
+                - bedrock.amazonaws.com
+                - datazone.amazonaws.com
+                - airflow-serverless.amazonaws.com
+            Action:
+              - sts:AssumeRole
+              - sts:TagSession
+              - sts:SetContext
+              - sts:SetSourceIdentity
+            Condition:
+              StringEquals:
+                'aws:SourceAccount': !Ref 'AWS::AccountId'
+      Policies:
+        - PolicyName: SelfPassRolePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: PassRoleSelf
+                Effect: Allow
+                Action: iam:PassRole
+                Resource:
+                  - !Sub 'arn:aws:iam::${AWS::AccountId}:role/${ProjectRoleName}'
+                  - !Sub 'arn:aws:iam::${AWS::AccountId}:role/DEFAULT_AgentExecutionRole'
+                  - !Sub 'arn:aws:iam::${AWS::AccountId}:role/*-lambda-role-${AWS::Region}-${AWS::AccountId}'
+                Condition:
+                  StringEquals:
+                    iam:PassedToService:
+                      - sagemaker.amazonaws.com
+                      - glue.amazonaws.com
+                      - lakeformation.amazonaws.com
+                      - bedrock.amazonaws.com
+                      - scheduler.amazonaws.com
+                      - airflow-serverless.amazonaws.com
+                      - redshift.amazonaws.com
+                      - emr-serverless.amazonaws.com
+                      - lambda.amazonaws.com
+        - PolicyName: BedrockInvokeAgentPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeAgent
+                  - bedrock:InvokeModel
+                  - bedrock:GetAgent
+                  - bedrock:ListAgents
+                Resource: '*'
+        # Allow managing inline policies on the pre-created lambda role
+        # The bedrock_agent_helper.py code dynamically adds inline policies for:
+        # 1. sub_agent_policy - permissions to invoke sub-agents (if sub_agent_arns provided)
+        # 2. additional_function_policy - custom permissions (if additional_function_iam_policy provided)
+        # 3. dynamodb-policy - DynamoDB table access (if dynamodb_table_name provided)
+        - PolicyName: ManageLambdaRoleInlinePolicies
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - iam:PutRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:DeleteRolePolicy
+                Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:role/test_agent-lambda-role-${AWS::Region}-${AWS::AccountId}'
+      ManagedPolicyArns:
+        - !Ref BedrockTestingPolicyArn
+        - !Ref BedrockAgentPassRolePolicyArn
+        - arn:aws:iam::aws:policy/SageMakerStudioUserIAMPermissiveExecutionPolicy
+      Tags:
+        - Key: CreatedBy
+          Value: SMUS-CICD
+        - Key: ManagedBy
+          Value: CloudFormation
+
+Outputs:
+  ProjectRoleArn:
+    Description: ARN of the project role
+    Value: !GetAtt ProjectRole.Arn

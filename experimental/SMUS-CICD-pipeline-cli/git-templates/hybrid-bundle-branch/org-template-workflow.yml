@@ -1,0 +1,336 @@
+name: SMUS Bundle-Based Deployment (Reusable)
+
+# This is a REUSABLE workflow for bundle-based deployment
+# DevOps maintains this in a central repository
+# Application teams call it from their workflows
+
+on:
+  workflow_call:
+    inputs:
+      manifest_path:
+        description: 'Path to application manifest file'
+        required: false
+        type: string
+        default: 'manifest.yaml'
+      
+      bundle_version:
+        description: 'Bundle version (auto-generated if not provided)'
+        required: false
+        type: string
+        default: ''
+      
+      artifact_repository:
+        description: 'S3 bucket for storing bundles'
+        required: false
+        type: string
+        default: 's3://smus-artifacts'
+      
+      smus_cli_path:
+        description: 'Path to SMUS CLI installation'
+        required: false
+        type: string
+        default: 'experimental/SMUS-CICD-pipeline-cli'
+      
+      python_version:
+        description: 'Python version to use'
+        required: false
+        type: string
+        default: '3.12'
+      
+      aws_region:
+        description: 'AWS region for authentication'
+        required: false
+        type: string
+        default: 'us-east-1'
+      
+      test_environment:
+        description: 'GitHub environment name for test'
+        required: false
+        type: string
+        default: 'aws-test'
+      
+      prod_environment:
+        description: 'GitHub environment name for production'
+        required: false
+        type: string
+        default: 'aws-prod'
+    
+    secrets:
+      AWS_ROLE_ARN_TEST:
+        description: 'AWS IAM role ARN for test deployments'
+        required: true
+      
+      AWS_ROLE_ARN_PROD:
+        description: 'AWS IAM role ARN for production deployments'
+        required: true
+      
+      TEST_DOMAIN_REGION:
+        description: 'AWS region for test domain'
+        required: false
+      
+      PROD_DOMAIN_REGION:
+        description: 'AWS region for production domain'
+        required: false
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  # ============================================================================
+  # CREATE BUNDLE - Package application into versioned artifact
+  # ============================================================================
+  create-bundle:
+    name: "Create Bundle"
+    runs-on: ubuntu-latest
+    outputs:
+      bundle-version: ${{ steps.version.outputs.bundle-version }}
+      bundle-path: ${{ steps.create.outputs.bundle-path }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Generate bundle version
+        id: version
+        run: |
+          if [ -n "${{ inputs.bundle_version }}" ]; then
+            VERSION="${{ inputs.bundle_version }}"
+          else
+            VERSION="${{ github.ref_name }}-$(date +%Y%m%d-%H%M%S)-${GITHUB_SHA:0:7}"
+          fi
+          echo "bundle-version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Bundle version: $VERSION"
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: 'pip'
+      
+      - name: Install SMUS CLI
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+        working-directory: ${{ inputs.smus_cli_path }}
+      
+      - name: Create bundle
+        id: create
+        run: |
+          echo "📦 Creating bundle..."
+          smus-cli bundle \
+            --manifest ${{ inputs.manifest_path }} \
+            --bundles-dir ./bundles \
+            --version ${{ steps.version.outputs.bundle-version }}
+          
+          BUNDLE_FILE=$(ls bundles/*.tar.gz | head -1)
+          echo "bundle-path=$BUNDLE_FILE" >> $GITHUB_OUTPUT
+          echo "✅ Bundle created: $BUNDLE_FILE"
+        env:
+          SMUS_LOG_LEVEL: WARNING
+      
+      - name: Upload bundle to artifact repository
+        run: |
+          echo "📤 Uploading bundle to artifact repository..."
+          aws s3 cp ${{ steps.create.outputs.bundle-path }} \
+            ${{ inputs.artifact_repository }}/$(basename ${{ inputs.manifest_path }} .yaml)/${{ steps.version.outputs.bundle-version }}/
+          echo "✅ Bundle uploaded"
+        env:
+          AWS_REGION: ${{ inputs.aws_region }}
+      
+      - name: Upload bundle as GitHub artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-${{ steps.version.outputs.bundle-version }}
+          path: ${{ steps.create.outputs.bundle-path }}
+          retention-days: 30
+
+  # ============================================================================
+  # TEST STAGE - Deploy bundle to test environment
+  # ============================================================================
+  deploy-test:
+    name: "Deploy to Test"
+    runs-on: ubuntu-latest
+    needs: [create-bundle]
+    environment: ${{ inputs.test_environment }}
+    outputs:
+      tests-passed: ${{ steps.run-tests.outcome == 'success' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ inputs.aws_region }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_TEST }}
+          role-session-name: smus-deploy-test-${{ github.run_id }}
+          role-duration-seconds: 3600
+      
+      - name: Download bundle
+        run: |
+          echo "📥 Downloading bundle..."
+          aws s3 cp \
+            ${{ inputs.artifact_repository }}/$(basename ${{ inputs.manifest_path }} .yaml)/${{ needs.create-bundle.outputs.bundle-version }}/$(basename ${{ needs.create-bundle.outputs.bundle-path }}) \
+            ./bundle.tar.gz
+          echo "✅ Bundle downloaded"
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: 'pip'
+      
+      - name: Install SMUS CLI
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+        working-directory: ${{ inputs.smus_cli_path }}
+      
+      - name: Deploy bundle to test
+        run: |
+          echo "🚀 Deploying bundle to test environment..."
+          smus-cli deploy \
+            --manifest ${{ inputs.manifest_path }} \
+            --bundle ./bundle.tar.gz \
+            test
+          echo "✅ Deployed to test"
+        env:
+          TEST_DOMAIN_REGION: ${{ secrets.TEST_DOMAIN_REGION }}
+          SMUS_LOG_LEVEL: WARNING
+      
+      - name: Run tests
+        id: run-tests
+        run: |
+          echo "🧪 Running tests in test..."
+          smus-cli test \
+            --manifest ${{ inputs.manifest_path }} \
+            test
+          echo "✅ Tests passed"
+        env:
+          TEST_DOMAIN_REGION: ${{ secrets.TEST_DOMAIN_REGION }}
+          SMUS_LOG_LEVEL: WARNING
+      
+      - name: Create test results summary
+        run: |
+          echo "✅ Test deployment successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Bundle Version:** ${{ needs.create-bundle.outputs.bundle-version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Tests:** Passed ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Ready to promote to production" >> $GITHUB_STEP_SUMMARY
+
+  # ============================================================================
+  # PROD STAGE - Deploy bundle to production environment
+  # Requires: Manual approval + Tests passed
+  # ============================================================================
+  deploy-prod:
+    name: "Deploy to Production"
+    runs-on: ubuntu-latest
+    needs: [create-bundle, deploy-test]
+    if: needs.deploy-test.outputs.tests-passed == 'true'
+    environment: 
+      name: ${{ inputs.prod_environment }}
+      url: https://console.aws.amazon.com/
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ inputs.aws_region }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
+          role-session-name: smus-deploy-prod-${{ github.run_id }}
+          role-duration-seconds: 3600
+      
+      - name: Download bundle
+        run: |
+          echo "📥 Downloading bundle..."
+          aws s3 cp \
+            ${{ inputs.artifact_repository }}/$(basename ${{ inputs.manifest_path }} .yaml)/${{ needs.create-bundle.outputs.bundle-version }}/$(basename ${{ needs.create-bundle.outputs.bundle-path }}) \
+            ./bundle.tar.gz
+          echo "✅ Bundle downloaded"
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+          cache: 'pip'
+      
+      - name: Install SMUS CLI
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+        working-directory: ${{ inputs.smus_cli_path }}
+      
+      - name: Deploy bundle to production
+        run: |
+          echo "🚀 Deploying bundle to production environment..."
+          smus-cli deploy \
+            --manifest ${{ inputs.manifest_path }} \
+            --bundle ./bundle.tar.gz \
+            prod
+          echo "✅ Deployed to production"
+        env:
+          PROD_DOMAIN_REGION: ${{ secrets.PROD_DOMAIN_REGION }}
+          SMUS_LOG_LEVEL: WARNING
+      
+      - name: Run smoke tests
+        run: |
+          echo "🧪 Running smoke tests in production..."
+          smus-cli test \
+            --manifest ${{ inputs.manifest_path }} \
+            prod
+          echo "✅ Smoke tests passed"
+        env:
+          PROD_DOMAIN_REGION: ${{ secrets.PROD_DOMAIN_REGION }}
+          SMUS_LOG_LEVEL: WARNING
+      
+      - name: Production deployment summary
+        run: |
+          echo "🎉 Production deployment completed successfully" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Bundle Version:** ${{ needs.create-bundle.outputs.bundle-version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Deployed by:** @${{ github.actor }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Approved by:** Reviewer (via GitHub environment protection)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Rollback:** To rollback, redeploy a previous bundle version" >> $GITHUB_STEP_SUMMARY
+
+  # ============================================================================
+  # SUMMARY - Report deployment status
+  # ============================================================================
+  summary:
+    name: "Deployment Summary"
+    runs-on: ubuntu-latest
+    needs: [create-bundle, deploy-test, deploy-prod]
+    if: always()
+    
+    steps:
+      - name: Generate summary
+        run: |
+          echo "# 📦 Bundle Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Bundle Version:** \`${{ needs.create-bundle.outputs.bundle-version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Trigger:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Deployment Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Stage | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Bundle Creation | ${{ needs.create-bundle.result == 'success' && '✅ Success' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Test | ${{ needs.deploy-test.result == 'success' && '✅ Success' || needs.deploy-test.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Prod | ${{ needs.deploy-prod.result == 'success' && '✅ Success' || needs.deploy-prod.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Bundle Strategy" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Create once:** Bundle is created with version \`${{ needs.create-bundle.outputs.bundle-version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deploy many:** Same bundle deployed to test and prod" >> $GITHUB_STEP_SUMMARY
+          echo "- **Rollback:** Redeploy any previous bundle version" >> $GITHUB_STEP_SUMMARY

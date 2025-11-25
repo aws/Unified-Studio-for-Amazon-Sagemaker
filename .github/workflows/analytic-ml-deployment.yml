@@ -1,0 +1,24 @@
+name: Deploy ML Deployment
+
+on:
+  push:
+    branches:
+      - main
+      - test
+      - amirbo_feature_branch
+    paths:
+      - 'experimental/SMUS-CICD-pipeline-cli/examples/analytic-workflow/ml/deployment/**'
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/smus-bundle-deploy.yml
+    with:
+      manifest_path: 'experimental/SMUS-CICD-pipeline-cli/examples/analytic-workflow/ml/deployment/manifest.yaml'
+      test_target: 'test'
+      prod_target: 'prod'
+      deploy_to_prod: ${{ github.ref == 'refs/heads/main' }}

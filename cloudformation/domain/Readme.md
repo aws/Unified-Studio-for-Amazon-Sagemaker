@@ -210,6 +210,10 @@ Parameters:
     - QuickSight
     - Additional analytics tools
 
+3. Generative AI model governance:
+    #Internal Project profile for Amazon Bedrock Governance
+
+
 #### Outputs:
 ```yaml
 Outputs:
@@ -217,6 +221,8 @@ Outputs:
     Value: !GetAtt SQLAnalytics.Id
   AllCapabilitiesProjectProfileId:
     Value: !GetAtt AllCapabilitiesProjectProfile.Id
+  ModelGovernanceProjectProfileId:
+    Value: !GetAtt ModelGovernanceProjectProfile.Id
 ```
 
 ### 6. policy_grant.yaml

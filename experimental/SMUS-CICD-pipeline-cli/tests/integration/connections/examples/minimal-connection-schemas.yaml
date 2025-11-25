@@ -1,0 +1,118 @@
+# Minimal DataZone Connection Schemas
+# Based on actual API validation from our testing
+
+# REQUIRED FIELDS FOR ALL CONNECTIONS:
+# - name: string
+# - environmentIdentifier: string (required by API)
+# - domainIdentifier: string (for API call)
+# - props: object (connection-type specific)
+
+# 1. SPARK GLUE - CONFIRMED WORKING ✅
+spark_glue_minimal:
+  name: "spark-connection"
+  description: "Spark Glue connection"
+  props:
+    sparkGlueProperties:
+      glueVersion: "5.0"
+      workerType: "G.1X" 
+      numberOfWorkers: 10
+      timeout: 60
+
+# 2. ATHENA - AVAILABLE ✅
+athena_minimal:
+  name: "athena-connection"
+  description: "Athena connection"
+  props:
+    athenaProperties:
+      workGroup: "primary"
+      outputLocation: "s3://bucket/path/"
+
+# 3. GLUE - AVAILABLE ✅  
+glue_minimal:
+  name: "glue-connection"
+  description: "Glue catalog connection"
+  props:
+    glueProperties:
+      catalogId: "123456789012"
+      connectionProperties:
+        JDBC_CONNECTION_URL: "jdbc:mysql://host:3306/db"
+
+# 4. REDSHIFT - AVAILABLE ✅
+redshift_minimal:
+  name: "redshift-connection"
+  description: "Redshift connection"
+  props:
+    redshiftProperties:
+      clusterIdentifier: "cluster-name"
+      database: "dbname"
+      host: "cluster.region.redshift.amazonaws.com"
+      port: 5439
+
+# 5. S3 - AVAILABLE ✅
+s3_minimal:
+  name: "s3-connection"
+  description: "S3 connection"
+  props:
+    s3Properties:
+      bucket: "my-bucket"
+      region: "us-west-2"
+
+# 6. SPARK EMR - AVAILABLE ✅
+spark_emr_minimal:
+  name: "spark-emr-connection"
+  description: "Spark EMR connection"
+  props:
+    sparkEmrProperties:
+      clusterId: "j-1234567890123"
+      sparkVersion: "3.4.0"
+
+# 7. IAM - AVAILABLE ✅
+iam_minimal:
+  name: "iam-connection"
+  description: "IAM connection"
+  props:
+    iamProperties:
+      roleArn: "arn:aws:iam::123456789012:role/Role"
+
+# 8. HYPERPOD - AVAILABLE ✅
+hyperpod_minimal:
+  name: "hyperpod-connection"
+  description: "HyperPod connection"
+  props:
+    hyperPodProperties:
+      clusterName: "cluster-name"
+      instanceType: "ml.p4d.24xlarge"
+
+# WORKFLOWS_MWAA - EXISTS IN PROJECTS BUT NOT IN API ❌
+# This exists in DataZone projects but is not available via create-connection API
+workflows_mwaa_theoretical:
+  name: "mwaa-connection"
+  description: "MWAA Airflow connection"
+  props:
+    workflowsMwaaProperties:  # NOT SUPPORTED IN CURRENT API
+      airflowVersion: "2.4.3"
+      environmentArn: "arn:aws:mwaa:region:account:environment/name"
+      executionRoleArn: "arn:aws:iam::account:role/role"
+      region: "us-west-2"
+
+# API CALL STRUCTURE:
+api_call_structure:
+  # Required parameters for create_connection API:
+  domainIdentifier: "dzd_xxxxx"      # Domain ID
+  environmentIdentifier: "env123"    # Environment ID (REQUIRED)
+  name: "connection-name"            # Connection name
+  
+  # Optional parameters:
+  description: "Connection description"
+  awsLocation:                       # AWS location info
+    awsAccountId: "123456789012"
+    awsRegion: "us-west-2"
+    iamRoleArn: "arn:aws:iam::account:role/role"
+  props: {}                          # Connection-specific properties
+  clientToken: "unique-token"        # Idempotency token
+
+# IMPORTANT NOTES:
+# 1. environmentIdentifier is REQUIRED (not projectIdentifier)
+# 2. connectionType is NOT a parameter - inferred from props
+# 3. Only 8 connection property types are supported in current API
+# 4. WORKFLOWS_MWAA exists in projects but not accessible via API

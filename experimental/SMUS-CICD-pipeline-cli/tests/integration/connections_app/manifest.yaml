@@ -1,0 +1,70 @@
+applicationName: ConnectionsTestBundle
+content:
+  storage:
+  - name: src
+    connectionName: default.s3_shared
+    include:
+    - src
+    exclude:
+    - .ipynb_checkpoints/
+    - __pycache__/
+    - '*.pyc'
+    - .libs.json
+stages:
+  test:
+    stage: TEST
+    domain:
+      tags:
+        purpose: smus-cicd-testing
+      region: ${DEV_DOMAIN_REGION:us-east-1}
+    project:
+      name: connections-test-project
+      create: true
+      owners:
+      - Eng1
+      - arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
+      - arn:aws:iam::${AWS_ACCOUNT_ID}:role/Admin
+      contributors: []
+      role:
+        policies:
+        - arn:aws:iam::aws:policy/SageMakerStudioUserIAMPermissiveExecutionPolicy
+    deployment_configuration:
+      storage:
+      - name: src
+        connectionName: default.s3_shared
+        targetDirectory: connections-test/src
+    bootstrap:
+      actions:
+      - type: datazone.create_environment
+        environment_configuration_name: OnDemand Workflows
+      - type: datazone.create_connection
+        name: s3-data-lake
+        connection_type: S3
+        properties:
+          s3Uri: s3://test-connections-bucket/data/
+      - type: datazone.create_connection
+        name: iam-lineage
+        connection_type: IAM
+        properties:
+          glueLineageSyncEnabled: true
+      - type: datazone.create_connection
+        name: spark-glue-proc
+        connection_type: SPARK_GLUE
+        properties:
+          glueVersion: '4.0'
+          workerType: G.1X
+          numberOfWorkers: 5
+      - type: datazone.create_connection
+        name: workflows-serverless
+        connection_type: WORKFLOWS_SERVERLESS
+        properties: {}
+      - type: datazone.create_connection
+        name: mlflow-experiments
+        connection_type: MLFLOW
+        properties:
+          trackingServerArn: arn:aws:sagemaker:${DEV_DOMAIN_REGION:us-east-2}:${AWS_ACCOUNT_ID}:mlflow-tracking-server/${MLFLOW_TRACKING_SERVER_NAME:smus-integration-mlflow-use2}
+      - type: datazone.create_connection
+        name: athena-query-engine
+        connection_type: ATHENA
+        properties:
+          workgroupName: primary

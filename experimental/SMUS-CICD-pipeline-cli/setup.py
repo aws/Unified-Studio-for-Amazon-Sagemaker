@@ -12,7 +12,10 @@ data_files = []
 if os.path.exists("configuration"):
     for root, dirs, files in os.walk("configuration"):
         data_files.append(
-            (os.path.relpath(root, "configuration"), [os.path.join(root, f) for f in files])
+            (
+                os.path.relpath(root, "configuration"),
+                [os.path.join(root, f) for f in files],
+            )
         )
 
 # Install requirements

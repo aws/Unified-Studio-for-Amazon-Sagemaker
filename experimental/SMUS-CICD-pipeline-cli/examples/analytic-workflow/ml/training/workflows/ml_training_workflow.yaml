@@ -1,0 +1,19 @@
+ml_training_workflow:
+  dag_id: "ml_training_workflow"
+  tasks:
+    ml_training_notebook:
+      operator: "airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator"
+      retries: 0
+      input_config:
+        input_path: "ml/bundle/training-workflows/ml_training_notebook.ipynb"
+        input_params:
+          mlflow_tracking_server_arn: "{proj.connection.mlflow-server.trackingServerArn}"
+          mlflow_artifact_location: "{proj.connection.default.s3_shared.s3Uri}ml/mlflow-artifacts"
+          sklearn_version: "1.2-1"
+          python_version: "py3"
+          training_instance_type: "ml.m5.large"
+          model_name: "realistic-classifier-v1"
+      output_config:
+        output_formats: 
+          ['NOTEBOOK']
+      wait_for_completion: True

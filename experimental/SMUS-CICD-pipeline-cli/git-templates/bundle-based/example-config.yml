@@ -1,0 +1,95 @@
+name: Deploy My Application (Bundle-Based)
+
+# Example configuration for bundle-based deployment
+# Copy this to .github/workflows/deploy.yml and customize
+
+on:
+  push:
+    branches:
+      - main                   # Create bundle on push to main
+    tags:
+      - 'v*'                   # Create bundle on version tags
+  workflow_dispatch:
+    inputs:
+      bundle_version:
+        description: 'Bundle version to deploy (leave empty to create new)'
+        required: false
+        type: string
+      deploy_to:
+        description: 'Deploy to which environment'
+        required: false
+        type: choice
+        options:
+          - both
+          - test
+          - prod
+
+jobs:
+  deploy:
+    uses: your-org/workflows/.github/workflows/smus-bundle-based.yml@v1
+    
+    with:
+      # ========================================================================
+      # REQUIRED PARAMETERS
+      # ========================================================================
+      
+      manifest_path: 'manifest.yaml'
+      artifact_repository: 's3://your-org-smus-artifacts'
+      
+      # ========================================================================
+      # OPTIONAL PARAMETERS (with defaults)
+      # ========================================================================
+      
+      bundle_version: ${{ inputs.bundle_version || '' }}    # auto-generated if empty
+      smus_cli_path: 'experimental/SMUS-CICD-pipeline-cli'  # default
+      python_version: '3.12'                                 # default
+      aws_region: 'us-east-1'                                # default
+      test_environment: 'aws-test'                           # default
+      prod_environment: 'aws-prod'                           # default
+    
+    secrets:
+      # ========================================================================
+      # REQUIRED SECRETS (configure in GitHub repository settings)
+      # ========================================================================
+      
+      AWS_ROLE_ARN_TEST: ${{ secrets.AWS_ROLE_ARN_TEST }}
+      # Example: arn:aws:iam::123456789012:role/GitHubActions-SMUS-Test
+      
+      AWS_ROLE_ARN_PROD: ${{ secrets.AWS_ROLE_ARN_PROD }}
+      # Example: arn:aws:iam::123456789012:role/GitHubActions-SMUS-Prod
+      
+      # ========================================================================
+      # OPTIONAL SECRETS (can use environment variables instead)
+      # ========================================================================
+      
+      TEST_DOMAIN_REGION: ${{ vars.TEST_DOMAIN_REGION }}
+      # Example: us-east-1
+      
+      PROD_DOMAIN_REGION: ${{ vars.PROD_DOMAIN_REGION }}
+      # Example: us-east-1
+
+# ============================================================================
+# BUNDLE VERSION EXAMPLES
+# ============================================================================
+# 
+# Auto-generated (default):
+#   main-20251114-143022-abc1234
+#
+# From tag:
+#   v1.0.0
+#
+# Custom:
+#   my-app-v2.1.0-rc1
+#
+# ============================================================================
+# ARTIFACT REPOSITORY STRUCTURE
+# ============================================================================
+#
+# s3://your-org-smus-artifacts/
+#   └── myapp/                          # application name
+#       ├── v1.0.0/                     # bundle version
+#       │   └── myapp-v1.0.0.tar.gz
+#       ├── v1.0.1/
+#       │   └── myapp-v1.0.1.tar.gz
+#       └── main-20251114-143022-abc1234/
+#           └── myapp-main-20251114-143022-abc1234.tar.gz

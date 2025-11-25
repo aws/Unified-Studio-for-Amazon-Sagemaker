@@ -1,7 +1,9 @@
 """Unit tests for describe command."""
+
 import pytest
 import tempfile
 import os
+from unittest.mock import patch
 from typer.testing import CliRunner
 from smus_cicd.cli import app
 
@@ -10,69 +12,88 @@ from smus_cicd.cli import app
 def sample_manifest():
     """Create a sample manifest file for testing."""
     manifest_content = """
-pipelineName: TestPipeline
-domain:
-  name: test-domain
-  region: us-east-1
-bundle:
-  bundlesDirectory: ./bundles
-targets:
+applicationName: TestPipeline
+content:
+  storage: []
+stages:
   dev:
+    domain:
+      name: test-domain
+      region: ${DEV_DOMAIN_REGION:us-east-1}
     stage: DEV
     project:
       name: test-project
       create: false
-workflows:
-  - workflowName: test_workflow
-    connectionName: project.workflow_mwaa
-    triggerPostDeployment: true
 """
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
         f.write(manifest_content)
         f.flush()
         yield f.name
     os.unlink(f.name)
 
 
-def test_describe_basic(sample_manifest):
+@patch("smus_cicd.helpers.utils._get_region_from_config")
+@patch("smus_cicd.helpers.utils.load_config")
+def test_describe_basic(mock_load_config, mock_get_region, sample_manifest):
     """Test basic describe functionality."""
+    mock_load_config.return_value = {"region": "us-east-1"}
+    mock_get_region.return_value = "us-east-1"
+
     runner = CliRunner()
     with tempfile.TemporaryDirectory() as temp_dir:
         os.chdir(temp_dir)
         with open("test.yaml", "w") as f:
             f.write(open(sample_manifest).read())
-        
-        result = runner.invoke(app, ["describe", "--pipeline", "test.yaml"])
+
+        result = runner.invoke(app, ["describe", "--manifest", "test.yaml"])
         assert result.exit_code == 0
         assert "Pipeline: TestPipeline" in result.stdout
-        assert "Domain: test-domain (us-east-1)" in result.stdout
+        assert "Domain: test-domain" in result.stdout
 
 
-def test_describe_with_connections(sample_manifest):
+@patch("smus_cicd.commands.describe.load_config")
+@patch("smus_cicd.commands.describe.get_datazone_project_info")
+@patch("smus_cicd.helpers.utils._get_region_from_config")
+@patch("smus_cicd.helpers.utils.load_config")
+def test_describe_with_connections(mock_load_config_utils, mock_get_region, mock_project_info, mock_load_config_describe, sample_manifest):
     """Test describe with connections flag."""
+    mock_load_config_utils.return_value = {"region": "us-east-1"}
+    mock_load_config_describe.return_value = {"region": "us-east-1"}
+    mock_get_region.return_value = "us-east-1"
+    mock_project_info.return_value = {"connections": {}, "status": "ACTIVE", "project_id": "test-id"}
+
     runner = CliRunner()
     with tempfile.TemporaryDirectory() as temp_dir:
         os.chdir(temp_dir)
         with open("test.yaml", "w") as f:
             f.write(open(sample_manifest).read())
-        
-        result = runner.invoke(app, ["describe", "--pipeline", "test.yaml", "--connections"])
+
+        result = runner.invoke(
+            app, ["describe", "--manifest", "test.yaml", "--connections"]
+        )
         assert result.exit_code == 0
         # Connections flag shows basic pipeline info
         assert "Pipeline:" in result.stdout
         assert "Targets:" in result.stdout
 
 
-def test_describe_with_targets(sample_manifest):
+@patch("smus_cicd.helpers.utils._get_region_from_config")
+@patch("smus_cicd.helpers.utils.load_config")
+def test_describe_with_targets(mock_load_config, mock_get_region, sample_manifest):
     """Test describe with targets flag."""
+    mock_load_config.return_value = {"region": "us-east-1"}
+    mock_get_region.return_value = "us-east-1"
+
     runner = CliRunner()
     with tempfile.TemporaryDirectory() as temp_dir:
         os.chdir(temp_dir)
         with open("test.yaml", "w") as f:
             f.write(open(sample_manifest).read())
-        
+
         # Test filtering to specific target
-        result = runner.invoke(app, ["describe", "--pipeline", "test.yaml", "--targets", "dev"])
+        result = runner.invoke(
+            app, ["describe", "--manifest", "test.yaml", "--targets", "dev"]
+        )
         assert result.exit_code == 0
         assert "Targets:" in result.stdout
         assert "dev: test-project" in result.stdout
@@ -85,9 +106,11 @@ def test_describe_with_connect_flag(sample_manifest):
         os.chdir(temp_dir)
         with open("test.yaml", "w") as f:
             f.write(open(sample_manifest).read())
-        
+
         # This might fail due to AWS access, but should show basic info
-        result = runner.invoke(app, ["describe", "--pipeline", "test.yaml", "--connect"])
+        result = runner.invoke(
+            app, ["describe", "--manifest", "test.yaml", "--connect"]
+        )
         # Exit code might be 1 due to AWS connection issues, but should not be a crash
         assert result.exit_code in [0, 1]
         # Should at least show pipeline info even if connect fails

@@ -2,45 +2,37 @@
 CloudFormation utility functions for SMUS CI/CD CLI.
 """
 
+import json
 import time
-from pathlib import Path
-from typing import Dict
 
 import boto3
 import typer
 
 from . import datazone
+from .logger import get_logger
 
 
-def _get_existing_memberships(
-    domain_id: str, project_id: str, region: str
-) -> Dict[str, str]:
-    """Get existing project memberships as a dict of user_id -> designation."""
+def get_project_id_from_stack(stack_name, region):
+    """Get DataZone project ID from CloudFormation stack outputs."""
     try:
-        datazone_client = boto3.client("datazone", region_name=region)
-        memberships_response = datazone_client.list_project_memberships(
-            domainIdentifier=domain_id, projectIdentifier=project_id
-        )
+        cf_client = boto3.client("cloudformation", region_name=region)
+        response = cf_client.describe_stacks(StackName=stack_name)
 
-        existing_memberships = {}
-        for member in memberships_response.get("members", []):
-            member_details = member.get("memberDetails", {})
-            if "user" in member_details:
-                user_info = member_details["user"]
-                user_id = user_info.get("userIdentifier")
-                if user_id:
-                    designation = member.get("designation")
-                    existing_memberships[user_id] = designation
-                    typer.echo(
-                        f"🔍 DEBUG: Found existing membership: {user_id} -> {designation}"
-                    )
+        if not response.get("Stacks"):
+            return None
 
-        typer.echo(f"🔍 DEBUG: Total existing memberships: {len(existing_memberships)}")
-        return existing_memberships
+        stack = response["Stacks"][0]
+        outputs = stack.get("Outputs", [])
+
+        for output in outputs:
+            if output.get("OutputKey") == "ProjectId":
+                return output.get("OutputValue")
+
+        return None
     except Exception as e:
-        typer.echo(f"🔍 DEBUG: Error getting existing memberships: {e}")
-        return {}
-        return {}
+        logger = get_logger("cloudformation")
+        logger.debug(f"Failed to get project ID from stack {stack_name}: {e}")
+        return None
 
 
 def create_project_via_cloudformation(
@@ -48,19 +40,23 @@ def create_project_via_cloudformation(
     profile_name,
     domain_name,
     region,
-    pipeline_name,
-    target_name,
+    bundle_name,
+    stage_name,
     target_stage=None,
     user_parameters=None,
     owners=None,
     contributors=None,
+    environments=None,
+    role_arn=None,
 ):
-    """Create DataZone project with memberships using dynamically generated CloudFormation template."""
+    """Create DataZone project using CloudFormation template (without memberships)."""
+    logger = get_logger("cloudformation")
+
     try:
-        print("🔍 DEBUG: Creating project via CloudFormation")
-        print(f"🔍 DEBUG: project_name={project_name}")
-        print(f"🔍 DEBUG: profile_name={profile_name}")
-        print(f"🔍 DEBUG: user_parameters={user_parameters}")
+        logger.debug("Creating project via CloudFormation")
+        logger.debug(f"project_name={project_name}")
+        logger.debug(f"profile_name={profile_name}")
+        logger.debug(f"user_parameters={user_parameters}")
 
         cf_client = boto3.client("cloudformation", region_name=region)
         datazone_client = boto3.client("datazone", region_name=region)
@@ -68,11 +64,11 @@ def create_project_via_cloudformation(
         # Convert userParameters to CloudFormation format
         user_parameters_cf = []
         if user_parameters:
-            print(
-                f"🔍 DEBUG: Converting {len(user_parameters)} user parameters to CF format"
+            logger.debug(
+                f"Converting {len(user_parameters)} user parameters to CF format"
             )
             for env_config in user_parameters:
-                print(f"🔍 DEBUG: Processing env_config: {env_config}")
+                logger.debug(f"Processing env_config: {env_config}")
                 env_dict = {
                     "EnvironmentConfigurationName": env_config.EnvironmentConfigurationName,
                     "EnvironmentParameters": [],
@@ -82,11 +78,11 @@ def create_project_via_cloudformation(
                         {"Name": param.name, "Value": param.value}
                     )
                 user_parameters_cf.append(env_dict)
-                print(f"🔍 DEBUG: Added CF env_dict: {env_dict}")
+                logger.debug(f"Added CF env_dict: {env_dict}")
         else:
-            print("🔍 DEBUG: No user_parameters provided")
+            logger.debug("No user_parameters provided")
 
-        print(f"🔍 DEBUG: Final user_parameters_cf: {user_parameters_cf}")
+        logger.debug(f"Final user_parameters_cf: {user_parameters_cf}")
 
         # Look up domain ID from domain name
         try:
@@ -99,11 +95,11 @@ def create_project_via_cloudformation(
 
             if not domain_id:
                 typer.echo(f"Error: Domain '{domain_name}' not found", err=True)
-                return False
+                raise Exception(f"Domain '{domain_name}' not found")
 
         except Exception as e:
             typer.echo(f"Error finding domain by name {domain_name}: {e}", err=True)
-            return False
+            raise Exception(f"Failed to find domain {domain_name}: {e}")
 
         # Look up project profile ID from profile name
         try:
@@ -120,119 +116,40 @@ def create_project_via_cloudformation(
                 typer.echo(
                     f"Error: Project profile '{profile_name}' not found", err=True
                 )
-                return False
+                raise Exception(f"Project profile '{profile_name}' not found")
 
         except Exception as e:
             typer.echo(
                 f"Error finding project profile by name {profile_name}: {e}", err=True
             )
-            return False
+            raise Exception(f"Failed to find project profile {profile_name}: {e}")
 
         # Generate stack name: SMUS-{pipeline}-{target}-{project}-{template}
-        clean_pipeline = pipeline_name.replace("_", "-").replace(" ", "-").lower()
-        clean_target = target_name.replace("_", "-").replace(" ", "-").lower()
+        clean_pipeline = bundle_name.replace("_", "-").replace(" ", "-").lower()
+        clean_target = stage_name.replace("_", "-").replace(" ", "-").lower()
         clean_project = project_name.replace("_", "-").replace(" ", "-").lower()
         stack_name = f"SMUS-{clean_pipeline}-{clean_target}-{clean_project}-project"
 
         # Prepare stack tags
         tags = [
-            {"Key": "PipelineName", "Value": pipeline_name},
-            {"Key": "TargetName", "Value": target_name},
+            {"Key": "Application", "Value": bundle_name},
+            {"Key": "Stage", "Value": stage_name},
             {"Key": "CreatedBy", "Value": "SMUS-CLI"},
         ]
         if target_stage:
             tags.append({"Key": "TargetStage", "Value": target_stage})
 
-        # Resolve usernames to DataZone user IDs before template generation
-        owner_ids = []
-        contributor_ids = []
-        if owners or contributors:
-            if owners:
-                owner_ids = datazone.resolve_usernames_to_ids(owners, domain_id, region)
-                typer.echo(f"Resolved {len(owner_ids)} owners: {owners} -> {owner_ids}")
-            if contributors:
-                contributor_ids = datazone.resolve_usernames_to_ids(
-                    contributors, domain_id, region
-                )
-                typer.echo(
-                    f"Resolved {len(contributor_ids)} contributors: {contributors} -> {contributor_ids}"
-                )
-
-        # Filter out the creating role to avoid conflicts (applies to both new and existing projects)
-        try:
-            # Get current role ARN
-            sts_client = boto3.client("sts", region_name=region)
-            caller_identity = sts_client.get_caller_identity()
-            current_role_arn = caller_identity.get("Arn", "")
-
-            if current_role_arn:
-                # Extract role name from ARN (arn:aws:iam::account:role/RoleName)
-                current_role_name = (
-                    current_role_arn.split("/")[-1] if "/" in current_role_arn else ""
-                )
-
-                # Try to resolve current role to DataZone user ID
-                if current_role_name:
-                    current_role_ids = datazone.resolve_usernames_to_ids(
-                        [current_role_name], domain_id, region
-                    )
-                    if current_role_ids:
-                        current_role_id = current_role_ids[0]
-                        # Filter out current role from owners to avoid duplicate
-                        if current_role_id in owner_ids:
-                            owner_ids.remove(current_role_id)
-                            typer.echo(
-                                f"🔍 Filtered out creating role {current_role_name} from owners (will be auto-added)"
-                            )
-
-        except Exception as e:
-            typer.echo(f"🔍 DEBUG: Could not determine current role: {e}")
-
-        # Check if project already exists and filter out existing memberships
+        # Check if project already exists
         existing_project_id = datazone.get_project_id_by_name(
             project_name, domain_id, region
         )
         if existing_project_id:
-            typer.echo(
-                f"🔍 Project {project_name} already exists, checking existing memberships..."
-            )
-            existing_memberships = _get_existing_memberships(
-                domain_id, existing_project_id, region
-            )
-            typer.echo(f"🔍 Found {len(existing_memberships)} existing memberships")
+            typer.echo(f"🔍 Project {project_name} already exists")
 
-            # Filter out owners who already have PROJECT_OWNER designation
-            original_owner_count = len(owner_ids)
-            owner_ids = [
-                uid
-                for uid in owner_ids
-                if existing_memberships.get(uid) != "PROJECT_OWNER"
-            ]
-            if original_owner_count > len(owner_ids):
-                typer.echo(
-                    f"🔍 Filtered out {original_owner_count - len(owner_ids)} existing owners"
-                )
-
-            # Filter out contributors who already have PROJECT_CONTRIBUTOR designation
-            original_contributor_count = len(contributor_ids)
-            contributor_ids = [
-                uid
-                for uid in contributor_ids
-                if existing_memberships.get(uid) != "PROJECT_CONTRIBUTOR"
-            ]
-            if original_contributor_count > len(contributor_ids):
-                typer.echo(
-                    f"🔍 Filtered out {original_contributor_count - len(contributor_ids)} existing contributors"
-                )
-
-        typer.echo(
-            f"🔍 Will add {len(owner_ids)} new owners and {len(contributor_ids)} new contributors"
-        )
-
-        # Generate CloudFormation template dynamically
+        # Generate CloudFormation template (project only, no memberships)
         template_dict = {
             "AWSTemplateFormatVersion": "2010-09-09",
-            "Description": "Create a single DataZone Project with memberships",
+            "Description": "Create a single DataZone Project",
             "Parameters": {
                 "DomainIdentifier": {
                     "Type": "String",
@@ -285,49 +202,14 @@ def create_project_via_cloudformation(
                 "UserParameters"
             ] = user_parameters_cf
 
-        # Add project memberships if they exist
-        membership_counter = 1
-        has_new_memberships = False
+        # Add CustomerProvidedRoleConfigs if role_arn is provided
+        if role_arn:
+            template_dict["Resources"]["DataZoneProject"]["Properties"][
+                "CustomerProvidedRoleConfigs"
+            ] = [{"RoleArn": role_arn, "RoleDesignation": "PROJECT_OWNER"}]
+            typer.echo(f"✓ Using customer-provided role: {role_arn}")
 
-        if owner_ids:
-            has_new_memberships = True
-            for owner_id in owner_ids:
-                resource_name = f"OwnerMembership{membership_counter}"
-                template_dict["Resources"][resource_name] = {
-                    "Type": "AWS::DataZone::ProjectMembership",
-                    "Properties": {
-                        "DomainIdentifier": {"Ref": "DomainIdentifier"},
-                        "ProjectIdentifier": {"Fn::GetAtt": ["DataZoneProject", "Id"]},
-                        "Member": {"UserIdentifier": owner_id},
-                        "Designation": "PROJECT_OWNER",
-                    },
-                }
-                membership_counter += 1
-
-        if contributor_ids:
-            has_new_memberships = True
-            for contributor_id in contributor_ids:
-                resource_name = f"ContributorMembership{membership_counter}"
-                template_dict["Resources"][resource_name] = {
-                    "Type": "AWS::DataZone::ProjectMembership",
-                    "Properties": {
-                        "DomainIdentifier": {"Ref": "DomainIdentifier"},
-                        "ProjectIdentifier": {"Fn::GetAtt": ["DataZoneProject", "Id"]},
-                        "Member": {"UserIdentifier": contributor_id},
-                        "Designation": "PROJECT_CONTRIBUTOR",
-                    },
-                }
-                membership_counter += 1
-
-        # If project exists and no new memberships needed, skip stack update
-        if existing_project_id and not has_new_memberships:
-            typer.echo(
-                "✅ No new memberships to add - project is already configured correctly"
-            )
-            return True
-
-        import json
-
+        # Convert template to JSON
         template_body = json.dumps(template_dict)
 
         # Parameters for the stack
@@ -337,16 +219,16 @@ def create_project_via_cloudformation(
             {"ParameterKey": "ProjectName", "ParameterValue": project_name},
             {
                 "ParameterKey": "ProjectDescription",
-                "ParameterValue": f"Auto-created project for {project_name} in {pipeline_name} pipeline",
+                "ParameterValue": f"Auto-created project for {project_name} in {bundle_name} bundle",
             },
         ]
 
         typer.echo(f"Creating CloudFormation stack: {stack_name}")
-        typer.echo(f"Pipeline: {pipeline_name}")
+        typer.echo(f"Bundle: {bundle_name}")
         typer.echo(f"Project: {project_name}")
         typer.echo(f"Profile: {profile_name}")
 
-        # Create the stack
+        # Create or update the stack
         try:
             response = cf_client.create_stack(
                 StackName=stack_name,
@@ -355,16 +237,48 @@ def create_project_via_cloudformation(
                 Capabilities=["CAPABILITY_IAM", "CAPABILITY_AUTO_EXPAND"],
                 Tags=tags,
             )
-
-            stack_id = response["StackId"]
-            typer.echo(f"Stack creation initiated: {stack_id}")
+            typer.echo(f"Stack creation initiated: {response['StackId']}")
 
         except cf_client.exceptions.AlreadyExistsException:
             # Stack already exists - attempt to update it
             typer.echo(f"CloudFormation stack {stack_name} already exists")
 
+            # Check if stack is in a transitional state
             try:
-                # Attempt to update the stack with new parameters
+                stack_response = cf_client.describe_stacks(StackName=stack_name)
+                current_status = stack_response["Stacks"][0]["StackStatus"]
+
+                if "IN_PROGRESS" in current_status:
+                    typer.echo(f"⏳ Stack is in transitional state: {current_status}")
+                    typer.echo("Waiting for stack to reach stable state...")
+
+                    # Wait for stack to reach stable state
+                    max_wait_attempts = 60  # 30 minutes
+                    wait_attempt = 0
+
+                    while (
+                        wait_attempt < max_wait_attempts
+                        and "IN_PROGRESS" in current_status
+                    ):
+                        time.sleep(30)
+                        wait_attempt += 1
+                        try:
+                            stack_response = cf_client.describe_stacks(
+                                StackName=stack_name
+                            )
+                            current_status = stack_response["Stacks"][0]["StackStatus"]
+                            typer.echo(f"Stack status: {current_status}")
+                        except Exception:
+                            break
+
+                    if "IN_PROGRESS" in current_status:
+                        typer.echo("⏰ Timeout waiting for stack to reach stable state")
+                        return False
+
+            except Exception as e:
+                typer.echo(f"Warning: Could not check stack status: {e}")
+
+            try:
                 typer.echo(f"Updating CloudFormation stack: {stack_name}")
                 cf_client.update_stack(
                     StackName=stack_name,
@@ -379,103 +293,77 @@ def create_project_via_cloudformation(
                 waiter = cf_client.get_waiter("stack_update_complete")
                 waiter.wait(
                     StackName=stack_name,
-                    WaiterConfig={"Delay": 30, "MaxAttempts": 60},  # 30 minutes max
+                    WaiterConfig={"Delay": 30, "MaxAttempts": 60},
                 )
                 typer.echo(f"✅ Stack {stack_name} updated successfully")
 
             except cf_client.exceptions.ClientError as update_error:
-                error_code = update_error.response["Error"]["Code"]
+
                 error_message = str(update_error)
 
-                if (
-                    error_code == "ValidationError"
-                    and "No updates are to be performed" in error_message
-                ):
-                    # No changes needed - this is fine
-                    typer.echo(f"✅ Stack {stack_name} is already up to date")
-                elif (
-                    error_code == "ValidationError"
-                    and "DELETE_IN_PROGRESS" in error_message
-                ):
-                    # Stack is being deleted - wait for deletion to complete then recreate
-                    typer.echo(
-                        f"⏳ Stack {stack_name} is being deleted, waiting for completion..."
-                    )
+                if "No updates are to be performed" in error_message:
+                    # Check if this is a legacy stack that needs membership resources removed
                     try:
-                        waiter = cf_client.get_waiter("stack_delete_complete")
-                        waiter.wait(
-                            StackName=stack_name,
-                            WaiterConfig={
-                                "Delay": 30,
-                                "MaxAttempts": 60,
-                            },  # 30 minutes max
-                        )
-                        typer.echo(
-                            f"✅ Stack {stack_name} deletion completed, recreating..."
+                        stack_response = cf_client.describe_stacks(StackName=stack_name)
+                        stack_resources = cf_client.describe_stack_resources(
+                            StackName=stack_name
                         )
 
-                        # Now create the stack fresh
-                        response = cf_client.create_stack(
-                            StackName=stack_name,
-                            TemplateBody=template_body,
-                            Parameters=parameters,
-                            Capabilities=["CAPABILITY_IAM", "CAPABILITY_AUTO_EXPAND"],
-                            Tags=tags,
+                        # Check if stack has membership resources that need to be removed
+                        has_membership_resources = any(
+                            resource["ResourceType"]
+                            == "AWS::DataZone::ProjectMembership"
+                            for resource in stack_resources["StackResources"]
                         )
-                        typer.echo(f"Stack recreation initiated: {response['StackId']}")
 
-                    except Exception as wait_error:
+                        if has_membership_resources:
+                            typer.echo(
+                                f"🔄 Stack {stack_name} has legacy membership resources - forcing update to remove them"
+                            )
+                            # Force update by adding a dummy parameter change
+                            updated_parameters = parameters.copy()
+                            updated_parameters.append(
+                                {
+                                    "ParameterKey": "ProjectDescription",
+                                    "ParameterValue": f"Auto-created project for {project_name} in {bundle_name} bundle (updated)",
+                                }
+                            )
+
+                            cf_client.update_stack(
+                                StackName=stack_name,
+                                TemplateBody=template_body,
+                                Parameters=updated_parameters,
+                                Capabilities=[
+                                    "CAPABILITY_IAM",
+                                    "CAPABILITY_AUTO_EXPAND",
+                                ],
+                                Tags=tags,
+                            )
+
+                            # Wait for update to complete
+                            typer.echo("Waiting for stack update to complete...")
+                            waiter = cf_client.get_waiter("stack_update_complete")
+                            waiter.wait(
+                                StackName=stack_name,
+                                WaiterConfig={"Delay": 30, "MaxAttempts": 60},
+                            )
+                            typer.echo(
+                                f"✅ Stack {stack_name} updated successfully (membership resources removed)"
+                            )
+                        else:
+                            typer.echo(f"✅ Stack {stack_name} is already up to date")
+                    except Exception as check_error:
                         typer.echo(
-                            f"❌ Failed to wait for stack deletion: {wait_error}"
+                            f"Warning: Could not check for legacy membership resources: {check_error}"
                         )
-                        return False
-                elif (
-                    "UPDATE_ROLLBACK_COMPLETE" in error_message
-                    and "AlreadyExists" in error_message
-                ):
-                    # Stack update failed due to existing memberships - this is acceptable
-                    typer.echo(
-                        "⚠️ Stack update rolled back due to existing project memberships - continuing"
-                    )
+                        typer.echo(f"✅ Stack {stack_name} is already up to date")
                 else:
-                    # Other update errors
                     typer.echo(
                         f"❌ Failed to update stack {stack_name}: {update_error}"
                     )
                     return False
 
-            # Check if the project actually exists in DataZone
-            domain_id = datazone.get_domain_id_by_name(domain_name, region)
-            if domain_id:
-                project_id = datazone.get_project_id_by_name(
-                    project_name, domain_id, region
-                )
-                if project_id:
-                    typer.echo(f"✅ Project {project_name} is ready")
-
-                    # Check and create missing environments from user_parameters
-                    if user_parameters:
-                        env_success = _create_missing_environments_via_cloudformation(
-                            project_name,
-                            domain_name,
-                            region,
-                            pipeline_name,
-                            target_name,
-                            user_parameters,
-                            domain_id,
-                            project_id,
-                        )
-                        if not env_success:
-                            typer.echo("❌ Failed to create one or more environments")
-                            return False
-
-                    return True
-
-            # Stack exists but project doesn't - this is an error state
-            typer.echo(
-                f"❌ Stack updated but project {project_name} not found in DataZone"
-            )
-            return False
+            return True
 
         # Wait for stack creation to complete
         typer.echo("Waiting for stack creation to complete...")
@@ -484,40 +372,13 @@ def create_project_via_cloudformation(
         try:
             waiter.wait(
                 StackName=stack_name,
-                WaiterConfig={"Delay": 30, "MaxAttempts": 60},  # 30 minutes max
+                WaiterConfig={"Delay": 30, "MaxAttempts": 60},
             )
             typer.echo(f"✅ Stack {stack_name} created successfully")
-
-            # Wait for project deployment to complete using DataZone API
-            typer.echo("Waiting for project deployment to complete...")
-            domain_id = datazone.get_domain_id_by_name(domain_name, region)
-            if domain_id:
-                project_id = datazone.get_project_id_by_name(
-                    project_name, domain_id, region
-                )
-                if project_id:
-                    return wait_for_project_deployment(
-                        project_name, project_id, domain_id, region
-                    )
-
             return True
 
         except Exception as e:
             typer.echo(f"❌ Stack creation failed: {str(e)}", err=True)
-
-            # Get stack events for debugging
-            try:
-                events = cf_client.describe_stack_events(StackName=stack_name)
-                typer.echo("Recent stack events:")
-                for event in events["StackEvents"][:5]:
-                    status = event.get("ResourceStatus", "N/A")
-                    reason = event.get("ResourceStatusReason", "N/A")
-                    typer.echo(
-                        f"  - {event.get('LogicalResourceId')}: {status} - {reason}"
-                    )
-            except Exception:
-                pass
-
             return False
 
     except Exception as e:
@@ -529,264 +390,124 @@ def wait_for_project_deployment(project_name, project_id, domain_id, region):
     """Wait for project deployment to complete using DataZone API."""
     try:
         datazone_client = boto3.client("datazone", region_name=region)
-        max_attempts = 120  # 10 minutes
 
-        for attempt in range(max_attempts):
+        # Poll project status until it's active
+        max_attempts = 60  # 30 minutes with 30-second intervals
+        attempt = 0
+
+        while attempt < max_attempts:
             try:
-                project_response = datazone_client.get_project(
+                response = datazone_client.get_project(
                     domainIdentifier=domain_id, identifier=project_id
                 )
 
-                status = project_response.get("projectStatus")
-                deployment_status = project_response.get("overallDeploymentStatus")
+                project_status = response.get("projectStatus", "UNKNOWN")
+                typer.echo(f"Project status: {project_status}")
 
-                typer.echo(
-                    f"Project status: {status}, Deployment status: {deployment_status} (attempt {attempt + 1}/{max_attempts})"
-                )
-
-                if status == "ACTIVE" and deployment_status != "IN_PROGRESS":
-                    typer.echo(f"✅ Project {project_name} is fully deployed and ready")
+                if project_status == "ACTIVE":
+                    typer.echo(f"✅ Project {project_name} is now active")
                     return True
-                elif status in ["FAILED", "DELETED"]:
+                elif project_status in ["FAILED", "DELETED"]:
                     typer.echo(
-                        f"❌ Project creation failed with status: {status}", err=True
+                        f"❌ Project {project_name} deployment failed with status: {project_status}"
                     )
                     return False
 
-                time.sleep(5)  # Wait 5 seconds between checks
+                # Wait before next check
+                time.sleep(30)
+                attempt += 1
 
             except Exception as e:
                 typer.echo(f"Error checking project status: {str(e)}")
-                time.sleep(5)
+                time.sleep(30)
+                attempt += 1
 
-        typer.echo("⚠️ Timeout waiting for project deployment to complete", err=True)
+        typer.echo(f"⏰ Timeout waiting for project {project_name} to become active")
         return False
 
     except Exception as e:
-        typer.echo(f"Error waiting for project deployment: {str(e)}", err=True)
+        typer.echo(f"Error waiting for project deployment: {str(e)}")
         return False
 
 
 def delete_project_stack(
-    project_name, domain_name, region, pipeline_name, target_name, output="TEXT"
+    project_name, domain_name, region, bundle_name, stage_name, output="TEXT"
 ):
     """Delete CloudFormation stack for a project."""
     try:
-        cf_client = boto3.client("cloudformation", region_name=region)
-
-        # Generate stack name using same logic as creation
-        clean_pipeline = pipeline_name.replace("_", "-").replace(" ", "-").lower()
-        clean_target = target_name.replace("_", "-").replace(" ", "-").lower()
+        # Generate stack name: SMUS-{pipeline}-{target}-{project}-{template}
+        clean_pipeline = bundle_name.replace("_", "-").replace(" ", "-").lower()
+        clean_target = stage_name.replace("_", "-").replace(" ", "-").lower()
         clean_project = project_name.replace("_", "-").replace(" ", "-").lower()
         stack_name = f"SMUS-{clean_pipeline}-{clean_target}-{clean_project}-project"
 
-        try:
-            # Check if stack exists
-            cf_client.describe_stacks(StackName=stack_name)
+        cf_client = boto3.client("cloudformation", region_name=region)
 
-            # Delete the stack
-            if output.upper() != "JSON":
-                typer.echo(f"Deleting CloudFormation stack: {stack_name}")
-            cf_client.delete_stack(StackName=stack_name)
+        if output.upper() != "JSON":
+            typer.echo(f"Deleting CloudFormation stack: {stack_name}")
+        cf_client.delete_stack(StackName=stack_name)
 
-            # Wait for deletion to complete
+        # Wait for deletion to complete
+        if output.upper() != "JSON":
+            typer.echo("Waiting for stack deletion to complete...")
+        waiter = cf_client.get_waiter("stack_delete_complete")
+        waiter.wait(
+            StackName=stack_name,
+            WaiterConfig={"Delay": 30, "MaxAttempts": 60},
+        )
+        if output.upper() != "JSON":
+            typer.echo(f"✅ Stack {stack_name} deleted successfully")
+        return True
+
+    except cf_client.exceptions.ClientError as e:
+        error_code = e.response["Error"]["Code"]
+        if error_code == "ValidationError" and "does not exist" in str(e):
             if output.upper() != "JSON":
-                typer.echo("Waiting for stack deletion to complete...")
-            waiter = cf_client.get_waiter("stack_delete_complete")
-            waiter.wait(
-                StackName=stack_name,
-                WaiterConfig={"Delay": 30, "MaxAttempts": 60},  # 30 minutes max
-            )
-            if output.upper() != "JSON":
-                typer.echo(f"✅ Stack {stack_name} deleted successfully")
+                typer.echo(f"✅ Stack {stack_name} does not exist")
             return True
-
-        except cf_client.exceptions.ClientError as e:
-            if "does not exist" in str(e):
-                if output.upper() != "JSON":
-                    typer.echo(f"⚠️ Stack {stack_name} not found - skipping")
-                return True
-            else:
-                raise e
-
+        else:
+            if output.upper() != "JSON":
+                typer.echo(f"❌ Failed to delete stack {stack_name}: {e}")
+            return False
     except Exception as e:
-        typer.echo(f"❌ Error deleting CloudFormation stack: {str(e)}", err=True)
+        if output.upper() != "JSON":
+            typer.echo(f"❌ Error deleting stack {stack_name}: {e}")
         return False
 
 
-def update_project_stack_tags(
-    pipeline_name, target_name, project_name, region, target_stage=None
-):
-    """Update existing project stack with tags."""
+def update_project_stack_tags(stack_name, region, tags):
+    """Update CloudFormation stack tags if stack exists."""
     try:
         cf_client = boto3.client("cloudformation", region_name=region)
 
-        # Generate stack name
-        clean_pipeline = pipeline_name.replace("_", "-").replace(" ", "-").lower()
-        clean_target = target_name.replace("_", "-").replace(" ", "-").lower()
-        clean_project = project_name.replace("_", "-").replace(" ", "-").lower()
-        stack_name = f"SMUS-{clean_pipeline}-{clean_target}-{clean_project}-project"
-
-        # Prepare stack tags
-        tags = [
-            {"Key": "PipelineName", "Value": pipeline_name},
-            {"Key": "TargetName", "Value": target_name},
-            {"Key": "CreatedBy", "Value": "SMUS-CLI"},
-        ]
-        if target_stage:
-            tags.append({"Key": "TargetStage", "Value": target_stage})
-
-        # Check if stack exists
+        # Check if stack exists first
         try:
-            response = cf_client.describe_stacks(StackName=stack_name)
-            stack_status = response["Stacks"][0]["StackStatus"]
-
-            if stack_status in ["CREATE_COMPLETE", "UPDATE_COMPLETE"]:
-                # Read the CloudFormation template
-                template_path = (
-                    Path(__file__).parent.parent
-                    / "cloudformation"
-                    / "single-project.yaml"
-                )
-                with open(template_path, "r") as f:
-                    template_body = f.read()
-
-                # Get current parameters
-                current_stack = response["Stacks"][0]
-                parameters = [
-                    {
-                        "ParameterKey": param["ParameterKey"],
-                        "ParameterValue": param["ParameterValue"],
-                    }
-                    for param in current_stack["Parameters"]
-                ]
-
-                # Update stack with tags
-                typer.echo(f"Updating project stack tags: {stack_name}")
-                cf_client.update_stack(
-                    StackName=stack_name,
-                    TemplateBody=template_body,
-                    Parameters=parameters,
-                    Capabilities=["CAPABILITY_IAM"],
-                    Tags=tags,
-                )
-
-                # Wait for update to complete
-                waiter = cf_client.get_waiter("stack_update_complete")
-                waiter.wait(
-                    StackName=stack_name, WaiterConfig={"MaxAttempts": 60, "Delay": 5}
-                )
-
-                typer.echo(f"✅ Project stack {stack_name} updated with tags")
-                return True
-            else:
-                typer.echo(
-                    f"⚠️ Project stack {stack_name} is in state {stack_status}, skipping update"
-                )
-                return False
-
+            cf_client.describe_stacks(StackName=stack_name)
         except cf_client.exceptions.ClientError as e:
             if "does not exist" in str(e):
-                typer.echo(f"⚠️ Project stack {stack_name} does not exist")
-                return False
-            else:
-                raise e
+                typer.echo(
+                    f"⚠️  Stack {stack_name} not found - project was created outside CICD, skipping tag update"
+                )
+                return True
+            raise
 
-    except Exception as e:
-        if "No updates are to be performed" in str(e):
-            typer.echo(f"✅ Project stack {stack_name} tags are already up to date")
-            return True
-        else:
-            typer.echo(f"❌ Error updating project stack tags: {str(e)}", err=True)
-            return False
-
-
-def _create_missing_environments_via_cloudformation(
-    project_name,
-    domain_name,
-    region,
-    pipeline_name,
-    target_name,
-    user_parameters,
-    domain_id,
-    project_id,
-):
-    """Create missing environments using CloudFormation stacks."""
-    if not user_parameters:
-        return True
-
-    typer.echo("🔍 Checking for missing environments...")
-
-    # Get existing environments for the project
-    existing_envs = datazone.get_project_environments(project_id, domain_id, region)
-    existing_env_names = {env.get("name", "") for env in existing_envs}
-
-    all_success = True
-
-    # Check each environment from user_parameters
-    for env_param in user_parameters:
-        # Handle EnvironmentUserParameters object
-        if hasattr(env_param, "EnvironmentConfigurationName"):
-            env_name = env_param.EnvironmentConfigurationName
-        else:
-            # Fallback for dict format
-            env_name = env_param.get("EnvironmentConfigurationName", "")
-
-        if not env_name:
-            continue
-
-        if env_name in existing_env_names:
-            typer.echo(f"✅ Environment '{env_name}' already exists, skipping")
-            continue
-
-        typer.echo(f"🔧 Creating missing environment: {env_name}")
-        try:
-            # Create environment using DataZone helper
-            success = datazone.create_environment_and_wait(
-                domain_id, project_id, env_name, target_name, region
-            )
-            if success:
-                typer.echo(f"✅ Environment '{env_name}' created successfully")
-                # Check if this is a workflow environment and validate MWAA
-                if "workflow" in env_name.lower() or "mwaa" in env_name.lower():
-                    _validate_mwaa_environment(project_id, domain_id, region)
-            else:
-                typer.echo(f"❌ Failed to create environment '{env_name}'")
-                all_success = False
-        except Exception as e:
-            typer.echo(f"❌ Error creating environment '{env_name}': {str(e)}")
-            all_success = False
-
-    return all_success
-
-
-def _validate_mwaa_environment(project_id: str, domain_id: str, region: str) -> None:
-    """Validate MWAA environment is available."""
-    try:
-        import time
-
-        import boto3
-
-        # Wait a bit for environment to be ready
-        time.sleep(5)
-
-        datazone_client = boto3.client("datazone", region_name=region)
-
-        # Get project connections to find MWAA connection
-        connections_response = datazone_client.list_data_sources(
-            domainIdentifier=domain_id, projectIdentifier=project_id
+        typer.echo(f"Updating CloudFormation stack tags: {stack_name}")
+        cf_client.update_stack(
+            StackName=stack_name,
+            UsePreviousTemplate=True,
+            Tags=tags,
         )
 
-        mwaa_connection = None
-        for conn in connections_response.get("items", []):
-            if "mwaa" in conn.get("type", "").lower():
-                mwaa_connection = conn
-                break
+        typer.echo(f"✅ Stack {stack_name} tags updated successfully")
+        return True
 
-        if mwaa_connection:
-            typer.echo("✅ MWAA environment is available")
+    except cf_client.exceptions.ClientError as e:
+        if "No updates are to be performed" in str(e):
+            typer.echo(f"✅ Stack {stack_name} tags are already up to date")
+            return True
         else:
-            typer.echo("⚠️  MWAA environment connection not found")
-
+            typer.echo(f"❌ Failed to update stack tags {stack_name}: {e}")
+            return False
     except Exception as e:
-        typer.echo(f"🔍 DEBUG: Error validating MWAA: {e}")
+        typer.echo(f"❌ Error updating stack tags {stack_name}: {e}")
+        return False

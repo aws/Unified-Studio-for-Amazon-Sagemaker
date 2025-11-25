@@ -9,7 +9,7 @@ from botocore.exceptions import ClientError
 
 
 def create_command(
-    pipeline_name: str,
+    bundle_name: str,
     domain_id: Optional[str] = None,
     dev_project_id: Optional[str] = None,
     stages: List[str] = None,
@@ -19,7 +19,7 @@ def create_command(
     Create a new pipeline manifest with all required fields and commented optional fields.
 
     Args:
-        pipeline_name: Name of the pipeline (required)
+        bundle_name: Name of the bundle (required)
         domain_id: SageMaker Unified Studio domain ID (optional)
         dev_project_id: Development project ID to base other targets on (optional)
         stages: List of stages to create targets for (defaults to ["dev", "test", "prod"])
@@ -33,18 +33,18 @@ def create_command(
     )
 
     manifest_content = _generate_manifest_content(
-        pipeline_name, domain_name, dev_project_name, stages, region
+        bundle_name, domain_name, dev_project_name, stages, region
     )
 
-    output_path = _write_manifest_file(pipeline_name, manifest_content)
+    output_path = _write_manifest_file(bundle_name, manifest_content)
 
     _display_creation_summary(
-        pipeline_name, domain_name, output_path, stages, domain_id, dev_project_id
+        bundle_name, domain_name, output_path, stages, domain_id, dev_project_id
     )
 
 
 def create_command_with_output(
-    pipeline_name: str,
+    bundle_name: str,
     output_file: str,
     domain_id: Optional[str] = None,
     dev_project_id: Optional[str] = None,
@@ -55,7 +55,7 @@ def create_command_with_output(
     Create a new pipeline manifest with all required fields and commented optional fields.
 
     Args:
-        pipeline_name: Name of the pipeline (required)
+        bundle_name: Name of the bundle (required)
         output_file: Output file path for the manifest
         domain_id: SageMaker Unified Studio domain ID (optional)
         dev_project_id: Development project ID to base other targets on (optional)
@@ -70,13 +70,13 @@ def create_command_with_output(
     )
 
     manifest_content = _generate_manifest_content(
-        pipeline_name, domain_name, dev_project_name, stages, region
+        bundle_name, domain_name, dev_project_name, stages, region
     )
 
     output_path = _write_manifest_file_to_path(output_file, manifest_content)
 
     _display_creation_summary(
-        pipeline_name, domain_name, output_path, stages, domain_id, dev_project_id
+        bundle_name, domain_name, output_path, stages, domain_id, dev_project_id
     )
 
 
@@ -195,7 +195,7 @@ def _handle_general_error(
 
 
 def _generate_manifest_content(
-    pipeline_name: str,
+    bundle_name: str,
     domain_name: str,
     dev_project_name: str,
     stages: List[str],
@@ -205,7 +205,7 @@ def _generate_manifest_content(
     Generate the complete manifest file content.
 
     Args:
-        pipeline_name: Name of the pipeline
+        bundle_name: Name of the bundle
         domain_name: Domain name or placeholder
         dev_project_name: Dev project name or placeholder
         stages: List of stages to create
@@ -214,22 +214,20 @@ def _generate_manifest_content(
     Returns:
         Complete manifest content as string
     """
-    targets_config = _generate_targets_section(stages, dev_project_name)
+    targets_config = _generate_targets_section(
+        stages, dev_project_name, domain_name, region
+    )
 
-    return f"""# SMUS CI/CD Pipeline Manifest
+    return f"""# SMUS CI/CD Application Manifest
 # Generated template with required fields and optional field examples
 
-pipelineName: {pipeline_name}
+applicationName: {bundle_name}
 
-domain:
-  name: {domain_name}
-  region: {region}
-
-# Bundle configuration (optional)
-bundle:
-  bundlesDirectory: ./bundles
-  workflow:
-    - connectionName: default.s3_shared
+# Application content configuration
+content:
+  storage:
+    - name: workflows
+      connectionName: default.s3_shared
       include:
         - 'workflows'
       exclude:
@@ -237,8 +235,8 @@ bundle:
         - '__pycache__/'
         - '*.pyc'
         - '.libs.json'
-  storage:
-    - connectionName: default.s3_shared
+    - name: code
+      connectionName: default.s3_shared
       include:
         - '*'
       exclude:
@@ -247,34 +245,42 @@ bundle:
         - '*.pyc'
         - '.libs.json'
 
-targets:
+# Test configuration (optional)
+# tests:
+#   folder: ./tests
+
+stages:
 {targets_config}
-# Workflows configuration (optional)
-# workflows:
-#   - workflowName: your_workflow_name
-#     connectionName: project.workflow_mwaa
-#     triggerPostDeployment: true
-#     logging: console
-#     engine: MWAA
-#     # parameters:
-#     #   env: production
-#     #   timeout: 3600
+# Bootstrap actions (optional)
+# Example bootstrap actions:
+#   bootstrap:
+#     actions:
+#       - type: datazone.create_environment
+#         environmentConfigurationName: "OnDemand Workflows"
 #
-#   - workflowName: another_workflow
-#     connectionName: project.workflow_mwaa
-#     triggerPostDeployment: false
-#     logging: none
-#     engine: MWAA
+#       - type: datazone.create_connection
+#         name: mlflow
+#         connectionType: MLFLOW
+#         properties:
+#           trackingServerUrl: "https://mlflow.example.com"
+#
+#       - type: mwaaserverless.start_workflow_run
+#         workflowArn: "arn:aws:airflow-serverless:us-east-1:123456789012:workflow/my-workflow"
+#         clientToken: "unique-run-id"
 """
 
 
-def _generate_targets_section(stages: List[str], dev_project_name: str) -> str:
+def _generate_targets_section(
+    stages: List[str], dev_project_name: str, domain_name: str, region: str
+) -> str:
     """
     Generate the targets section of the manifest.
 
     Args:
         stages: List of stage names
         dev_project_name: Development project name
+        domain_name: Domain name for all targets
+        region: AWS region to use as default
 
     Returns:
         Formatted targets section as string
@@ -289,24 +295,21 @@ def _generate_targets_section(stages: List[str], dev_project_name: str) -> str:
         default_comment = _get_default_comment(i)
 
         targets_config += f"""  {stage}:
+    domain:
+      name: {domain_name}
+      region: ${{DEV_DOMAIN_REGION:{region}}}
     stage: {stage_upper}
     project:
       name: {project_name}
       create: {str(create_project).lower()}  # {'Auto-create project' if create_project else 'Use existing project'}
 {default_comment}
 
-    # Bundle target configuration
-    bundle_target_configuration:
+    # Deployment configuration
+    deployment_configuration:
       storage:
-        connectionName: default.s3_shared
-        directory: 'src'
-      workflows:
-        connectionName: default.s3_shared
-        directory: 'workflows'
-
-    # Test configuration (optional)
-    tests:
-      folder: ./tests
+        - name: code
+          connectionName: default.s3_shared
+          targetDirectory: 'src'
 
 """
 
@@ -344,19 +347,16 @@ def _determine_project_config(stage: str, dev_project_name: str) -> Tuple[str, b
 
 
 def _get_default_comment(index: int) -> str:
-    """Get appropriate default comment for target based on its position."""
-    if index == 0:
-        return "    default: true  # Default target for operations"
-    else:
-        return "    # default: true  # Uncomment to make this the default target"
+    """Get appropriate default comment for target - removed as default is no longer supported."""
+    return ""
 
 
-def _write_manifest_file(pipeline_name: str, content: str) -> Path:
+def _write_manifest_file(bundle_name: str, content: str) -> Path:
     """
     Write manifest content to file.
 
     Args:
-        pipeline_name: Name of the pipeline (used for filename)
+        bundle_name: Name of the bundle (used for filename)
         content: Manifest content to write
 
     Returns:
@@ -366,7 +366,7 @@ def _write_manifest_file(pipeline_name: str, content: str) -> Path:
         typer.Exit: If file creation fails
     """
     try:
-        output_file = f"{pipeline_name}.yaml"
+        output_file = f"{bundle_name}.yaml"
         output_path = Path.cwd() / output_file
 
         with open(output_path, "w") as f:
@@ -380,7 +380,7 @@ def _write_manifest_file(pipeline_name: str, content: str) -> Path:
 
 
 def _display_creation_summary(
-    pipeline_name: str,
+    bundle_name: str,
     domain_name: str,
     output_path: Path,
     stages: List[str],
@@ -391,7 +391,7 @@ def _display_creation_summary(
     Display summary of manifest creation and next steps.
 
     Args:
-        pipeline_name: Name of the created pipeline
+        bundle_name: Name of the created bundle
         domain_name: Domain name used
         output_path: Path to the created manifest file
         stages: List of stages that were created
@@ -399,7 +399,7 @@ def _display_creation_summary(
         dev_project_id: Dev project ID if provided
     """
     typer.echo(f"✅ Pipeline manifest created: {output_path}")
-    typer.echo(f"📝 Pipeline name: {pipeline_name}")
+    typer.echo(f"📝 Bundle name: {bundle_name}")
     typer.echo(f"🌐 Domain: {domain_name}")
     typer.echo(f"📁 Output file: {output_path.absolute()}")
     typer.echo(f"🎯 Stages: {', '.join(stages)}")

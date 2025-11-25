@@ -1,0 +1,81 @@
+name: Deploy My Application
+
+# This is YOUR application's workflow file
+# Copy this to: .github/workflows/deploy.yml
+# 
+# This workflow CALLS the reusable workflow provided by DevOps
+# You only need to configure the parameters below for your application
+
+on:
+  push:
+    branches:
+      - '*-test-branch'   # Matches: demo-feature1-test-branch, myapp-test-branch, etc.
+      - '*-prod-branch'   # Matches: demo-feature1-prod-branch, myapp-prod-branch, etc.
+  workflow_dispatch:
+    inputs:
+      stage:
+        description: 'Stage to deploy'
+        required: true
+        type: choice
+        options:
+          - test
+          - prod
+
+jobs:
+  deploy:
+    name: "Deploy Application"
+    # Call the reusable workflow from your organization's template repository
+    # Option 1: If reusable workflow is in the same repo
+    uses: ./.github/workflows/smus-direct-branch-reusable.yml
+    
+    # Option 2: If reusable workflow is in a central template repository
+    # uses: your-org/workflow-templates/.github/workflows/smus-direct-branch.yml@main
+    
+    with:
+      # ========================================================================
+      # REQUIRED: Customize these for your application
+      # ========================================================================
+      
+      # Path to your application manifest
+      manifest_path: 'manifest.yaml'
+      
+      # Path to SMUS CLI (if different from default)
+      smus_cli_path: 'experimental/SMUS-CICD-pipeline-cli'
+      
+      # ========================================================================
+      # OPTIONAL: Customize if you use different conventions
+      # ========================================================================
+      
+      # Python version (default: '3.12')
+      # python_version: '3.11'
+      
+      # AWS region for authentication (default: 'us-east-1')
+      # aws_region: 'us-west-2'
+      
+      # Branch names (customize for your application)
+      test_branch: 'demo-feature1-test-branch'
+      prod_branch: 'demo-feature1-prod-branch'
+      
+      # GitHub environment names (defaults: 'aws-test' and 'aws-prod')
+      # test_environment: 'aws-staging'
+      # prod_environment: 'aws-production'
+      
+      # Stage for manual dispatch (leave empty for automatic)
+      stage: ${{ inputs.stage || '' }}
+    
+    secrets:
+      # ========================================================================
+      # REQUIRED: AWS IAM Role ARNs for OIDC authentication
+      # These must be configured in your GitHub repository secrets
+      # ========================================================================
+      
+      AWS_ROLE_ARN_TEST: ${{ secrets.AWS_ROLE_ARN_TEST }}
+      AWS_ROLE_ARN_PROD: ${{ secrets.AWS_ROLE_ARN_PROD }}
+      
+      # ========================================================================
+      # OPTIONAL: AWS regions for domains (if using environment variables)
+      # These can be configured in GitHub environment variables instead
+      # ========================================================================
+      
+      TEST_DOMAIN_REGION: ${{ vars.TEST_DOMAIN_REGION }}
+      PROD_DOMAIN_REGION: ${{ vars.PROD_DOMAIN_REGION }}

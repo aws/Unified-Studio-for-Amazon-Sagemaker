@@ -1,0 +1,47 @@
+applicationName: TestAllSubstitutions
+content:
+  workflows:
+  - workflowName: dummy_workflow
+    connectionName: default.workflow_serverless
+
+stages:
+  test:
+    stage: TEST
+    domain:
+      region: us-east-1
+      tags:
+        purpose: smus-cicd-testing
+    project:
+      name: test-marketing
+    environment_variables:
+      AWS_REGION: us-east-1
+      S3_PREFIX: test
+      CUSTOM_VAR: custom_value
+    bootstrap:
+      actions:
+      # Test environment variables
+      - type: cli.print
+        message: "ENV: AWS_REGION={env.AWS_REGION}, S3_PREFIX={env.S3_PREFIX}, CUSTOM={env.CUSTOM_VAR}"
+      
+      # Test stage properties
+      - type: cli.print
+        message: "STAGE: name={stage.name}"
+      
+      # Test project properties
+      - type: cli.print
+        message: "PROJECT: id={proj.id}, name={proj.name}, domain_id={proj.domain_id}"
+      
+      - type: cli.print
+        message: "PROJECT IAM: role={proj.iam_role}, role_name={proj.iam_role_name}"
+      
+      # Test domain properties
+      - type: cli.print
+        message: "DOMAIN: id={domain.id}, name={domain.name}, region={domain.region}"
+      
+      # Test S3 shared connection
+      - type: cli.print
+        message: "S3: uri={proj.connection.default.s3_shared.s3Uri}, bucket={proj.connection.default.s3_shared.bucket}"
+      
+      # Test MLflow artifact location (the actual use case)
+      - type: cli.print
+        message: "MLFLOW_ARTIFACTS: {proj.connection.default.s3_shared.s3Uri}ml/mlflow-artifacts"

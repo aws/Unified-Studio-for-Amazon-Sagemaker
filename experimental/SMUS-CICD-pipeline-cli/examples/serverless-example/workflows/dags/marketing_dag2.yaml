@@ -1,0 +1,10 @@
+marketing_pipeline2:
+  dag_id: "marketing_serverless_pipeline2"
+  default_args:
+    owner: "abo"
+  schedule_interval: '0 12 * * ? *'
+  tasks:
+    task_1:
+      operator: "airflow.providers.amazon.aws.operators.s3.S3ListOperator"
+      bucket: "sample-data-123456789012-us-east-2"
+      prefix: ${S3_PREFIX}

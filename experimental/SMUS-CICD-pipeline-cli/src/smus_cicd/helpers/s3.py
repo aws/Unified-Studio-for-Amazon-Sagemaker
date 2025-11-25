@@ -13,11 +13,18 @@ def upload_file(
     region: str = None,
 ) -> bool:
     """Upload a file to S3."""
+    from .logger import get_logger
+
+    logger = get_logger("s3")
+
     try:
         s3_client = boto3_client.create_client("s3", connection_info, region)
         s3_client.upload_file(local_file_path, bucket_name, s3_key)
         return True
-    except Exception:
+    except Exception as e:
+        logger.error(
+            f"Failed to upload file {local_file_path} to s3://{bucket_name}/{s3_key}: {e}"
+        )
         return False
 
 
@@ -39,7 +46,11 @@ def list_objects(
                 objects.extend(page["Contents"])
 
         return objects
-    except Exception:
+    except Exception as e:
+        from .logger import get_logger
+
+        logger = get_logger("s3")
+        logger.error(f"Failed to list objects in s3://{bucket_name}/{prefix}: {e}")
         return []
 
 
@@ -61,7 +72,11 @@ def delete_objects(
             Bucket=bucket_name, Delete={"Objects": objects_to_delete}
         )
         return True
-    except Exception:
+    except Exception as e:
+        from .logger import get_logger
+
+        logger = get_logger("s3")
+        logger.error(f"Failed to delete objects in s3://{bucket_name}: {e}")
         return False
 
 

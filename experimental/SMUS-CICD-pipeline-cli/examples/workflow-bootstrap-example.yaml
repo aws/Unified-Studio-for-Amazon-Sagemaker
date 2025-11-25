@@ -1,0 +1,54 @@
+applicationName: WorkflowBootstrapExample
+content:
+  storage:
+  - name: etl-code
+    connectionName: default.s3_shared
+    include:
+    - etl/scripts/
+  workflows:
+  - workflowName: data_processing_dag
+    connectionName: default.workflow_serverless
+stages:
+  dev:
+    stage: DEV
+    domain:
+      tags:
+        purpose: smus-cicd-testing
+      region: us-east-2
+    project:
+      name: dev-analytics
+  test:
+    stage: TEST
+    domain:
+      tags:
+        purpose: smus-cicd-testing
+      region: us-east-2
+    project:
+      name: test-analytics
+    bootstrap:
+      actions:
+      - type: workflow.create
+        workflowName: data_processing_dag
+      - type: workflow.run
+        workflowName: data_processing_dag
+        wait: false
+  prod:
+    stage: PROD
+    domain:
+      tags:
+        purpose: smus-cicd-production
+      region: us-east-2
+    project:
+      name: prod-analytics
+    bootstrap:
+      actions:
+      - type: workflow.create
+        workflowName: data_processing_dag
+      - type: workflow.monitor
+        workflowName: data_processing_dag
+      - type: workflow.run
+        workflowName: data_processing_dag
+        wait: false
+      - type: workflow.logs
+        workflowName: data_processing_dag
+        lines: 50

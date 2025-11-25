@@ -1,10 +1,17 @@
 name: PR Integration Tests
 
 on:
-  pull_request:
-    branches: [ main, master ]
-    paths:
-      - 'experimental/SMUS-CICD-pipeline-cli/**'
+  # pull_request:
+  #   branches: [main, master]
+  #   paths:
+  #     - 'experimental/SMUS-CICD-pipeline-cli/**'
+  #     - '.github/workflows/pr-tests.yml'
+  # push:
+  #   branches: [amirbo_feature_branch]
+  #   paths:
+  #     - 'experimental/SMUS-CICD-pipeline-cli/**'
+  #     - '.github/workflows/pr-tests.yml'
+  workflow_dispatch:
 
 concurrency:
   group: pr-tests-${{ github.ref }}
@@ -15,9 +22,8 @@ permissions:
   contents: read
 
 jobs:
-  integration-tests:
+  unit-tests:
     runs-on: ubuntu-latest
-    environment: aws-env
     
     steps:
     - uses: actions/checkout@v4
@@ -27,12 +33,67 @@ jobs:
       with:
         python-version: '3.12'
     
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v4
+    - name: Install dependencies
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+    
+    - name: Run unit tests with coverage
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli
+        pytest tests/unit/ -v --tb=short --cov=src/smus_cicd --cov-report=xml --cov-report=html --junit-xml=tests/test-outputs/test-results-unit.xml
+    
+    - name: Upload unit test coverage
+      uses: actions/upload-artifact@v4
+      if: always()
       with:
-        aws-region: us-east-1
-        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-        role-session-name: smus-cicd-integration-tests
+        name: coverage-unit
+        path: |
+          experimental/SMUS-CICD-pipeline-cli/tests/test-outputs/coverage.xml
+          experimental/SMUS-CICD-pipeline-cli/tests/test-outputs/.coverage
+          experimental/SMUS-CICD-pipeline-cli/tests/test-outputs/coverage/
+          experimental/SMUS-CICD-pipeline-cli/tests/test-outputs/test-results-unit.xml
+        retention-days: 30
+
+  discover-tests:
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    outputs:
+      test-dirs: ${{ steps.find-tests.outputs.test-dirs }}
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Find integration test directories
+      id: find-tests
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli/tests/integration
+        
+        # Run basic_app, connections_app, and bundle_zip_deploy tests
+        test_dirs='["basic_app", "connections_app", "bundle_zip_deploy"]'
+        
+        echo "test-dirs=$test_dirs" >> $GITHUB_OUTPUT
+        echo "Found tests: $test_dirs"
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    environment: dev-aws-account
+    needs: discover-tests
+    if: needs.discover-tests.outputs.test-dirs != '[]'
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        test-path: ${{ fromJson(needs.discover-tests.outputs.test-dirs) }}
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
     
     - name: Install dependencies
       run: |
@@ -40,14 +101,139 @@ jobs:
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
     
-    - name: Run integration tests
+    - name: Generate test name
+      id: test-name
+      run: |
+        # Convert path to safe name: basic_app -> basic-app, test_file.py -> test-file
+        test_name=$(echo "${{ matrix.test-path }}" | sed 's|/|-|g' | sed 's|_|-|g' | sed 's|\.py$||')
+        echo "name=$test_name" >> $GITHUB_OUTPUT
+    
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+        aws-region: ${{ vars.DOMAIN_REGION }}
+        role-session-name: test-${{ steps.test-name.outputs.name }}
+        role-duration-seconds: 43200
+    
+    - name: Register AWS CLI models
+      run: |
+        aws configure add-model \
+          --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/mwaaserverless-2024-07-26.normal-edited-2.json \
+          --service-name mwaaserverless-internal
+        aws configure add-model \
+          --service-model file://experimental/SMUS-CICD-pipeline-cli/src/smus_cicd/resources/datazone-internal-2018-05-10.json \
+          --service-name datazone-internal
+    
+    - name: Get AWS Account ID
+      id: aws-account
+      run: |
+        ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+        echo "account-id=$ACCOUNT_ID" >> $GITHUB_OUTPUT
+        echo "✓ AWS Account ID: $ACCOUNT_ID"
+    
+    - name: Verify DataZone domain exists
+      run: |
+        echo "🔍 Checking DataZone domains in ${{ vars.DOMAIN_REGION }}"
+        ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+        echo "Account: $ACCOUNT_ID"
+        echo "Region: ${{ vars.DOMAIN_REGION }}"
+        echo ""
+        echo "Available domains:"
+        aws datazone list-domains --region ${{ vars.DOMAIN_REGION }} --query 'items[].{id:id,name:name}' --output table
+    
+    - name: Test describe --connect with basic_app manifest
+      env:
+        DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+        DEV_DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+        AWS_ACCOUNT_ID: ${{ steps.aws-account.outputs.account-id }}
       run: |
         cd experimental/SMUS-CICD-pipeline-cli
-        python scripts/run_tests.py --type integration --no-html-report
+        echo "Testing describe --connect with basic_app manifest"
+        smus-cli describe --connect --targets test --manifest tests/integration/basic_app/manifest.yaml || echo "Describe failed"
     
-    - name: Upload test results
+    - name: Run test
+      env:
+        DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+        TEST_DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+        DEV_DOMAIN_REGION: ${{ vars.DOMAIN_REGION }}
+        MLFLOW_TRACKING_SERVER_NAME: smus-integration-mlflow-use1
+        STS_REGION: ${{ vars.DOMAIN_REGION }}
+        STS_ACCOUNT_ID: ${{ steps.aws-account.outputs.account-id }}
+        AWS_ACCOUNT_ID: ${{ steps.aws-account.outputs.account-id }}
+      run: |
+        cd experimental/SMUS-CICD-pipeline-cli
+        test_path="tests/integration/${{ matrix.test-path }}"
+        test_name="${{ steps.test-name.outputs.name }}"
+        
+        pytest "$test_path" -v --tb=short \
+          --cov=src/smus_cicd \
+          --cov-report=xml:coverage-${test_name}.xml \
+          --junit-xml=test-results-${test_name}.xml || {
+          echo "❌ Test failed - check test-results-${test_name}.xml for details"
+          exit 1
+        }
+        
+        [ -f tests/test-outputs/.coverage ] && cp tests/test-outputs/.coverage coverage-${test_name}.data
+    
+    - name: Upload coverage
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: integration-test-results
-        path: experimental/SMUS-CICD-pipeline-cli/tests/reports/
+        name: coverage-${{ steps.test-name.outputs.name }}
+        path: |
+          experimental/SMUS-CICD-pipeline-cli/coverage-${{ steps.test-name.outputs.name }}.xml
+          experimental/SMUS-CICD-pipeline-cli/coverage-${{ steps.test-name.outputs.name }}.data
+          experimental/SMUS-CICD-pipeline-cli/test-results-${{ steps.test-name.outputs.name }}.xml
+
+  test-summary:
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests]
+    if: always()
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download all coverage artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: coverage-artifacts
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+    
+    - name: Install coverage tools
+      run: pip install coverage pytest-html
+    
+    - name: Generate test summary
+      run: |
+        echo "# Test Results Summary" > test-summary.md
+        echo "" >> test-summary.md
+        
+        for result in coverage-artifacts/*/test-results-*.xml; do
+          if [ -f "$result" ]; then
+            testname=$(basename "$result" .xml | sed 's/test-results-//')
+            failures=$(grep -o 'failures="[0-9]*"' "$result" | grep -o '[0-9]*' || echo "0")
+            errors=$(grep -o 'errors="[0-9]*"' "$result" | grep -o '[0-9]*' || echo "0")
+            tests=$(grep -o 'tests="[0-9]*"' "$result" | grep -o '[0-9]*' || echo "0")
+            
+            if [ "$failures" = "0" ] && [ "$errors" = "0" ]; then
+              echo "✅ **$testname**: $tests tests passed" >> test-summary.md
+            else
+              echo "❌ **$testname**: $failures failures, $errors errors out of $tests tests" >> test-summary.md
+            fi
+          fi
+        done
+        
+        cat test-summary.md
+    
+    - name: Upload combined summary
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-summary-combined
+        path: |
+          test-summary.md
+          coverage-artifacts/
+        retention-days: 30

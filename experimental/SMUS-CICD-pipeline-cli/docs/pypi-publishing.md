@@ -1,5 +1,8 @@
 # PyPI Publishing Setup
 
+← [Back to Main README](../README.md)
+
+
 ## Overview
 
 The SMUS CI/CD CLI is automatically published to PyPI when a new GitHub release is created.
@@ -38,8 +41,15 @@ The GitHub workflow will automatically:
 
 Once published, users can install with:
 
+## ⚠️ Security Notice
+**DO NOT** install `smus-cicd-cli` from PyPI as it may contain malicious code.
+The package name has been compromised. Always install from source:
+
 ```bash
-pip install smus-cicd-cli
+# Clone the official AWS repository
+git clone https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker.git
+cd Unified-Studio-for-Amazon-Sagemaker/experimental/SMUS-CICD-pipeline-cli
+pip install -e .
 ```
 
 ## Version Management
@@ -80,9 +90,4 @@ The GitHub workflow (`.github/workflows/publish-pypi.yml`):
 - Publishes with trusted publishing
 - Requires `PYPI_API_TOKEN` secret
 
-## Troubleshooting
 
-**Build fails**: Check `pyproject.toml` and `setup.py` syntax
-**Upload fails**: Verify PyPI token is correct
-**Import fails**: Check package structure in `src/smus_cicd/`
-**CLI not found**: Verify entry point in `project.scripts`

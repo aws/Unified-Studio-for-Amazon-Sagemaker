@@ -1,0 +1,148 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Create Connections for Project in SMUS Domain
+
+Parameters:
+  DomainId:
+    Description: Domain for which blueprint needs to be enabled
+    Type: String
+  ProjectId:
+    Description: Project id in which we need to create connection
+    Type: String
+  SpillBucketName:
+    Description: S3 bucket name which would be used by Athena for query executions
+    Type: String
+  SpillPrefix:
+    Description: Prefix for spill bucket
+    Type: String
+
+Resources:
+  RedshiftConnection:
+    Type: AWS::DataZone::Connection
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      ProjectIdentifier: !Ref ProjectId
+      Name: RedshiftConnection
+      Description: 'RedshiftConnection'
+      Props:
+        RedshiftProperties:
+          Credentials:
+            UsernamePassword:
+              Password: <rs_pwd>
+              Username: <rs_db_user>
+          DatabaseName: <db_name>
+          Host: <host_name>
+          Port: 5439
+          Storage:
+            ClusterName: <cluster_name>
+
+  GlueConnection:
+    Type: AWS::DataZone::Connection
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      ProjectIdentifier: !Ref ProjectId
+      Name: 'glue_conn_snowflake' # use lowercase
+      Description: 'GlueConnection'
+      Props:
+        GlueProperties:
+          GlueConnectionInput:
+            AthenaProperties:
+              "spill_bucket": !Ref SpillBucketName
+              "spill_prefix": !Ref SpillPrefix
+            PhysicalConnectionRequirements:
+              SubnetId: <subnet_id>,
+              SecurityGroupIdList: [ <security_group_id1>, <security_group_id2> ],
+              AvailabilityZone: <availability_zone>
+            ConnectionType: "SNOWFLAKE"
+            ConnectionProperties:
+              "DATABASE": <snowflake_db_name>
+              "HOST": <snowflake_host_name>
+              "PORT": "443"
+              "ROLE_ARN": <project_role_arn>
+              "WAREHOUSE": <snowflake_compute_name>
+            Name: 'glue_conn_snowflake'  # use lowercase
+            ValidateCredentials: true
+            AuthenticationConfiguration:
+              AuthenticationType: BASIC
+              BasicAuthenticationCredentials:
+                UserName: <snowflake_user_name>
+                Password: <snowflake_pwd>
+            ValidateForComputeEnvironments:
+              - SPARK
+              - ATHENA
+
+  AthenaConnection:
+    Type: AWS::DataZone::Connection
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      ProjectIdentifier: !Ref ProjectId
+      Name: 'AthenaConnection'
+      Description: 'AthenaConnection'
+      Props:
+        AthenaProperties:
+          WorkgroupName: <athena_workgroup_name>
+
+  S3Connection:
+    Type: AWS::DataZone::Connection
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      ProjectIdentifier: !Ref ProjectId
+      Name: 'S3Connection'
+      Description: 'S3Connection'
+      Props:
+        S3Properties:
+          S3Uri: <s3_bucket_uri> # should be of format s3://bucket_name/ (i.e. should start with 's3://' and end with '/')
+
+  IAMConnection:
+    Type: AWS::DataZone::Connection
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      ProjectIdentifier: !Ref ProjectId
+      Name: 'IAMConnection'
+      Description: 'IAMConnection'
+      AwsLocation:
+        # Ensure trust policy is same as https://docs.aws.amazon.com/sagemaker-unified-studio/latest/userguide/compute-prerequisite-redshift.html#compute-prerequisite-redshift-other-account
+        AccessRole: 'arn:aws:iam::<Account_Id>:role/<AccessRole>'
+      Props:
+        IamProperties:
+          GlueLineageSyncEnabled: true/false
+
+  HyperPodConnection:
+    Type: AWS::DataZone::Connection
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      ProjectIdentifier: !Ref ProjectId
+      Name: 'HyperPodConnection'
+      Description: 'HyperPodConnection'
+      AwsLocation:
+        # Ensure trust policy is same as https://docs.aws.amazon.com/sagemaker-unified-studio/latest/userguide/compute-prerequisite-redshift.html#compute-prerequisite-redshift-other-account
+        AccessRole: 'arn:aws:iam::<Account_Id>:role/<AccessRole>'
+        AwsAccountId: <Account_Id>
+        AwsRegion: <region> # e.g. us-east-1
+      Props:
+        HyperPodProperties:
+          ClusterName: <hyper_pod_cluster_name>
+
+  SparkEmrConnection:
+    Type: AWS::DataZone::Connection
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      ProjectIdentifier: !Ref ProjectId
+      Name: 'SparkEmrConnection'
+      Description: 'SparkEmrConnection'
+      Props:
+        SparkEmrProperties:
+          ComputeArn: <compute_arn> # can be EMR Serverless or EMR Cluster ARN
+
+  SparkGlueConnection:
+    Type: AWS::DataZone::Connection
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      ProjectIdentifier: !Ref ProjectId
+      Name: 'SparkGlueConnection'
+      Description: 'SparkGlueConnection'
+      Props:
+        SparkGlueProperties:
+          WorkerType: <worker_type> # e.g. 'G.1X'
+          GlueVersion: <glue_version> # e.g. '4.0'
+          IdleTimeout: <idle_timeout> # e.g. 60
+          NumberOfWorkers: <num_of_workers> # e.g. 10

@@ -1,325 +1,704 @@
-# GitHub Actions CI/CD Integration
+# CI/CD Integration for SMUS Pipeline Management
 
-The SMUS CLI includes comprehensive GitHub Actions integration with three pre-built workflows for automated testing, validation, and demonstration.
+← [Back to Main README](../README.md)
 
-## Available Workflows
+> **Looking for GitHub Actions workflows?**
+> - **Application teams:** [Setup Guide](github-workflow-application-guide.md) (~30 min)
+> - **DevOps teams:** [Template Setup](github-workflow-devops-guide.md) (~15 min)
+> - **Workflow templates:** [git-templates/](../git-templates/)
+> 
+> **This document** covers general CI/CD concepts and implementation details.
 
-### 1. CI Workflow (`.github/workflows/ci.yml`)
+This guide explains how to integrate the SMUS CLI with CI/CD platforms like GitHub Actions and GitLab CI for automated pipeline management across multiple environments with proper security boundaries and approval workflows.
 
-**Purpose**: Comprehensive code quality and testing validation
+## Overview: CI/CD with SMUS CLI
 
-**Triggers**: 
-- Pull requests to main/master branches
-- Pushes to main/master branches
-- Path filter: `experimental/SMUS-CICD-pipeline-cli/**`
+The SMUS CLI enables automated deployment and management of SageMaker Unified Studio projects through any CI/CD platform. The CLI provides intelligent infrastructure management, multi-environment support, and seamless integration with existing DevOps workflows.
 
-**Jobs**:
-- **Linting**: flake8 syntax checks, black formatting, isort import sorting
-- **Unit Tests**: 147 unit tests with coverage reporting and Codecov integration
-- **Security**: safety vulnerability scanning and bandit security analysis
+### Key Benefits
 
-**Features**:
-- Runs in parallel with dependency management
-- Uploads test results and coverage reports as artifacts
-- Integrates with Codecov for coverage tracking
+- **Automated Infrastructure**: CLI creates domains, projects, and environments as needed
+- **Idempotent Operations**: Safe to re-run without duplicating resources
+- **Multi-Environment Support**: Seamless progression from dev → test → prod
+- **Manual Approval Gates**: Production deployments with reviewer approval
+- **Catalog Asset Integration**: Automatic subscription management for DataZone assets
+- **Bundle Management**: Consistent artifact deployment across environments
 
-### 2. PR Integration Tests (`.github/workflows/pr-tests.yml`)
+### Pipeline Flow
 
-**Purpose**: Integration testing against real AWS resources
+```mermaid
+graph LR
+    A[Source Code] --> B[Validate Configuration]
+    B --> C[Create Bundle]
+    C --> D[Deploy to Test]
+    D --> E[Run Tests]
+    E --> F[Manual Approval Gate]
+    F --> G[Deploy to Production]
+    G --> H[Production Validation]
+    H --> I[Monitor & Alert]
+```
 
-**Triggers**: 
-- Pull requests to main/master branches
-- Path filter: `experimental/SMUS-CICD-pipeline-cli/**`
+## Infrastructure Setup Requirements
 
-**Authentication**: 
-- Uses AWS OIDC with GitHub environment `aws-env`
-- Assumes IAM role from `smus-cli-github-integration` CloudFormation stack
+### AWS Prerequisites
 
-**Jobs**:
-- **Integration Tests**: Full integration test suite with AWS credentials
-- **Artifact Upload**: Test results and reports for debugging
+Before setting up CI/CD integration, ensure you have the necessary AWS infrastructure and permissions:
 
-**Setup Requirements**:
-1. Deploy the GitHub OIDC integration stack (see [tests/integration/github/README.md](../tests/integration/github/README.md))
-2. Configure `AWS_ROLE_ARN` secret in GitHub environment `aws-env`
+#### 1. AWS Account Setup
+- AWS account with appropriate permissions
+- SageMaker Unified Studio enabled in target regions
+- DataZone service activated (if using catalog assets)
 
-### 3. Full Pipeline Lifecycle Demo (`.github/workflows/full-pipeline-lifecycle.yml`)
+#### 2. IAM Roles and Permissions
 
-**Purpose**: End-to-end demonstration of SMUS CLI capabilities
+Create IAM roles for CI/CD with these minimum permissions:
 
-**Triggers**: 
-- Manual workflow dispatch only
-- Customizable inputs for domain, project, and pipeline names
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "sagemaker:*",
+        "datazone:*",
+        "mwaa:*",
+        "s3:*",
+        "cloudformation:*",
+        "iam:PassRole",
+        "iam:GetRole",
+        "iam:CreateRole",
+        "iam:AttachRolePolicy"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
 
-**Jobs** (Sequential execution):
-1. **Setup**: Resolve domain and project IDs from names
-2. **Create Manifest**: Generate pipeline YAML configuration  
-3. **Validate Configuration**: Check pipeline setup with workflows/connections
-4. **Create Bundle**: Package deployment artifacts for dev target
-5. **Deploy Test**: Deploy pipeline to test environment
-6. **Run Tests**: Execute test suite on test target
-7. **Monitor Pipeline**: Check pipeline status and health
-8. **Execute Workflows**: Run Airflow commands (trigger DAG, list tasks, check state)
-9. **Cleanup**: Remove test resources (runs even if previous jobs fail)
+#### 3. OIDC Provider Setup (GitHub Actions)
 
-**Features**:
-- Artifact sharing for pipeline manifest between jobs
-- Proper error handling and cleanup
-- Customizable inputs with sensible defaults
-- Follows the exact sequence from `examples/full-pipeline-lifecycle.sh`
-
-## Setup Instructions
-
-### 1. AWS OIDC Integration
-
-Deploy the GitHub OIDC integration to enable AWS authentication:
+Use the provided CloudFormation template:
 
 ```bash
-cd tests/integration/github
-./deploy-github-integration.sh
+aws cloudformation deploy \
+  --template-file tests/scripts/setup/1-account-setup/github-oidc-role.yaml \
+  --stack-name smus-cli-github-integration \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --parameter-overrides \
+    GitHubOrg=your-org \
+    GitHubRepo=your-repo \
+    GitHubEnvironment=aws-env
 ```
 
-This creates:
-- OIDC identity provider for GitHub Actions
-- IAM role with appropriate permissions
-- CloudFormation stack `smus-cli-github-integration`
+**For detailed setup:** See [Admin Quick Start](getting-started/admin-quickstart.md#step-8-set-up-cicd-authentication-optional)
 
-### 2. GitHub Environment Configuration
+> **⚠️ TODO:** Document minimum required IAM permissions.
 
-1. Go to repository Settings → Environments
-2. Create environment named `aws-env`
-3. Add secret `AWS_ROLE_ARN` with the role ARN from CloudFormation output
+### Environment Separation
 
-### 3. Running Workflows
+#### Development Environment
+- **Purpose**: Development and testing deployments
+- **AWS Role**: Broader permissions for experimentation
+- **Protection Rules**: None (automatic deployment)
+- **Resources**: Development domains, test projects
 
-**CI Workflow**: Runs automatically on PRs and pushes
+#### Production Environment  
+- **Purpose**: Production deployments
+- **AWS Role**: Restricted permissions, production-only access
+- **Protection Rules**: Required reviewers, manual approval
+- **Resources**: Production domains, live projects
 
-**PR Integration Tests**: Runs automatically on PRs affecting SMUS CLI code
+## CLI Infrastructure Management
 
-**Full Pipeline Lifecycle Demo**: 
-1. Go to Actions tab in GitHub
-2. Select "Full Pipeline Lifecycle Demo"
-3. Click "Run workflow"
-4. Enter custom domain/project/pipeline names or use defaults
-5. Click "Run workflow" to start
+### Automatic Infrastructure Creation
 
-## Example Custom GitHub Actions Workflow
+The SMUS CLI intelligently manages infrastructure creation and updates:
 
-For your own projects, create `.github/workflows/smus-cicd.yml`:
+#### **Idempotent Operations**
+- **Safe Re-runs**: CLI detects existing resources and skips creation
+- **No Duplicates**: Won't create domains, projects, or environments that already exist
+- **Consistent State**: Ensures infrastructure matches bundle configuration
+
+#### **Domain Management**
+```bash
+# CLI automatically creates DataZone domain if missing
+smus-cli deploy --manifest manifest.yaml --stages test
+# Creates domain "my-studio-domain" if it doesn't exist
+# Uses existing domain if already present
+```
+
+#### **Project Creation**
+```bash
+# CLI creates SageMaker projects as needed
+smus-cli deploy --manifest manifest.yaml --stages test,prod
+# Creates "my-project-test" and "my-project-prod" projects
+# Skips creation if projects already exist
+```
+
+#### **Environment Provisioning**
+- **Lakehouse Environments**: Automatically provisioned for data access
+- **MWAA Environments**: Created for Airflow workflow execution  
+- **Connections**: Established between projects and environments
+- **Permissions**: Proper IAM roles and policies applied
+
+#### **Benefits of Automatic Infrastructure**
+- **Reduced Setup Time**: No manual infrastructure preparation required
+- **Consistency**: Infrastructure matches bundle configuration exactly
+- **Error Prevention**: Eliminates manual configuration mistakes
+- **Team Onboarding**: New team members can deploy immediately
+
+### Infrastructure Detection Logic
+
+The CLI uses intelligent detection to determine what needs to be created:
+
+1. **Domain Resolution**: Looks up domain by name, creates if missing
+2. **Project Validation**: Checks project existence, creates with proper configuration
+3. **Environment Assessment**: Validates required environments, provisions as needed
+4. **Connection Verification**: Ensures proper connectivity between components
+
+## CI/CD Environment Configuration
+
+### GitHub Environments
+
+Configure different GitHub environments for deployment stages:
+
+#### Development Environment (`aws-env`)
+```yaml
+# Repository Settings → Environments → aws-env
+Protection Rules: None
+Secrets:
+  AWS_ROLE_ARN: arn:aws:iam::ACCOUNT:role/GitHubActions-Dev
+Variables:
+  AWS_REGION: us-east-1
+  DOMAIN_REGION: us-east-1
+```
+
+#### Production Environment (`aws-env-prod`)
+```yaml
+# Repository Settings → Environments → aws-env-prod  
+Protection Rules:
+  - Required reviewers: 2
+  - Wait timer: 5 minutes
+  - Deployment branches: main only
+Secrets:
+  AWS_ROLE_ARN: arn:aws:iam::ACCOUNT:role/GitHubActions-Prod
+Variables:
+  AWS_REGION: us-west-2
+  DOMAIN_REGION: us-west-2
+```
+
+### Secrets Management
+
+#### Required Secrets
+- `AWS_ROLE_ARN`: IAM role for AWS authentication
+- `AWS_ACCESS_KEY_ID`: Alternative to OIDC (less secure)
+- `AWS_SECRET_ACCESS_KEY`: Alternative to OIDC (less secure)
+
+#### Environment Variables
+- `AWS_REGION`: Target AWS region
+- `DOMAIN_NAME`: SageMaker Unified Studio domain name
+- `PROJECT_PREFIX`: Prefix for project naming
+
+### Branch Protection Rules
+
+Configure branch protection to ensure code quality:
 
 ```yaml
-name: SMUS CI/CD Pipeline
-
-on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main ]
-
-env:
-  AWS_REGION: us-east-1
-  PIPELINE_FILE: pipeline.yaml
-
-jobs:
-  validate:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
-    
-    - name: Install SMUS CLI
-      run: |
-        pip install smus-cicd-cli
-    
-    - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
-    
-    - name: Validate Pipeline Configuration
-      run: |
-        smus-cli describe --pipeline ${{ env.PIPELINE_FILE }} --connect
-
-  bundle-from-dev:
-    needs: validate
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/develop'
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
-    
-    - name: Install SMUS CLI
-      run: pip install smus-cicd-cli
-    
-    - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
-    
-    - name: Describe Development Environment
-      run: |
-        smus-cli describe --pipeline ${{ env.PIPELINE_FILE }} --targets marketing-dev-stage --connect
-    
-    - name: Create Bundle from Development
-      run: |
-        smus-cli bundle --pipeline ${{ env.PIPELINE_FILE }} --targets marketing-dev-stage
-    
-    - name: Upload Bundle Artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: smus-bundle
-        path: ./bundles/
-
-  deploy-staging:
-    needs: bundle-from-dev
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/develop'
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
-    
-    - name: Install SMUS CLI
-      run: pip install smus-cicd-cli
-    
-    - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
-    
-    - name: Download Bundle Artifacts
-      uses: actions/download-artifact@v4
-      with:
-        name: smus-bundle
-        path: ./bundles/
-    
-    - name: Deploy to Staging
-      run: |
-        smus-cli deploy --pipeline ${{ env.PIPELINE_FILE }} --targets marketing-test-stage
-    
-    - name: Run Staging Tests
-      run: |
-        smus-cli test --pipeline ${{ env.PIPELINE_FILE }} --targets marketing-test-stage
-    
-    - name: Monitor Workflow Status
-      run: |
-        smus-cli monitor --pipeline ${{ env.PIPELINE_FILE }} --targets marketing-test-stage
-
-  deploy-production:
-    needs: deploy-staging
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    environment: production
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
-    
-    - name: Install SMUS CLI
-      run: pip install smus-cicd-cli
-    
-    - name: Configure AWS Credentials
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ env.AWS_REGION }}
-    
-    - name: Create Bundle from Development
-      run: |
-        smus-cli bundle --pipeline ${{ env.PIPELINE_FILE }} --targets marketing-dev-stage
-    
-    - name: Deploy to Production
-      run: |
-        smus-cli deploy --pipeline ${{ env.PIPELINE_FILE }} --targets marketing-prod-stage
-    
-    - name: Run Production Tests
-      run: |
-        smus-cli test --pipeline ${{ env.PIPELINE_FILE }} --targets marketing-prod-stage
-    
-    - name: Monitor Production Deployment
-      run: |
-        smus-cli monitor --pipeline ${{ env.PIPELINE_FILE }} --targets marketing-prod-stage
+# Repository Settings → Branches → main
+Branch Protection Rules:
+  - Require pull request reviews
+  - Require status checks to pass
+  - Require branches to be up to date
+  - Restrict pushes to matching branches
 ```
 
-## Workflow Explanation
+## Pipeline Stages and Workflow
 
-This GitHub Actions workflow implements a complete CI/CD pipeline for SMUS deployments:
+### Stage Progression
 
-### **Triggers**
-- **Push to `develop`**: Deploys to development and staging environments
-- **Push to `main`**: Deploys to production (after staging validation)
-- **Pull Requests**: Validates pipeline configuration only
+The SMUS CLI supports a standard deployment progression with automatic infrastructure management:
 
-### **Pipeline Stages**
+#### **Development → Test → Production Flow**
 
-1. **Validate** (All branches)
-   - Validates pipeline configuration
-   - Connects to AWS to verify resources and permissions
-   - Runs on every push and PR
+```mermaid
+graph TD
+    A[Development Environment] --> B[Create Bundle]
+    B --> C[Deploy to Test]
+    C --> D[Run Tests]
+    D --> E{Tests Pass?}
+    E -->|Yes| F[Manual Approval Gate]
+    E -->|No| G[Fix Issues]
+    G --> A
+    F --> H[Deploy to Production]
+    H --> I[Production Validation]
+    I --> J[Monitor & Alert]
+```
 
-2. **Bundle from Development** (develop branch only)
-   - Describes the existing development environment
-   - Creates bundle from `marketing-dev-stage` (where development work is done)
-   - Uploads bundle as GitHub Actions artifact for reuse
-   - No deployment - dev environment already exists with latest work
+### Bundle Creation and Management
 
-3. **Deploy Staging** (develop branch only)
-   - Downloads bundle created from development
-   - Deploys to `marketing-test-stage` target
-   - Runs comprehensive tests
-   - Monitors workflow execution
-   - Pre-production validation
+#### **Bundle Creation Process**
+```bash
+# CLI packages all deployment artifacts
+smus-cli bundle --manifest manifest.yaml --stages test
+```
 
-4. **Deploy Production** (main branch only)
-   - Creates fresh bundle from development environment
-   - Uses GitHub Environment protection rules
-   - Deploys to `marketing-prod-stage` target
-   - Runs production tests
-   - Monitors deployment status
+**What gets bundled:**
+- Airflow DAGs and dependencies
+- Jupyter notebooks and scripts
+- Configuration files and schemas
+- DataZone catalog asset references
+- Environment-specific parameters
 
-### **Required GitHub Secrets**
+#### **Artifact Management**
+- **S3 Storage**: Bundles uploaded to environment-specific S3 buckets
+- **Versioning**: Each bundle tagged with commit SHA or version
+- **Reuse**: Same bundle deployed across test → production
+- **Rollback**: Previous bundles available for quick rollback
 
-Configure these secrets in your GitHub repository settings:
+### Infrastructure-Aware Deployment
 
-- `AWS_ACCESS_KEY_ID`: AWS access key for SMUS CLI
-- `AWS_SECRET_ACCESS_KEY`: AWS secret key for SMUS CLI
+#### **Automatic Infrastructure Provisioning**
 
-### **Environment Protection**
+The CLI handles infrastructure creation during deployment:
 
-The production job uses GitHub's `environment: production` feature, which allows you to:
-- Require manual approval before production deployments
-- Restrict deployments to specific branches
-- Add deployment protection rules
+```bash
+# Single command creates all required infrastructure
+smus-cli deploy --manifest manifest.yaml --stages test
 
-### **Benefits**
+# CLI automatically:
+# 1. Creates DataZone domain if missing
+# 2. Creates SageMaker project if missing  
+# 3. Provisions required environments (Lakehouse, MWAA)
+# 4. Establishes connections between components
+# 5. Deploys bundle to target environment
+```
 
-- **Automated Testing**: Every deployment is automatically tested
-- **Environment Progression**: Code flows through dev (source) → staging → production
-- **Bundle Reuse**: Staging uses the same bundle created from dev environment
-- **Development Isolation**: Dev environment is the source, not a deployment target
-- **Rollback Safety**: Failed tests prevent promotion to next environment
-- **Audit Trail**: Complete deployment history in GitHub Actions
-- **Team Collaboration**: Pull request validation ensures code quality
+#### **Infrastructure Detection Logic**
+1. **Domain Resolution**: Resolves domain by name, creates if not found
+2. **Project Validation**: Checks project existence, creates with proper settings
+3. **Environment Assessment**: Validates environments, provisions missing ones
+4. **Connection Setup**: Ensures proper connectivity and permissions
 
-This integration transforms your SMUS pipeline into a fully automated CI/CD system that scales with your team's development workflow.
+#### **Idempotent Operations**
+- **Safe Re-runs**: Multiple deployments won't create duplicate resources
+- **State Consistency**: Infrastructure matches bundle configuration
+- **Error Recovery**: Failed deployments can be safely retried
+
+### Catalog Asset Integration
+
+#### **Automatic Subscription Management**
+
+The CLI handles DataZone catalog asset access throughout the pipeline:
+
+```yaml
+# In manifest.yaml - catalog assets are automatically managed
+content:
+  catalog:
+    assets:
+      - selector:
+          search:
+            assetType: GlueTable
+            identifier: covid19_db.countries_aggregated
+        permission: READ
+        requestReason: Required for pipeline deployment
+```
+
+**CLI Automation:**
+1. **Asset Discovery**: Identifies required catalog assets in bundle
+2. **Subscription Requests**: Creates subscription requests for target project
+3. **Approval Workflow**: Manages approval process with configurable timeout
+4. **Grant Verification**: Ensures access is granted before proceeding
+5. **Cross-Environment**: Handles different subscriptions per environment
+
+### Manual Approval Gates
+
+#### **Production Deployment Protection**
+
+Configure manual approval for production deployments using CI/CD platform features:
+
+**GitHub Actions Example:**
+```yaml
+deploy-production:
+  name: "Deploy to Production"
+  runs-on: ubuntu-latest
+  environment: aws-env-prod  # Triggers manual approval
+  needs: [test-validation]
+  steps:
+    - name: Deploy to Production
+      run: |
+        smus-cli deploy --manifest manifest.yaml --stages prod
+```
+
+**GitLab CI Example:**
+```yaml
+deploy-production:
+  stage: deploy
+  environment:
+    name: production
+    action: start
+  when: manual  # Requires manual trigger
+  script:
+    - smus-cli deploy --manifest manifest.yaml --stages prod
+```
+
+#### **Approval Workflow Process**
+
+1. **Workflow Pause**: CI/CD pipeline pauses at production deployment
+2. **Notification**: Designated reviewers receive notification
+3. **Review Process**: Reviewers can:
+   - ✅ **Approve**: Continue to production deployment
+   - ❌ **Reject**: Stop the workflow with reason
+   - 💬 **Comment**: Request changes or clarification
+4. **Audit Trail**: All approvals logged for compliance
+5. **Deployment**: Approved deployments proceed automatically
+
+### CLI Integration Points
+
+#### **1. Configuration Validation**
+```bash
+# Validates bundle configuration and connectivity
+smus-cli describe --manifest manifest.yaml --connect
+```
+
+#### **2. Bundle Creation**
+```bash
+# Creates deployment bundle from source environment
+smus-cli bundle --manifest manifest.yaml --stages test
+```
+
+#### **3. Infrastructure-Aware Deployment**
+```bash
+# Deploys with automatic infrastructure creation
+smus-cli deploy --manifest manifest.yaml --stages test
+```
+
+#### **4. Test Execution**
+```bash
+# Runs validation tests on deployed environment
+smus-cli test --manifest manifest.yaml --stages test
+```
+
+#### **5. Production Deployment**
+```bash
+# Deploys to production with approval gates
+smus-cli deploy --manifest manifest.yaml --stages prod
+```
+
+#### **6. Monitoring and Status**
+```bash
+# Monitors deployment status and health
+smus-cli monitor --manifest manifest.yaml --stages prod
+```
+
+## Manual Reviewers and Approval Process
+
+### Setting Up Approval Gates
+
+#### **GitHub Environment Protection Rules**
+
+1. **Navigate to Repository Settings**
+   - Go to **Settings** → **Environments**
+   - Select or create production environment
+
+2. **Configure Protection Rules**
+   ```yaml
+   Environment: aws-env-prod
+   Protection Rules:
+     - Required reviewers: 2-3 team members
+     - Wait timer: 5-10 minutes (optional)
+     - Deployment branches: main, release/* only
+     - Prevent self-review: enabled
+   ```
+
+3. **Reviewer Assignment**
+   - **Team Leads**: Senior developers or architects
+   - **DevOps Engineers**: Infrastructure and deployment experts  
+   - **Product Owners**: Business stakeholders for critical releases
+   - **Security Team**: For compliance-sensitive deployments
+
+#### **GitLab Environment Protection**
+
+```yaml
+# .gitlab-ci.yml
+deploy-production:
+  stage: deploy
+  environment:
+    name: production
+    deployment_tier: production
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+      allow_failure: false
+  script:
+    - smus-cli deploy --manifest manifest.yaml --stages prod
+```
+
+### Approval Workflow Mechanics
+
+#### **Notification Process**
+1. **Automatic Alerts**: Reviewers notified via email/Slack when approval needed
+2. **Context Information**: Deployment details, changes, and test results provided
+3. **Review Dashboard**: Centralized view of pending approvals
+
+#### **Review Criteria**
+- **Code Quality**: All tests passing, code review completed
+- **Security Validation**: Security scans passed, no vulnerabilities
+- **Business Impact**: Change aligns with business requirements
+- **Rollback Plan**: Clear rollback strategy documented
+
+#### **Approval Actions**
+```yaml
+# Reviewer options in GitHub/GitLab UI
+Actions Available:
+  - Approve Deployment: ✅ Proceed with production deployment
+  - Request Changes: 🔄 Block deployment, request modifications  
+  - Reject Deployment: ❌ Stop deployment with reason
+  - Add Comments: 💬 Provide feedback or ask questions
+```
+
+### Audit Trail and Compliance
+
+#### **Deployment History**
+- **Who**: User who initiated deployment
+- **What**: Changes being deployed (commit SHA, bundle version)
+- **When**: Timestamp of deployment request and approval
+- **Why**: Deployment reason and business justification
+- **Reviewers**: Who approved/rejected with comments
+
+#### **Compliance Features**
+- **SOX Compliance**: Separation of duties between developers and approvers
+- **Change Management**: Integration with ITSM tools for change requests
+- **Audit Logs**: Immutable logs of all deployment activities
+- **Rollback Tracking**: Complete history of rollbacks and reasons
+
+## Specific Implementation Example: aws/Unified-Studio-for-Amazon-Sagemaker
+
+This section demonstrates how the general concepts above are implemented in the specific GitHub repository `https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/` using the `.github/workflows/full-pipeline-lifecycle.yml` workflow.
+
+### Repository-Specific Configuration
+
+#### **GitHub Environments Used**
+- **`aws-env`**: Development environment for testing and validation
+- **`aws-env-amirbo-6778`**: Production environment with manual approval gates
+
+#### **Multi-Environment AWS Role Configuration**
+```yaml
+# Development Role (broader permissions for testing)
+- name: Configure AWS credentials (Dev)
+  uses: aws-actions/configure-aws-credentials@v4
+  with:
+    aws-region: us-east-1
+    role-to-assume: ${{ secrets.AWS_ROLE_ARN_DEV }}
+    role-session-name: smus-pipeline-lifecycle-dev
+    role-duration-seconds: 43200
+
+# Production Role (restricted permissions)  
+- name: Configure AWS credentials (Prod)
+  uses: aws-actions/configure-aws-credentials@v4
+  with:
+    aws-region: us-east-1
+    role-to-assume: ${{ secrets.AWS_ROLE_ARN_PROD }}
+    role-session-name: smus-pipeline-lifecycle-prod
+    role-duration-seconds: 43200
+```
+
+### Workflow Implementation Details
+
+The `full-pipeline-lifecycle.yml` workflow demonstrates a complete end-to-end pipeline with the following jobs:
+
+#### **Job 1: Setup and Environment Resolution**
+```yaml
+setup:
+  name: "Step 1 - Setup and Resolve Environment"
+  runs-on: ubuntu-latest
+  environment: aws-env
+  outputs:
+    domain-id: ${{ steps.resolve.outputs.domain-id }}
+    project-id: ${{ steps.resolve.outputs.project-id }}
+```
+
+**Purpose**: Resolves DataZone domain and project IDs from user-friendly names
+**Infrastructure Management**: CLI automatically detects existing domains or creates them if missing
+
+#### **Job 2: Bundle Creation**
+```yaml
+create-bundle:
+  name: "Step 2 - Create Bundle"
+  runs-on: ubuntu-latest
+  environment: aws-env
+  needs: setup
+```
+
+**Purpose**: Packages deployment artifacts including DAGs, notebooks, and catalog assets
+**CLI Command**: `smus-cli bundle --manifest manifest.yaml --stages test`
+**Infrastructure Impact**: Creates S3 storage for bundles if not present
+
+#### **Job 3: Test Environment Deployment**
+```yaml
+deploy-test:
+  name: "Step 3 - Deploy to Test Environment"
+  runs-on: ubuntu-latest
+  environment: aws-env
+  needs: [setup, create-bundle]
+```
+
+**Purpose**: Deploys to test environment with automatic infrastructure provisioning
+**CLI Command**: `smus-cli deploy --manifest manifest.yaml --stages test`
+**Infrastructure Created**:
+- SageMaker project (if missing)
+- Lakehouse environment (if missing)
+- MWAA environment (if missing)
+- Required IAM roles and policies
+
+#### **Job 4: Test Execution**
+```yaml
+run-tests:
+  name: "Step 4 - Run Tests on Test Environment"
+  runs-on: ubuntu-latest
+  environment: aws-env
+  needs: [setup, create-bundle, deploy-test]
+```
+
+**Purpose**: Validates deployment through automated testing
+**CLI Command**: `smus-cli test --manifest manifest.yaml --stages test`
+
+#### **Job 5: Production Deployment (Manual Approval)**
+```yaml
+deploy-prod:
+  name: "Step 5 - Deploy to Production Environment"
+  runs-on: ubuntu-latest
+  environment: aws-env-amirbo-6778  # Triggers manual approval
+  needs: [setup, create-bundle, deploy-test, run-tests]
+```
+
+**Manual Approval Gate**: Uses GitHub environment `aws-env-amirbo-6778` with protection rules
+**CLI Command**: `smus-cli deploy --manifest manifest.yaml --stages prod`
+**Infrastructure Management**: Creates production infrastructure idempotently
+
+### Repository-Specific Features
+
+#### **Workflow Dispatch Inputs**
+```yaml
+on:
+  workflow_dispatch:
+    inputs:
+      domain_name:
+        description: 'SageMaker Unified Studio domain name'
+        required: true
+        default: 'cicd-test-domain'
+      project_name:
+        description: 'Development project name'
+        required: true
+        default: 'cicd-test-project'
+      pipeline_name:
+        description: 'Pipeline name'
+        required: true
+        default: 'TestPipeline'
+```
+
+#### **Environment Variables**
+```yaml
+env:
+  DEV_DOMAIN_REGION: ${{ vars.DEV_DOMAIN_REGION }}
+  PROD_DOMAIN_REGION: ${{ vars.PROD_DOMAIN_REGION }}
+  SMUS_LOG_LEVEL: WARNING
+```
+
+#### **Artifact Management**
+```yaml
+- name: Upload Bundle Manifest
+  uses: actions/upload-artifact@v4
+  with:
+    name: pipeline-manifest
+    path: manifest.yaml
+    retention-days: 30
+```
+
+### Security Implementation
+
+#### **OIDC Integration**
+The repository uses AWS OIDC for secure authentication without long-lived credentials:
+
+```yaml
+permissions:
+  id-token: write
+  contents: read
+```
+
+#### **Environment Protection Rules**
+- **Development (`aws-env`)**: No protection, automatic deployment
+- **Production (`aws-env-amirbo-6778`)**: 
+  - Required reviewers: 2 team members
+  - Manual approval required
+  - Deployment branch restrictions
+
+### Catalog Asset Integration Example
+
+The workflow demonstrates automatic catalog asset management:
+
+```yaml
+# CLI automatically handles catalog asset subscriptions
+- name: Deploy with Catalog Assets
+  run: |
+    smus-cli deploy --manifest manifest.yaml --stages prod
+    # CLI automatically:
+    # 1. Identifies catalog assets in bundle
+    # 2. Requests subscriptions for production project
+    # 3. Waits for approval (with timeout)
+    # 4. Verifies grants before proceeding
+```
+
+### Monitoring and Cleanup
+
+#### **Pipeline Monitoring**
+```yaml
+monitor-pipeline:
+  name: "Step 6 - Monitor Pipeline Status"
+  runs-on: ubuntu-latest
+  environment: aws-env-amirbo-6778
+  needs: [deploy-prod]
+```
+
+#### **Automatic Cleanup**
+```yaml
+cleanup:
+  name: "Step 7 - Cleanup Test Resources"
+  runs-on: ubuntu-latest
+  environment: aws-env
+  if: always()  # Runs even if previous jobs fail
+```
+
+### Repository Setup for This Implementation
+
+#### **Required Secrets**
+```bash
+# Repository Settings → Secrets and Variables → Actions
+AWS_ROLE_ARN_DEV = arn:aws:iam::123456789012:role/GitHubActions-Dev
+AWS_ROLE_ARN_PROD = arn:aws:iam::123456789012:role/GitHubActions-Prod
+```
+
+#### **Environment Variables**
+```bash
+# Environment: aws-env
+DEV_DOMAIN_REGION = us-east-1
+
+# Environment: aws-env-amirbo-6778  
+PROD_DOMAIN_REGION = us-east-2
+```
+
+#### **GitHub Environment Configuration**
+1. **aws-env** (Development)
+   - No protection rules
+   - Used for: setup, bundling, test deployment, testing
+   
+2. **aws-env-amirbo-6778** (Production)
+   - Protection rules: Required reviewers (2)
+   - Used for: production deployment, monitoring
+
+This implementation showcases how the SMUS CLI's infrastructure management capabilities work in practice, automatically creating and managing AWS resources while providing secure, auditable deployments with proper approval workflows.
+
+For more detailed information about CLI commands and bundle configuration, see:
+- [CLI Commands Documentation](cli-commands.md)
+- [Bundle Manifest Guide](bundle-manifest.md)
+- [Development Guide](development.md)

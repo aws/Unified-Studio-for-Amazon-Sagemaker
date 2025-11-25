@@ -1,0 +1,27 @@
+{
+  "name": "smus-agent",
+  "description": "SMUS project agent with trusted permissions",
+  "allowedTools": [
+    "fs_read",
+    "knowledge", 
+    "execute_bash",
+    "fs_write",
+    "use_aws"
+  ],
+  "toolsSettings": {
+    "fs_read": {
+      "allowedPaths": ["/Users/amirbo/code/smus/experimental/**"]
+    },
+    "fs_write": {
+      "allowedPaths": ["/Users/amirbo/code/smus/experimental/**"]
+    },
+    "execute_bash": {
+      "allowedCommands": ["gh .*", "git .*"],
+      "autoAllowReadonly": true
+    },
+    "use_aws": {
+      "allowedServices": ["*"],
+      "autoAllowReadonly": true
+    }
+  }
+}

@@ -1,22 +1,23 @@
 """Delete command for SMUS CI/CD CLI."""
 
 import json
+import time
 from typing import Optional
 
+import boto3
 import typer
 from rich.console import Console
 from rich.prompt import Confirm
 
-from ..helpers.cloudformation import delete_project_stack
+from ..application import ApplicationManifest
 from ..helpers.datazone import get_domain_id_by_name
-from ..pipeline import PipelineManifest
 
 console = Console()
 
 
 def delete_command(
     pipeline: str = typer.Option(
-        "pipeline.yaml", "--pipeline", "-p", help="Path to pipeline manifest file"
+        "bundle.yaml", "--bundle", "-b", help="Path to bundle manifest file"
     ),
     targets: Optional[str] = typer.Option(
         None,
@@ -39,35 +40,34 @@ def delete_command(
     """
     try:
         # Parse manifest
-        manifest = PipelineManifest.from_file(pipeline)
+        manifest = ApplicationManifest.from_file(pipeline)
 
         # Determine targets to delete
         if targets:
             target_list = [t.strip() for t in targets.split(",")]
         else:
-            target_list = list(manifest.targets.keys())
+            target_list = list(manifest.stages.keys())
 
         # Validate targets exist in manifest
-        invalid_targets = [t for t in target_list if t not in manifest.targets]
+        invalid_targets = [t for t in target_list if t not in manifest.stages]
         if invalid_targets:
             console.print(
                 f"[red]Error: Target(s) not found in manifest: {', '.join(invalid_targets)}[/red]"
             )
-            console.print(f"Available targets: {', '.join(manifest.targets.keys())}")
+            console.print(f"Available targets: {', '.join(manifest.stages.keys())}")
             raise typer.Exit(1)
 
         # Show what will be deleted
         if output.upper() != "JSON":
-            console.print(f"[yellow]Pipeline:[/yellow] {manifest.pipeline_name}")
-            console.print(
-                f"[yellow]Domain:[/yellow] {manifest.domain.name} ({manifest.domain.region})"
-            )
+            console.print(f"[yellow]Pipeline:[/yellow] {manifest.application_name}")
             console.print()
             console.print("[yellow]Targets to delete:[/yellow]")
 
-            for target_name in target_list:
-                target = manifest.targets[target_name]
-                console.print(f"  - {target_name}: {target.project.name}")
+            for stage_name in target_list:
+                target = manifest.stages[stage_name]
+                console.print(
+                    f"  - {stage_name}: {target.project.name} (Domain: {target.domain.name})"
+                )
 
         # Confirmation prompt (unless --force)
         if not force:
@@ -81,68 +81,172 @@ def delete_command(
                     console.print("Deletion cancelled.")
                 return  # Just return instead of raising Exit
 
-        # Get domain ID
-        domain_id = get_domain_id_by_name(manifest.domain.name, manifest.domain.region)
-        if not domain_id:
-            console.print(
-                f"[red]Error: Domain '{manifest.domain.name}' not found[/red]"
-            )
-            raise typer.Exit(1)
-
         # Delete each target
         results = []
-        for target_name in target_list:
-            target = manifest.targets[target_name]
+        for stage_name in target_list:
+            target = manifest.stages[stage_name]
             if output.upper() != "JSON":
-                console.print(f"\n[blue]🗑️  Deleting target: {target_name}[/blue]")
+                console.print(f"\n[blue]🗑️  Deleting target: {stage_name}[/blue]")
 
             try:
-                # Only delete CloudFormation stack - this will delete the project automatically
-                stack_deleted = delete_project_stack(
-                    target.project.name,
-                    manifest.domain.name,
-                    manifest.domain.region,
-                    manifest.pipeline_name,
-                    target_name,
-                    output,
+                # Get domain ID for this target
+                domain_id = get_domain_id_by_name(
+                    target.domain.name, target.domain.region
                 )
-
-                if not stack_deleted:
+                if not domain_id:
+                    console.print(
+                        f"[red]Error: Domain '{target.domain.name}' not found[/red]"
+                    )
                     results.append(
                         {
-                            "target": target_name,
+                            "target": stage_name,
                             "project_name": target.project.name,
                             "status": "error",
-                            "message": "Failed to delete CloudFormation stack",
+                            "message": f"Domain '{target.domain.name}' not found",
                         }
                     )
                     continue
 
+                # Initialize DataZone client
+                dz = boto3.client("datazone", region_name=target.domain.region)
+
+                # Find the project
+                project_id = None
+                try:
+                    projects = dz.list_projects(domainIdentifier=domain_id)
+                    for project in projects.get("items", []):
+                        if project["name"] == target.project.name:
+                            project_id = project["id"]
+                            break
+                except Exception as e:
+                    console.print(f"[red]Error listing projects: {e}[/red]")
+                    results.append(
+                        {
+                            "target": stage_name,
+                            "project_name": target.project.name,
+                            "status": "error",
+                            "message": f"Error listing projects: {e}",
+                        }
+                    )
+                    continue
+
+                if not project_id:
+                    if output.upper() != "JSON":
+                        console.print(
+                            f"[yellow]⚠️  Project '{target.project.name}' not found (already deleted?)[/yellow]"
+                        )
+                    results.append(
+                        {
+                            "target": stage_name,
+                            "project_name": target.project.name,
+                            "status": "not_found",
+                            "message": "Project not found",
+                        }
+                    )
+                    continue
+
+                # Delete environments first
+                if output.upper() != "JSON":
+                    console.print("  🔍 Checking for environments...")
+
+                try:
+                    envs = dz.list_environments(
+                        domainIdentifier=domain_id, projectIdentifier=project_id
+                    )
+                    env_count = len(envs.get("items", []))
+
+                    if env_count > 0:
+                        if output.upper() != "JSON":
+                            console.print(
+                                f"  🗑️  Deleting {env_count} environment(s)..."
+                            )
+
+                        for env in envs.get("items", []):
+                            env_id = env["id"]
+                            env_name = env.get("name", env_id)
+
+                            if output.upper() != "JSON":
+                                console.print(f"    - Deleting environment: {env_name}")
+
+                            dz.delete_environment(
+                                domainIdentifier=domain_id, identifier=env_id
+                            )
+
+                            # Wait for environment deletion
+                            if not async_mode:
+                                for i in range(60):
+                                    try:
+                                        dz.get_environment(
+                                            domainIdentifier=domain_id,
+                                            identifier=env_id,
+                                        )
+                                        time.sleep(2)
+                                    except dz.exceptions.ResourceNotFoundException:
+                                        if output.upper() != "JSON":
+                                            console.print(
+                                                f"    ✅ Environment {env_name} deleted after {i * 2}s"
+                                            )
+                                        break
+                    else:
+                        if output.upper() != "JSON":
+                            console.print("  ℹ️  No environments to delete")
+
+                except Exception as e:
+                    console.print(
+                        f"[yellow]⚠️  Error deleting environments: {e}[/yellow]"
+                    )
+
+                # Delete the project
+                if output.upper() != "JSON":
+                    console.print(f"  🗑️  Deleting project: {target.project.name}")
+
+                dz.delete_project(domainIdentifier=domain_id, identifier=project_id)
+
+                # Wait for project deletion
+                if not async_mode:
+                    if output.upper() != "JSON":
+                        console.print("  ⏳ Waiting for project deletion...")
+
+                    for i in range(60):
+                        try:
+                            proj = dz.get_project(
+                                domainIdentifier=domain_id, identifier=project_id
+                            )
+                            status = proj.get("projectStatus", "UNKNOWN")
+                            if output.upper() != "JSON" and i % 5 == 0:
+                                console.print(
+                                    f"    Status: {status} (check {i + 1}/60)"
+                                )
+                            time.sleep(2)
+                        except dz.exceptions.ResourceNotFoundException:
+                            if output.upper() != "JSON":
+                                console.print(f"  ✅ Project deleted after {i * 2}s")
+                            break
+
                 if async_mode:
                     if output.upper() != "JSON":
                         console.print(
-                            f"[green]✅ Stack deletion initiated for {target.project.name}[/green]"
+                            f"[green]✅ Project deletion initiated for {target.project.name}[/green]"
                         )
                     results.append(
                         {
-                            "target": target_name,
+                            "target": stage_name,
                             "project_name": target.project.name,
                             "status": "deletion_initiated",
-                            "message": "Stack deletion started (async mode)",
+                            "message": "Project deletion started (async mode)",
                         }
                     )
                 else:
-                    # Stack deletion already waits for completion in delete_project_stack
                     if output.upper() != "JSON":
                         console.print(
-                            f"[green]✅ Successfully deleted stack for {target.project.name}[/green]"
+                            f"[green]✅ Successfully deleted project {target.project.name}[/green]"
                         )
                     results.append(
                         {
-                            "target": target_name,
+                            "target": stage_name,
                             "project_name": target.project.name,
                             "status": "deleted",
-                            "message": "Successfully deleted via CloudFormation stack",
+                            "message": "Successfully deleted project and environments",
                         }
                     )
 
@@ -153,7 +257,7 @@ def delete_command(
                     )
                 results.append(
                     {
-                        "target": target_name,
+                        "target": stage_name,
                         "project_name": target.project.name,
                         "status": "error",
                         "message": str(e),
@@ -165,8 +269,7 @@ def delete_command(
             print(
                 json.dumps(
                     {
-                        "pipeline": manifest.pipeline_name,
-                        "domain": manifest.domain.name,
+                        "bundle": manifest.application_name,
                         "results": results,
                     },
                     indent=2,

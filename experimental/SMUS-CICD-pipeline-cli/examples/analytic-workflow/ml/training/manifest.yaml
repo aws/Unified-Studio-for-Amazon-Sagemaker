@@ -1,0 +1,72 @@
+# ML Training Application Manifest
+applicationName: IntegrationTestMLTraining
+content:
+  storage:
+  - name: training-code
+    include:
+    - code
+  - name: training-workflows
+    include:
+    - workflows
+  workflows:
+  - workflowName: ml_training_workflow
+    connectionName: default.workflow_serverless
+stages:
+  dev:
+    stage: DEV
+    domain:
+      tags:
+        purpose: smus-cicd-testing
+      region: ${DEV_DOMAIN_REGION:us-east-1}
+    project:
+      name: dev-marketing
+    environment_variables:
+      S3_PREFIX: dev
+  test:
+    stage: TEST
+    domain:
+      tags:
+        purpose: smus-cicd-testing
+      region: ${TEST_DOMAIN_REGION:us-east-1}
+    project:
+      name: test-marketing
+      create: true
+      owners:
+      - Eng1
+      - arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
+      - arn:aws:iam::${AWS_ACCOUNT_ID}:role/Admin
+      contributors: []
+      role:
+        arn: arn:aws:iam::${AWS_ACCOUNT_ID}:role/test-marketing-role
+      user_parameters:
+      - environment_configuration_name: Lakehouse Database
+        parameters:
+        - name: glueDbName
+          value: analytic_workflow_test_db
+    environment_variables:
+      S3_PREFIX: test
+    deployment_configuration:
+      storage:
+      - name: training-code
+        connectionName: default.s3_shared
+        targetDirectory: ml/bundle/training-code
+        compression: gz
+      - name: training-workflows
+        connectionName: default.s3_shared
+        targetDirectory: ml/bundle/training-workflows
+    bootstrap:
+      actions:
+      - type: datazone.create_connection
+        name: mlflow-server
+        connection_type: MLFLOW
+        properties:
+          trackingServerArn: arn:aws:sagemaker:${STS_REGION}:${STS_ACCOUNT_ID}:mlflow-tracking-server/${MLFLOW_TRACKING_SERVER_NAME:smus-integration-mlflow-use2}
+      - type: workflow.create
+        workflowName: ml_training_workflow
+      - type: workflow.run
+        workflowName: ml_training_workflow
+        trailLogs: true
+tests:
+  folder: examples/analytic-workflow/ml/training/app_tests/
+# Trigger workflow - test domain_name fix
+# Trigger workflow - Fri Nov 21 08:13:13 EST 2025

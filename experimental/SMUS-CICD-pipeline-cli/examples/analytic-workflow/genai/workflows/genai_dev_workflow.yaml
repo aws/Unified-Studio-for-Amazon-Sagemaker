@@ -1,0 +1,17 @@
+genai_dev_workflow:
+  dag_id: "genai_dev_workflow"
+  tasks:
+    bedrock_agent_notebook:
+      operator: "airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator"
+      retries: 0
+      input_config:
+        input_path: "genai/bundle/workflows/bedrock_agent_notebook.ipynb"
+        input_params:
+          agent_name: "calculator_agent"
+          agent_llm: "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+          force_recreate: "True"
+          kb_name: "mortgage-kb"
+      output_config:
+        output_formats: 
+          ['NOTEBOOK']
+      wait_for_completion: True

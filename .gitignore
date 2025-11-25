@@ -1,6 +1,8 @@
 .DS_Store
 *__pycache__*
 .idea
+.claude/
+*.log
 
 experimental/SMUS-CICD-pipeline-cli/tests/integration/multi_target_pipeline/code/workflows/dags/generated_test_dag_*.py
 
@@ -18,3 +20,27 @@ override.tf.json
 *_override.tf.json
 .terraformrc
 terraform.rc
+
+# Test outputs and reports - should only be in tests/test-outputs/
+experimental/SMUS-CICD-pipeline-cli/tests/test-outputs/
+tests/reports/
+tests/test-outputs/
+coverage-artifacts/
+artifacts/
+test_results.txt
+.coverage
+.coverage.*
+
+# Build artifacts at repo root
+/genai/
+/ml-workflow/
+
+q-tasks.txt
+smus-feedback.txt
+
+# Local integration test workflows (contain hardcoded credentials)
+.github/workflows/run-integration-local.yml
+
+# Integration test environment files
+experimental/SMUS-CICD-pipeline-cli/env-*.env
+bundles/

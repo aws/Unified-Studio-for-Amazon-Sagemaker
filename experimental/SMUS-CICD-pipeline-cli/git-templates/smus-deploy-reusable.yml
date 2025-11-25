@@ -1,0 +1,136 @@
+name: SMUS Deploy (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      manifest_path:
+        description: 'Path to manifest file'
+        required: false
+        type: string
+        default: 'manifest.yaml'
+      
+      targets:
+        description: 'Comma-separated deployment targets (e.g., test,prod)'
+        required: true
+        type: string
+      
+      python_version:
+        description: 'Python version'
+        required: false
+        type: string
+        default: '3.12'
+      
+      aws_region:
+        description: 'AWS region'
+        required: false
+        type: string
+        default: 'us-east-1'
+      
+      run_tests:
+        description: 'Run tests after deployment'
+        required: false
+        type: boolean
+        default: true
+    
+    secrets:
+      AWS_ROLE_ARN:
+        description: 'AWS IAM role ARN for OIDC'
+        required: true
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+      
+      - name: Install SMUS CLI
+        run: |
+          pip install -e .
+      
+      - name: Validate manifest
+        run: |
+          smus-cli describe --manifest ${{ inputs.manifest_path }}
+
+  deploy:
+    name: Deploy to ${{ inputs.targets }}
+    runs-on: ubuntu-latest
+    needs: validate
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+      
+      - name: Install SMUS CLI
+        run: |
+          pip install -e .
+      
+      # Temporary: Register mwaaserverless-internal model until service is GA
+      - name: Register AWS CLI model patch
+        run: |
+          aws configure add-model \
+            --service-model file://src/smus_cicd/resources/mwaaserverless-2024-07-26.normal-edited-2.json \
+            --service-name mwaaserverless-internal
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ inputs.aws_region }}
+      
+      - name: Deploy
+        run: |
+          smus-cli deploy \
+            --manifest ${{ inputs.manifest_path }} \
+            --targets ${{ inputs.targets }}
+
+  test:
+    name: Test ${{ inputs.targets }}
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: ${{ inputs.run_tests }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python_version }}
+      
+      - name: Install SMUS CLI
+        run: |
+          pip install -e .
+      
+      # Temporary: Register mwaaserverless-internal model until service is GA
+      - name: Register AWS CLI model patch
+        run: |
+          aws configure add-model \
+            --service-model file://src/smus_cicd/resources/mwaaserverless-2024-07-26.normal-edited-2.json \
+            --service-name mwaaserverless-internal
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ inputs.aws_region }}
+      
+      - name: Run tests
+        run: |
+          smus-cli test \
+            --manifest ${{ inputs.manifest_path }} \
+            --targets ${{ inputs.targets }}
