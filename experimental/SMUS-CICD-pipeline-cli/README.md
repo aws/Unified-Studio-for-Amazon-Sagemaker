@@ -324,49 +324,78 @@ applicationName: IntegrationTestETLWorkflow
 
 content:
   storage:
-    - name: dashboard-glue-quick
-      connectionName: default.s3_shared
-      include: [dashboard-glue-quick]
+  - name: dashboard-glue-quick
+    include:
+    - "*.py"
+    exclude:
+    - .ipynb_checkpoints/
+    - __pycache__/
+    - '*.pyc'
+  - name: workflows
+    include:
+    - "*.yaml"
+    exclude:
+    - manifest.yaml
   
   git:
-    - repository: covid-19-dataset
-      url: https://github.com/datasets/covid-19.git
+  - repository: covid-19-dataset
+    url: https://github.com/datasets/covid-19.git
   
   quicksight:
-    - dashboardId: sample-dashboard
-      assetBundle: quicksight/sample-dashboard.qs
-      owners:
-        - arn:aws:quicksight:${DEV_DOMAIN_REGION:us-east-2}:*:user/default/Admin/*
+  - name: TotalDeathByCountry
+    type: dashboard
   
   workflows:
-    - workflowName: covid_dashboard_glue_quick_pipeline
-      connectionName: default.workflow_serverless
+  - workflowName: covid_dashboard_glue_quick_pipeline
+    connectionName: default.workflow_serverless
 
 stages:
   test:
+    stage: TEST
     domain:
-      region: us-east-2
+      tags:
+        purpose: smus-cicd-testing
+      region: ${TEST_DOMAIN_REGION:us-east-1}
     project:
       name: test-marketing
       owners:
-        - Eng1
-        - arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
+      - Eng1
+      - arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
+      - arn:aws:iam::${AWS_ACCOUNT_ID}:role/Admin
     environment_variables:
       S3_PREFIX: test
+      AWS_REGION: ${TEST_DOMAIN_REGION:us-east-1}
       GRANT_TO: Admin,service-role/aws-quicksight-service-role-v0
     bootstrap:
       actions:
-        - type: workflow.create
-          workflowName: covid_dashboard_glue_quick_pipeline
-        - type: workflow.run
-          workflowName: covid_dashboard_glue_quick_pipeline
-          trailLogs: true
-        - type: quicksight.refresh_dataset
-          refreshScope: IMPORTED
-          ingestionType: FULL_REFRESH
-          wait: false
+      - type: workflow.create
+        workflowName: covid_dashboard_glue_quick_pipeline
+      - type: workflow.run
+        workflowName: covid_dashboard_glue_quick_pipeline
+        trailLogs: true
+      - type: quicksight.refresh_dataset
+        refreshScope: IMPORTED
+        ingestionType: FULL_REFRESH
+        wait: false
     deployment_configuration:
+      storage:
+      - name: dashboard-glue-quick
+        connectionName: default.s3_shared
+        targetDirectory: dashboard-glue-quick/bundle
+      - name: workflows
+        connectionName: default.s3_shared
+        targetDirectory: dashboard-glue-quick/bundle/workflows
+      git:
+      - name: covid-19-dataset
+        connectionName: default.s3_shared
+        targetDirectory: repos
       quicksight:
+        assets:
+        - name: TotalDeathByCountry
+          owners:
+          - arn:aws:quicksight:${TEST_DOMAIN_REGION:us-east-1}:${AWS_ACCOUNT_ID}:user/default/Admin/*
+          viewers:
+          - arn:aws:quicksight:${TEST_DOMAIN_REGION:us-east-1}:${AWS_ACCOUNT_ID}:user/default/Admin/*
         overrideParameters:
           ResourceIdOverrideConfiguration:
             PrefixForAllResources: deployed-{stage.name}-covid-
