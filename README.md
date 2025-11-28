@@ -1,6 +1,6 @@
 ## Amazon SageMaker Unified Studio
 
-This repository contains utilities for Amazon SageMaker Unified Studio. It is structured as follows:
+This repository contains utilities for Amazon SageMaker Unified Studio. It is structured as follows: 
 - Cloudformation
     - [Templates](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/tree/main/cloudformation) to setup and Create a new Amazon SageMaker Unified domain and project
 - Migration 
