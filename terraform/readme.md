@@ -4,136 +4,15 @@
 
 This repository contains a sample Terraform composition for setting up and configuring an AWS SageMaker Unified Studio domain with various resources and capabilities. The setup includes creating a domain, creating associated resources, enabling blueprints, and setting up project profiles.
 
-By default, the main example shown demonstrates a cross-account domain deployment without AWS Organizations by utilizing multiple providers. 
+## Deployment
 
-## Usage
+Visit `/terraform/examples/` to see examples of single account and multi-account deployment.
 
-The main stack requires three variables to be specified before deployment. 
+## Modification
 
-#### Variables:
+By default, the `/terraform/constructs/create-blueprint` module enables all blueprints by default. If only a select number of blueprints need to be enabled, then the unused blueprints have to be disabled. Each blueprint deployment depends on the previous blueprint deployment before proceeding. This is to serialize blueprint enablement one-at-a-time to avoid running into service limits by enabling all of them at once. If select blueprints are disabled, the subsequent blueprints `depends_on` statement has to be updated.
 
-```tf
-variable domain_name {
-  description = "Name of the DataZone domain"
-  type = string
-}
-
-variable sagemaker_subnets {
-  description = "A list of subnets within the sagemaker VPC"
-  type = list(string)
-}
-
-variable sagemaker_vpc_id {
-  description = "The VPC ID of the sagemaker VPC"
-  type = string
-}
-```
-
-These variables can be specified in a `.tfvars` file to be referenced during deployment
-
-example.tfvars
-```
-domain_name = "Example"
-sagemaker_subnets = ["subnet-xxx","subnet-xxx","subnet-xxx","subnet-xxx"]
-sagemaker_vpc_id = "vpc-xxx"
-```
-
-### Configuring Providers
-
-This sample utilizes both [AWS](https://registry.terraform.io/providers/hashicorp/aws/latest) and [AWS Cloud Control](https://registry.terraform.io/providers/hashicorp/awscc/latest) providers to deploy resources. 
-
-By default, this example utilizes four providers located in `providers.tf`, two for the "primary" account where the Sagemaker Unified Studio Domain is deployed and two for an "alternate" associated account which associates with the domain and deploys blueprints and resources. 
-
-These are configured to read from profiles named `primary` and `alternate`. To configure these profiles, run the following commands to set credentials for each profile using the AWS CLI tool:
-- `aws configure --profile primary`
-- `aws configure --profile alternate`  
-```
-// primary account providers
-provider "aws" {
-  profile = "primary"
-}
-provider "awscc" {
-  profile = "primary"
-}
-// alternate (associated domain) account providers
-provider "aws" {
-  alias   = "alternate"
-  profile = "alternate"
-}
-provider "awscc" {
-  alias   = "alternate"
-  profile = "alternate"
-}
-```
-
-Alternatively, modify the `providers.tf` file to set custom credentials for the provider according to the documentation.
-- [AWS](https://registry.terraform.io/providers/hashicorp/aws/latest/docs#authentication-and-configuration)
-- [AWS Cloud Control](https://registry.terraform.io/providers/hashicorp/awscc/latest/docs#authentication)
-- [Provider Configuration](https://developer.hashicorp.com/terraform/language/providers/configuration)
-
-#### Disabling Cross-Account Deployment
-
-The main stack is configured as an example of a cross-account deployment that is not within an AWS Organization and utilizes two profiles. To disable this, remove instances of "alternate" aws and awscc provider alias in the `main.tf` stack and the stack will deploy entirely in the primary account provider.
-
-```
-// change
-data.aws_caller_identity.alternate.account_id
-// to
-data.aws_caller_identity.current.account_id
-
-// change
-data.aws_region.alternate.name
-// to
-data.aws_region.current.name
-
-// remove
-data "aws_region" "alternate" {
-    provider = aws.alternate
-}
-data "aws_caller_identity" "alternate" {
-    provider = aws.alternate
-}
-
-// remove
-providers = {
-    "aws" = aws.alternate
-    "awscc" = awscc.alternate
-}
-
-// remove
-provider = aws.alternate
-
-// remove
-provider "aws" {
-  alias   = "alternate"
-  profile = "alternate"
-}
-provider "awscc" {
-  alias   = "alternate"
-  profile = "alternate"
-}
-
-```
-
-### Deployment
-
-Initialize terraform within the `/terraform` project:
-
-```bash
-terraform init
-```
-
-Plan the project using a `.tfvars` file:
-
-```bash
-terraform plan -var-file=example.tfvars
-```
-
-Apply the plan to deploy the project:
-
-```bash
-terraform apply -var-file=example.tfvars
-```
+By default the `/terraform/constructs/create-blueprint` module creates an All capabilities and SQL Analytics project profile. Custom project profiles can be created by only referencing select blueprints in the definition.
 
 ## Notable Differences to the CloudFormation sample
 
@@ -154,21 +33,3 @@ The [`for_each` Terraform meta-argument](https://developer.hashicorp.com/terrafo
 ### Removal of Custom Resources
 
 In the CloudFormation template sample, a lambda custom resource was used to create DataZone policy grant to enable access to the blueprints and project profiles. In the Terraform sample, custom resources were removed - therefore blueprints and project profiles require a manual policy grant before creating a project.
-
-## Pending Items
-
-### Project Creation
-
-Module samples to create a Datazone project are currently on hold due to an [open issue for project profile creation](https://github.com/hashicorp/terraform-provider-awscc/issues/2380) through the AWS Cloud Control provider. We will monitor the issue and update the sample once this becomes available.
-
-### Below use case steps to automate process of account association and data onboarding.
-  
-1. Create IAM roles using CFN
-2. Create domain using CFN
-3. Add SSO/IAM users CFN
-4. Associate accountants TF
-5. Enable blue prints in associated account TF
-6. Project profile creation for associated account CFN
-7. Policy grants for blue prints and project profile CFN/TF
-8. Onboard data - CLI/Python, need validation.
-9. Create projects CFN 

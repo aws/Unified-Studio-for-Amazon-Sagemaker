@@ -14,7 +14,7 @@ data "aws_caller_identity" "alternate" {
 
 // deploy in primary account
 module "domain_service_roles" {
-  source = "./constructs/create-service-roles"
+  source = "../../constructs/create-service-roles"
 
 }
 
@@ -79,7 +79,7 @@ resource "aws_s3_bucket" "dzs3_bucket" {
 // create roles in associated account
 // when doing cross-account deployment, the account id will be set to the source account to allow for the domain to call in
 module "blueprint_roles" {
-  source     = "./constructs/create-blueprint-roles"
+  source     = "../../constructs/create-blueprint-roles"
   domain_arn = awscc_datazone_domain.domain.arn
   domain_id  = awscc_datazone_domain.domain.domain_id
   account_id = data.aws_caller_identity.current.account_id
@@ -96,7 +96,7 @@ module "blueprint_roles" {
 // enable blueprints for the domain
 // If a cross-account association is used, these blueprints will be created in the associated account by specifying the provider
 module "blueprints" {
-  source                               = "./constructs/create-blueprint"
+  source                               = "../../constructs/create-blueprint"
   domain_id                            = awscc_datazone_domain.domain.domain_id
   amazon_sage_maker_manage_access_role = module.blueprint_roles.sagemaker_manage_access_role_arn
   amazon_sage_maker_provisioning_role  = module.blueprint_roles.sagemaker_provisioning_role_arn
@@ -115,11 +115,28 @@ module "blueprints" {
 }
 
 module "blueprint_policy_grants" {
-  source         = "./constructs/create-blueprint-policy-grant"
+  source         = "../../constructs/create-blueprint-policy-grant"
   domain_id      = awscc_datazone_domain.domain.domain_id
   domain_unit_id = awscc_datazone_domain.domain.root_domain_unit_id
 
   blueprint_ids = tomap({
+    lakehouse_catalog_id             = module.blueprints.lakehouse_catalog_id,
+    amazon_bedrock_guardrail_id      = module.blueprints.amazon_bedrock_guardrail_id,
+    ml_experiments_id                = module.blueprints.ml_experiments_id,
+    tooling_id                       = module.blueprints.tooling_id,
+    redshift_serverless_id           = module.blueprints.redshift_serverless_id,
+    emr_serverless_id                = module.blueprints.emr_serverless_id,
+    workflows_id                     = module.blueprints.workflows_id,
+    amazon_bedrock_prompt_id         = module.blueprints.amazon_bedrock_prompt_id,
+    data_lake_id                     = module.blueprints.data_lake_id,
+    amazon_bedrock_evaluation_id     = module.blueprints.amazon_bedrock_evaluation_id,
+    amazon_bedrock_knowledge_base_id = module.blueprints.amazon_bedrock_knowledge_base_id,
+    partner_apps_id                  = module.blueprints.partner_apps_id,
+    amazon_bedrock_chat_agent_id     = module.blueprints.amazon_bedrock_chat_agent_id,
+    amazon_bedrock_function_id       = module.blueprints.amazon_bedrock_function_id,
+    amazon_bedrock_flow_id           = module.blueprints.amazon_bedrock_flow_id,
+    emr_on_ec2_id                    = module.blueprints.emr_on_ec2_id,
+    quick_sight_id                   = module.blueprints.quick_sight_id,
     lakehouse_catalog_id             = module.blueprints.lakehouse_catalog_id,
     amazon_bedrock_guardrail_id      = module.blueprints.amazon_bedrock_guardrail_id,
     ml_experiments_id                = module.blueprints.ml_experiments_id,
@@ -148,7 +165,7 @@ module "blueprint_policy_grants" {
 // project profiles are created in primary account and reference the account where blueprints are located
 // in a multi-account configuration, the project profiles are created in the primary account and reference blueprints created in the associated account
 module "project_profiles" {
-  source = "./constructs/create_project_profiles"
+  source = "../../constructs/create_project_profiles"
   // domain to enable project profiles
   domain_id = awscc_datazone_domain.domain.domain_id
   domain_unit_id = awscc_datazone_domain.domain.root_domain_unit_id
@@ -177,7 +194,7 @@ module "project_profiles" {
 
 
 module "project_profile_policy_grant" {
-  source         = "./constructs/create-project-profile-policy-grant"
+  source         = "../../constructs/create-project-profile-policy-grant"
   domain_id      = awscc_datazone_domain.domain.domain_id
   domain_unit_id = awscc_datazone_domain.domain.root_domain_unit_id
   project_profile_ids = [
@@ -187,9 +204,27 @@ module "project_profile_policy_grant" {
 }
 
 module "sample_project" {
-  source = "./constructs/create_project"
+  source = "../../constructs/create_project"
   domain_id = awscc_datazone_domain.domain.domain_id
   project_profile_id = module.project_profiles.all_capabilities_project_profile_id
   name = "DeployedProjectV2"
   users = toset([for user in aws_datazone_user_profile.sso_users: user.user_identifier])
+}
+
+/* 
+ * The following commands deploy an empty project profile with the name "Generative AI model governance" and 
+ * creates a project using the project profile with the name "GenerativeAIModelGovernanceProject".
+ * Users/Principals added to the project using project membership will be allowed to control enablement of Bedrock models for the domain.
+ */
+resource "awscc_datazone_project_profile" "model_governance_project_profile" {
+  name                   = "Generative AI model governance"
+  description            = "Govern generative AI models powered by Amazon Bedrock"
+  status                 = "ENABLED"
+  domain_identifier      = awscc_datazone_domain.domain.domain_id
+  domain_unit_identifier = awscc_datazone_domain.domain.root_domain_unit_id
+}
+resource "awscc_datazone_project" "model_governance_project" {
+  domain_identifier       = awscc_datazone_domain.domain.domain_id
+  name                    = "GenerativeAIModelGovernanceProject"
+  project_profile_id      = awscc_datazone_project_profile.model_governance_project_profile.project_profile_id
 }

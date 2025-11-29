@@ -1,0 +1,3 @@
+# AWS SageMaker Unified Studio Domain Setup - Terraform Examples
+
+The examples in this folder demonstrate the use of terraform constructs to deploy single and multi-account sagemaker unified studio deployments. The constructs used are agnostic for single-account and multi-account deployment, meaning the same constructs are used for both. When comparing the single and multi-account examples you can see which provider is used to deploy which construct - indicating which account a resource has to be created in. 
