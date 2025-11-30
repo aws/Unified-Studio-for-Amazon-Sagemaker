@@ -473,44 +473,6 @@ Events emitted by SMUS CLI follow this structure:
 }
 ```
 
-## Troubleshooting
-
-### Event Not Appearing in EventBridge
-
-1. **Check event bus name**: Verify the event bus exists
-   ```bash
-   aws events describe-event-bus --name my-event-bus
-   ```
-
-2. **Check IAM permissions**: Ensure deployment role has `events:PutEvents` permission
-
-3. **Check CloudWatch Logs**: Look for event emission errors in deployment logs
-
-### Variable Not Resolving
-
-1. **Check variable syntax**: Must use `${variable.path}` format
-2. **Check variable availability**: Only documented variables are available
-3. **Check nesting**: Variables work in nested objects and arrays
-
-### Event Bus Access Denied
-
-Ensure your deployment role has permissions:
-```json
-{
-  "Effect": "Allow",
-  "Action": "events:PutEvents",
-  "Resource": "arn:aws:events:*:*:event-bus/*"
-}
-```
-
-## Best Practices
-
-1. **Use descriptive event sources**: Follow reverse-DNS naming (e.g., `com.company.app`)
-2. **Keep detail payloads small**: EventBridge has a 256KB limit
-3. **Use custom event buses**: Separate production events from development
-4. **Test with default bus first**: Easier to debug
-5. **Document your events**: Maintain a registry of event types and their schemas
-
 ## Examples
 
 See complete examples in:

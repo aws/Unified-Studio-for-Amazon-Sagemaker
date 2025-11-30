@@ -11,7 +11,7 @@ content:
     include:
     - workflows/
   workflows:
-  - workflowName: parallel_notebooks_workflow
+  - workflowName: notebooks_workflow
     connectionName: default.workflow_serverless
 stages:
   dev:
@@ -54,9 +54,9 @@ stages:
         properties:
           trackingServerArn: arn:aws:sagemaker:${STS_REGION}:${STS_ACCOUNT_ID}:mlflow-tracking-server/${MLFLOW_TRACKING_SERVER_NAME:smus-integration-mlflow-use2}
       - type: workflow.create
-        workflowName: parallel_notebooks_workflow
+        workflowName: notebooks_workflow
       - type: workflow.run
-        workflowName: parallel_notebooks_workflow
+        workflowName: notebooks_workflow
         trailLogs: true
 tests:
   folder: examples/analytic-workflow/data-notebooks/app_tests/

@@ -2,22 +2,33 @@ applicationName: QuickSightBootstrapExample
 content:
   storage:
   - name: etl-code
-    connectionName: default.s3_shared
     include:
-    - etl/scripts/
+    - "*.py"
+    exclude:
+    - .ipynb_checkpoints/
+    - __pycache__/
+    - '*.pyc'
+  - name: workflows
+    include:
+    - "*.yaml"
+    exclude:
+    - manifest.yaml
+  git:
+  - repository: sample-data
+    url: https://github.com/example/sample-data.git
+  quicksight:
+  - name: SalesDashboard
+    type: dashboard
   workflows:
   - workflowName: data_processing_dag
     connectionName: default.workflow_serverless
-  quicksight:
-  - dashboardId: sample-dashboard
-    assetBundle: quicksight/sample-dashboard.qs
 stages:
   dev:
     stage: DEV
     domain:
       tags:
         purpose: smus-cicd-testing
-      region: us-east-2
+      region: ${DEV_DOMAIN_REGION:us-east-2}
     project:
       name: dev-analytics
   test:
@@ -25,27 +36,63 @@ stages:
     domain:
       tags:
         purpose: smus-cicd-testing
-      region: us-east-2
+      region: ${TEST_DOMAIN_REGION:us-east-1}
     project:
       name: test-analytics
+      owners:
+      - Eng1
+      - arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
+      - arn:aws:iam::${AWS_ACCOUNT_ID}:role/Admin
+    environment_variables:
+      S3_PREFIX: test
+      AWS_REGION: ${TEST_DOMAIN_REGION:us-east-1}
+      GRANT_TO: Admin,service-role/aws-quicksight-service-role-v0
     bootstrap:
       actions:
       - type: workflow.create
         workflowName: data_processing_dag
       - type: workflow.run
         workflowName: data_processing_dag
-        wait: false
+        trailLogs: true
       - type: quicksight.refresh_dataset
         refreshScope: IMPORTED
+        ingestionType: FULL_REFRESH
         wait: false
+    deployment_configuration:
+      storage:
+      - name: etl-code
+        connectionName: default.s3_shared
+        targetDirectory: etl/bundle
+      - name: workflows
+        connectionName: default.s3_shared
+        targetDirectory: etl/bundle/workflows
+      git:
+      - name: sample-data
+        connectionName: default.s3_shared
+        targetDirectory: repos
+      quicksight:
+        assets:
+        - name: SalesDashboard
+          owners:
+          - arn:aws:quicksight:${TEST_DOMAIN_REGION:us-east-1}:${AWS_ACCOUNT_ID}:user/default/Admin/*
+          viewers:
+          - arn:aws:quicksight:${TEST_DOMAIN_REGION:us-east-1}:${AWS_ACCOUNT_ID}:user/default/Admin/*
+        overrideParameters:
+          ResourceIdOverrideConfiguration:
+            PrefixForAllResources: deployed-{stage.name}-sales-
   prod:
     stage: PROD
     domain:
       tags:
         purpose: smus-cicd-production
-      region: us-east-2
+      region: ${PROD_DOMAIN_REGION:us-east-1}
     project:
       name: prod-analytics
+      owners:
+      - arn:aws:iam::${AWS_ACCOUNT_ID}:role/Admin
+    environment_variables:
+      S3_PREFIX: prod
+      AWS_REGION: ${PROD_DOMAIN_REGION:us-east-1}
     bootstrap:
       actions:
       - type: workflow.create
@@ -64,3 +111,25 @@ stages:
       - type: workflow.logs
         workflowName: data_processing_dag
         lines: 50
+    deployment_configuration:
+      storage:
+      - name: etl-code
+        connectionName: default.s3_shared
+        targetDirectory: etl/bundle
+      - name: workflows
+        connectionName: default.s3_shared
+        targetDirectory: etl/bundle/workflows
+      git:
+      - name: sample-data
+        connectionName: default.s3_shared
+        targetDirectory: repos
+      quicksight:
+        assets:
+        - name: SalesDashboard
+          owners:
+          - arn:aws:quicksight:${PROD_DOMAIN_REGION:us-east-1}:${AWS_ACCOUNT_ID}:user/default/Admin/*
+          viewers:
+          - arn:aws:quicksight:${PROD_DOMAIN_REGION:us-east-1}:${AWS_ACCOUNT_ID}:user/default/Admin/*
+        overrideParameters:
+          ResourceIdOverrideConfiguration:
+            PrefixForAllResources: deployed-{stage.name}-sales-
