@@ -282,57 +282,6 @@ permissions:
     actions: ["quicksight:DescribeDashboard", "quicksight:QueryDashboard", "quicksight:UpdateDashboard"]
 ```
 
-## Troubleshooting
-
-### Dashboard Export Fails
-
-**Error:** `Failed to start export: AccessDeniedException`
-
-**Solution:** Ensure AWS account ID is configured in `~/.smus/config.yaml`:
-```yaml
-aws:
-  account_id: "123456789012"
-  region: us-east-1
-```
-
-### Dashboard Import Fails
-
-**Error:** `Import failed: ResourceNotFoundException`
-
-**Solution:** Verify dashboard bundle exists in bundle zip or S3 location.
-
-### Permission Grant Fails
-
-**Error:** `Failed to grant permissions: InvalidParameterValueException`
-
-**Solution:** Verify principal ARN format:
-- User: `arn:aws:quicksight:REGION:ACCOUNT:user/default/USERNAME`
-- Group: `arn:aws:quicksight:REGION:ACCOUNT:group/default/GROUPNAME`
-
-### Override Parameters Not Applied
-
-**Error:** Dashboard deployed but using wrong dataset
-
-**Solution:** Check parameter names match QuickSight asset bundle format. Use exact ARN format.
-
-### Export Timeout
-
-**Error:** `Export timed out after 300s`
-
-**Solution:** Large dashboards may take longer. The timeout is currently fixed at 5 minutes. Consider:
-- Simplifying dashboard complexity
-- Reducing number of visuals
-- Optimizing dataset queries
-
-## Best Practices
-
-1. **Use `assetBundle: export` for dev dashboards** - Ensures latest version is bundled
-2. **Override datasets per environment** - Keep dashboard logic same, swap data sources
-3. **Grant minimal permissions** - Only give users the actions they need
-4. **Test in dev first** - Validate dashboard works before promoting to prod
-5. **Version dashboard bundles** - Store bundles in S3 with version tags
-6. **Document override parameters** - Comment what each parameter does in manifest
-
 ## IAM Permissions Required
 
 The AWS credentials used must have these QuickSight permissions:
