@@ -142,20 +142,34 @@ S3 • Lambda • Step Functions • DynamoDB • RDS • SNS/SQS • Batch
 
 **The Problem:** Traditional deployment approaches force DevOps teams to learn AWS analytics services (Glue, Athena, DataZone, SageMaker, MWAA, etc.) and understand SMUS project structures, or force data teams to become CI/CD experts.
 
-**The Solution:** SMUS CLI is the abstraction layer that encapsulates all AWS and SMUS complexity:
+**The Solution:** SMUS CLI is the abstraction layer that encapsulates all AWS and SMUS complexity.
+
+**Example workflow:**
 
 ```
-Data Teams                    SMUS CLI                         DevOps Teams
-    ↓                            ↓                                  ↓
-manifest.yaml          smus-cli deploy                    GitHub Actions
-(WHAT & WHERE)         (AWS ABSTRACTION)                  (HOW & WHEN)
+1. DevOps Team                 2. Data Team                    3. SMUS CLI (The Abstraction)
+   ↓                               ↓                              ↓
+Defines the PROCESS            Defines the CONTENT            Workflow calls:
+- Test on merge                - Glue jobs                    smus-cli deploy --manifest manifest.yaml
+- Approval for prod            - SageMaker training             ↓
+- Security scans               - Athena queries               CLI handles ALL AWS complexity:
+- Notification rules           - File structure               - DataZone APIs
+                                                              - Glue/Athena/SageMaker APIs
+Defines INFRASTRUCTURE                                        - MWAA deployment
+- Account & region                                            - S3 management
+- IAM roles                                                   - IAM configuration
+- Resources                                                   - Infrastructure provisioning
+
+Works for ANY app!
+No ML/Analytics/GenAI
+service knowledge needed!
 ```
 
-**Data teams focus on:**
-- Application code and workflows
-- Which AWS services to use (Glue, Athena, SageMaker, etc.)
-- Environment configurations
-- Business logic
+**DevOps teams focus on:**
+- CI/CD best practices (testing, approvals, notifications)
+- Security and compliance gates
+- Deployment orchestration
+- Monitoring and alerting
 
 **SMUS CLI handles ALL AWS complexity:**
 - DataZone domain and project management
@@ -168,36 +182,17 @@ manifest.yaml          smus-cli deploy                    GitHub Actions
 - Infrastructure provisioning
 - Testing and validation
 
-**DevOps teams focus on:**
-- CI/CD best practices (testing, approvals, notifications)
-- Security and compliance gates
-- Deployment orchestration
-- Monitoring and alerting
+**Data teams focus on:**
+- Application code and workflows
+- Which AWS services to use (Glue, Athena, SageMaker, etc.)
+- Environment configurations
+- Business logic
 
 **Result:** 
-- Data teams never touch CI/CD configs
 - **DevOps teams never call AWS APIs directly** - they just call `smus-cli deploy`
 - **CI/CD workflows are generic** - same workflow works for Glue apps, SageMaker apps, or Bedrock apps
+- Data teams never touch CI/CD configs
 - Both teams work independently using their expertise
-
-**Example workflow:**
-
-```
-1. Data Team                    2. DevOps Team                 3. SMUS CLI (The Abstraction)
-   ↓                               ↓                              ↓
-Creates manifest.yaml          Creates generic workflow       Workflow calls:
-- Glue jobs                    - Test on merge                smus-cli deploy --manifest manifest.yaml
-- SageMaker training           - Approval for prod              ↓
-- Athena queries               - Security scans               CLI handles ALL AWS complexity:
-- S3 locations                 - Notification rules           - DataZone APIs
-                                                              - Glue/Athena/SageMaker APIs
-                               Works for ANY app!             - MWAA deployment
-                               No AWS knowledge needed!       - S3 management
-                                                              - IAM configuration
-                                                              - Infrastructure provisioning
-                                                                ↓
-                                                              Success!
-```
 
 ---
 
@@ -327,15 +322,9 @@ content:
   - name: dashboard-glue-quick
     include:
     - "*.py"
-    exclude:
-    - .ipynb_checkpoints/
-    - __pycache__/
-    - '*.pyc'
   - name: workflows
     include:
     - "*.yaml"
-    exclude:
-    - manifest.yaml
   
   git:
   - repository: covid-19-dataset
@@ -458,9 +447,6 @@ content:
       include:
         - notebooks/
         - workflows/
-      exclude:
-        - .ipynb_checkpoints/
-        - __pycache__/
   
   workflows:
     - workflowName: parallel_notebooks_execution
