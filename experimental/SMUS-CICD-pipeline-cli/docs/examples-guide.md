@@ -30,9 +30,6 @@ content:
       include:
         - notebooks/
         - workflows/
-      exclude:
-        - .ipynb_checkpoints/
-        - __pycache__/
   
   workflows:
     - workflowName: parallel_notebooks_execution
@@ -299,9 +296,6 @@ content:
       include:
         - "*.py"
         - "*.yaml"
-      exclude:
-        - .ipynb_checkpoints/
-        - __pycache__/
         - manifest.yaml
   
   git:
