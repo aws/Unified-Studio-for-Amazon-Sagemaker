@@ -60,7 +60,7 @@ filetype==1.2.0
 flask==3.1.2
 flask-cors==6.0.1
 flatbuffers==25.9.23
-fonttools==4.60.1
+fonttools==4.61.0
 frozenlist==1.8.0
 fsspec==2025.9.0
 gast==0.6.0
