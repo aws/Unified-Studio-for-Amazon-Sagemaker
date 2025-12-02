@@ -465,6 +465,97 @@ Resources:
           AwsRegion:
             RegionName: !Ref Region
 
+  GenerativeAIApplicationDevelopment:
+    Type: AWS::DataZone::ProjectProfile
+    Properties:
+      Name: 'Generative AI application development'
+      Description: 'Build generative AI applications powered by Amazon Bedrock'
+      Status: 'ENABLED'
+      DomainIdentifier: !Ref DomainId
+      DomainUnitIdentifier: !Ref DomainUnitId
+      EnvironmentConfigurations:
+        - Name: 'Tooling'
+          EnvironmentBlueprintId: !Ref ToolingId
+          Description: 'Configuration for the Tooling'
+          DeploymentOrder: 0
+          DeploymentMode: 'ON_CREATE'
+          AwsAccount:
+            AwsAccountId: !Ref AccountId
+          AwsRegion:
+            RegionName: !Ref Region
+          ConfigurationParameters:
+            ParameterOverrides:
+              - Name: 'enableSpaces'
+                Value: 'false'
+                IsEditable: false
+              - Name: 'maxEbsVolumeSize'
+                IsEditable: false
+              - Name: 'idleTimeoutInMinutes'
+                IsEditable: false
+              - Name: 'lifecycleManagement'
+                IsEditable: false
+              - Name: 'enableNetworkIsolation'
+                IsEditable: false
+              - Name: 'enableAmazonBedrockPermissions'
+                Value: 'true'
+                IsEditable: false
+        - Name: 'Amazon Bedrock Chat Agent'
+          EnvironmentBlueprintId: !Ref AmazonBedrockChatAgentId
+          Description: 'A configurable generative AI app with a conversational interface'
+          DeploymentMode: 'ON_DEMAND'
+          AwsAccount:
+            AwsAccountId: !Ref AccountId
+          AwsRegion:
+            RegionName: !Ref Region
+        - Name: 'Amazon Bedrock Knowledge Base'
+          EnvironmentBlueprintId: !Ref AmazonBedrockKnowledgeBaseId
+          Description: 'A reusable component for providing your own data to apps'
+          DeploymentMode: 'ON_DEMAND'
+          AwsAccount:
+            AwsAccountId: !Ref AccountId
+          AwsRegion:
+            RegionName: !Ref Region
+        - Name: 'Amazon Bedrock Guardrail'
+          EnvironmentBlueprintId: !Ref AmazonBedrockGuardrailId
+          Description: 'A reusable component for implementing safeguards on model outputs'
+          DeploymentMode: 'ON_DEMAND'
+          AwsAccount:
+            AwsAccountId: !Ref AccountId
+          AwsRegion:
+            RegionName: !Ref Region
+        - Name: 'Amazon Bedrock Function'
+          EnvironmentBlueprintId: !Ref AmazonBedrockFunctionId
+          Description: 'A reusable component for including dynamic information in model outputs'
+          DeploymentMode: 'ON_DEMAND'
+          AwsAccount:
+            AwsAccountId: !Ref AccountId
+          AwsRegion:
+            RegionName: !Ref Region
+        - Name: 'Amazon Bedrock Flow'
+          EnvironmentBlueprintId: !Ref AmazonBedrockFlowId
+          Description: 'A configurable generative AI workflow'
+          DeploymentMode: 'ON_DEMAND'
+          AwsAccount:
+            AwsAccountId: !Ref AccountId
+          AwsRegion:
+            RegionName: !Ref Region
+        - Name: 'Amazon Bedrock Prompt'
+          EnvironmentBlueprintId: !Ref AmazonBedrockPromptId
+          Description: 'A reusable set of inputs that guide model outputs'
+          DeploymentMode: 'ON_DEMAND'
+          AwsAccount:
+            AwsAccountId: !Ref AccountId
+          AwsRegion:
+            RegionName: !Ref Region
+        - Name: 'Amazon Bedrock Evaluation'
+          EnvironmentBlueprintId: !Ref AmazonBedrockEvaluationId
+          Description: 'Enables evaluation features to compare Bedrock models'
+          DeploymentMode: 'ON_DEMAND'
+          AwsAccount:
+            AwsAccountId: !Ref AccountId
+          AwsRegion:
+            RegionName: !Ref Region
+
 #Internal Project profile for Amazon Bedrock Governance
   ModelGovernanceProjectProfile:
     Type: AWS::DataZone::ProjectProfile
@@ -480,6 +571,9 @@ Outputs:
     Value: !GetAtt SQLAnalytics.Id
   AllCapabilitiesProjectProfileId:
     Value: !GetAtt AllCapabilitiesProjectProfile.Id
+  GenerativeAIApplicationDevelopmentProfileId:
+    Description: Generative AI Application Development Project Profile ID
+    Value: !GetAtt GenerativeAIApplicationDevelopment.Id
   ModelGovernanceProjectProfileId:
     Description: Model Governance Project Profile ID
     Value: !GetAtt ModelGovernanceProjectProfile.Id

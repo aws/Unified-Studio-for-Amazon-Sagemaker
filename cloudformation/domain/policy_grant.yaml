@@ -51,7 +51,8 @@ Parameters:
         Type: String
     AllCapabilitiesProjectProfileId:
         Type: String
-
+    GenerativeAIApplicationDevelopmentProfileId:
+        Type: String
 
 Resources:
     'Fn::ForEach::PolicyGrants':
@@ -73,6 +74,7 @@ Resources:
             - !Ref AmazonBedrockFunctionId
             - !Ref AmazonBedrockFlowId
             - !Ref EmrOnEc2Id
+            - !Ref QuickSightId
         - 'AddPolicyGrantFor&{Blueprint}':
               Type: AWS::DataZone::PolicyGrant
               Properties:
@@ -103,6 +105,7 @@ Resources:
                     ProjectProfiles:
                         - !Ref SQLAnalyticsProfileId
                         - !Ref AllCapabilitiesProjectProfileId
+                        - !Ref GenerativeAIApplicationDevelopmentProfileId
             Principal:
                 User:
                     AllUsersGrantFilter: {}

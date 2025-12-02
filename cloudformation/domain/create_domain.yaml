@@ -139,3 +139,4 @@ Resources:
 
         SQLAnalyticsProfileId: !GetAtt ProjectProfileStack.Outputs.SQLAnalyticsProfileId
         AllCapabilitiesProjectProfileId: !GetAtt ProjectProfileStack.Outputs.AllCapabilitiesProjectProfileId
+        GenerativeAIApplicationDevelopmentProfileId: !GetAtt ProjectProfileStack.Outputs.GenerativeAIApplicationDevelopmentProfileId
