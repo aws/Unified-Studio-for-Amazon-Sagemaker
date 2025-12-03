@@ -312,6 +312,73 @@ dashboard-glue-quick/
 </details>
 
 <details>
+<summary><b>View Airflow Workflow</b></summary>
+
+```yaml
+workflow_combined:
+  dag_id: 'covid_dashboard_glue_quick_pipeline'
+  tasks:
+    setup_covid_db_task:
+      operator: airflow.providers.amazon.aws.operators.glue.GlueJobOperator
+      retries: 0
+      job_name: setup-covid-db-job
+      script_location: '{proj.connection.default.s3_shared.s3Uri}dashboard-glue-quick/bundle/glue_setup_covid_db.py'
+      s3_bucket: '{proj.connection.default.s3_shared.bucket}'
+      iam_role_name: '{proj.iam_role_name}'
+      region_name: '{domain.region}'
+      update_config: true
+      script_args:
+        '--BUCKET_NAME': '{proj.connection.default.s3_shared.bucket}'
+        '--REGION_NAME': '{domain.region}'
+      create_job_kwargs:
+        GlueVersion: '4.0'
+        MaxRetries: 0
+        Timeout: 180
+
+    data_summary_task:
+      operator: airflow.providers.amazon.aws.operators.glue.GlueJobOperator
+      retries: 0
+      job_name: summary-glue-job
+      script_location: '{proj.connection.default.s3_shared.s3Uri}dashboard-glue-quick/bundle/glue_covid_summary_job.py'
+      s3_bucket: '{proj.connection.default.s3_shared.bucket}'
+      iam_role_name: '{proj.iam_role_name}'
+      region_name: '{domain.region}'
+      update_config: true
+      script_args:
+        '--DATABASE_NAME': 'covid19_db'
+        '--TABLE_NAME': 'us_simplified'
+        '--SUMMARY_DATABASE_NAME': 'covid19_summary_db'
+        '--S3_DATABASE_PATH': '{proj.connection.default.s3_shared.s3Uri}dashboard-glue-quick/output/databases/covid19_summary_db/'
+        '--BUCKET_NAME': '{proj.connection.default.s3_shared.bucket}'
+      dependencies: [setup_covid_db_task]
+      create_job_kwargs:
+        GlueVersion: '4.0'
+        MaxRetries: 0
+        Timeout: 180
+
+    set_permission_check_task:
+      operator: airflow.providers.amazon.aws.operators.glue.GlueJobOperator
+      retries: 0
+      job_name: set-permission-check-job
+      script_location: '{proj.connection.default.s3_shared.s3Uri}dashboard-glue-quick/bundle/glue_set_permission_check.py'
+      s3_bucket: '{proj.connection.default.s3_shared.bucket}'
+      iam_role_name: '{proj.iam_role_name}'
+      region_name: '{domain.region}'
+      update_config: true
+      script_args:
+        '--BUCKET_NAME': '{proj.connection.default.s3_shared.bucket}'
+        '--REGION_NAME': '{domain.region}'
+        '--ROLES': '{env.GRANT_TO}'
+      dependencies: [data_summary_task]
+      create_job_kwargs:
+        GlueVersion: '4.0'
+        MaxRetries: 0
+        Timeout: 180
+```
+
+</details>
+
+<details>
 <summary><b>View Manifest</b></summary>
 
 ```yaml
@@ -485,6 +552,62 @@ stages:
 
 </details>
 
+<details>
+<summary><b>View Airflow Workflow</b></summary>
+
+```yaml
+notebooks_workflow:
+  dag_id: notebooks_parallel
+  tasks:
+    nb_churn:
+      operator: airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator
+      retries: 0
+      input_config:
+        input_path: notebooks/bundle/notebooks/customer_churn_prediction.ipynb
+        input_params: {}
+      output_config:
+        output_formats:
+        - NOTEBOOK
+      compute:
+        instance_type: ml.c5.xlarge
+        image_details:
+          image_name: sagemaker-distribution-prod
+          image_version: '3'
+      wait_for_completion: true
+    nb_sales:
+      operator: airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator
+      retries: 0
+      input_config:
+        input_path: notebooks/bundle/notebooks/retail_sales_forecasting.ipynb
+        input_params: {}
+      output_config:
+        output_formats:
+        - NOTEBOOK
+      compute:
+        instance_type: ml.c5.xlarge
+        image_details:
+          image_name: sagemaker-distribution-prod
+          image_version: '3'
+      wait_for_completion: true
+    nb_segment:
+      operator: airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator
+      retries: 0
+      input_config:
+        input_path: notebooks/bundle/notebooks/customer_segmentation_analysis.ipynb
+        input_params: {}
+      output_config:
+        output_formats:
+        - NOTEBOOK
+      compute:
+        instance_type: ml.c5.xlarge
+        image_details:
+          image_name: sagemaker-distribution-prod
+          image_version: '3'
+      wait_for_completion: true
+```
+
+</details>
+
 **[View Full Example →](docs/examples-guide.md#-data-engineering---notebooks)**
 
 ---
@@ -497,6 +620,30 @@ Train ML models with SageMaker using the [SageMaker SDK](https://sagemaker.readt
 **GitHub Workflow:** [analytic-ml-training.yml](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/actions/workflows/analytic-ml-training.yml)
 
 **What happens during deployment:** Training code and workflow definitions are uploaded to S3 with compression, Airflow DAG is created for training orchestration, MLflow connection is provisioned for experiment tracking, and SageMaker training jobs are created and executed using SageMaker Distribution images.
+
+<details>
+<summary><b>📁 App Structure</b></summary>
+
+```
+ml/training/
+├── manifest.yaml                      # Deployment configuration
+├── code/
+│   ├── sagemaker_training_script.py  # Training script
+│   └── requirements.txt              # Python dependencies
+├── workflows/
+│   ├── ml_training_workflow.yaml     # Airflow orchestration
+│   └── ml_training_notebook.ipynb    # Training notebook
+└── app_tests/
+    └── test_model_registration.py    # Integration tests
+```
+
+**Key Files:**
+- **Training Script**: SageMaker training job implementation
+- **Workflow**: Airflow DAG for training orchestration
+- **Notebook**: Interactive training workflow
+- **Tests**: Validate model registration and training
+
+</details>
 
 <details>
 <summary><b>View Manifest</b></summary>
@@ -557,6 +704,33 @@ stages:
 
 </details>
 
+<details>
+<summary><b>View Airflow Workflow</b></summary>
+
+```yaml
+ml_training_workflow:
+  dag_id: "ml_training_workflow"
+  tasks:
+    ml_training_notebook:
+      operator: "airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator"
+      retries: 0
+      input_config:
+        input_path: "ml/bundle/training-workflows/ml_training_notebook.ipynb"
+        input_params:
+          mlflow_tracking_server_arn: "{proj.connection.mlflow-server.trackingServerArn}"
+          mlflow_artifact_location: "{proj.connection.default.s3_shared.s3Uri}ml/mlflow-artifacts"
+          sklearn_version: "1.2-1"
+          python_version: "py3"
+          training_instance_type: "ml.m5.large"
+          model_name: "realistic-classifier-v1"
+      output_config:
+        output_formats: 
+          ['NOTEBOOK']
+      wait_for_completion: True
+```
+
+</details>
+
 **[View Full Example →](docs/examples-guide.md#-machine-learning---training)**
 
 ---
@@ -569,6 +743,29 @@ Deploy trained ML models as SageMaker real-time inference endpoints. Uses SageMa
 **GitHub Workflow:** [analytic-ml-deployment.yml](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/actions/workflows/analytic-ml-deployment.yml)
 
 **What happens during deployment:** Model artifacts, deployment code, and workflow definitions are uploaded to S3, Airflow DAG is created for endpoint deployment orchestration, SageMaker endpoint configuration and model are created, and the inference endpoint is deployed and ready to serve predictions.
+
+<details>
+<summary><b>📁 App Structure</b></summary>
+
+```
+ml/deployment/
+├── manifest.yaml                      # Deployment configuration
+├── code/
+│   └── inference.py                  # Inference handler
+├── workflows/
+│   ├── ml_deployment_workflow.yaml   # Airflow orchestration
+│   └── ml_deployment_notebook.ipynb  # Deployment notebook
+└── app_tests/
+    └── test_endpoint_deployment.py   # Integration tests
+```
+
+**Key Files:**
+- **Inference Handler**: Custom inference logic for endpoint
+- **Workflow**: Airflow DAG for endpoint deployment
+- **Notebook**: Interactive deployment workflow
+- **Tests**: Validate endpoint deployment and predictions
+
+</details>
 
 <details>
 <summary><b>View Manifest</b></summary>
@@ -630,6 +827,31 @@ stages:
 
 </details>
 
+<details>
+<summary><b>View Airflow Workflow</b></summary>
+
+```yaml
+ml_deployment_workflow:
+  dag_id: "ml_deployment_workflow"
+  tasks:
+    ml_deployment_notebook:
+      operator: "airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator"
+      retries: 0
+      input_config:
+        input_path: "ml/bundle/deployment-workflows/ml_deployment_notebook.ipynb"
+        input_params:
+          model_s3_uri: "{proj.connection.default.s3_shared.s3Uri}ml/output/model-artifacts/latest/output/model.tar.gz"
+          sklearn_version: "1.2-1"
+          python_version: "py3"
+          inference_instance_type: "ml.m5.large"
+      output_config:
+        output_formats: 
+          ['NOTEBOOK']
+      wait_for_completion: True
+```
+
+</details>
+
 **[View Full Example →](docs/examples-guide.md#-machine-learning---deployment)**
 
 ---
@@ -642,6 +864,35 @@ Deploy GenAI applications with Bedrock agents and knowledge bases. Demonstrates 
 **GitHub Workflow:** [analytic-genai-workflow.yml](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/actions/workflows/analytic-genai-workflow.yml)
 
 **What happens during deployment:** Agent configuration and workflow definitions are uploaded to S3, Airflow DAG is created for agent deployment orchestration, Bedrock agents and knowledge bases are configured, and the GenAI application is ready for inference and testing.
+
+<details>
+<summary><b>📁 App Structure</b></summary>
+
+```
+genai/
+├── manifest.yaml                      # Deployment configuration
+├── job-code/
+│   ├── requirements.txt              # Python dependencies
+│   ├── test_agent.yaml               # Agent test configuration
+│   ├── lambda_mask_string.py         # Lambda function
+│   └── utils/
+│       ├── bedrock_agent.py          # Agent management
+│       ├── bedrock_agent_helper.py   # Agent utilities
+│       └── knowledge_base_helper.py  # Knowledge base utilities
+├── workflows/
+│   ├── genai_dev_workflow.yaml       # Airflow orchestration
+│   └── bedrock_agent_notebook.ipynb  # Agent deployment notebook
+└── app_tests/
+    └── test_genai_workflow.py        # Integration tests
+```
+
+**Key Files:**
+- **Agent Code**: Bedrock agent and knowledge base management
+- **Workflow**: Airflow DAG for GenAI deployment
+- **Notebook**: Interactive agent deployment
+- **Tests**: Validate agent functionality
+
+</details>
 
 <details>
 <summary><b>View Manifest</b></summary>
@@ -682,6 +933,31 @@ stages:
         - name: genai-workflows
           connectionName: default.s3_shared
           targetDirectory: genai/bundle/workflows
+```
+
+</details>
+
+<details>
+<summary><b>View Airflow Workflow</b></summary>
+
+```yaml
+genai_dev_workflow:
+  dag_id: "genai_dev_workflow"
+  tasks:
+    bedrock_agent_notebook:
+      operator: "airflow.providers.amazon.aws.operators.sagemaker_unified_studio.SageMakerNotebookOperator"
+      retries: 0
+      input_config:
+        input_path: "genai/bundle/workflows/bedrock_agent_notebook.ipynb"
+        input_params:
+          agent_name: "calculator_agent"
+          agent_llm: "us.anthropic.claude-3-5-sonnet-20241022-v2:0"
+          force_recreate: "True"
+          kb_name: "mortgage-kb"
+      output_config:
+        output_formats: 
+          ['NOTEBOOK']
+      wait_for_completion: True
 ```
 
 </details>
