@@ -298,7 +298,7 @@ dashboard-glue-quick/
 ├── glue_covid_summary_job.py         # Glue job: ETL transformations
 ├── glue_set_permission_check.py      # Glue job: Permission validation
 ├── quicksight/
-│   └── sample-dashboard.qs           # QuickSight dashboard bundle
+│   └── TotalDeathByCountry.qs        # QuickSight dashboard bundle
 └── app_tests/
     └── test_covid_data.py            # Integration tests
 ```
