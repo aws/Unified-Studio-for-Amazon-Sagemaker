@@ -145,7 +145,7 @@ markupsafe==3.0.3
 marshmallow==3.26.1
 matplotlib==3.10.7
 matplotlib-inline==0.2.1
-mcp==1.21.2
+mcp==1.23.0
 mdurl==0.1.2
 ml-dtypes==0.5.4
 mlflow==3.5.1
