@@ -477,25 +477,20 @@ Deploy Jupyter notebooks with parallel execution orchestration for data analysis
 
 ```
 data-notebooks/
-├── manifest.yaml                              # Deployment configuration
+├── manifest.yaml                                # Deployment configuration
 ├── notebooks/
-│   ├── 00_basic_python_pandas.ipynb          # Basic data analysis
-│   ├── 04_gdc_athena.ipynb                   # Athena queries
-│   ├── 05_customer_churn_spark.ipynb         # Spark ML
-│   ├── 06_purchase_analytics_duckdb.ipynb    # DuckDB analytics
-│   ├── 08_genai_etl_pandas.ipynb             # GenAI ETL
-│   ├── 09_city_temperature_spark.ipynb       # Spark ETL
-│   ├── 10_time_series_chronos.ipynb          # Time series
-│   ├── 11_movie_sales_dynamodb.ipynb         # DynamoDB
-│   └── 12_classification_mlflow.ipynb        # MLflow tracking
+│   ├── customer_churn_prediction.ipynb         # Customer churn ML
+│   ├── retail_sales_forecasting.ipynb          # Sales forecasting
+│   ├── customer_segmentation_analysis.ipynb    # Customer segmentation
+│   └── requirements.txt                        # Python dependencies
 ├── workflows/
-│   └── parallel_notebooks_workflow.yaml      # Airflow orchestration
+│   └── parallel_notebooks_workflow.yaml        # Airflow orchestration
 └── app_tests/
-    └── test_notebooks_execution.py           # Integration tests
+    └── test_notebooks_execution.py             # Integration tests
 ```
 
 **Key Files:**
-- **Notebooks**: 9 Jupyter notebooks covering various data engineering patterns
+- **Notebooks**: 3 Jupyter notebooks for ML and analytics workflows
 - **Workflow**: Parallel execution orchestration with Airflow
 - **Tests**: Validate notebook execution and outputs
 
