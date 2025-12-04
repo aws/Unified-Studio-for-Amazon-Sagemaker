@@ -461,13 +461,13 @@ task = PythonOperator(
             if target == "dev":
                 deploy_steps += f"""      - name: Deploy to {target}
         if: github.ref == 'refs/heads/main'
-        run: smus-cli deploy -p bundle.yaml -t {target}
+        run: smus-cli deploy --manifest bundle.yaml --targets {target}
 
 """
             else:
                 deploy_steps += f"""      - name: Deploy to {target}
         if: github.event_name == 'workflow_dispatch'
-        run: smus-cli deploy -p bundle.yaml -t {target}
+        run: smus-cli deploy --manifest bundle.yaml --targets {target}
 
 """
 

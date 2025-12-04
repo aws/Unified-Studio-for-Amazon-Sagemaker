@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: Create DataZone Project without membership handling
+Description: Create DataZone Project (basic version - role config added separately)
 
 Parameters:
   DomainId:
@@ -11,6 +11,12 @@ Parameters:
   Name:
     Description: Name of the project
     Type: String
+  ProjectRoleArn:
+    Description: Execution Role for the project
+    Type: String
+  OwnerRoleArn:
+    Description: Owner Role for the project
+    Type: String
 
 Resources:
   Project:
@@ -20,7 +26,13 @@ Resources:
       DomainIdentifier: !Ref DomainId
       Name: !Ref Name
       ProjectProfileId: !Ref ProjectProfileId
-
+      customerProvidedRoleConfigs:
+        - roleArn: !Ref ProjectRoleArn
+          roleDesignation: PROJECT_OWNER
+      membershipAssignments:
+        - designation: PROJECT_OWNER
+          member:
+            groupIdentifier: !Ref OwnerRoleArn
 Outputs:
   ProjectId:
     Description: "DataZone Project ID"
