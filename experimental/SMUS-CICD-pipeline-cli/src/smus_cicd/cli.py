@@ -44,9 +44,15 @@ def configure_logging(output_format: str = "TEXT", log_level: str = None):
 def show_help_suggestion():
     """Show helpful suggestions for common mistakes."""
     console.print("\n[yellow]💡 Common usage patterns:[/yellow]")
-    console.print("   [cyan]smus-cli describe --manifest my-pipeline.yaml --targets dev[/cyan]")
-    console.print("   [cyan]smus-cli monitor --manifest my-pipeline.yaml --output JSON[/cyan]")
-    console.print("   [cyan]smus-cli deploy --manifest my-pipeline.yaml --targets prod[/cyan]")
+    console.print(
+        "   [cyan]smus-cli describe --manifest my-pipeline.yaml --targets dev[/cyan]"
+    )
+    console.print(
+        "   [cyan]smus-cli monitor --manifest my-pipeline.yaml --output JSON[/cyan]"
+    )
+    console.print(
+        "   [cyan]smus-cli deploy --manifest my-pipeline.yaml --targets prod[/cyan]"
+    )
 
     console.print("\n[yellow]🔧 Universal switches (work on all commands):[/yellow]")
     console.print("   [green]--manifest/-m[/green]   - Path to bundle manifest")
