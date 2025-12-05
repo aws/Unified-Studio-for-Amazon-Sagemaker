@@ -490,10 +490,10 @@ my-organization/
 ```bash
 # Both applications deploy to the same shared projects
 cd monthly-metrics
-smus-cli deploy --stages test --manifest manifest.yaml  # → shared-data-platform-test
+smus-cli deploy --targets test --manifest manifest.yaml  # → shared-data-platform-test
 
 cd ../churn-model
-smus-cli deploy --stages test --manifest manifest.yaml  # → shared-data-platform-test
+smus-cli deploy --targets test --manifest manifest.yaml  # → shared-data-platform-test
 ```
 
 All workflows from both applications appear in the same MWAA environment.

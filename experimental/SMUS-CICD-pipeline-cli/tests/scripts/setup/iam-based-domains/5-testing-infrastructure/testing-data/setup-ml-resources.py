@@ -79,7 +79,7 @@ def upload_training_code(bucket_name, region):
     
     # Find the training code directory
     script_dir = Path(__file__).parent
-    training_code_dir = script_dir.parent.parent.parent.parent / 'examples' / 'analytic-workflow' / 'ml' / 'training-workflow'
+    training_code_dir = script_dir.parent.parent.parent.parent.parent.parent / 'examples' / 'analytic-workflow' / 'ml' / 'training' / 'workflows'
     
     if not training_code_dir.exists():
         print(f"❌ Training code directory not found: {training_code_dir}")
@@ -127,11 +127,22 @@ def verify_resources(bucket_name, region):
 def main():
     parser = argparse.ArgumentParser(description='Setup ML workflow testing resources')
     parser.add_argument('--region', default='us-east-1', help='AWS region (default: us-east-1)')
-    parser.add_argument('--bucket', help='S3 bucket name (default: demo-bucket-smus-ml-{region})')
+    parser.add_argument('--bucket', help='S3 bucket name (default: demo-bucket-smus-ml-{account_id}-{region})')
     args = parser.parse_args()
     
     region = args.region
-    bucket_name = args.bucket or f'demo-bucket-smus-ml-{region}'
+    
+    # Get AWS account ID from caller identity
+    if not args.bucket:
+        try:
+            sts = boto3.client('sts', region_name=region)
+            account_id = sts.get_caller_identity()['Account']
+            bucket_name = f'demo-bucket-smus-ml-{account_id}-{region}'
+        except Exception as e:
+            print(f"❌ Failed to get AWS account ID: {e}")
+            sys.exit(1)
+    else:
+        bucket_name = args.bucket
     
     print(f"🚀 Setting up ML resources in {region}")
     print(f"📦 Bucket: {bucket_name}\n")

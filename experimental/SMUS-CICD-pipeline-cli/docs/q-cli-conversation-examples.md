@@ -121,18 +121,18 @@ jobs:
       
       - name: Deploy to Dev
         if: github.ref == 'refs/heads/main'
-        run: smus-cli deploy -p manifest.yaml -t dev
+        run: smus-cli deploy --manifest manifest.yaml --targets dev
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       
       - name: Deploy to Test
         if: github.ref == 'refs/heads/main'
-        run: smus-cli deploy -p manifest.yaml -t test
+        run: smus-cli deploy --manifest manifest.yaml --targets test
       
       - name: Deploy to Prod (Manual Approval)
         if: github.event_name == 'workflow_dispatch'
-        run: smus-cli deploy -p manifest.yaml -t prod
+        run: smus-cli deploy --manifest manifest.yaml --targets prod
 ```
 
 This workflow will:
