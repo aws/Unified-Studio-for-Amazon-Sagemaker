@@ -44,13 +44,19 @@ def configure_logging(output_format: str = "TEXT", log_level: str = None):
 def show_help_suggestion():
     """Show helpful suggestions for common mistakes."""
     console.print("\n[yellow]💡 Common usage patterns:[/yellow]")
-    console.print("   [cyan]smus-cli describe -p my-pipeline.yaml -t dev[/cyan]")
-    console.print("   [cyan]smus-cli monitor -p my-pipeline.yaml --output JSON[/cyan]")
-    console.print("   [cyan]smus-cli deploy -p my-pipeline.yaml -t prod[/cyan]")
+    console.print(
+        "   [cyan]smus-cli describe --manifest my-pipeline.yaml --targets dev[/cyan]"
+    )
+    console.print(
+        "   [cyan]smus-cli monitor --manifest my-pipeline.yaml --output JSON[/cyan]"
+    )
+    console.print(
+        "   [cyan]smus-cli deploy --manifest my-pipeline.yaml --targets prod[/cyan]"
+    )
 
     console.print("\n[yellow]🔧 Universal switches (work on all commands):[/yellow]")
     console.print("   [green]--manifest/-m[/green]   - Path to bundle manifest")
-    console.print("   [green]--target/-t[/green]     - Target environment")
+    console.print("   [green]--targets/-t[/green]    - Target environment(s)")
     console.print("   [green]--output[/green]        - Output format (TEXT/JSON)")
     console.print(
         "   [green]--log-level[/green]     - Logging level (DEBUG/INFO/WARNING/ERROR)"
@@ -91,7 +97,7 @@ def main(
 # Register commands with proper ordering
 @app.command(
     "describe",
-    help="1. Describe and validate pipeline manifest file. Example: smus-cli describe -p pipeline.yaml -t dev",
+    help="1. Describe and validate pipeline manifest file. Example: smus-cli describe --manifest pipeline.yaml --targets dev",
     rich_help_panel="Pipeline Commands",
 )
 def describe(
@@ -177,7 +183,7 @@ def bundle(
 
 @app.command(
     "deploy",
-    help="3. Deploy bundle files to target (auto-initializes if needed). Example: smus-cli deploy -p pipeline.yaml -t prod",
+    help="3. Deploy bundle files to target (auto-initializes if needed). Example: smus-cli deploy --manifest pipeline.yaml --targets prod",
     rich_help_panel="Pipeline Commands",
 )
 def deploy(
@@ -219,7 +225,7 @@ def deploy(
 
 @app.command(
     "monitor",
-    help="4. Monitor workflow status. Example: smus-cli monitor -p pipeline.yaml -t dev",
+    help="4. Monitor workflow status. Example: smus-cli monitor --manifest pipeline.yaml --targets dev",
     rich_help_panel="Pipeline Commands",
 )
 def monitor(
@@ -320,7 +326,7 @@ def logs(
 
 @app.command(
     "run",
-    help="6. Run Airflow CLI commands in target environment. Example: smus-cli run --workflow my_dag -p pipeline.yaml",
+    help="6. Run Airflow CLI commands in target environment. Example: smus-cli run --workflow my_dag --manifest pipeline.yaml",
     rich_help_panel="Pipeline Commands",
 )
 def run(

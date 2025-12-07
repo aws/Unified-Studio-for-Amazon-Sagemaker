@@ -983,19 +983,19 @@ All commands support:
 smus-cli create -o my-manifest.yaml
 
 # 2. Validate configuration
-smus-cli describe -p my-manifest.yaml
+smus-cli describe --manifest my-manifest.yaml
 
 # 3. Create bundle from dev
-smus-cli bundle -p my-manifest.yaml -t dev
+smus-cli bundle --manifest my-manifest.yaml --target dev
 
 # 4. Deploy to test
-smus-cli deploy -p my-manifest.yaml -t test
+smus-cli deploy --manifest my-manifest.yaml --targets test
 
 # 5. Monitor deployment
-smus-cli monitor -p my-manifest.yaml -t test
+smus-cli monitor --manifest my-manifest.yaml --targets test
 
 # 6. Run workflow commands
-smus-cli run -w my_dag -c "dags list" -t test
+smus-cli run --workflow my_dag --command "dags list" --targets test
 ```
 
 ### Cleanup Workflow

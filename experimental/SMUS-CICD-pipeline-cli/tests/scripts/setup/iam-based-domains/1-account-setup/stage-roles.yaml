@@ -10,12 +10,12 @@ Parameters:
   BedrockTestingPolicyArn:
     Type: String
     Description: ARN of the existing BedrockTestingPolicy managed policy
-    Default: 'arn:aws:iam::019900059033:policy/BedrockTestingPolicy'
+    Default: 'arn:aws:iam::${AWS::AccountId}:policy/BedrockTestingPolicy'
   
   BedrockAgentPassRolePolicyArn:
     Type: String
     Description: ARN of the existing BedrockAgentPassRolePolicy managed policy
-    Default: 'arn:aws:iam::019900059033:policy/BedrockAgentPassRolePolicy'
+    Default: 'arn:aws:iam::${AWS::AccountId}:policy/BedrockAgentPassRolePolicy'
 
 Resources:
   ProjectRole:
