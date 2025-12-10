@@ -61,8 +61,12 @@ Creates SMUS projects (dev-marketing, test-marketing).
 
 #### Step 5: Testing Infrastructure and Data
 ```bash
+# Install prerequisites (Python dependencies)
+cd tests/scripts/setup/{domain-type}/5-testing-infrastructure
+./install_prerequisites.sh
+
 # Deploy infrastructure (MLflow, IAM roles, S3)
-cd tests/scripts/setup/{domain-type}/5-testing-infrastructure/testing-infrastructure
+cd testing-infrastructure
 ./deploy.sh us-east-1
 
 # Deploy test data (ML datasets, COVID data)
@@ -96,7 +100,8 @@ cd 1-account-setup && ./deploy.sh && cd ..
 # Step 4: Create projects
 cd 4-project-setup && ./deploy.sh && cd ..
 
-# Step 5: Deploy infrastructure and data
+# Step 5: Deploy prerequisites, infrastructure and data
+cd 5-testing-infrastructure && ./install_prerequisites.sh && cd ..
 cd 5-testing-infrastructure/testing-infrastructure && ./deploy.sh us-east-1 && cd ..
 cd testing-data && ./deploy.sh us-east-1
 ```
