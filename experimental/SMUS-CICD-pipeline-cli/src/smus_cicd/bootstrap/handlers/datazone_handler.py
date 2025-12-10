@@ -46,7 +46,6 @@ def create_connection(
     logger.info("Creating DataZone connection")
 
     # Extract context
-    target_config = context.get("target_config")
     config = context.get("config")
     metadata = context.get("metadata", {})
 

@@ -2,7 +2,7 @@
 
 import os
 import tempfile
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import boto3
 import typer

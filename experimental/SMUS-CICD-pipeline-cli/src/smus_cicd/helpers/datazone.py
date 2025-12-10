@@ -1035,10 +1035,10 @@ def get_group_id_for_role_arn(role_arn, domain_id, region):
             error_msg = str(create_error)
             if "IAM Identity Center" in error_msg or "IdP" in error_msg:
                 print(
-                    f"⚠️ Cannot auto-create group profile (IAM Identity Center not enabled)"
+                    "⚠️ Cannot auto-create group profile (IAM Identity Center not enabled)"
                 )
                 print(
-                    f"⚠️ The role must be used at least once in DataZone to create its group profile"
+                    "⚠️ The role must be used at least once in DataZone to create its group profile"
                 )
             else:
                 print(f"❌ Failed to create group profile: {error_msg}")
