@@ -15,7 +15,7 @@ stages:
     project:
       name: test-project-name
       create: true
-      profile_name: All capabilities
+      profileName: All capabilities
       owners:
       - arn:aws:iam::123456789012:role/GitHubActionsRole-SMUS-CLI-Tests
       contributors: []
@@ -26,7 +26,7 @@ stages:
     project:
       name: prod-project-name
       create: true
-      profile_name: All capabilities
+      profileName: All capabilities
       owners:
       - arn:aws:iam::123456789012:role/GitHubActionsRole-SMUS-CLI-Tests
       contributors: []

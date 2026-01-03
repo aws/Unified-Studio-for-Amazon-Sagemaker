@@ -190,7 +190,7 @@ stages:
     project:
       name: test-marketing
       create: true
-      profile_name: 'All capabilities'
+      profileName: 'All capabilities'
       owners: ['alice@company.com']
       contributors: ['bob@company.com']
       role:
@@ -261,7 +261,7 @@ stages:
     project:
       name: prod-marketing
       create: true
-      profile_name: 'All capabilities'
+      profileName: 'All capabilities'
       owners: ['alice@company.com']
       contributors: []
     
@@ -451,7 +451,7 @@ stages:
     project:
       name: test-marketing
       create: true
-      profile_name: 'All capabilities'
+      profileName: 'All capabilities'
       owners: ['alice@company.com']
       contributors: ['bob@company.com', 'charlie@company.com']
       user_parameters:

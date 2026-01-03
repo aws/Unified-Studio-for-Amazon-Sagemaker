@@ -62,7 +62,7 @@ stages:
     initialization:
       project:
         create: true
-        profile_name: All capabilities
+        profileName: All capabilities
         owners:
         - arn:aws:iam::123456789012:role/GitHubActionsRole-SMUS-CLI-Tests
         - Eng1
@@ -88,7 +88,7 @@ stages:
     initialization:
       project:
         create: true
-        profile_name: All capabilities
+        profileName: All capabilities
         owners:
         - arn:aws:iam::123456789012:role/GitHubActionsRole-SMUS-CLI-Tests
         - Eng1
