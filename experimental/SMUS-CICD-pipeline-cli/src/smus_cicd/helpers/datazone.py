@@ -979,6 +979,58 @@ def get_user_id_by_username(username, domain_id, region):
         return None
 
 
+def get_group_id_by_name(group_name, domain_id, region):
+    """Get DataZone group ID by searching for a group name."""
+    try:
+        datazone_client = _get_datazone_client(region)
+        print(f"🔍 Searching for group profile with name: {group_name}")
+
+        next_token = None
+        page_num = 0
+        total_groups = 0
+
+        while True:
+            page_num += 1
+            params = {
+                "domainIdentifier": domain_id,
+                "groupType": "IAM_ROLE_SESSION_GROUP",
+            }
+            if next_token:
+                params["nextToken"] = next_token
+
+            response = datazone_client.search_group_profiles(**params)
+            items = response.get("items", [])
+            total_groups += len(items)
+
+            print(
+                f"🔍 Page {page_num}: Found {len(items)} groups (total so far: {total_groups})"
+            )
+
+            for group in items:
+                group_id = group.get("id")
+                current_group_name = group.get("groupName")
+                
+                print(f"🔍   Checking group {group_id}: {current_group_name}")
+                if current_group_name == group_name:
+                    print(f"✅ Found matching group ID: {group_id}")
+                    return group_id
+                elif group_id == group_name:
+                    # Direct match by group ID
+                    print(f"✅ Found matching group ID: {group_id}")
+                    return group_id
+
+            next_token = response.get("nextToken")
+            if not next_token:
+                break
+
+        print(f"❌ Group not found with name: {group_name}")
+        return None
+
+    except Exception as e:
+        print(f"❌ Error getting group ID for group name {group_name}: {str(e)}")
+        return None
+
+
 def get_group_id_for_role_arn(role_arn, domain_id, region):
     """Get DataZone group ID for an IAM role ARN, creating if possible."""
     try:
@@ -1105,17 +1157,20 @@ def manage_project_memberships(
         # Add owners
         if owners:
             for owner in owners:
-                # Determine if it's an IAM role ARN or username
                 if owner.startswith("arn:aws:iam::"):
-                    # It's an IAM role - get group ID
                     member_id = get_group_id_for_role_arn(owner, domain_id, region)
                     member_spec = {"groupIdentifier": member_id}
                     member_type = "role"
                 else:
-                    # It's a username - resolve to user ID
+                    # Try username first, fallback to group name
                     member_id = get_user_id_by_username(owner, domain_id, region)
-                    member_spec = {"userIdentifier": member_id}
-                    member_type = "user"
+                    if member_id:
+                        member_spec = {"userIdentifier": member_id}
+                        member_type = "user"
+                    else:
+                        member_id = get_group_id_by_name(owner, domain_id, region)
+                        member_spec = {"groupIdentifier": member_id}
+                        member_type = "role"
 
                 if not member_id:
                     typer.echo(f"⚠️ Could not resolve owner: {owner}")
@@ -1145,17 +1200,20 @@ def manage_project_memberships(
         # Add contributors
         if contributors:
             for contributor in contributors:
-                # Determine if it's an IAM role ARN or username
                 if contributor.startswith("arn:aws:iam::"):
-                    member_id = get_group_id_for_role_arn(
-                        contributor, domain_id, region
-                    )
+                    member_id = get_group_id_for_role_arn(contributor, domain_id, region)
                     member_spec = {"groupIdentifier": member_id}
                     member_type = "role"
                 else:
+                    # Try username first, fallback to group name
                     member_id = get_user_id_by_username(contributor, domain_id, region)
-                    member_spec = {"userIdentifier": member_id}
-                    member_type = "user"
+                    if member_id:
+                        member_spec = {"userIdentifier": member_id}
+                        member_type = "user"
+                    else:
+                        member_id = get_group_id_by_name(contributor, domain_id, region)
+                        member_spec = {"groupIdentifier": member_id}
+                        member_type = "role"
 
                 if not member_id:
                     typer.echo(f"⚠️ Could not resolve contributor: {contributor}")
