@@ -112,14 +112,14 @@ def create_connection(
                     "connection_id": connection_id,
                 }
 
-            # Update connection with new properties
-            typer.echo(f"🔄 Updating connection '{name}'")
-            datazone_client.update_connection(
-                domainIdentifier=domain_id,
-                identifier=connection_id,
+            # Update connection with new properties using ConnectionCreator
+            connection_id = creator.update_connection(
+                connection_id=connection_id,
+                name=name,
+                connection_type=connection_type,
                 props=desired_props,
+                environment_id=environment_id,
             )
-            typer.echo(f"✅ Connection '{name}' updated: {connection_id}")
             return {
                 "action": "datazone.create_connection",
                 "status": "updated",

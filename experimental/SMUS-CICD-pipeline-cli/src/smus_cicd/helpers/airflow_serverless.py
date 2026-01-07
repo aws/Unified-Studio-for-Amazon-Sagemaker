@@ -35,11 +35,18 @@ def format_log_event(event: dict) -> str:
 def create_airflow_serverless_client(
     connection_info: Dict[str, Any] = None, region: str = None
 ):
-    """Create Airflow Serverless client with proper endpoint configuration."""
-    session = boto3.Session()
-
+    """Create Airflow Serverless client with custom model that supports MWAA Serverless operations."""
+    import json
+    from pathlib import Path
+    import tempfile
+    import os
+    import shutil
+    from botocore.loaders import Loader
+    from botocore.session import Session as BotocoreSession
+    
     # Determine region
     if not region:
+        session = boto3.Session()
         region = session.region_name or "us-east-1"
 
     # Use AIRFLOW_SERVERLESS_ENDPOINT if set, otherwise use public endpoint
@@ -52,11 +59,63 @@ def create_airflow_serverless_client(
         f"🔍 DEBUG: Creating Airflow Serverless client with region={region}, endpoint={endpoint_url}"
     )
 
-    return session.client(
-        AIRFLOW_SERVERLESS_SERVICE,
-        region_name=region,
-        endpoint_url=endpoint_url,
-    )
+    # Get the path to the custom MWAA Serverless model
+    current_dir = Path(__file__).parent.parent
+    model_path = current_dir / "resources" / "mwaaserverless-2024-07-26.normal-edited-2.json"
+    
+    if not model_path.exists():
+        raise FileNotFoundError(f"Custom MWAA Serverless model not found at {model_path}")
+    
+    # Load the custom model
+    with open(model_path, 'r') as f:
+        service_model_data = json.load(f)
+    
+    # Create a temporary directory for the custom model
+    temp_dir = tempfile.mkdtemp()
+    
+    try:
+        # Create the expected directory structure for botocore
+        service_dir = os.path.join(temp_dir, 'mwaaserverless', '2024-07-26')
+        os.makedirs(service_dir, exist_ok=True)
+        
+        # Write the service model
+        service_file = os.path.join(service_dir, 'service-2.json')
+        with open(service_file, 'w') as f:
+            json.dump(service_model_data, f)
+        
+        # Create a custom loader with our model directory
+        loader = Loader(extra_search_paths=[temp_dir])
+        
+        # Create a botocore session with custom loader
+        botocore_session = BotocoreSession()
+        botocore_session.register_component('data_loader', loader)
+        
+        # Get credentials from boto3 session
+        boto3_session = boto3.Session()
+        credentials = boto3_session.get_credentials()
+        botocore_session.set_credentials(
+            access_key=credentials.access_key,
+            secret_key=credentials.secret_key,
+            token=credentials.token
+        )
+        
+        # Create the custom client
+        custom_client = botocore_session.create_client(
+            'mwaaserverless',
+            region_name=region,
+            endpoint_url=endpoint_url,
+            api_version='2024-07-26'
+        )
+        
+        # Store temp_dir for cleanup (attach to client for later cleanup)
+        custom_client._temp_dir = temp_dir
+        
+        return custom_client
+        
+    except Exception as e:
+        # Clean up temp directory on error
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        raise e
 
 
 def create_workflow(
@@ -97,12 +156,12 @@ def create_workflow(
         }
 
         # Network configuration - commented out for now
-        # if security_group_ids and subnet_ids:
-        #     params["NetworkConfiguration"] = {
-        #         "SecurityGroupIds": security_group_ids,
-        #         "SubnetIds": subnet_ids
-        #     }
-        #     logger.debug(f"Network configuration: SecurityGroups={security_group_ids}, Subnets={subnet_ids}")
+        if security_group_ids and subnet_ids:
+            params["NetworkConfiguration"] = {
+                "SecurityGroupIds": security_group_ids,
+                "SubnetIds": subnet_ids
+            }
+        logger.debug(f"Network configuration: SecurityGroups={security_group_ids}, Subnets={subnet_ids}")
 
         if description:
             params["Description"] = description
@@ -251,6 +310,9 @@ def create_workflow(
                         # Find IAM connection and extract environment_id
                         for conn_name, conn_info in project_connections.items():
                             if conn_info.get("type") == "IAM":
+                                logger.info(
+                                        f"Found IAM connection: {conn_info}"
+                                )
                                 env_id = conn_info.get("environmentId")
                                 if env_id:
                                     env_vars["DataZoneEnvironmentId"] = env_id

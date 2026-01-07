@@ -760,101 +760,16 @@ def get_project_details(project_name, region, domain_name):
 
 
 def get_project_connections(project_id, domain_id, region):
-    """Get project connections from DataZone."""
+    """Get project connections from DataZone using the centralized connections helper."""
+    from . import connections
+
     typer.echo(
         f"🔍 DEBUG: get_project_connections called for project {project_id}", err=True
     )
+
     try:
-        datazone_client = _get_datazone_client(region)
-
-        # DEBUG: Log the exact parameters being used for the ListConnections call
-        import sys
-
-        is_json_output = "--output" in sys.argv and "JSON" in sys.argv
-        if not is_json_output:
-            print(
-                f"🔍 DEBUG datazone.get_project_connections: region={region}, domain_id={domain_id}, project_id={project_id}",
-                file=sys.stderr,
-            )
-
-        # List connections for the project with pagination
-        connections = {}
-        next_token = None
-
-        while True:
-            list_params = {
-                "domainIdentifier": domain_id,
-                "projectIdentifier": project_id,
-                "maxResults": 50,
-            }
-            if next_token:
-                list_params["nextToken"] = next_token
-
-            response = datazone_client.list_connections(**list_params)
-
-            if not is_json_output:
-                print(
-                    f"🔍 DEBUG: Page returned {len(response.get('items', []))} connections",
-                    file=sys.stderr,
-                )
-
-            for connection in response.get("items", []):
-                connection_name = connection.get("name", "unknown")
-                connection_id = connection.get("connectionId", "")
-
-                typer.echo(f"🔍 DEBUG: Processing {connection_name}", err=True)
-
-                # Get detailed connection information
-                try:
-                    detail_response = datazone_client.get_connection(
-                        domainIdentifier=domain_id, identifier=connection_id
-                    )
-
-                    connection_type = detail_response.get("type", "UNKNOWN")
-
-                    conn_info = {
-                        "connectionId": connection_id,
-                        "type": connection_type,
-                        "description": detail_response.get("description", ""),
-                        "environmentId": detail_response.get("environmentId"),
-                    }
-
-                    # Add type-specific properties
-                    props = detail_response.get("props", {})
-                    if connection_type == "S3":
-                        s3_props = props.get("s3Properties", {})
-                        conn_info["s3Uri"] = s3_props.get("s3Uri", "")
-                    elif connection_type == "WORKFLOWS_MWAA":
-                        mwaa_props = props.get("mwaaProperties", {})
-                        env_name = mwaa_props.get("environmentName")
-
-                        # If no environment name in properties, infer it from project structure
-                        if not env_name:
-                            env_name = f"DataZoneMWAAEnv-{domain_id}-{project_id}-dev"
-
-                        conn_info["environmentName"] = env_name
-
-                    connections[connection_name] = conn_info
-
-                except Exception as e:
-                    connections[connection_name] = {
-                        "connectionId": connection_id,
-                        "type": "UNKNOWN",
-                        "error": str(e),
-                    }
-
-            # Check if there are more pages
-            next_token = response.get("nextToken")
-            if not next_token:
-                break
-
-        if not is_json_output:
-            print(
-                f"🔍 DEBUG: Retrieved {len(connections)} total connections",
-                file=sys.stderr,
-            )
-
-        return connections
+        # Use the centralized connections helper directly with IDs
+        return connections.get_project_connections(project_id, domain_id, region)
 
     except Exception as e:
         # Check if this is a permission error

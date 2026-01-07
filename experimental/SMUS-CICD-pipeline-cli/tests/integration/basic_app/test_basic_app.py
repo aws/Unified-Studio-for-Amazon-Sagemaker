@@ -17,7 +17,7 @@ class TestBasicApp(IntegrationTestBase):
 
         # Clean up project from previous test run (only in setup)
         try:
-            pipeline_file = os.path.join(self.test_dir, "manifest.yaml")
+            pipeline_file = self.get_pipeline_file()  # Use the actual manifest file path
             
             # Use CLI delete command to properly delete project
             print("🧹 Cleaning up existing test project...")

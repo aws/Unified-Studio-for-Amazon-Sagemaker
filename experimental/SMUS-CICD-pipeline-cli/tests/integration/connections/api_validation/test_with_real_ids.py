@@ -2,6 +2,7 @@
 
 import boto3
 import time
+import pytest
 
 def test_s3_connection():
     """Test S3 connection creation with real IDs"""
@@ -37,11 +38,10 @@ def test_s3_connection():
             identifier=connection_id
         )
         print(f"✅ Cleaned up: {connection_id}")
-        return True
         
     except Exception as e:
         print(f"❌ Failed: {str(e)}")
-        return False
+        assert False, f"S3 connection test failed: {str(e)}"
 
 if __name__ == "__main__":
     success = test_s3_connection()

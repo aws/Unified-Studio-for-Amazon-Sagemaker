@@ -32,7 +32,7 @@ def test_permissions():
         
     except Exception as e:
         print(f"❌ List connections: FAILED - {str(e)}")
-        return False
+        assert False, "List connections failed"
     
     # Test 2: Try simple S3 connection creation
     print(f"\nTesting S3 connection creation...")
@@ -57,7 +57,6 @@ def test_permissions():
             identifier=response['connectionId']
         )
         print(f"   Cleaned up successfully")
-        return True
         
     except Exception as e:
         error_msg = str(e)
@@ -68,7 +67,7 @@ def test_permissions():
         elif "ValidationException" in error_msg:
             print("   → Schema issue: Parameters may be incorrect")
         
-        return False
+        assert False, f"S3 connection creation failed: {error_msg}"
 
 if __name__ == "__main__":
     success = test_permissions()

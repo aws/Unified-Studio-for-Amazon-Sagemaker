@@ -20,12 +20,6 @@ from ..helpers.utils import (  # noqa: F401
     load_config,
 )
 
-# Airflow Serverless (MWAA Serverless) configuration
-# TODO: Remove these overrides once service is available in all regions
-AIRFLOW_SERVERLESS_REGION = "us-west-2"  # Force us-west-2 for Airflow Serverless
-AIRFLOW_SERVERLESS_ENDPOINT_URL = "https://airflow-serverless.us-west-2.api.aws/"
-
-
 def _fix_airflow_role_cloudwatch_policy(role_arn: str, region: str) -> bool:
     """Fix IAM role by adding CloudWatch logs policy for airflow-serverless."""
     try:

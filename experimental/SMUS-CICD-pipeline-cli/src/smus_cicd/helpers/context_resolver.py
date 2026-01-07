@@ -96,10 +96,10 @@ class ContextResolver:
             },
             "env": self.env_vars,
         }
-
+        
         # Get all project connections using our helper
         project_connections = connections.get_project_connections(
-            self.project_name, self.domain_name, self.region
+            project_id, self.domain_id, self.region
         )
 
         # Add connections to context
@@ -114,7 +114,6 @@ class ContextResolver:
     def _flatten_connection(self, conn_data: Dict[str, Any]) -> Dict[str, Any]:
         """Flatten connection properties to simple key-value pairs."""
         flat = {}
-
         # Add environment user role if available
         if "environmentUserRole" in conn_data:
             flat["environmentUserRole"] = conn_data["environmentUserRole"]
@@ -213,6 +212,7 @@ class ContextResolver:
         resolved = re.sub(pattern, replacer, content)
 
         if unresolved:
+            print(f"Unresolved: {', '.join(unresolved)}\n")
             raise ValueError(
                 f"Failed to resolve variables: {', '.join(unresolved)}\n"
                 f"Available connections: {', '.join(context['proj']['connection'].keys())}"
