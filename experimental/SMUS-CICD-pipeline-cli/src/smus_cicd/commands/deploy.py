@@ -20,6 +20,7 @@ from ..helpers.utils import (  # noqa: F401
     load_config,
 )
 
+
 def _fix_airflow_role_cloudwatch_policy(role_arn: str, region: str) -> bool:
     """Fix IAM role by adding CloudWatch logs policy for airflow-serverless."""
     try:
@@ -1754,9 +1755,7 @@ def _upload_dag_to_s3(
                 sts = boto3.client("sts")
                 identity = sts.get_caller_identity()
                 account_id = identity["Account"]
-            bucket_name = (
-                f"smus-airflow-serverless-{account_id}-{AIRFLOW_SERVERLESS_REGION}"
-            )
+            bucket_name = f"smus-airflow-serverless-{account_id}-{region}"
 
         object_key = f"workflows/{workflow_name}.yaml"
 

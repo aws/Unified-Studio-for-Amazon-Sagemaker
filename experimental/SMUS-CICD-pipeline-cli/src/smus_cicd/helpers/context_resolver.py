@@ -96,7 +96,7 @@ class ContextResolver:
             },
             "env": self.env_vars,
         }
-        
+
         # Get all project connections using our helper
         project_connections = connections.get_project_connections(
             project_id, self.domain_id, self.region
