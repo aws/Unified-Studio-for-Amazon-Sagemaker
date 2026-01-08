@@ -5,7 +5,7 @@ import pytest
 import subprocess
 import sys
 from pathlib import Path
-from ..base import IntegrationTestBase
+from tests.integration.base import IntegrationTestBase
 
 
 class TestTestCommandIntegration(IntegrationTestBase):

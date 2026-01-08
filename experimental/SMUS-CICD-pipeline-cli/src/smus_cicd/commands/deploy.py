@@ -20,11 +20,6 @@ from ..helpers.utils import (  # noqa: F401
     load_config,
 )
 
-# Airflow Serverless (MWAA Serverless) configuration
-# TODO: Remove these overrides once service is available in all regions
-AIRFLOW_SERVERLESS_REGION = "us-west-2"  # Force us-west-2 for Airflow Serverless
-AIRFLOW_SERVERLESS_ENDPOINT_URL = "https://airflow-serverless.us-west-2.api.aws/"
-
 
 def _fix_airflow_role_cloudwatch_policy(role_arn: str, region: str) -> bool:
     """Fix IAM role by adding CloudWatch logs policy for airflow-serverless."""
@@ -563,8 +558,6 @@ def _deploy_bundle_to_target(
         raise
 
     # Create serverless Airflow workflows if configured
-    effective_target_name = stage_name or target_config.name
-
     # Get S3 location from first successful storage deployment for backward compatibility
     s3_bucket = None
     s3_prefix = None
@@ -813,8 +806,6 @@ def _deploy_local_storage_item(
 
             dest_path = os.path.join(temp_dir, rel_path)
             os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-
-            import shutil
 
             shutil.copy2(file_path, dest_path)
 
@@ -1230,7 +1221,7 @@ def _deploy_git_direct(
             if os.path.exists(git_dir):
                 shutil.rmtree(git_dir)
 
-            typer.echo(f"Deploying cloned repository to S3...")
+            typer.echo("Deploying cloned repository to S3...")
 
             # Deploy files
             connection = _get_project_connection(project_name, git_config, config)
@@ -1764,9 +1755,7 @@ def _upload_dag_to_s3(
                 sts = boto3.client("sts")
                 identity = sts.get_caller_identity()
                 account_id = identity["Account"]
-            bucket_name = (
-                f"smus-airflow-serverless-{account_id}-{AIRFLOW_SERVERLESS_REGION}"
-            )
+            bucket_name = f"smus-airflow-serverless-{account_id}-{region}"
 
         object_key = f"workflows/{workflow_name}.yaml"
 
@@ -2071,7 +2060,7 @@ def _deploy_quicksight_dashboards(
                             viewers = getattr(item, "viewers", []) or []
                         break
 
-                typer.echo(f"🔍 Dashboard permissions from deployment_configuration:")
+                typer.echo("🔍 Dashboard permissions from deployment_configuration:")
                 typer.echo(f"    Owners: {owners}")
                 typer.echo(f"    Viewers: {viewers}")
 
@@ -2185,7 +2174,7 @@ def _deploy_quicksight_dashboards(
                 # Permissions already collected and applied during import
                 # Now grant additional dataset and data source permissions
                 typer.echo(
-                    f"🔍 Granting additional permissions to datasets and data sources"
+                    "🔍 Granting additional permissions to datasets and data sources"
                 )
                 if permissions:
                     # Grant dashboard permissions (redundant but ensures consistency)

@@ -37,11 +37,9 @@ stages:
       region: us-east-1
     project:
       name: test-project
-    initialization:
-      project:
-        create: true
-        profileName: 'All capabilities'
-        owners: ['test@example.com']
+      create: true
+      profile_name: 'All capabilities'
+      owners: ['test@example.com']
     deployment_configuration:
       storage:
         - name: code

@@ -8,7 +8,7 @@ updated MWAA workflow execution support to be fully functional.
 import pytest
 import os
 from typer.testing import CliRunner
-from ..base import IntegrationTestBase
+from tests.integration.base import IntegrationTestBase
 from smus_cicd.helpers.utils import get_datazone_project_info
 
 

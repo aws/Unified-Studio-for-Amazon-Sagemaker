@@ -72,61 +72,52 @@ if [ -n "$EXISTING_PROJECT" ] && [ "$EXISTING_PROJECT" != "None" ]; then
     exit 0
 fi
 
-# Clean up any existing failed CloudFormation stacks
-PROJECT_STACK_NAME="datazone-project-dev"
-STACK_STATUS=$(aws cloudformation describe-stacks --stack-name "$PROJECT_STACK_NAME" --region "$REGION" --query 'Stacks[0].StackStatus' --output text 2>/dev/null || echo "DOES_NOT_EXIST")
+echo "🚀 Creating DataZone project using internal DataZone client..."
+echo "   Project Name: $DEV_PROJECT_NAME"
+echo "   Domain: $DOMAIN_NAME"
 
-if [ "$STACK_STATUS" != "DOES_NOT_EXIST" ] && [ "$STACK_STATUS" != "CREATE_COMPLETE" ] && [ "$STACK_STATUS" != "UPDATE_COMPLETE" ]; then
-    echo "🧹 Cleaning up existing stack in $STACK_STATUS state..."
-    aws cloudformation delete-stack --stack-name "$PROJECT_STACK_NAME" --region "$REGION"
-    aws cloudformation wait stack-delete-complete --stack-name "$PROJECT_STACK_NAME" --region "$REGION"
-    echo "✅ Stack cleanup completed"
+# Construct ARNs safely to avoid malformed ARNs
+PROJECT_ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/test-marketing-role"
+OWNER_ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/Admin"
+
+echo "🔍 Verifying role ARNs..."
+echo "   Project Role ARN: $PROJECT_ROLE_ARN"
+echo "   Owner Role ARN: $OWNER_ROLE_ARN"
+
+# Verify the roles exist before proceeding
+if ! aws iam get-role --role-name "test-marketing-role" >/dev/null 2>&1; then
+    echo "❌ Project role 'test-marketing-role' does not exist"
+    echo "💡 Run Step 1 (account setup) to create required roles"
+    exit 1
 fi
 
-echo "🚀 Creating DataZone project via CloudFormation..."
-echo "   Template: create_project.yaml"
-echo "   Stack: $PROJECT_STACK_NAME"
-echo "   Project Execution Role: arn:aws:iam::${ACCOUNT_ID}:role/test-marketing-role"
-echo "   Owner Role: arn:aws:iam::${ACCOUNT_ID}:role/Admin"
+if ! aws iam get-role --role-name "Admin" >/dev/null 2>&1; then
+    echo "❌ Owner role 'Admin' does not exist"
+    echo "💡 Ensure the Admin role exists in your account"
+    exit 1
+fi
+
+echo "✅ Both roles exist and are accessible"
 echo ""
 
-# Deploy CloudFormation stack with role configuration
-aws cloudformation deploy \
-  --template-file "$SCRIPT_DIR/create_project.yaml" \
-  --stack-name "$PROJECT_STACK_NAME" \
-  --parameter-overrides \
-    DomainId="$DOMAIN_ID" \
-    ProjectProfileId="$PROJECT_PROFILE_ID" \
-    Name="$DEV_PROJECT_NAME" \
-    ProjectRoleArn="arn:aws:iam::${ACCOUNT_ID}:role/test-marketing-role" \
-    OwnerRoleArn="arn:aws:iam::${ACCOUNT_ID}:role/Admin" \
-  --capabilities CAPABILITY_IAM \
-  --region "$REGION" \
-  --no-fail-on-empty-changeset
+# Use Python script with internal DataZone client for customerProvidedRoleConfigs support
+python3 "$SCRIPT_DIR/create_project_with_roles.py" \
+    --domain-name "$DOMAIN_NAME" \
+    --project-name "$DEV_PROJECT_NAME" \
+    --project-role-arn "$PROJECT_ROLE_ARN" \
+    --owner-role-arn "$OWNER_ROLE_ARN" \
+    --region "$REGION" \
+    --wait-for-deployment
 
 if [ $? -eq 0 ]; then
-    echo ""
-    echo "✅ CloudFormation deployment successful!"
-    
-    # Get the project ID from the stack
-    PROJECT_ID=$(aws cloudformation describe-stacks --stack-name "$PROJECT_STACK_NAME" --region "$REGION" --query 'Stacks[0].Outputs[?OutputKey==`ProjectId`].OutputValue' --output text)
-    
-    if [ -n "$PROJECT_ID" ] && [ "$PROJECT_ID" != "None" ]; then
-        echo "📋 Project ID: $PROJECT_ID"
-    else
-        echo "⚠️  Could not retrieve Project ID from CloudFormation outputs"
-    fi
-    
     echo ""
     echo "🎉 Step 4 (Project Setup) Complete!"
     echo ""
     echo "📊 Project Summary:"
-    echo "   Stack Name: $PROJECT_STACK_NAME"
     echo "   Project Name: $DEV_PROJECT_NAME"
-    echo "   Project ID: $PROJECT_ID"
     echo "   Domain: $DOMAIN_NAME"
-    echo "   Project Execution Role: arn:aws:iam::${ACCOUNT_ID}:role/test-marketing-role"
-    echo "   Owner Role: arn:aws:iam::${ACCOUNT_ID}:role/Admin"
+    echo "   Project Execution Role: $PROJECT_ROLE_ARN"
+    echo "   Owner Role: $OWNER_ROLE_ARN"
     echo ""
     echo "🔗 All projects in domain:"
     aws datazone list-projects --domain-identifier "$DOMAIN_ID" --region "$REGION" --query 'items[].{Name:name,Id:id,Status:projectStatus}' --output table
@@ -135,20 +126,13 @@ if [ $? -eq 0 ]; then
     
 else
     echo ""
-    echo "❌ CloudFormation deployment failed"
-    echo ""
-    echo "🔍 Checking CloudFormation events for details..."
-    aws cloudformation describe-stack-events --stack-name "$PROJECT_STACK_NAME" --region "$REGION" --query 'StackEvents[?ResourceStatus==`CREATE_FAILED`].[LogicalResourceId,ResourceStatusReason]' --output table 2>/dev/null || echo "No failed events found"
-    
-    echo ""
-    echo "📊 Stack status:"
-    aws cloudformation describe-stacks --stack-name "$PROJECT_STACK_NAME" --region "$REGION" --query 'Stacks[0].{Status:StackStatus,Reason:StackStatusReason}' --output table 2>/dev/null || echo "Stack not found"
-    
+    echo "❌ Project creation failed"
     echo ""
     echo "💡 Troubleshooting tips:"
-    echo "   1. Check if the CustomerProvidedRoleConfigs property is supported in your region"
-    echo "   2. Verify the IAM role exists: arn:aws:iam::${ACCOUNT_ID}:role/test-marketing-role"
-    echo "   3. Check CloudFormation template syntax with: aws cloudformation validate-template --template-body file://create_project.yaml"
+    echo "   1. Ensure the IAM role exists: $PROJECT_ROLE_ARN"
+    echo "   2. Check if datazone-internal client is available"
+    echo "   3. Verify domain permissions and project profile access"
+    echo "   4. Check AWS credentials and region configuration"
     
     exit 1
 fi

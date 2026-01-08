@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 
 import typer
 
-from . import cloudformation, datazone
+from . import datazone
 from .error_handler import handle_error, handle_success
 from .utils import get_datazone_project_info
 
@@ -383,8 +383,6 @@ class ProjectManager:
         contributors,
     ):
         """Create project using DataZone API directly (for gamma endpoints)."""
-        import boto3
-
         # Get domain ID
         domain_id = datazone.get_domain_id_by_name(domain_name, region)
         if not domain_id:

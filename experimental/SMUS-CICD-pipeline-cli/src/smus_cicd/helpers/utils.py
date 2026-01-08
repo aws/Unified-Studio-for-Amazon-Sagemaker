@@ -525,88 +525,14 @@ def _get_readable_user_name(user_profile: Dict[str, Any], fallback_id: str) -> s
 def _get_project_connections(
     project_name: str, domain_id: str, project_id: str, region: str
 ) -> Dict[str, Any]:
-    """Get project connections using domain_id and project_id directly."""
+    """Get project connections using the centralized connections helper."""
+    from . import connections
     from .logger import get_logger
 
     logger = get_logger("utils")
 
     try:
-        datazone_client = datazone._get_datazone_client(region)
-
-        connections_dict = {}
-        next_token = None
-
-        # Paginate through all connections
-        while True:
-            list_params = {
-                "domainIdentifier": domain_id,
-                "projectIdentifier": project_id,
-                "maxResults": 50,
-            }
-            if next_token:
-                list_params["nextToken"] = next_token
-
-            response = datazone_client.list_connections(**list_params)
-
-            for conn in response.get("items", []):
-                conn_name = conn.get("name", "unknown")
-                conn_type = conn.get("type", "")
-
-                # Check if WORKFLOWS_MWAA is actually serverless
-                if conn_type == "WORKFLOWS_MWAA":
-                    props = conn.get("props", {})
-                    if "workflowsServerlessProperties" in props:
-                        conn_type = "WORKFLOWS_SERVERLESS"
-
-                connections_dict[conn_name] = {
-                    "connectionId": conn.get("connectionId", ""),
-                    "type": conn_type,
-                    "region": region,
-                }
-
-                # Add S3 URI if it's an S3 connection
-                if conn_type == "S3":
-                    props = conn.get("props", {}).get("s3Properties", {})
-                    if props.get("s3Uri"):
-                        connections_dict[conn_name]["s3Uri"] = props["s3Uri"]
-
-                # Add workgroup info for ATHENA connections
-                elif conn_type == "ATHENA":
-                    props = conn.get("props", {}).get("athenaProperties", {})
-                    if props.get("workgroupName"):
-                        connections_dict[conn_name]["workgroupName"] = props[
-                            "workgroupName"
-                        ]
-
-                # Add SPARK connection properties
-                elif conn_type == "SPARK":
-                    # Need to get full connection details for sparkGlueProperties and configurations
-                    try:
-                        detail_response = datazone_client.get_connection(
-                            domainIdentifier=domain_id,
-                            identifier=conn.get("connectionId", ""),
-                        )
-                        props = detail_response.get("props", {}).get(
-                            "sparkGlueProperties", {}
-                        )
-                        if props:
-                            connections_dict[conn_name]["sparkGlueProperties"] = props
-
-                        configurations = detail_response.get("configurations", [])
-                        if configurations:
-                            connections_dict[conn_name][
-                                "configurations"
-                            ] = configurations
-                    except Exception as e:
-                        logger.warning(f"Failed to get SPARK connection details: {e}")
-
-            # Check for next page
-            next_token = response.get("nextToken")
-            if not next_token:
-                break
-
-        return connections_dict
-
+        return connections.get_project_connections(project_id, domain_id, region)
     except Exception as e:
         logger.error(f"Failed to get project connections for {project_name}: {e}")
         return {}

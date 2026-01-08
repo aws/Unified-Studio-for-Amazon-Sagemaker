@@ -2,8 +2,6 @@
 
 from typing import Any, Dict
 
-import boto3
-
 
 def extract_connection_properties(connection_detail: Dict[str, Any]) -> Dict[str, Any]:
     """Extract type-specific properties from a DataZone connection."""
@@ -15,6 +13,7 @@ def extract_connection_properties(connection_detail: Dict[str, Any]) -> Dict[str
         "type": connection_type,
         "description": connection_detail.get("description"),
         # Preserve physicalEndpoints for boto3 client creation
+        "environmentId": connection_detail.get("environmentId", ""),
         "physicalEndpoints": connection_detail.get("physicalEndpoints", []),
     }
 
@@ -100,22 +99,13 @@ def extract_connection_properties(connection_detail: Dict[str, Any]) -> Dict[str
 
 
 def get_project_connections(
-    project_name: str, domain_name: str, region: str
+    project_id: str, domain_id: str, region: str
 ) -> Dict[str, Dict[str, Any]]:
     """Get all connections for a DataZone project with extracted properties."""
     from . import datazone
 
-    # Get domain and project IDs
-    domain_id = datazone.get_domain_id_by_name(domain_name, region)
-    if not domain_id:
-        return {}
-
-    project_id = datazone.get_project_id_by_name(project_name, domain_id, region)
-    if not project_id:
-        return {}
-
     # Get connections from DataZone
-    datazone_client = boto3.client("datazone", region_name=region)
+    datazone_client = datazone._get_datazone_client(region)
 
     # DEBUG: Log the exact parameters being used for the ListConnections call
     import sys
@@ -132,7 +122,6 @@ def get_project_connections(
         response = datazone_client.list_connections(
             domainIdentifier=domain_id, projectIdentifier=project_id
         )
-
         connections = {}
         for conn in response.get("items", []):
             conn_name = conn.get("name", "unknown")
