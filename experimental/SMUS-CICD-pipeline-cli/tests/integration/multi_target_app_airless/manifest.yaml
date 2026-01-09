@@ -47,7 +47,7 @@ stages:
     project:
       name: integration-airless-test
       create: true
-      profile_name: All capabilities
+      profileName: All capabilities
       owners:
       - Eng1
       - arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests
@@ -77,7 +77,7 @@ stages:
     project:
       name: integration-airless-test
       create: true
-      profile_name: All capabilities
+      profileName: All capabilities
       owners:
       - Eng1
       - arn:aws:iam::${AWS_ACCOUNT_ID}:role/GitHubActionsRole-SMUS-CLI-Tests

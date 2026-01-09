@@ -11,7 +11,7 @@ stages:
     
     project:
       name: dev-project
-      profile_name: DataAnalyticsProfile
+      profileName: DataAnalyticsProfile
       
       # Option 1: Create new role with policies
       role:
@@ -28,7 +28,7 @@ stages:
     
     project:
       name: prod-project
-      profile_name: DataAnalyticsProfile
+      profileName: DataAnalyticsProfile
       
       # Option 2: Use existing role and attach additional policies
       role:

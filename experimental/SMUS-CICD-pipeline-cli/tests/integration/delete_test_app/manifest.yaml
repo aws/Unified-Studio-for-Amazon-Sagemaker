@@ -37,7 +37,7 @@ stages:
     project:
       name: delete-test-project
       create: true
-      profile_name: All capabilities
+      profileName: All capabilities
       owners:
       - Eng1
       - arn:aws:iam::${AWS_ACCOUNT_ID}:role/Admin
