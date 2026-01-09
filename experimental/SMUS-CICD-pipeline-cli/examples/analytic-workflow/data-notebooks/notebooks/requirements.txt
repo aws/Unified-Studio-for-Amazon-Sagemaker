@@ -221,7 +221,7 @@ pymssql==2.3.9
 pymysql==1.1.2
 pyopenssl==25.3.0
 pyparsing==3.2.5
-pypdf==6.4.0
+pypdf==6.6.0
 pyroaring==1.0.3
 pyspark==3.5.7
 python-dateutil==2.9.0.post0
