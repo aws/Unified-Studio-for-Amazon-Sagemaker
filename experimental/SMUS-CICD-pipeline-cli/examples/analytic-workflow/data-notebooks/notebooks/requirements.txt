@@ -55,7 +55,7 @@ docstring-to-markdown==0.17
 duckdb==1.4.2
 executing==2.2.1
 fastapi==0.121.2
-filelock==3.20.0
+filelock==3.20.3
 filetype==1.2.0
 flask==3.1.2
 flask-cors==6.0.1
