@@ -108,7 +108,7 @@ jsonschema-path==0.3.4
 jsonschema-specifications==2025.9.1
 jupyter-client==8.6.3
 jupyter-core==5.9.1
-keras==3.12.0
+keras==3.13.1
 kiwisolver==1.4.9
 langchain==1.0.7
 langchain-core==1.0.7
