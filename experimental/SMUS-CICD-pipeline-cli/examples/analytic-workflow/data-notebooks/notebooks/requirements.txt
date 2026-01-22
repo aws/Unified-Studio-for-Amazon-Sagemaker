@@ -310,7 +310,7 @@ watchdog==6.0.0
 wcwidth==0.2.14
 websockets==15.0.1
 werkzeug==3.1.4
-wheel==0.45.1
+wheel==0.46.2
 wrapt==1.17.3
 xgboost-cpu==3.1.1
 xxhash==3.6.0
