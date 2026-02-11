@@ -184,7 +184,7 @@ pathable==0.4.4
 pathos==0.3.2
 pathspec==0.12.1
 pexpect==4.9.0
-pillow==11.3.0
+pillow==12.1.1
 pip==25.3
 platformdirs==4.5.0
 plotly==6.3.1
