@@ -113,7 +113,7 @@ kiwisolver==1.4.9
 langchain==1.0.7
 langchain-core==1.0.7
 langgraph==1.0.3
-langgraph-checkpoint==3.0.1
+langgraph-checkpoint==4.0.0
 langgraph-prebuilt==1.0.4
 langgraph-sdk==0.2.9
 langsmith==0.4.43
