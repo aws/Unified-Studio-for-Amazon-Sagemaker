@@ -1,0 +1,126 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'AWS Organization Structure for Account Pool Factory Testing - Banking Industry'
+
+Parameters:
+  RootId:
+    Type: String
+    Description: Organization Root ID (e.g., r-xxxx)
+    AllowedPattern: '^r-[a-z0-9]{4,32}$'
+
+Resources:
+  # Level 1: Retail Banking Business Unit
+  RetailBankingOU:
+    Type: AWS::Organizations::OrganizationalUnit
+    Properties:
+      Name: RetailBanking
+      ParentId: !Ref RootId
+      Tags:
+        - Key: BusinessUnit
+          Value: RetailBanking
+        - Key: Description
+          Value: Retail banking operations and customer services
+        - Key: ManagedBy
+          Value: AccountPoolFactory
+        - Key: Environment
+          Value: Test
+
+  # Level 1: Commercial Banking Business Unit
+  CommercialBankingOU:
+    Type: AWS::Organizations::OrganizationalUnit
+    Properties:
+      Name: CommercialBanking
+      ParentId: !Ref RootId
+      Tags:
+        - Key: BusinessUnit
+          Value: CommercialBanking
+        - Key: Description
+          Value: Commercial banking and business lending
+        - Key: ManagedBy
+          Value: AccountPoolFactory
+        - Key: Environment
+          Value: Test
+
+  # Level 2: Customer Analytics under Retail Banking
+  # This is where the Account Pool will create accounts for customer analytics
+  RetailBankingCustomerAnalyticsOU:
+    Type: AWS::Organizations::OrganizationalUnit
+    Properties:
+      Name: CustomerAnalytics
+      ParentId: !Ref RetailBankingOU
+      Tags:
+        - Key: BusinessUnit
+          Value: RetailBanking
+        - Key: Purpose
+          Value: CustomerAnalytics
+        - Key: Description
+          Value: Customer analytics and insights for Retail Banking
+        - Key: ManagedBy
+          Value: AccountPoolFactory
+        - Key: Environment
+          Value: Test
+        - Key: AccountPoolTarget
+          Value: 'true'
+
+  # Level 2: Risk Analytics under Retail Banking
+  # Alternative OU for risk-focused analytics workloads
+  RetailBankingRiskAnalyticsOU:
+    Type: AWS::Organizations::OrganizationalUnit
+    Properties:
+      Name: RiskAnalytics
+      ParentId: !Ref RetailBankingOU
+      Tags:
+        - Key: BusinessUnit
+          Value: RetailBanking
+        - Key: Purpose
+          Value: RiskAnalytics
+        - Key: Description
+          Value: Risk analytics and compliance for Retail Banking
+        - Key: ManagedBy
+          Value: AccountPoolFactory
+        - Key: Environment
+          Value: Test
+        - Key: AccountPoolTarget
+          Value: 'true'
+
+Outputs:
+  RootId:
+    Description: Organization Root ID
+    Value: !Ref RootId
+    Export:
+      Name: !Sub '${AWS::StackName}-RootId'
+
+  RetailBankingOUId:
+    Description: Retail Banking OU ID
+    Value: !Ref RetailBankingOU
+    Export:
+      Name: !Sub '${AWS::StackName}-RetailBankingOU'
+
+  CommercialBankingOUId:
+    Description: Commercial Banking OU ID
+    Value: !Ref CommercialBankingOU
+    Export:
+      Name: !Sub '${AWS::StackName}-CommercialBankingOU'
+
+  RetailBankingCustomerAnalyticsOUId:
+    Description: Retail Banking Customer Analytics OU ID (Account Pool Target)
+    Value: !Ref RetailBankingCustomerAnalyticsOU
+    Export:
+      Name: !Sub '${AWS::StackName}-CustomerAnalyticsOU'
+
+  RetailBankingRiskAnalyticsOUId:
+    Description: Retail Banking Risk Analytics OU ID (Account Pool Target)
+    Value: !Ref RetailBankingRiskAnalyticsOU
+    Export:
+      Name: !Sub '${AWS::StackName}-RiskAnalyticsOU'
+
+  TargetOUPath:
+    Description: Target OU Path for Account Pool (Customer Analytics)
+    Value: /RetailBanking/CustomerAnalytics
+    Export:
+      Name: !Sub '${AWS::StackName}-TargetOUPath'
+
+  TargetOUId:
+    Description: Target OU ID for Account Pool (Customer Analytics)
+    Value: !Ref RetailBankingCustomerAnalyticsOU
+    Export:
+      Name: !Sub '${AWS::StackName}-TargetOUId'

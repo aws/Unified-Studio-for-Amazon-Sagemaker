@@ -1,0 +1,66 @@
+[
+    {
+        "OutputKey": "EventBusName",
+        "OutputValue": "AccountPoolFactoryEventBus",
+        "Description": "Name of the EventBridge event bus",
+        "ExportName": "AccountPoolFactory-ControlTower-Test-EventBusName"
+    },
+    {
+        "OutputKey": "StackSetAdministrationRoleArn",
+        "OutputValue": "arn:aws:iam::495869084367:role/AccountPoolFactory-ControlTower-Test-SSAdmin",
+        "Description": "ARN of the StackSet administration role (used by CloudFormation service)",
+        "ExportName": "AccountPoolFactory-ControlTower-Test-StackSetAdminRoleArn"
+    },
+    {
+        "OutputKey": "AccountCreationRoleArn",
+        "OutputValue": "arn:aws:iam::495869084367:role/AccountPoolFactory-ControlTower-Test-AcctCreation",
+        "Description": "ARN of the IAM role for requesting account to assume for account creation",
+        "ExportName": "AccountPoolFactory-ControlTower-Test-AccountCreationRoleArn"
+    },
+    {
+        "OutputKey": "ExternalId",
+        "OutputValue": "AccountPoolFactory-ControlTower-Test-495869084367",
+        "Description": "External ID for assuming the account creation role",
+        "ExportName": "AccountPoolFactory-ControlTower-Test-ExternalId"
+    },
+    {
+        "OutputKey": "StackSetDeploymentRoleArn",
+        "OutputValue": "arn:aws:iam::495869084367:role/AccountPoolFactory-ControlTower-Test-SSDeploy",
+        "Description": "ARN of the role for requesting account to deploy approved StackSet instances",
+        "ExportName": "AccountPoolFactory-ControlTower-Test-StackSetDeploymentRoleArn"
+    },
+    {
+        "OutputKey": "Region",
+        "OutputValue": "us-east-2",
+        "Description": "AWS Region where this stack is deployed"
+    },
+    {
+        "OutputKey": "ApprovedStackSetPrefix",
+        "OutputValue": "AccountPoolFactory-ControlTower-Test-",
+        "Description": "Prefix for approved StackSet names (requesting account can only deploy StackSets with this prefix)",
+        "ExportName": "AccountPoolFactory-ControlTower-Test-StackSetPrefix"
+    },
+    {
+        "OutputKey": "StackSetExternalId",
+        "OutputValue": "AccountPoolFactory-ControlTower-Test-StackSet-495869084367",
+        "Description": "External ID for assuming the StackSet deployment role",
+        "ExportName": "AccountPoolFactory-ControlTower-Test-StackSetExternalId"
+    },
+    {
+        "OutputKey": "AccountCreationRoleName",
+        "OutputValue": "AccountPoolFactory-ControlTower-Test-AcctCreation",
+        "Description": "Name of the IAM role for account creation",
+        "ExportName": "AccountPoolFactory-ControlTower-Test-AccountCreationRoleName"
+    },
+    {
+        "OutputKey": "StackName",
+        "OutputValue": "AccountPoolFactory-ControlTower-Test",
+        "Description": "Name of this CloudFormation stack"
+    },
+    {
+        "OutputKey": "EventBusArn",
+        "OutputValue": "arn:aws:events:us-east-2:495869084367:event-bus/AccountPoolFactoryEventBus",
+        "Description": "ARN of the EventBridge event bus for account lifecycle events",
+        "ExportName": "AccountPoolFactory-ControlTower-Test-EventBusArn"
+    }
+]

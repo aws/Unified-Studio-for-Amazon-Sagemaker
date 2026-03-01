@@ -1,0 +1,169 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'IAM roles for DataZone blueprint management and provisioning'
+
+Parameters:
+  ProjectTag:
+    Type: String
+    Description: Value for Project tag
+    Default: AccountPoolFactory
+  
+  EnvironmentTag:
+    Type: String
+    Description: Value for Environment tag
+    Default: Production
+  
+  UseCustomProvisioningPolicy:
+    Type: String
+    Description: Use custom provisioning policy instead of AWS managed policy
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+  
+  CustomProvisioningPolicyArn:
+    Type: String
+    Description: ARN of custom provisioning policy (only used if UseCustomProvisioningPolicy is true)
+    Default: ''
+
+Conditions:
+  UseCustomPolicy: !Equals [!Ref UseCustomProvisioningPolicy, 'true']
+  UseManagedPolicy: !Equals [!Ref UseCustomProvisioningPolicy, 'false']
+
+Resources:
+  # ManageAccessRole - for blueprint management
+  ManageAccessRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-ManageAccessRole'
+      Description: IAM role to manage access to DataZone environments
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: datazone.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/AmazonDataZoneEnvironmentRolePermissionsBoundary'
+      Policies:
+        - PolicyName: ManageAccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Lake Formation permissions
+              - Sid: LakeFormationPermissions
+                Effect: Allow
+                Action:
+                  - 'lakeformation:GrantPermissions'
+                  - 'lakeformation:RevokePermissions'
+                  - 'lakeformation:GetDataAccess'
+                  - 'lakeformation:GetDataLakeSettings'
+                  - 'lakeformation:PutDataLakeSettings'
+                  - 'lakeformation:RegisterResource'
+                  - 'lakeformation:DeregisterResource'
+                  - 'lakeformation:DescribeResource'
+                  - 'lakeformation:ListResources'
+                  - 'lakeformation:ListPermissions'
+                Resource: '*'
+              
+              # IAM permissions for role management
+              - Sid: IAMRoleManagement
+                Effect: Allow
+                Action:
+                  - 'iam:GetRole'
+                  - 'iam:GetRolePolicy'
+                  - 'iam:ListRolePolicies'
+                  - 'iam:ListAttachedRolePolicies'
+                  - 'iam:PassRole'
+                Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:role/*'
+              
+              # Glue permissions for catalog management
+              - Sid: GlueCatalogPermissions
+                Effect: Allow
+                Action:
+                  - 'glue:GetDatabase'
+                  - 'glue:GetDatabases'
+                  - 'glue:GetTable'
+                  - 'glue:GetTables'
+                  - 'glue:GetPartition'
+                  - 'glue:GetPartitions'
+                  - 'glue:BatchGetPartition'
+                  - 'glue:CreateDatabase'
+                  - 'glue:UpdateDatabase'
+                  - 'glue:DeleteDatabase'
+                Resource: '*'
+              
+              # S3 permissions for data access
+              - Sid: S3DataAccess
+                Effect: Allow
+                Action:
+                  - 's3:GetObject'
+                  - 's3:GetObjectVersion'
+                  - 's3:PutObject'
+                  - 's3:DeleteObject'
+                  - 's3:ListBucket'
+                  - 's3:GetBucketLocation'
+                Resource: '*'
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectTag
+        - Key: Environment
+          Value: !Ref EnvironmentTag
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # ProvisioningRole - for environment provisioning
+  ProvisioningRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-ProvisioningRole'
+      Description: IAM role to provision DataZone environments
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: datazone.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - !If
+          - UseManagedPolicy
+          - 'arn:aws:iam::aws:policy/service-role/AmazonSageMakerStudioProjectProvisioningRolePolicy'
+          - !Ref AWS::NoValue
+        - !If
+          - UseCustomPolicy
+          - !Ref CustomProvisioningPolicyArn
+          - !Ref AWS::NoValue
+        - 'arn:aws:iam::aws:policy/AmazonDataZoneEnvironmentRolePermissionsBoundary'
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectTag
+        - Key: Environment
+          Value: !Ref EnvironmentTag
+        - Key: ManagedBy
+          Value: CloudFormation
+
+Outputs:
+  ManageAccessRoleArn:
+    Description: ARN of the ManageAccessRole for blueprint management
+    Value: !GetAtt ManageAccessRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-ManageAccessRoleArn'
+  
+  ManageAccessRoleName:
+    Description: Name of the ManageAccessRole
+    Value: !Ref ManageAccessRole
+    Export:
+      Name: !Sub '${AWS::StackName}-ManageAccessRoleName'
+  
+  ProvisioningRoleArn:
+    Description: ARN of the ProvisioningRole for environment provisioning
+    Value: !GetAtt ProvisioningRole.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-ProvisioningRoleArn'
+  
+  ProvisioningRoleName:
+    Description: Name of the ProvisioningRole
+    Value: !Ref ProvisioningRole
+    Export:
+      Name: !Sub '${AWS::StackName}-ProvisioningRoleName'
