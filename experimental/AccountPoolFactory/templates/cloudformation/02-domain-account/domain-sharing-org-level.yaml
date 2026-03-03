@@ -1,0 +1,80 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CF2 - DataZone Domain Sharing Setup - Organization Level (Domain Account)'
+
+Parameters:
+  DomainId:
+    Type: String
+    Description: DataZone Domain ID to share
+  
+  DomainName:
+    Type: String
+    Description: DataZone Domain Name
+  
+  DomainArn:
+    Type: String
+    Description: DataZone Domain ARN
+  
+  OrganizationId:
+    Type: String
+    Description: AWS Organization ID (e.g., o-xxxxxxxxxx)
+
+Resources:
+  # Single RAM ResourceShare for entire organization
+  DomainResourceShare:
+    Type: AWS::RAM::ResourceShare
+    Properties:
+      Name: !Sub "DataZone-EXTENDED_PORTAL_ACCESS-${DomainId}-ORG"
+      AllowExternalPrincipals: false
+      ResourceArns:
+        - !Ref DomainArn
+      PermissionArns:
+        # Use the permission ARN that includes portal access
+        - "arn:aws:ram::aws:permission/AWSRAMPermissionsAmazonDatazoneDomainExtendedServiceWithPortalAccess"
+      Principals:
+        - !Ref OrganizationId
+      Tags:
+        - Key: DomainId
+          Value: !Ref DomainId
+        - Key: DomainName
+          Value: !Ref DomainName
+        - Key: ManagedBy
+          Value: AccountPoolFactory
+        - Key: SharingScope
+          Value: Organization
+
+Outputs:
+  DomainId:
+    Description: DataZone Domain ID
+    Value: !Ref DomainId
+    Export:
+      Name: !Sub "${AWS::StackName}-DomainId"
+  
+  DomainArn:
+    Description: DataZone Domain ARN
+    Value: !Ref DomainArn
+    Export:
+      Name: !Sub "${AWS::StackName}-DomainArn"
+  
+  OrganizationId:
+    Description: Organization ID that domain is shared with
+    Value: !Ref OrganizationId
+    Export:
+      Name: !Sub "${AWS::StackName}-OrganizationId"
+  
+  ResourceShareArn:
+    Description: RAM Resource Share ARN
+    Value: !GetAtt DomainResourceShare.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-ResourceShareArn"
+  
+  PermissionArn:
+    Description: RAM permission ARN used for sharing
+    Value: "arn:aws:ram::aws:permission/AWSRAMPermissionsAmazonDatazoneDomainExtendedServiceWithPortalAccess"
+    Export:
+      Name: !Sub "${AWS::StackName}-PermissionArn"
+  
+  SharingScope:
+    Description: Scope of sharing
+    Value: Organization
+    Export:
+      Name: !Sub "${AWS::StackName}-SharingScope"

@@ -290,13 +290,20 @@ stateDiagram-v2
 - FR5.5 Handle concurrent account requests safely
 
 ### FR6: Account Provisioning Workflow
-- FR6.1 Domain account triggers Control Tower account creation in Org Admin account
-- FR6.2 Org Admin account creates account via Control Tower Account Factory
-- FR6.3 Org Admin account notifies Domain account of account creation
-- FR6.4 Domain account deploys CF3 (StackSet) to new account
+- FR6.1 Domain account triggers account creation in Org Admin account (via Control Tower or Organizations API)
+- FR6.2 Org Admin account creates account via selected strategy
+- FR6.3 Org Admin account notifies Domain account of account creation completion
+- FR6.4 Domain account orchestrates complete account setup via Setup Orchestrator Lambda:
+  - FR6.4.1 Create AWS RAM resource share for the new account
+  - FR6.4.2 Share DataZone domain with the new account
+  - FR6.4.3 Accept RAM share in the new account (if required)
+  - FR6.4.4 Deploy CF3 (StackSet) to new account for baseline configuration
+  - FR6.4.5 Enable DataZone blueprints in the new account
+  - FR6.4.6 Validate all setup steps completed successfully
 - FR6.5 New account completes setup and notifies Domain account
 - FR6.6 Domain account marks account as AVAILABLE in pool
 - FR6.7 All steps include error handling and retry logic
+- FR6.8 Setup Orchestrator Lambda coordinates all post-creation steps as a single workflow
 
 ### FR7: Account Assignment
 - FR7.1 Assign accounts to DataZone projects via custom Lambda integration
@@ -510,23 +517,44 @@ Control Tower emits lifecycle events to EventBridge when account operations comp
 
 After Control Tower creates an account, additional configuration is required before it can be used as a DataZone project account:
 
-#### Required Setup Steps (CF3 - StackSet Deployment)
+#### Required Setup Steps (Orchestrated by Setup Orchestrator Lambda)
 
-The CF3 template must perform the following configuration steps on each newly created account. These steps are based on the existing CloudFormation templates in `cloudformation/domain/`:
+The Setup Orchestrator Lambda must coordinate the following configuration steps on each newly created account. These steps are based on the existing CloudFormation templates in `cloudformation/domain/` and the working domain sharing approach documented in `MULTI_STRATEGY_CHANGES.md`:
 
 1. **DataZone Domain Resource Sharing (RAM)**
-   - Create AWS RAM resource share to associate account with DataZone domain
-   - Use permission: `arn:aws:ram::aws:permission/AWSRAMPermissionsAmazonDatazoneDomainExtendedServiceAccess`
+   - Create AWS RAM resource share in Domain account to associate new account with DataZone domain
+   - Use permission: `arn:aws:ram::aws:permission/AWSRAMPermissionsAmazonDatazoneDomainExtendedServiceWithPortalAccess` (CRITICAL: must include "WithPortalAccess")
    - Share the domain ARN with the new account
-   - Reference: `create_resource_share.yaml`
+   - Within same organization, share is automatically accepted (no manual acceptance required)
+   - Verify domain is visible in the new account via DataZone API
+   - Reference: `templates/cloudformation/02-domain-account/domain-sharing-setup.yaml`
+   - Note: Organization-level sharing is NOT supported; must create one RAM share per account
 
-2. **Blueprint Enablement**
+2. **VPC Setup (CF3 StackSet - OPTIONAL)**
+   - Deploy VPC and networking resources if required by blueprints
+   - Create VPC with public and private subnets
+   - Configure NAT gateways, route tables, security groups
+   - Reference: `templates/cloudformation/03-project-account/vpc-setup.yaml`
+   - Note: Some blueprints can work without VPC
+
+3. **IAM Roles (CF3 StackSet - REQUIRED)**
+   - **CRITICAL**: Must be deployed BEFORE blueprint enablement
+   - Create ManageAccessRole: Allows DataZone to manage environment resources
+   - Create ProvisioningRole: Allows DataZone to provision environment resources
+   - Configure trust policies to allow DataZone service to assume roles
+   - Create cross-account role for Domain account management
+   - Apply account-level tags (configurable)
+   - Reference: `templates/cloudformation/03-project-account/iam-roles.yaml`
+   - **Without these roles, blueprint enablement will fail**
+
+4. **Blueprint Enablement (CF3 StackSet - REQUIRED)**
+   - **CRITICAL**: Must be performed AFTER IAM roles are deployed
    - Enable required DataZone environment blueprints for the account
-   - Configurable list of blueprints (default: all blueprints)
+   - MUST be performed AFTER domain sharing is complete and domain is visible in account
    - Each blueprint requires:
-     - ManageAccessRoleArn (from configuration)
-     - ProvisioningRoleArn (from configuration)
-     - Regional parameters: S3Location, Subnets, VpcId
+     - ManageAccessRoleArn (from IAM roles StackSet output)
+     - ProvisioningRoleArn (from IAM roles StackSet output)
+     - Regional parameters: S3Location, Subnets, VpcId (from VPC StackSet output if deployed)
    - Blueprints to enable (configurable):
      - LakehouseCatalog (required baseline)
      - Tooling, MLExperiments, DataLake
@@ -534,9 +562,10 @@ The CF3 template must perform the following configuration steps on each newly cr
      - Workflows
      - Amazon Bedrock blueprints (Guardrail, Prompt, Evaluation, KnowledgeBase, ChatAgent, Function, Flow)
      - QuickSight, PartnerApps
-   - Reference: `enable_all_blueprints.yaml`
+   - Reference: `templates/cloudformation/03-project-account/blueprint-enablement.yaml`
+   - **Without blueprint enablement, environment creation will fail with 403 authorization error**
 
-3. **Policy Grants Configuration**
+4. **Policy Grants Configuration**
    - Grant permissions for blueprints and project profiles
    - Create policy grants for:
      - CREATE_ENVIRONMENT_FROM_BLUEPRINT for each enabled blueprint
@@ -544,29 +573,66 @@ The CF3 template must perform the following configuration steps on each newly cr
    - Configure principal access (project contributors, users)
    - Reference: `policy_grant.yaml`
 
-4. **IAM Role Creation**
-   - Create project-specific IAM role (e.g., DataZoneProjectRole)
-   - Configure trust policy to allow DataZone service to assume role
-   - Attach required managed policies for project operations
-   - Create cross-account role for Domain account management
-
-5. **Baseline Security Configuration**
-   - Enable CloudTrail for audit logging
-   - Configure AWS Config for compliance monitoring
-   - Set up VPC and networking (if required by blueprints)
-   - Apply account-level tags (configurable)
-
-6. **Cross-Account Access**
-   - Create IAM role for Domain account to manage the project account
-   - Set up EventBridge rules to forward events to Domain account
-   - Configure SNS topic for notifications
-
-7. **Account Readiness Validation**
+5. **Account Readiness Validation**
    - Verify all resources are created successfully
    - Test IAM role assumptions
-   - Confirm DataZone domain association via RAM
+   - Confirm DataZone domain association via RAM (domain visible in account)
    - Validate blueprint enablement
    - Signal completion to Domain account
+
+**Orchestration Workflow**:
+
+The Setup Orchestrator Lambda coordinates these steps in the following sequence:
+
+```
+1. Account Created Event Received
+   ↓
+2. Create RAM Share (Domain Account)
+   - Create AWS RAM resource share
+   - Associate domain ARN as resource
+   - Associate new account ID as principal
+   - Use permission: AWSRAMPermissionsAmazonDatazoneDomainExtendedServiceWithPortalAccess
+   ↓
+3. Verify Domain Sharing (New Account)
+   - Assume role in new account
+   - Call DataZone ListDomains API
+   - Verify domain is visible and status is AVAILABLE
+   - Retry with exponential backoff if not yet visible
+   ↓
+4. Deploy VPC StackSet (New Account - OPTIONAL)
+   - Deploy VPC and networking resources if required
+   - Wait for StackSet deployment to complete
+   - Capture outputs: VpcId, Subnets, S3Location
+   ↓
+5. Deploy IAM Roles StackSet (New Account - REQUIRED)
+   - Deploy ManageAccessRole and ProvisioningRole
+   - Wait for StackSet deployment to complete
+   - Capture outputs: ManageAccessRoleArn, ProvisioningRoleArn
+   - CRITICAL: Must complete before blueprint enablement
+   ↓
+6. Deploy Blueprint Enablement StackSet (New Account - REQUIRED)
+   - Use role ARNs from step 5
+   - Use VPC parameters from step 4 (if deployed)
+   - Enable all configured blueprints
+   - Wait for StackSet deployment to complete
+   - CRITICAL: Without this, environment creation will fail with 403 error
+   ↓
+7. Create Policy Grants (Domain Account)
+   - Grant CREATE_ENVIRONMENT_FROM_BLUEPRINT permissions
+   - Grant CREATE_PROJECT_FROM_PROJECT_PROFILE permissions
+   ↓
+8. Mark Account as AVAILABLE
+   - Update DynamoDB account state to AVAILABLE
+   - Emit CloudWatch metrics
+   - Send SNS notification
+```
+
+**Error Handling**:
+- Each step includes retry logic with exponential backoff
+- Failed steps are logged with detailed error information
+- Account marked as FAILED if max retries exceeded
+- SNS alert sent for manual intervention
+- Partial setup can be resumed from last successful step
 
 **Customization Requirements**:
 - All blueprint selections must be configurable
@@ -597,6 +663,161 @@ ASSIGNED → (Assigned to DataZone project)
 - **StackSet Deployment Failures**: Rollback and mark account as FAILED
 - **Timeout Handling**: Maximum 20 minutes for complete account provisioning
 - **Duplicate Detection**: Handle UpdateManagedAccount events as potential retries
+
+## Account Creation Strategies
+
+The Account Pool Factory supports multiple strategies for creating AWS accounts, allowing customers to choose the approach that best fits their organizational requirements and existing infrastructure.
+
+### Strategy 1: Control Tower Account Factory (Recommended)
+
+**Description**: Uses AWS Control Tower Account Factory via Service Catalog to create fully managed accounts with built-in governance and compliance.
+
+**Prerequisites**:
+- AWS Control Tower must be enabled in the organization
+- Control Tower Account Factory product must be available in Service Catalog
+- Appropriate IAM permissions for Service Catalog operations
+
+**Advantages**:
+- Automatic enrollment in Control Tower governance
+- Built-in compliance and security guardrails
+- Automated baseline configuration
+- Integration with AWS IAM Identity Center (SSO)
+- Account lifecycle management
+
+**Disadvantages**:
+- Requires Control Tower setup (one-time)
+- Slightly longer provisioning time (10-15 minutes)
+- Additional Control Tower costs
+
+**Use Cases**:
+- Organizations already using Control Tower
+- Enterprises requiring strong governance and compliance
+- Multi-account environments with centralized management
+
+### Strategy 2: AWS Organizations API (Direct)
+
+**Description**: Creates accounts directly using AWS Organizations API without Control Tower dependency.
+
+**Prerequisites**:
+- AWS Organizations must be enabled
+- Appropriate IAM permissions for Organizations operations
+- Manual configuration of baseline security and compliance
+
+**Advantages**:
+- No Control Tower dependency
+- Faster provisioning (5-8 minutes)
+- Lower cost (no Control Tower overhead)
+- Simpler architecture
+- More control over account configuration
+
+**Disadvantages**:
+- Manual governance and compliance setup required
+- No automatic guardrails
+- Must implement own baseline configuration
+- No built-in SSO integration
+
+**Use Cases**:
+- Organizations not using Control Tower
+- Simpler environments with fewer compliance requirements
+- Cost-sensitive deployments
+- Organizations wanting full control over account configuration
+
+### Strategy 3: Pre-Created Account Pool (Manual)
+
+**Description**: Uses accounts that have been manually created and pre-configured by administrators.
+
+**Prerequisites**:
+- Accounts must be created manually in advance
+- Accounts must be registered in the pool
+- Baseline configuration must be applied manually
+
+**Advantages**:
+- No automated account creation required
+- Full control over account setup
+- Can use existing accounts
+- No API rate limits
+
+**Disadvantages**:
+- Manual account creation and management
+- Pool must be manually replenished
+- Higher operational overhead
+- Slower scaling
+
+**Use Cases**:
+- Organizations with strict account creation policies
+- Environments with limited automation
+- Testing and development scenarios
+
+### Strategy 4: Bring Your Own Accounts (BYOA)
+
+**Description**: Allows customers to provide their own accounts that are already created and configured.
+
+**Prerequisites**:
+- Accounts must exist and be accessible
+- Accounts must meet minimum configuration requirements
+- Cross-account access must be configured
+
+**Advantages**:
+- Use existing accounts
+- No account creation required
+- Maximum flexibility
+- Can integrate with external account management systems
+
+**Disadvantages**:
+- Customer responsible for all account configuration
+- Must ensure accounts meet requirements
+- No automated provisioning
+- Complex validation required
+
+**Use Cases**:
+- Organizations with existing account inventory
+- Integration with external systems
+- Special account requirements
+- Regulatory or compliance constraints
+
+### Strategy Selection
+
+The account creation strategy is configured via the `account_creation_strategy` parameter in the configuration file:
+
+```yaml
+account_creation:
+  strategy: control_tower  # Options: control_tower, organizations_api, manual_pool, byoa
+  
+  # Strategy-specific configuration
+  control_tower:
+    product_id: prod-xxxxxxxxxxxx
+    artifact_id: pa-xxxxxxxxxxxx  # Optional, uses latest if not specified
+    sso_user_email: datazone-projects@example.com
+    sso_user_first_name: DataZone
+    sso_user_last_name: Project
+  
+  organizations_api:
+    iam_user_access_to_billing: ALLOW  # or DENY
+    role_name: OrganizationAccountAccessRole
+  
+  manual_pool:
+    account_registration_method: api  # or console
+  
+  byoa:
+    validation_required: true
+    minimum_requirements:
+      - cloudtrail_enabled
+      - config_enabled
+      - iam_role_exists
+```
+
+### Implementation Phases
+
+**Phase 1** (Current): Implement Strategy 1 (Control Tower) and Strategy 2 (Organizations API)
+- CF1 template supports both strategies
+- Lambda functions implement both account creation methods
+- Configuration parameter to select strategy
+- Customers can choose which to use
+
+**Phase 2** (Future): Implement Strategy 3 (Manual Pool) and Strategy 4 (BYOA)
+- Manual account registration API
+- Account validation framework
+- Integration with external systems
 
 ## Open Questions
 

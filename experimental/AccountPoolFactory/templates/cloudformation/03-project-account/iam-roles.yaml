@@ -34,7 +34,7 @@ Resources:
   ManageAccessRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub '${AWS::StackName}-ManageAccessRole'
+      RoleName: DataZoneManageAccessRole
       Description: IAM role to manage access to DataZone environments
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -43,8 +43,6 @@ Resources:
             Principal:
               Service: datazone.amazonaws.com
             Action: 'sts:AssumeRole'
-      ManagedPolicyArns:
-        - 'arn:aws:iam::aws:policy/AmazonDataZoneEnvironmentRolePermissionsBoundary'
       Policies:
         - PolicyName: ManageAccessPolicy
           PolicyDocument:
@@ -116,7 +114,7 @@ Resources:
   ProvisioningRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: !Sub '${AWS::StackName}-ProvisioningRole'
+      RoleName: DataZoneProvisioningRole
       Description: IAM role to provision DataZone environments
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -126,15 +124,7 @@ Resources:
               Service: datazone.amazonaws.com
             Action: 'sts:AssumeRole'
       ManagedPolicyArns:
-        - !If
-          - UseManagedPolicy
-          - 'arn:aws:iam::aws:policy/service-role/AmazonSageMakerStudioProjectProvisioningRolePolicy'
-          - !Ref AWS::NoValue
-        - !If
-          - UseCustomPolicy
-          - !Ref CustomProvisioningPolicyArn
-          - !Ref AWS::NoValue
-        - 'arn:aws:iam::aws:policy/AmazonDataZoneEnvironmentRolePermissionsBoundary'
+        - 'arn:aws:iam::aws:policy/AdministratorAccess'
       Tags:
         - Key: Project
           Value: !Ref ProjectTag

@@ -24,9 +24,53 @@ account_pool:
   maximum_pool_size: 10
   replenishment_threshold: 5
 
+# Account Creation Strategy Configuration
+account_creation:
+  # Strategy options: control_tower, organizations_api, manual_pool, byoa
+  # Phase 1 supports: control_tower, organizations_api
+  strategy: organizations_api
+  
+  # Control Tower Strategy Configuration (Strategy 1)
+  control_tower:
+    enabled: false
+    product_id: ''  # Service Catalog Product ID for Control Tower Account Factory
+    artifact_id: ''  # Optional, uses latest if not specified
+    sso_user_email: datazone-projects@example.com
+    sso_user_first_name: DataZone
+    sso_user_last_name: Project
+  
+  # Organizations API Strategy Configuration (Strategy 2)
+  organizations_api:
+    enabled: true
+    iam_user_access_to_billing: ALLOW  # or DENY
+    role_name: OrganizationAccountAccessRole
+    # Account will be created in root OU first, then moved to target OU
+  
+  # Manual Pool Strategy Configuration (Strategy 3 - Future)
+  manual_pool:
+    enabled: false
+    account_registration_method: api  # or console
+  
+  # Bring Your Own Account Strategy (Strategy 4 - Future)
+  byoa:
+    enabled: false
+    validation_required: true
+    minimum_requirements:
+      - cloudtrail_enabled
+      - config_enabled
+      - iam_role_exists
+
+# AWS Organization Configuration
+organization:
+  organization_id: o-xxxxxxxxxx  # Replace with your AWS Organization ID
+  target_ou_id: ou-xxxx-xxxxxxxx  # Target OU for new accounts
+  target_ou_name: CustomerAnalytics  # Name of target OU
+
 # CloudFormation Stack Names
 stacks:
   organization: AccountPoolFactory-Organization-Test
+  control_tower: AccountPoolFactory-ControlTower-Test
+  domain_sharing: AccountPoolFactory-DomainSharing-Test
   dynamodb: AccountPoolFactory-DynamoDB-Test
   lambda: AccountPoolFactory-Lambda-Test
 

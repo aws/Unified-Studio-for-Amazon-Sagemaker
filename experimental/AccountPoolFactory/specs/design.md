@@ -246,9 +246,38 @@ DataZone invokes the Lambda with two types of operations:
   "tags": {
     "Purpose": "DataZone",
     "ManagedBy": "AccountPoolFactory"
-  }
+  },
+  "strategy": "control_tower"
 }
 ```
+
+**Architecture**: Strategy Pattern
+
+The Account Creator Lambda implements a strategy pattern to support multiple account creation methods:
+
+```python
+class AccountCreatorStrategy(ABC):
+    """Abstract base class for account creation strategies"""
+    
+    @abstractmethod
+    def create_account(self, account_config: dict) -> dict:
+        """Create account and return provisioning details"""
+        pass
+    
+    @abstractmethod
+    def get_provisioning_status(self, provisioning_id: str) -> dict:
+        """Check status of account provisioning"""
+        pass
+    
+    @abstractmethod
+    def get_account_id(self, provisioning_id: str) -> str:
+        """Get account ID from provisioning request"""
+        pass
+```
+
+#### Strategy 1: Control Tower Account Factory
+
+**Class**: `ControlTowerStrategy`
 
 **Process**:
 1. Assume cross-account role in Org Admin account
@@ -274,11 +303,91 @@ DataZone invokes the Lambda with two types of operations:
 }
 ```
 
+**Event Handling**: Listens for Control Tower CreateManagedAccount/UpdateManagedAccount events
+
+**Provisioning Time**: 10-15 minutes
+
+#### Strategy 2: AWS Organizations API
+
+**Class**: `OrganizationsApiStrategy`
+
+**Process**:
+1. Assume cross-account role in Org Admin account (if different account)
+2. Call Organizations `CreateAccount` API directly
+3. Create DynamoDB record with state `PROVISIONING`
+4. Return account creation request ID
+
+**Organizations API Parameters**:
+```python
+{
+    'Email': account_email,
+    'AccountName': account_name,
+    'RoleName': 'OrganizationAccountAccessRole',  # Configurable
+    'IamUserAccessToBilling': 'ALLOW',  # Configurable
+    'Tags': [
+        {'Key': k, 'Value': v} for k, v in tags.items()
+    ]
+}
+```
+
+**Post-Creation Steps**:
+1. Wait for account creation to complete (poll `DescribeCreateAccountStatus`)
+2. Move account to target OU using `MoveAccount` API
+3. Emit custom event to trigger Setup Orchestrator
+
+**Event Handling**: Polls Organizations API for status, emits custom EventBridge event when complete
+
+**Provisioning Time**: 5-8 minutes
+
+**Advantages**:
+- No Control Tower dependency
+- Faster provisioning
+- Simpler architecture
+- Lower cost
+
+**Disadvantages**:
+- No automatic Control Tower guardrails
+- Must manually configure baseline security
+- No SSO integration
+- Must implement own governance
+
+#### Strategy Selection
+
+The Lambda function selects the strategy based on configuration:
+
+```python
+def get_strategy(strategy_name: str) -> AccountCreatorStrategy:
+    """Factory method to get account creation strategy"""
+    strategies = {
+        'control_tower': ControlTowerStrategy,
+        'organizations_api': OrganizationsApiStrategy,
+        # Future strategies
+        'manual_pool': ManualPoolStrategy,
+        'byoa': BringYourOwnAccountStrategy
+    }
+    
+    strategy_class = strategies.get(strategy_name)
+    if not strategy_class:
+        raise ValueError(f"Unknown strategy: {strategy_name}")
+    
+    return strategy_class()
+```
+
+**Configuration**:
+```python
+# Read from DynamoDB config table or environment variable
+strategy_name = os.environ.get('ACCOUNT_CREATION_STRATEGY', 'control_tower')
+strategy = get_strategy(strategy_name)
+
+# Create account using selected strategy
+result = strategy.create_account(account_config)
+```
+
 ### 3.4 Setup Orchestrator Lambda
 
 **Function Name**: `SetupOrchestrator-{DomainId}`
 
-**Trigger**: EventBridge rule matching Control Tower events
+**Trigger**: EventBridge rule matching Control Tower events or custom events from Organizations API
 
 **Event Pattern**:
 ```json
@@ -296,14 +405,352 @@ DataZone invokes the Lambda with two types of operations:
 }
 ```
 
-**Process**:
-1. Extract account ID from event
-2. Update DynamoDB record state to `CONFIGURING`
-3. Deploy CF3 StackSet to new account
-4. Wait for StackSet deployment completion
-5. Validate account setup
-6. Update DynamoDB record state to `AVAILABLE`
-7. Emit CloudWatch metrics
+**Orchestration Process**:
+
+The Setup Orchestrator Lambda coordinates the complete account setup workflow after account creation. This is a critical component that ensures accounts are fully configured before being marked as AVAILABLE in the pool.
+
+**Step 1: Initialize Setup**
+```python
+def handler(event, context):
+    # Extract account details from event
+    account_id = extract_account_id(event)
+    account_name = extract_account_name(event)
+    
+    # Update DynamoDB state
+    update_account_state(account_id, 'CONFIGURING', {
+        'SetupStartedAt': datetime.utcnow().isoformat(),
+        'SetupSteps': []
+    })
+    
+    # Start orchestration
+    orchestrate_setup(account_id, account_name)
+```
+
+**Step 2: Create RAM Share for Domain**
+```python
+def create_ram_share(account_id, domain_arn):
+    """
+    Create AWS RAM resource share to share DataZone domain with new account.
+    
+    CRITICAL: Must use permission ARN with portal access:
+    arn:aws:ram::aws:permission/AWSRAMPermissionsAmazonDatazoneDomainExtendedServiceWithPortalAccess
+    
+    Note: Organization-level sharing is NOT supported for DataZone domains.
+    Must create one RAM share per account.
+    """
+    ram_client = boto3.client('ram')
+    
+    share_name = f"DataZoneDomain-{account_id}"
+    
+    response = ram_client.create_resource_share(
+        name=share_name,
+        resourceArns=[domain_arn],
+        principals=[account_id],
+        permissionArns=[
+            'arn:aws:ram::aws:permission/AWSRAMPermissionsAmazonDatazoneDomainExtendedServiceWithPortalAccess'
+        ],
+        allowExternalPrincipals=False,  # Same org only
+        tags=[
+            {'key': 'Purpose', 'value': 'DataZoneDomainSharing'},
+            {'key': 'AccountId', 'value': account_id}
+        ]
+    )
+    
+    share_arn = response['resourceShare']['resourceShareArn']
+    
+    # Wait for share to become ACTIVE
+    wait_for_ram_share_active(share_arn)
+    
+    return share_arn
+```
+
+**Step 3: Verify Domain Visibility**
+```python
+def verify_domain_visibility(account_id, domain_id, max_retries=10):
+    """
+    Verify that DataZone domain is visible in the new account.
+    
+    Within same organization, RAM share is automatically accepted.
+    However, it may take a few seconds for domain to become visible.
+    """
+    # Assume role in new account
+    sts_client = boto3.client('sts')
+    assumed_role = sts_client.assume_role(
+        RoleArn=f'arn:aws:iam::{account_id}:role/OrganizationAccountAccessRole',
+        RoleSessionName='DomainVerification'
+    )
+    
+    # Create DataZone client with assumed credentials
+    datazone_client = boto3.client(
+        'datazone',
+        aws_access_key_id=assumed_role['Credentials']['AccessKeyId'],
+        aws_secret_access_key=assumed_role['Credentials']['SecretAccessKey'],
+        aws_session_token=assumed_role['Credentials']['SessionToken']
+    )
+    
+    # Retry with exponential backoff
+    for attempt in range(max_retries):
+        try:
+            response = datazone_client.list_domains()
+            
+            # Check if our domain is in the list
+            for domain in response.get('items', []):
+                if domain['id'] == domain_id:
+                    if domain['status'] == 'AVAILABLE':
+                        logger.info(f"Domain {domain_id} is visible and available in account {account_id}")
+                        return True
+                    else:
+                        logger.warning(f"Domain {domain_id} found but status is {domain['status']}")
+            
+            # Domain not found yet, wait and retry
+            wait_time = 2 ** attempt  # Exponential backoff
+            logger.info(f"Domain not visible yet, waiting {wait_time}s before retry {attempt+1}/{max_retries}")
+            time.sleep(wait_time)
+            
+        except Exception as e:
+            logger.error(f"Error checking domain visibility: {e}")
+            if attempt == max_retries - 1:
+                raise
+            time.sleep(2 ** attempt)
+    
+    raise Exception(f"Domain {domain_id} not visible in account {account_id} after {max_retries} retries")
+```
+
+**Step 4: Deploy CF3 StackSet**
+```python
+def deploy_stackset(account_id, account_name):
+    """
+    Deploy CF3 StackSet to new account for baseline configuration.
+    """
+    cfn_client = boto3.client('cloudformation')
+    
+    # Deploy StackSet instance
+    response = cfn_client.create_stack_instances(
+        StackSetName='AccountPoolFactory-ProjectAccountSetup',
+        Accounts=[account_id],
+        Regions=[os.environ['AWS_REGION']],
+        ParameterOverrides=[
+            {'ParameterKey': 'AccountName', 'ParameterValue': account_name},
+            {'ParameterKey': 'DomainId', 'ParameterValue': os.environ['DOMAIN_ID']},
+            {'ParameterKey': 'DomainAccountId', 'ParameterValue': os.environ['DOMAIN_ACCOUNT_ID']}
+        ],
+        OperationPreferences={
+            'MaxConcurrentCount': 1,
+            'FailureToleranceCount': 0
+        }
+    )
+    
+    operation_id = response['OperationId']
+    
+    # Wait for deployment to complete
+    wait_for_stackset_operation(operation_id)
+    
+    return operation_id
+```
+
+**Step 5: Enable Blueprints**
+```python
+def enable_blueprints(account_id, domain_id, blueprints_config):
+    """
+    Enable DataZone blueprints in the new account.
+    
+    MUST be performed AFTER domain sharing is complete and domain is visible.
+    """
+    # Assume role in new account
+    sts_client = boto3.client('sts')
+    assumed_role = sts_client.assume_role(
+        RoleArn=f'arn:aws:iam::{account_id}:role/OrganizationAccountAccessRole',
+        RoleSessionName='BlueprintEnablement'
+    )
+    
+    # Create DataZone client with assumed credentials
+    datazone_client = boto3.client(
+        'datazone',
+        aws_access_key_id=assumed_role['Credentials']['AccessKeyId'],
+        aws_secret_access_key=assumed_role['Credentials']['SecretAccessKey'],
+        aws_session_token=assumed_role['Credentials']['SessionToken']
+    )
+    
+    enabled_blueprints = []
+    
+    for blueprint_config in blueprints_config:
+        try:
+            response = datazone_client.create_environment_blueprint_configuration(
+                domainIdentifier=domain_id,
+                environmentBlueprintIdentifier=blueprint_config['blueprint_id'],
+                enabledRegions=[os.environ['AWS_REGION']],
+                manageAccessRoleArn=blueprint_config['manage_access_role_arn'],
+                provisioningRoleArn=blueprint_config['provisioning_role_arn'],
+                regionalParameters={
+                    os.environ['AWS_REGION']: {
+                        'S3Location': blueprint_config.get('s3_location'),
+                        'VpcId': blueprint_config.get('vpc_id'),
+                        'SubnetIds': blueprint_config.get('subnet_ids', [])
+                    }
+                }
+            )
+            
+            enabled_blueprints.append(blueprint_config['blueprint_id'])
+            logger.info(f"Enabled blueprint {blueprint_config['blueprint_id']} in account {account_id}")
+            
+        except Exception as e:
+            logger.error(f"Failed to enable blueprint {blueprint_config['blueprint_id']}: {e}")
+            # Continue with other blueprints
+    
+    return enabled_blueprints
+```
+
+**Step 6: Create Policy Grants**
+```python
+def create_policy_grants(domain_id, account_id, enabled_blueprints):
+    """
+    Create policy grants for blueprints and project profiles.
+    Performed in Domain account.
+    """
+    datazone_client = boto3.client('datazone')
+    
+    grants_created = []
+    
+    # Grant CREATE_ENVIRONMENT_FROM_BLUEPRINT for each enabled blueprint
+    for blueprint_id in enabled_blueprints:
+        try:
+            response = datazone_client.create_policy_grant(
+                domainIdentifier=domain_id,
+                principal={
+                    'account': account_id
+                },
+                policyType='CREATE_ENVIRONMENT_FROM_BLUEPRINT',
+                detail={
+                    'createEnvironmentFromBlueprint': {
+                        'blueprintIdentifier': blueprint_id
+                    }
+                }
+            )
+            
+            grants_created.append(response['policyGrantId'])
+            
+        except Exception as e:
+            logger.error(f"Failed to create policy grant for blueprint {blueprint_id}: {e}")
+    
+    return grants_created
+```
+
+**Step 7: Validate and Mark Available**
+```python
+def complete_setup(account_id):
+    """
+    Validate all setup steps and mark account as AVAILABLE.
+    """
+    # Validate all resources
+    validation_results = {
+        'ram_share': validate_ram_share(account_id),
+        'domain_visibility': validate_domain_visibility(account_id),
+        'stackset': validate_stackset_deployment(account_id),
+        'blueprints': validate_blueprints_enabled(account_id),
+        'policy_grants': validate_policy_grants(account_id)
+    }
+    
+    # Check if all validations passed
+    if all(validation_results.values()):
+        # Update DynamoDB state to AVAILABLE
+        update_account_state(account_id, 'AVAILABLE', {
+            'SetupCompletedAt': datetime.utcnow().isoformat(),
+            'ValidationResults': validation_results
+        })
+        
+        # Emit CloudWatch metrics
+        emit_metric('AccountSetupSuccess', 1, account_id)
+        
+        # Send SNS notification
+        send_notification(f"Account {account_id} is now AVAILABLE in the pool")
+        
+        logger.info(f"Account {account_id} setup completed successfully")
+        
+    else:
+        # Mark as FAILED
+        update_account_state(account_id, 'FAILED', {
+            'SetupFailedAt': datetime.utcnow().isoformat(),
+            'ValidationResults': validation_results,
+            'FailureReason': 'Validation failed'
+        })
+        
+        # Send alert
+        send_alert(f"Account {account_id} setup failed validation: {validation_results}")
+        
+        raise Exception(f"Account setup validation failed: {validation_results}")
+```
+
+**Complete Orchestration Flow**:
+```python
+def orchestrate_setup(account_id, account_name):
+    """
+    Orchestrate complete account setup workflow.
+    """
+    try:
+        # Step 1: Create RAM share
+        logger.info(f"Step 1: Creating RAM share for account {account_id}")
+        ram_share_arn = create_ram_share(account_id, os.environ['DOMAIN_ARN'])
+        update_setup_progress(account_id, 'ram_share_created', ram_share_arn)
+        
+        # Step 2: Verify domain visibility
+        logger.info(f"Step 2: Verifying domain visibility in account {account_id}")
+        verify_domain_visibility(account_id, os.environ['DOMAIN_ID'])
+        update_setup_progress(account_id, 'domain_visible', True)
+        
+        # Step 3: Deploy CF3 StackSet
+        logger.info(f"Step 3: Deploying CF3 StackSet to account {account_id}")
+        operation_id = deploy_stackset(account_id, account_name)
+        update_setup_progress(account_id, 'stackset_deployed', operation_id)
+        
+        # Step 4: Enable blueprints
+        logger.info(f"Step 4: Enabling blueprints in account {account_id}")
+        blueprints_config = get_blueprints_config()
+        enabled_blueprints = enable_blueprints(account_id, os.environ['DOMAIN_ID'], blueprints_config)
+        update_setup_progress(account_id, 'blueprints_enabled', enabled_blueprints)
+        
+        # Step 5: Create policy grants
+        logger.info(f"Step 5: Creating policy grants for account {account_id}")
+        grants_created = create_policy_grants(os.environ['DOMAIN_ID'], account_id, enabled_blueprints)
+        update_setup_progress(account_id, 'policy_grants_created', grants_created)
+        
+        # Step 6: Validate and mark available
+        logger.info(f"Step 6: Validating setup for account {account_id}")
+        complete_setup(account_id)
+        
+    except Exception as e:
+        logger.error(f"Account setup failed for {account_id}: {e}")
+        
+        # Update DynamoDB with error
+        update_account_state(account_id, 'FAILED', {
+            'SetupFailedAt': datetime.utcnow().isoformat(),
+            'LastError': str(e),
+            'RetryCount': get_retry_count(account_id) + 1
+        })
+        
+        # Check if should retry
+        if should_retry(account_id):
+            logger.info(f"Scheduling retry for account {account_id}")
+            schedule_retry(account_id)
+        else:
+            logger.error(f"Max retries exceeded for account {account_id}")
+            send_alert(f"Account {account_id} setup failed after max retries: {e}")
+        
+        raise
+```
+
+**Error Handling**:
+- Each step includes retry logic with exponential backoff
+- Failed steps are logged with detailed error information
+- Account marked as FAILED if max retries exceeded
+- SNS alert sent for manual intervention
+- Partial setup can be resumed from last successful step
+- Setup progress tracked in DynamoDB for debugging
+
+**Monitoring**:
+- CloudWatch metrics for each setup step
+- Detailed logging with correlation IDs
+- Setup duration tracking
+- Success/failure rates per step
 
 ## 4. CloudFormation Templates
 
@@ -311,28 +758,134 @@ DataZone invokes the Lambda with two types of operations:
 
 **Template Name**: `org-admin-setup.yaml`
 
+**Purpose**: Configure the Organization Admin account to support both Control Tower and Organizations API account creation strategies.
+
 **Resources**:
+
 1. **Cross-Account IAM Role** (`AccountFactoryAccessRole`)
    - Trust policy: Domain account
-   - Permissions: Service Catalog ProvisionProduct, Organizations read
+   - Permissions for Strategy 1 (Control Tower):
+     - Service Catalog ProvisionProduct, DescribeProvisionedProduct, DescribeRecord
+     - Organizations read operations
+     - SSO read operations
+   - Permissions for Strategy 2 (Organizations API):
+     - Organizations CreateAccount, DescribeCreateAccountStatus
+     - Organizations MoveAccount (to move to target OU)
+     - Organizations TagResource
+     - Organizations read operations
 
 2. **EventBridge Rule** (`AccountCreationEventRule`)
-   - Pattern: Control Tower CreateManagedAccount events
+   - Pattern for Strategy 1: Control Tower CreateManagedAccount/UpdateManagedAccount events
+   - Pattern for Strategy 2: Custom events from Organizations API poller
    - Target: EventBridge event bus in Domain account
 
-3. **EventBridge Event Bus Permission**
+3. **EventBridge Event Bus** (`AccountLifecycleEventBus`)
+   - Receives account creation events from both strategies
+   - Forwards events to Domain account
+
+4. **EventBridge Event Bus Permission**
    - Allow Domain account to receive events
 
-4. **CloudTrail** (if not exists)
-   - Log Control Tower API calls
+5. **CloudTrail** (if not exists)
+   - Log Control Tower and Organizations API calls
+
+6. **StackSet Administration Role** (`StackSetAdministrationRole`)
+   - Allows CloudFormation service to deploy StackSets
+   - Assumes AWSControlTowerExecution role in target accounts
+
+7. **StackSet Deployment Role** (`StackSetDeploymentRole`)
+   - Allows Domain account to deploy approved StackSet instances
+   - Restricted to StackSets with specific name prefix
+   - Explicit DENY on creating/modifying StackSets
 
 **Parameters**:
 - `DomainAccountId`: AWS Account ID of Domain account
 - `EventBusArn`: ARN of event bus in Domain account
+- `AccountCreationStrategy`: Strategy to use (control_tower, organizations_api, both)
+- `ControlTowerProductId`: Service Catalog Product ID (required for Strategy 1)
+- `ControlTowerArtifactId`: Provisioning Artifact ID (optional for Strategy 1)
 
 **Outputs**:
 - `CrossAccountRoleArn`: ARN of the cross-account role
 - `EventRuleArn`: ARN of the EventBridge rule
+- `EventBusArn`: ARN of the event bus
+- `StackSetAdminRoleArn`: ARN of StackSet administration role
+- `StackSetDeploymentRoleArn`: ARN of StackSet deployment role
+
+**Strategy-Specific Configuration**:
+
+The template uses CloudFormation conditions to enable/disable resources based on the selected strategy:
+
+```yaml
+Conditions:
+  UseControlTower: !Or
+    - !Equals [!Ref AccountCreationStrategy, 'control_tower']
+    - !Equals [!Ref AccountCreationStrategy, 'both']
+  
+  UseOrganizationsApi: !Or
+    - !Equals [!Ref AccountCreationStrategy, 'organizations_api']
+    - !Equals [!Ref AccountCreationStrategy, 'both']
+```
+
+**IAM Policy for Strategy 1 (Control Tower)**:
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ServiceCatalogAccountFactory",
+      "Effect": "Allow",
+      "Action": [
+        "servicecatalog:ProvisionProduct",
+        "servicecatalog:DescribeProvisionedProduct",
+        "servicecatalog:DescribeRecord",
+        "servicecatalog:TerminateProvisionedProduct"
+      ],
+      "Resource": "*",
+      "Condition": {
+        "StringEquals": {
+          "servicecatalog:productType": "CONTROL_TOWER_ACCOUNT"
+        }
+      }
+    }
+  ]
+}
+```
+
+**IAM Policy for Strategy 2 (Organizations API)**:
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "OrganizationsAccountCreation",
+      "Effect": "Allow",
+      "Action": [
+        "organizations:CreateAccount",
+        "organizations:DescribeCreateAccountStatus",
+        "organizations:MoveAccount",
+        "organizations:TagResource",
+        "organizations:ListTagsForResource"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "OrganizationsRead",
+      "Effect": "Allow",
+      "Action": [
+        "organizations:DescribeOrganization",
+        "organizations:DescribeOrganizationalUnit",
+        "organizations:DescribeAccount",
+        "organizations:ListAccounts",
+        "organizations:ListAccountsForParent",
+        "organizations:ListOrganizationalUnitsForParent",
+        "organizations:ListRoots"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
 
 ### 4.2 CF2: Domain Account Setup
 
@@ -463,33 +1016,56 @@ DataZone invokes the Lambda with two types of operations:
    ↓
 3. Account Creator:
    - Assumes role in Org Admin account
-   - Calls Service Catalog ProvisionProduct
+   - Calls Service Catalog ProvisionProduct (Control Tower) OR Organizations CreateAccount API
    - Creates DynamoDB record (state: PROVISIONING)
    ↓
-4. Control Tower creates account (10-15 minutes)
+4. Control Tower/Organizations creates account (5-15 minutes)
    ↓
-5. Control Tower emits CreateManagedAccount event
+5. Account creation event emitted
    ↓
 6. EventBridge forwards event to Domain account
    ↓
 7. Setup Orchestrator Lambda triggered:
    - Updates DynamoDB (state: CONFIGURING)
-   - Deploys CF3 StackSet to new account
+   
+   Step 1: Create RAM Share (Domain Account)
+   - Create AWS RAM resource share
+   - Associate domain ARN as resource
+   - Associate new account ID as principal
+   - Use permission: AWSRAMPermissionsAmazonDatazoneDomainExtendedServiceWithPortalAccess
+   - Wait for share to become ACTIVE
    ↓
-8. CF3 StackSet deployment (2-5 minutes):
-   - Accepts RAM resource share
-   - Enables blueprints
-   - Creates IAM roles
-   - Sets up CloudTrail
-   - Creates VPC (if configured)
+   Step 2: Verify Domain Visibility (New Account)
+   - Assume role in new account
+   - Call DataZone ListDomains API
+   - Verify domain is visible and status is AVAILABLE
+   - Retry with exponential backoff if not yet visible (within same org, auto-accepted)
    ↓
-9. Custom Resource signals completion
+   Step 3: Deploy CF3 StackSet (New Account)
+   - Deploy baseline IAM roles and security configuration
+   - Wait for StackSet deployment to complete (2-5 minutes)
+   - Verify all resources created successfully
    ↓
-10. Setup Orchestrator:
-    - Validates account setup
-    - Updates DynamoDB (state: AVAILABLE)
-    - Emits CloudWatch metrics
+   Step 4: Enable Blueprints (New Account)
+   - For each configured blueprint:
+     - Call DataZone EnableBlueprint API
+     - Provide required parameters (roles, VPC, subnets)
+     - Verify blueprint enabled successfully
+   ↓
+   Step 5: Create Policy Grants (Domain Account)
+   - Grant CREATE_ENVIRONMENT_FROM_BLUEPRINT permissions
+   - Grant CREATE_PROJECT_FROM_PROJECT_PROFILE permissions
+   ↓
+   Step 6: Validate and Mark Available
+   - Validate all setup steps completed
+   - Update DynamoDB (state: AVAILABLE)
+   - Emit CloudWatch metrics
+   - Send SNS notification
 ```
+
+**Total Time**: 7-20 minutes (depending on account creation strategy)
+- Control Tower: 10-15 minutes account creation + 2-5 minutes setup
+- Organizations API: 5-8 minutes account creation + 2-5 minutes setup
 
 ### 5.2 Account Assignment Workflow
 

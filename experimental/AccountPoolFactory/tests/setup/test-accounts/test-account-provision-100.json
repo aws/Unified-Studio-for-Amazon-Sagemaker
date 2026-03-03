@@ -1,0 +1,12 @@
+{
+  "emailNumber": 100,
+  "accountEmail": "amirbo+100@amazon.com",
+  "accountName": "TestAccount-OrgsApi-100",
+  "strategy": "organizations_api",
+  "requestId": "car-554f55c5a22b47acb6e7693876443e43",
+  "status": "SUCCEEDED",
+  "targetOu": "ou-n5om-otvkrtx2",
+  "createdAt": "2026-03-01T22:48:45Z",
+  "updatedAt": "2026-03-01T22:48:57Z",
+  "accountId": "004878717744"
+}

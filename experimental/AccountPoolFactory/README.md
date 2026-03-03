@@ -4,7 +4,21 @@ An automated account provisioning and management system for SageMaker Unified St
 
 ## Quick Start
 
-### 1. Configure Environment
+### 1. Choose Your Role
+
+This system has three personas:
+- **Organization Administrator**: Manages AWS Organization and account creation
+- **Domain Administrator**: Manages DataZone domain and account pool
+- **Project Creator**: Creates DataZone projects and environments
+
+### 2. Read the User Guide
+
+Start with **[docs/UserGuide.md](docs/UserGuide.md)** - it has everything you need:
+- Architecture overview
+- Setup instructions for your persona
+- Common tasks and troubleshooting
+
+### 3. Configure Environment
 
 ```bash
 cd experimental/AccountPoolFactory
@@ -16,32 +30,30 @@ cp config.yaml.template config.yaml
 # Required: aws.region, aws.account_id, datazone.domain_id
 ```
 
-### 2. Configure AWS Credentials
+### 4. Follow Your Persona's Setup
 
-Choose one method:
-```bash
-# Option 1: AWS CLI
-aws configure
-
-# Option 2: AWS SSO
-aws sso login --profile your-profile
-
-# Option 3: Isengard (Amazon internal)
-eval $(isengardcli creds YOUR_PROFILE --role Admin)
-```
-
-### 3. Follow Testing Guide
-
-See [docs/TestingGuide.md](docs/TestingGuide.md) for step-by-step testing instructions.
+See [docs/UserGuide.md](docs/UserGuide.md) → "Setup by Persona" section
 
 ## Documentation
 
-- **[docs/TestingGuide.md](docs/TestingGuide.md)** - Complete testing manual with step-by-step instructions
-- **[docs/GettingStarted.md](docs/GettingStarted.md)** - Quick start guide for new users
-- **[docs/ProjectStructure.md](docs/ProjectStructure.md)** - Project organization and directory structure
+### Start Here 👇
+- **[docs/UserGuide.md](docs/UserGuide.md)** - Main user guide (start here!)
+- **[docs/README.md](docs/README.md)** - Documentation index and navigation
+
+### For Developers
+- **[docs/DevelopmentProgress.md](docs/DevelopmentProgress.md)** - What works, what doesn't, lessons learned
+- **[IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)** - Current implementation status
+- **[ACCOUNT_POOL_SUCCESS.md](ACCOUNT_POOL_SUCCESS.md)** - Account pool integration success report
+- **[ACCOUNT_POOL_FINDINGS.md](ACCOUNT_POOL_FINDINGS.md)** - ON_CREATE investigation findings
+
+### For Detailed Testing
+- **[docs/TestingGuide.md](docs/TestingGuide.md)** - Comprehensive testing procedures
+
+### Architecture & Design
 - **[specs/requirements.md](specs/requirements.md)** - Functional requirements and architecture
 - **[specs/design.md](specs/design.md)** - Technical design document
 - **[specs/tasks.md](specs/tasks.md)** - Implementation task breakdown
+- **[docs/ProjectStructure.md](docs/ProjectStructure.md)** - Project organization
 
 ## Overview
 

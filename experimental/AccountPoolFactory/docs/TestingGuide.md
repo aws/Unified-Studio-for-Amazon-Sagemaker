@@ -303,31 +303,205 @@ cat cf1-outputs.json
 
 ---
 
-### Step 1.5: Test Account Creation via Control Tower
+### Step 1.4a: Choose Account Creation Strategy
 
-**Objective**: Verify the Control Tower Account Factory integration works by creating a test account.
+**Objective**: Understand and select the account creation strategy for your environment.
+
+**Background**:
+The Account Pool Factory supports multiple account creation strategies. You must choose which strategy to use based on your requirements and existing infrastructure.
+
+**Available Strategies**:
+
+| Strategy | Prerequisites | Speed | Cost | Governance | Best For |
+|----------|--------------|-------|------|------------|----------|
+| **Organizations API** | AWS Organizations only | < 1 min | Lower | Manual | Simple setups, fast testing |
+| **Control Tower** | Control Tower + Organizations | 10-15 min | Higher | Automatic guardrails | Enterprise with compliance needs |
+
+**Strategy 1: Organizations API** (Recommended for Testing)
+- ✅ No Control Tower required
+- ✅ Fastest account creation (< 1 minute)
+- ✅ Lower cost (no Control Tower fees)
+- ✅ Simpler architecture
+- ⚠️ Manual governance and guardrails
+- ⚠️ No automatic SSO setup
+
+**Strategy 2: Control Tower Account Factory**
+- ✅ Automatic governance and guardrails
+- ✅ Automatic SSO user provisioning
+- ✅ Centralized compliance management
+- ⚠️ Requires Control Tower setup
+- ⚠️ Slower provisioning (10-15 minutes)
+- ⚠️ Higher cost (Control Tower fees)
+
+**How to Choose**:
+1. **For Testing/Development**: Use Organizations API (faster, simpler)
+2. **For Production with Compliance**: Use Control Tower (governance, guardrails)
+3. **For Hybrid**: CF1 supports both strategies simultaneously
+
+**Checking Your Environment**:
+```bash
+# Check if Control Tower is enabled
+./tests/setup/scripts/check-control-tower.sh
+```
+
+**Updating CF1 Strategy**:
+If you need to change strategies after CF1 deployment:
+```bash
+# Update CF1 stack with new strategy
+./tests/setup/scripts/update-cf1-multi-strategy.sh
+
+# Choose one of:
+# - organizations_api (Organizations API only)
+# - control_tower (Control Tower only)
+# - both (Support both strategies)
+```
+
+**Status**: ✅ COMPLETED (CF1 deployed with organizations_api strategy)
+
+**Notes**:
+- CF1 template supports all strategies via CloudFormation parameters
+- You can switch strategies by updating the CF1 stack
+- Both strategies use the same EventBridge integration
+- Both strategies work with the same approved StackSets
+
+---
+
+### Step 1.5: Test Account Creation
+
+**Objective**: Verify account creation works by creating test accounts.
 
 **Background**:
 Now that CF1 is deployed, we can test the account creation workflow. This validates:
-- Control Tower Account Factory is accessible
+- Account creation strategy is working
 - IAM roles have correct permissions
 - EventBridge rules capture account lifecycle events
 - Account creation completes successfully
 
 **Test Scripts**:
-We've created four scripts for async account creation and management:
+We've created separate scripts for each strategy:
 
-1. **test-create-account.sh** - Creates new AWS account via Control Tower
-2. **test-check-status.sh** - Checks provisioning status (can be run repeatedly)
-3. **test-verify-account.sh** - Verifies account was created correctly
-4. **test-delete-account.sh** - Deletes test account when done
+**Organizations API Strategy**:
+1. **test-create-account-orgs-api.sh** - Creates account via Organizations API
+2. **test-check-status-orgs-api.sh** - Checks creation status
+3. **test-verify-account.sh** - Verifies account setup
+4. **test-delete-account.sh** - Deletes test account
+
+**Control Tower Strategy**:
+1. **test-create-account.sh** - Creates account via Control Tower
+2. **test-check-status.sh** - Checks provisioning status
+3. **test-verify-account.sh** - Verifies account setup
+4. **test-delete-account.sh** - Deletes test account
 
 **Email Format**: Test accounts use `amirbo+NNN@amazon.com` format (starting at 100, auto-increments)
 
 **Implementation**:
 - Test scripts: `tests/setup/scripts/test-*.sh`
-- Provision files: `test-account-provision-NNN.json` (tracks status)
+- Provision files: `tests/setup/test-accounts/test-account-provision-NNN.json` (tracks status)
 - Async operation: Can disconnect and reconnect without losing progress
+
+---
+
+#### Option A: Organizations API Strategy (Recommended for Testing)
+
+**Commands**:
+```bash
+# Navigate to project directory
+cd experimental/AccountPoolFactory
+
+# Step 1: Create a test account
+./tests/setup/scripts/test-create-account-orgs-api.sh
+
+# The script will:
+# - Find next available email number (100, 101, 102, etc.)
+# - Create account via Organizations API
+# - Move account to target OU
+# - Emit EventBridge event
+# - Save details to test-account-provision-NNN.json
+# - Complete in < 1 minute!
+
+# Step 2: Check status (if needed)
+./tests/setup/scripts/test-check-status-orgs-api.sh 100
+
+# Or check latest:
+./tests/setup/scripts/test-check-status-orgs-api.sh
+
+# Step 3: Verify account setup
+./tests/setup/scripts/test-verify-account.sh 100
+
+# Step 4: Delete account when done testing
+./tests/setup/scripts/test-delete-account.sh 100
+```
+
+**Account Creation Details**:
+- **Name**: `TestAccount-OrgsApi-NNN` (e.g., TestAccount-OrgsApi-100)
+- **Email**: `amirbo+NNN@amazon.com` (e.g., amirbo+100@amazon.com)
+- **Target OU**: Value from config.yaml (e.g., CustomerAnalytics)
+- **Creation Time**: < 1 minute ⚡
+- **Status Tracking**: Saved in `tests/setup/test-accounts/test-account-provision-NNN.json`
+
+**Expected Output - Create Account**:
+```
+=== Organizations API Account Creation Test ===
+
+Account Details:
+  Email: amirbo+100@amazon.com
+  Name: TestAccount-OrgsApi-100
+  Provision File: /path/to/test-account-provision-100.json
+  Target OU: ou-n5om-otvkrtx2
+
+Getting cross-account role from CF1 stack...
+  Role ARN: arn:aws:iam::495869084367:role/AccountPoolFactory-ControlTower-Test-AcctCreation
+  External ID: AccountPoolFactory-ControlTower-Test-495869084367
+
+Assuming cross-account role...
+✓ Successfully assumed role
+
+Creating account via Organizations API...
+  This will take 5-8 minutes...
+
+✓ Account creation initiated
+  Request ID: car-xxxxxxxxxxxxx
+  Initial State: IN_PROGRESS
+
+✓ Provisioning details saved
+
+Monitoring account creation...
+  Attempt 1/60 - State: SUCCEEDED
+
+✓ Account created successfully!
+  Account ID: 004878717744
+
+Moving account to target OU...
+✓ Account moved to target OU
+
+Emitting EventBridge event...
+✓ EventBridge event emitted
+
+=== Account Creation Complete ===
+
+Next steps:
+  1. Verify account: ./test-verify-account.sh 100
+  2. Deploy StackSets to account (manual for now)
+  3. Delete account when done: ./test-delete-account.sh 100
+```
+
+**Verification Checklist - Organizations API**:
+- [ ] test-create-account-orgs-api.sh runs without errors
+- [ ] Account creation completes in < 1 minute
+- [ ] Provision file created with correct email number
+- [ ] Account reaches SUCCEEDED status
+- [ ] Account moved to correct OU
+- [ ] EventBridge event emitted
+- [ ] test-verify-account.sh shows account is ACTIVE
+- [ ] Account appears in AWS Organizations
+
+---
+
+#### Option B: Control Tower Strategy
+
+**Prerequisites**:
+- Control Tower must be enabled (check with `./tests/setup/scripts/check-control-tower.sh`)
+- CF1 stack must be deployed with `control_tower` or `both` strategy
 
 **Commands**:
 ```bash
@@ -381,7 +555,7 @@ cd experimental/AccountPoolFactory
 - **Email**: `amirbo+NNN@amazon.com` (e.g., amirbo+100@amazon.com)
 - **SSO User**: `amirbo+NNN-admin@amazon.com`
 - **Target OU**: Value from config.yaml (e.g., RetailBanking/CustomerAnalytics)
-- **Provisioning Time**: 5-10 minutes
+- **Provisioning Time**: 10-15 minutes
 - **Status Tracking**: Saved in `test-account-provision-NNN.json`
 
 **Provision File Structure**:
@@ -851,17 +1025,60 @@ Next Steps:
    - Check external ID is correct
    - Verify StackSet name has correct prefix
 
-**Status**: ⏳ PENDING
+**Status**: ✅ COMPLETED (VPC only, IAM Roles and Blueprints pending domain setup)
+
+**Test Results - VPC Deployment**:
+- **Test Account**: 004878717744 (TestAccount-OrgsApi-100)
+- **StackSet**: AccountPoolFactory-ControlTower-Test-VPCSetup
+- **Operation ID**: e39101ef-9fa4-40cc-8aee-49660ff8c038
+- **Deployment Time**: ~2.5 minutes
+- **Status**: SUCCEEDED ✅
+
+**Resources Created in Account 100**:
+- VPC ID: vpc-0d764624c03680061
+- VPC CIDR: 10.38.0.0/16
+- VPC Name: SageMakerUnifiedStudioVPC
+- Private Subnets: 3 subnets across 3 AZs
+  - subnet-0f5bf55074875ddb0 (us-east-2a)
+  - subnet-02b257c30ca46056e (us-east-2b)
+  - subnet-0be15065bbb85a4fa (us-east-2c)
+
+**Verification Commands**:
+```bash
+# Check StackSet operation status
+aws cloudformation describe-stack-set-operation \
+  --stack-set-name AccountPoolFactory-ControlTower-Test-VPCSetup \
+  --operation-id e39101ef-9fa4-40cc-8aee-49660ff8c038 \
+  --region us-east-2
+
+# Check stack instance status
+aws cloudformation list-stack-instances \
+  --stack-set-name AccountPoolFactory-ControlTower-Test-VPCSetup \
+  --region us-east-2
+
+# Verify VPC in target account (requires assuming role)
+aws sts assume-role \
+  --role-arn "arn:aws:iam::004878717744:role/OrganizationAccountAccessRole" \
+  --role-session-name "VPCVerification" \
+  --region us-east-2
+
+# Then check VPC
+aws ec2 describe-vpcs --region us-east-2
+```
 
 **Notes**:
+- ✅ VPC StackSet deployment works perfectly with Organizations API accounts
+- ✅ AWSControlTowerExecution role setup script works correctly
+- ⏳ IAM Roles StackSet - Pending (will deploy after domain setup)
+- ⏳ Blueprint Enablement StackSet - Pending (requires domain setup and IAM roles)
 - StackSets are created once in Org Admin account
 - Instances are deployed per account
 - Templates can be updated by Org Admin
 - Requesting account can only deploy instances, not modify StackSets
 - Each deployment takes 2-5 minutes per stack
-- Total deployment time: ~10-15 minutes for all 3 stacks
 - Resources in test account cost money - delete when done testing
 - See `APPROVED_TEMPLATES_SUMMARY.md` for detailed template documentation
+- See `TEST_RESULTS.md` for complete test results
 
 ---
 
@@ -1475,10 +1692,12 @@ aws iam delete-role \
 | 1.1 - Verify DataZone Domain | ✅ COMPLETED | 2026-02-27 | Domain verified and accessible |
 | 1.2 - Verify IAM Permissions | ✅ COMPLETED | 2026-02-27 | Using Isengard CLI with Admin role |
 | 1.3 - Setup Organization Structure | ✅ COMPLETED | 2026-02-27 | OUs created successfully |
-| 1.4 - Deploy CF1 (Control Tower) | ✅ COMPLETED | 2026-03-01 | Account Factory setup deployed |
-| 1.5 - Test Account Creation | ⏳ PENDING | - | Scripts ready, awaiting user approval |
+| 1.4 - Deploy CF1 (Control Tower) | ✅ COMPLETED | 2026-03-01 | Account Factory setup deployed with organizations_api strategy |
+| 1.4a - Choose Account Creation Strategy | ✅ COMPLETED | 2026-03-01 | Selected Organizations API strategy |
+| 1.5 - Test Account Creation | ✅ COMPLETED | 2026-03-01 | 2 test accounts created successfully (100, 101) |
 | 1.6 - Verify Directory Structure | ✅ COMPLETED | 2026-02-27 | All directories exist |
-| 1.7 - Install Dependencies | ⏳ PENDING | - | - |
+| 1.7 - Deploy Approved StackSets | ✅ COMPLETED (VPC only) | 2026-03-01 | VPC deployed to account 100, IAM Roles and Blueprints pending |
+| 1.8 - Install Dependencies | ⏳ PENDING | - | - |
 | 2.1 - Create DynamoDB Tables | ⏳ PENDING | - | - |
 | 2.2 - Initialize Configuration | ⏳ PENDING | - | - |
 | 2.3 - Create Mock Accounts | ⏳ PENDING | - | - |
@@ -1499,26 +1718,44 @@ aws iam delete-role \
 
 ## Next Steps
 
-**Current Status**: Step 1.4 completed ✅, Step 1.5 ready to test
+**Current Status**: Step 1.7 completed (VPC only) ✅, ready for domain setup
 
-**Next Action**: Proceed to Step 1.5 - Test Account Creation via Control Tower
+**Next Action**: Continue with domain setup (CF2) before deploying IAM Roles and Blueprint Enablement StackSets
 
 **What We've Accomplished So Far**:
 1. ✅ Organization structure created with proper banking OUs
-2. ✅ CF1 (Control Tower Account Factory) deployed successfully
-3. ✅ Test scripts created for account creation workflow
-4. ✅ Async account creation with resumable monitoring
+2. ✅ CF1 (Control Tower Account Factory) deployed with multi-strategy support
+3. ✅ Organizations API strategy selected and tested
+4. ✅ 2 test accounts created successfully (100: 004878717744, 101: 400398152132)
+5. ✅ Account creation time: < 1 minute (much faster than expected!)
+6. ✅ Accounts moved to correct OU (CustomerAnalytics)
+7. ✅ EventBridge events emitted successfully
+8. ✅ VPC StackSet deployed to account 100 successfully
+9. ✅ VPC resources verified in target account (vpc-0d764624c03680061)
 
 **What's Next**:
-1. Run `./tests/setup/scripts/test-create-account.sh` to create first test account
-2. Verify account creation completes successfully
-3. Deploy approved StackSets (VPC, IAM Roles, Blueprints) to test account
-4. Continue with DynamoDB and Lambda implementation
+1. Implement CF2 (Domain account setup) with DynamoDB tables and Lambda functions
+2. Deploy IAM Roles StackSet to test account (after domain setup)
+3. Deploy Blueprint Enablement StackSet to test account (after IAM roles)
+4. Test complete workflow with DataZone integration
 
-**Command to Run**:
+**Test Accounts Created**:
+- Account 100: 004878717744 (amirbo+100@amazon.com) - VPC deployed ✅
+- Account 101: 400398152132 (amirbo+101@amazon.com) - Available for additional testing
+
+**Resources Deployed**:
+- Organization Structure: 4 OUs across 2 business units ✅
+- CF1 Stack: Account Factory with Organizations API strategy ✅
+- VPC StackSet: Deployed to account 100 ✅
+  - VPC: vpc-0d764624c03680061 (10.38.0.0/16)
+  - 3 private subnets across 3 AZs
+  - Ready for SageMaker Unified Studio
+
+**Command to Continue**:
 ```bash
 cd experimental/AccountPoolFactory
-./tests/setup/scripts/test-create-account.sh
+# Next: Implement CF2 (Domain account setup)
+# See specs/design.md for CF2 requirements
 ```
 
 **Important Notes**:
@@ -1576,3 +1813,226 @@ See `specs/requirements.md` for architecture diagrams.
 ### D. Task List
 
 See `specs/tasks.md` for complete implementation task list.
+
+
+---
+
+## Phase 2: Account Pool Setup
+
+### Step 2.1: Create Account Pool ✅
+
+**Objective**: Create a DataZone account pool with placeholder Lambda ARNs.
+
+**Script**: `tests/setup/scripts/create-account-pool.sh`
+
+**Commands**:
+```bash
+cd experimental/AccountPoolFactory
+
+# Ensure AWS credentials are configured for domain account
+eval $(isengardcli creds amirbo+3 --role Admin)  # Or your credential method
+
+# Create account pool
+./tests/setup/scripts/create-account-pool.sh
+```
+
+**What This Does**:
+1. Reads configuration from config.yaml
+2. Creates placeholder Lambda ARNs based on domain ID
+3. Creates DataZone account pool via AWS CLI
+4. Saves pool details to `account-pool-details.json`
+
+**Expected Output**:
+```
+=== Creating DataZone Account Pool ===
+Domain ID: dzd-xxxxxxxxxxxxx
+Domain Account: 123456789012
+Region: us-east-2
+
+Pool Name: AccountPoolFactory-CustomPool
+Resolution Strategy: MANUAL
+Lambda Function ARN (placeholder): arn:aws:lambda:us-east-2:123456789012:function:AccountProvider-dzd-xxxxxxxxxxxxx
+Lambda Role ARN (placeholder): arn:aws:iam::123456789012:role/AccountProviderLambdaRole-dzd-xxxxxxxxxxxxx
+
+✅ Account pool created successfully!
+
+Pool ID: c8whzud5xehgrt
+Pool Name: AccountPoolFactory-CustomPool
+Resolution Strategy: MANUAL
+```
+
+**Verification Checklist**:
+- [ ] Account pool created with ID
+- [ ] Pool details saved to `account-pool-details.json`
+- [ ] Pool visible in DataZone console (optional)
+
+**Note**: The Lambda ARNs are placeholders. The pool will not work until the Lambda function is created.
+
+---
+
+### Step 2.2: Create Project Profile with Account Pool ✅
+
+**Objective**: Create a project profile that uses the account pool for dynamic account assignment.
+
+**Background**:
+Project profiles with account pools use the `accountPools` property in environment configurations. When using account pools:
+- Cannot specify `awsAccount` (account comes from pool)
+- Cannot specify `awsRegion` (region comes from pool)
+- Account and region are selected dynamically when creating a project
+
+**Script**: `tests/setup/scripts/create-project-profile-with-pool.sh`
+
+**Commands**:
+```bash
+cd experimental/AccountPoolFactory
+
+# Ensure AWS credentials are configured for domain account
+eval $(isengardcli creds amirbo+3 --role Admin)  # Or your credential method
+
+# Create project profile
+./tests/setup/scripts/create-project-profile-with-pool.sh
+```
+
+**What This Does**:
+1. Reads account pool ID from `account-pool-details.json`
+2. Fetches blueprint IDs from the domain (Tooling and DataLake)
+3. Creates project profile via AWS CLI with account pool integration
+4. Adds policy grants for blueprints and project profile
+5. Saves profile details to `project-profile-details.json`
+
+**Expected Output**:
+```
+=== Creating Project Profile with Account Pool ===
+Domain ID: dzd-4igt64u5j25ko9
+Domain Unit ID: 6kg8zlq8mvid9l
+Domain Account ID: 994753223772
+Account Pool ID: c8whzud5xehgrt
+Region: us-east-2
+
+Fetching blueprint IDs from domain...
+Blueprint IDs retrieved:
+  Tooling: 3owsbi7jjppvc9
+  DataLake: 6bbrztdwfxomeh
+
+Creating project profile via AWS CLI...
+
+✅ Project profile created successfully!
+Profile ID: aqjtbhjae02pex
+Profile Name: All capabilities - Account Pool
+
+Profile details saved to: /path/to/project-profile-details.json
+
+=== Adding Policy Grants ===
+
+Adding policy grant for Tooling blueprint...
+✅ Policy grant added for Tooling
+Adding policy grant for DataLake blueprint...
+✅ Policy grant added for DataLake
+Adding policy grant for Project Profile...
+✅ Policy grant added for Project Profile
+
+=== Next Steps ===
+1. Create the Account Provider Lambda function
+2. Add test accounts to the pool (accounts 100 & 101)
+3. Create a DataZone project using this profile
+4. Verify account is assigned from the pool
+```
+
+**Verification**:
+```bash
+# View project profile details
+cat project-profile-details.json
+
+# Verify via AWS CLI
+aws datazone get-project-profile \
+  --domain-identifier $(yq eval '.datazone.domain_id' config.yaml) \
+  --identifier $(jq -r '.profileId' project-profile-details.json) \
+  --region $(yq eval '.aws.region' config.yaml) \
+  --output json | jq '{id, name, status, environmentConfigurations: [.environmentConfigurations[] | {name, environmentBlueprintId, accountPools}]}'
+```
+
+**Expected Verification Output**:
+```json
+{
+  "id": "aqjtbhjae02pex",
+  "name": "All capabilities - Account Pool",
+  "status": "ENABLED",
+  "environmentConfigurations": [
+    {
+      "name": "Tooling",
+      "environmentBlueprintId": "3owsbi7jjppvc9",
+      "accountPools": [
+        "c8whzud5xehgrt"
+      ]
+    },
+    {
+      "name": "Lakehouse Database",
+      "environmentBlueprintId": "6bbrztdwfxomeh",
+      "accountPools": [
+        "c8whzud5xehgrt"
+      ]
+    }
+  ]
+}
+```
+
+**Verification Checklist**:
+- [ ] Project profile created with ID
+- [ ] Profile name is "All capabilities - Account Pool"
+- [ ] Profile status is ENABLED
+- [ ] Both environment configurations reference the account pool
+- [ ] No awsAccount or awsRegion specified (comes from pool)
+- [ ] Policy grants added for both blueprints
+- [ ] Policy grant added for project profile
+- [ ] Profile details saved to `project-profile-details.json`
+
+**Notes**:
+- CloudFormation doesn't support `accountPools` property yet, so we use AWS CLI
+- Policy grants allow users to create projects and environments
+- The profile won't work until the Lambda function is created and accounts are added to the pool
+Account Pool ID: c8whzud5xehgrt
+Region: us-east-2
+
+Fetching blueprint IDs from domain...
+Blueprint IDs retrieved:
+  Tooling: DefaultTooling
+  DataLake: DefaultDataLake
+  RedshiftServerless: DefaultRedshiftServerless
+
+Deploying CloudFormation stack: AccountPoolFactory-ProjectProfile-Test
+
+✅ Project profile created successfully!
+
+Profile ID: abc123xyz
+Profile Name: All capabilities (Account Pool)
+```
+
+**Verification Checklist**:
+- [ ] CloudFormation stack deployed successfully
+- [ ] Project profile created with ID
+- [ ] Profile details saved to `project-profile-details.json`
+- [ ] Profile visible in DataZone console
+
+**Key Difference from Standard Profile**:
+- Uses `AwsAccountIdPath` (account pool ID) instead of `AwsAccountId` (hardcoded account)
+- Accounts are assigned dynamically from the pool when projects are created
+- Profile name: "All capabilities (Account Pool)"
+
+**Files Created**:
+- `account-pool-details.json` - Account pool information
+- `project-profile-details.json` - Project profile information
+
+---
+
+## Summary of Phase 2
+
+At this point, you have:
+1. ✅ Created a DataZone account pool with placeholder Lambda ARNs
+2. ✅ Created a project profile that uses the account pool
+
+**Next Steps**:
+- Implement the Account Provider Lambda function
+- Add test accounts to the pool
+- Create a DataZone project using the new profile
+- Verify account assignment from the pool
+

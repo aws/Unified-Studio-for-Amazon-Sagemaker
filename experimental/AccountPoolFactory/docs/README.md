@@ -1,12 +1,37 @@
 # Account Pool Factory Documentation
 
-This directory contains all project documentation.
+This directory contains all project documentation organized by audience.
 
-## Documentation Index
+## Start Here
 
-### Getting Started
-- **[GettingStarted.md](GettingStarted.md)** - Quick start guide for new users
-- **[TestingGuide.md](TestingGuide.md)** - Complete step-by-step testing manual
+### 👥 For Real Deployment (Production/Existing Infrastructure)
+**[User Guide](UserGuide.md)** - Deploy to existing AWS Organization and DataZone domain:
+- Prerequisites (existing org, domain, OUs)
+- Deployment by persona (Org Admin, Domain Admin, Project Creator)
+- Common tasks and troubleshooting
+
+### 🧪 For Test Environment Setup (Starting from Scratch)
+**[Test Setup Guide](TestSetupGuide.md)** - Create test infrastructure before deployment:
+- Create AWS Organization structure
+- Create DataZone domain
+- Create test accounts
+- Prepare environment to match real deployment
+
+### 🔧 For Developers
+**[Development Progress](DevelopmentProgress.md)** - Development journey including:
+- What's working and what's not
+- Experiments and test results
+- Key findings and lessons learned
+- Technical debt and pending work
+
+### 📋 For Detailed Testing
+**[Testing Guide](TestingGuide.md)** - Comprehensive step-by-step testing procedures with:
+- Detailed commands and expected outputs
+- Verification checklists
+- Console verification steps
+- Complete troubleshooting guide
+
+## Additional Documentation
 
 ### Architecture & Design
 - **[../specs/requirements.md](../specs/requirements.md)** - Functional requirements and system architecture
@@ -17,17 +42,29 @@ This directory contains all project documentation.
 - **[ProjectStructure.md](ProjectStructure.md)** - Directory structure and organization
 - **[../config.yaml.template](../config.yaml.template)** - Configuration template
 
-## Quick Links
+### Status Reports
+- **[../ACCOUNT_POOL_SUCCESS.md](../ACCOUNT_POOL_SUCCESS.md)** - Account pool integration success report
+- **[../ACCOUNT_POOL_FINDINGS.md](../ACCOUNT_POOL_FINDINGS.md)** - ON_CREATE investigation findings
+- **[../IMPLEMENTATION_STATUS.md](../IMPLEMENTATION_STATUS.md)** - Current implementation status
 
-### For Users
-1. Start with [GettingStarted.md](GettingStarted.md)
-2. Follow [TestingGuide.md](TestingGuide.md) for testing
+## Quick Navigation
 
-### For Developers
-1. Review [../specs/requirements.md](../specs/requirements.md) for architecture
-2. Check [../specs/design.md](../specs/design.md) for technical details
-3. See [../specs/tasks.md](../specs/tasks.md) for implementation tasks
+### I want to...
+- **Deploy to existing infrastructure**: → [User Guide](UserGuide.md)
+- **Set up test environment first**: → [Test Setup Guide](TestSetupGuide.md)
+- **Understand what works**: → [Development Progress](DevelopmentProgress.md) → Completed Milestones
+- **Run detailed tests**: → [Testing Guide](TestingGuide.md)
+- **Understand the architecture**: → [Requirements](../specs/requirements.md)
+- **See technical details**: → [Design](../specs/design.md)
+- **Know what's next**: → [Development Progress](DevelopmentProgress.md) → Pending Work
 
-### For Contributors
-1. Understand [ProjectStructure.md](ProjectStructure.md)
-2. Review coding standards in [../specs/design.md](../specs/design.md)
+## Documentation Philosophy
+
+We've separated documentation into four levels:
+
+1. **User Guide**: Real deployment to existing infrastructure (production-ready)
+2. **Test Setup Guide**: Create test infrastructure from scratch (for testing/learning)
+3. **Development Progress**: What we learned building it (experiments, findings, lessons)
+4. **Testing Guide**: How to test every detail (comprehensive procedures)
+
+This keeps deployment docs focused on real use cases while providing clear paths for testing and development.

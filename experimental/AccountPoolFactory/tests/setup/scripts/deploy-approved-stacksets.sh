@@ -82,14 +82,19 @@ echo "  Admin Role ARN: $ADMIN_ROLE_ARN"
 echo ""
 
 # Create S3 bucket for templates if it doesn't exist
-BUCKET_NAME="${CF1_STACK_NAME}-stackset-templates-${ACCOUNT_ID}"
+BUCKET_NAME="apf-stacksets-${ACCOUNT_ID}"
 echo -e "${YELLOW}Checking S3 bucket for templates...${NC}"
 if ! aws s3 ls "s3://$BUCKET_NAME" --region "$REGION" &> /dev/null; then
     echo "Creating S3 bucket: $BUCKET_NAME"
     if [ "$REGION" = "us-east-1" ]; then
-        aws s3 mb "s3://$BUCKET_NAME" --region "$REGION"
+        aws s3api create-bucket \
+            --bucket "$BUCKET_NAME" \
+            --region "$REGION"
     else
-        aws s3 mb "s3://$BUCKET_NAME" --region "$REGION" --create-bucket-configuration LocationConstraint="$REGION"
+        aws s3api create-bucket \
+            --bucket "$BUCKET_NAME" \
+            --region "$REGION" \
+            --create-bucket-configuration LocationConstraint="$REGION"
     fi
     
     # Enable versioning
@@ -120,16 +125,16 @@ echo ""
 echo -e "${YELLOW}Uploading templates to S3...${NC}"
 TEMPLATES_DIR="$PROJECT_ROOT/templates/cloudformation/03-project-account"
 
-for template in vpc-setup.yaml blueprint-enablement.yaml iam-roles.yaml; do
-    if [ -f "$TEMPLATES_DIR/$template" ]; then
-        echo "  Uploading $template..."
-        aws s3 cp "$TEMPLATES_DIR/$template" "s3://$BUCKET_NAME/$template" --region "$REGION"
-        echo -e "${GREEN}  ✓ Uploaded $template${NC}"
-    else
-        echo -e "${RED}  Error: Template not found: $TEMPLATES_DIR/$template${NC}"
-        exit 1
-    fi
-done
+# Only upload VPC template for now
+template="vpc-setup.yaml"
+if [ -f "$TEMPLATES_DIR/$template" ]; then
+    echo "  Uploading $template..."
+    aws s3 cp "$TEMPLATES_DIR/$template" "s3://$BUCKET_NAME/$template" --region "$REGION"
+    echo -e "${GREEN}  ✓ Uploaded $template${NC}"
+else
+    echo -e "${RED}  Error: Template not found: $TEMPLATES_DIR/$template${NC}"
+    exit 1
+fi
 echo ""
 
 # Function to create or update StackSet
@@ -137,8 +142,16 @@ create_or_update_stackset() {
     local stackset_name=$1
     local template_file=$2
     local description=$3
+    shift 3
+    local parameters=("$@")
     
     echo -e "${YELLOW}Processing StackSet: $stackset_name${NC}"
+    
+    # Build parameters array
+    local param_args=()
+    for param in "${parameters[@]}"; do
+        param_args+=(--parameters "$param")
+    done
     
     # Check if StackSet exists
     if aws cloudformation describe-stack-set \
@@ -151,9 +164,7 @@ create_or_update_stackset() {
             --template-url "https://s3.${REGION}.amazonaws.com/${BUCKET_NAME}/${template_file}" \
             --description "$description" \
             --capabilities CAPABILITY_NAMED_IAM \
-            --parameters \
-                ParameterKey=ProjectTag,ParameterValue="$PROJECT_TAG" \
-                ParameterKey=EnvironmentTag,ParameterValue="$ENVIRONMENT_TAG" \
+            "${param_args[@]}" \
             --administration-role-arn "$ADMIN_ROLE_ARN" \
             --execution-role-name AWSControlTowerExecution \
             --region "$REGION" || true
@@ -166,9 +177,7 @@ create_or_update_stackset() {
             --template-url "https://s3.${REGION}.amazonaws.com/${BUCKET_NAME}/${template_file}" \
             --description "$description" \
             --capabilities CAPABILITY_NAMED_IAM \
-            --parameters \
-                ParameterKey=ProjectTag,ParameterValue="$PROJECT_TAG" \
-                ParameterKey=EnvironmentTag,ParameterValue="$ENVIRONMENT_TAG" \
+            "${param_args[@]}" \
             --administration-role-arn "$ADMIN_ROLE_ARN" \
             --execution-role-name AWSControlTowerExecution \
             --permission-model SELF_MANAGED \
@@ -190,20 +199,16 @@ echo -e "${GREEN}Creating StackSets${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 
-create_or_update_stackset \
-    "${CF1_STACK_NAME}-IAMRoles" \
-    "iam-roles.yaml" \
-    "IAM roles for DataZone blueprint management and provisioning"
-
+# Only deploy VPC StackSet for now
 create_or_update_stackset \
     "${CF1_STACK_NAME}-VPCSetup" \
     "vpc-setup.yaml" \
-    "VPC and networking configuration for project accounts"
+    "VPC and networking configuration for project accounts" \
+    "ParameterKey=useVpcEndpoints,ParameterValue=false"
 
-create_or_update_stackset \
-    "${CF1_STACK_NAME}-BlueprintEnablement" \
-    "blueprint-enablement.yaml" \
-    "DataZone blueprint enablement for project accounts"
+# Note: IAM Roles and Blueprint Enablement will be deployed later
+echo -e "${YELLOW}Note: Only VPC StackSet deployed. IAM Roles and Blueprint Enablement will be tested later.${NC}"
+echo ""
 
 # List all StackSets
 echo -e "${GREEN}========================================${NC}"

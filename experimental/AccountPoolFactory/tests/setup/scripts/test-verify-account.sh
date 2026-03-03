@@ -7,14 +7,15 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+PROVISION_DIR="$PROJECT_ROOT/tests/setup/test-accounts"
 
 # Get email number from argument or find latest
 EMAIL_NUM="$1"
 
 if [ -z "$EMAIL_NUM" ]; then
     # Find latest provision file
-    if ls "$PROJECT_ROOT"/test-account-provision-*.json 1> /dev/null 2>&1; then
-        LATEST_FILE=$(ls -t "$PROJECT_ROOT"/test-account-provision-*.json | head -1)
+    if ls "$PROVISION_DIR"/test-account-provision-*.json 1> /dev/null 2>&1; then
+        LATEST_FILE=$(ls -t "$PROVISION_DIR"/test-account-provision-*.json | head -1)
         EMAIL_NUM=$(basename "$LATEST_FILE" | sed 's/test-account-provision-\([0-9]*\)\.json/\1/')
         echo "No email number provided, using latest: $EMAIL_NUM"
         echo ""
@@ -25,7 +26,7 @@ if [ -z "$EMAIL_NUM" ]; then
     fi
 fi
 
-PROVISION_FILE="$PROJECT_ROOT/test-account-provision-${EMAIL_NUM}.json"
+PROVISION_FILE="$PROVISION_DIR/test-account-provision-${EMAIL_NUM}.json"
 
 # Colors
 RED='\033[0;31m'

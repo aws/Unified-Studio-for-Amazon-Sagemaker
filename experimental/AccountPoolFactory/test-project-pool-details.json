@@ -1,0 +1,14 @@
+{
+    "domainId": "dzd-4igt64u5j25ko9",
+    "id": "b02tshgpxdpquh",
+    "name": "test-pool-project-1772546820",
+    "createdBy": "4b89ed84-9842-45dd-a2e5-15e49eda2b03",
+    "createdAt": "2026-03-03T14:07:01.426350+00:00",
+    "lastUpdatedAt": "2026-03-03T14:07:01.426350+00:00",
+    "domainUnitId": "6kg8zlq8mvid9l",
+    "projectProfileId": "3q3bu487vip8a1",
+    "environmentDeploymentDetails": {
+        "overallDeploymentStatus": "PENDING_DEPLOYMENT",
+        "environmentFailureReasons": {}
+    }
+}

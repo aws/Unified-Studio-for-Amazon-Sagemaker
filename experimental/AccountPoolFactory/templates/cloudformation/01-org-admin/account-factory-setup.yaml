@@ -1,24 +1,31 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Account Pool Factory - CF1: Organization Admin Account Setup for Control Tower Account Factory Integration'
+Description: 'Account Pool Factory - CF1: Organization Admin Account Setup for Multi-Strategy Account Creation'
 
 Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
       - Label:
+          default: 'Account Creation Strategy'
+        Parameters:
+          - AccountCreationStrategy
+      - Label:
           default: 'Requesting Account Configuration'
         Parameters:
           - RequestingAccountId
-          - RequestingAccountRoleName
       - Label:
           default: 'Event Bridge Configuration'
         Parameters:
           - EventBusName
           - EnableEventForwarding
       - Label:
-          default: 'Control Tower Configuration'
+          default: 'Control Tower Configuration (Strategy 1)'
         Parameters:
           - ControlTowerProductId
-          - ControlTowerArtifactId
+      - Label:
+          default: 'Organizations API Configuration (Strategy 2)'
+        Parameters:
+          - OrganizationsRoleName
+          - IamUserAccessToBilling
       - Label:
           default: 'Tagging'
         Parameters:
@@ -27,17 +34,20 @@ Metadata:
           - OwnerTag
 
 Parameters:
+  AccountCreationStrategy:
+    Type: String
+    Description: Account creation strategy to use
+    Default: organizations_api
+    AllowedValues:
+      - control_tower
+      - organizations_api
+      - both
+
   RequestingAccountId:
     Type: String
-    Description: AWS Account ID that will request account creation (e.g., the account hosting the account pool management system)
+    Description: AWS Account ID that will request account creation
     AllowedPattern: '^\d{12}$'
     ConstraintDescription: Must be a valid 12-digit AWS account ID
-  
-  RequestingAccountRoleName:
-    Type: String
-    Description: Name of the IAM role in requesting account that will trigger account creation
-    Default: AccountPoolFactoryAccountCreatorRole
-    AllowedPattern: '^[\w+=,.@-]{1,64}$'
   
   EventBusName:
     Type: String
@@ -47,21 +57,32 @@ Parameters:
   
   EnableEventForwarding:
     Type: String
-    Description: Enable forwarding of Control Tower events to Domain account
+    Description: Enable forwarding of account creation events to requesting account
     Default: 'true'
     AllowedValues:
       - 'true'
       - 'false'
   
+  # Control Tower Parameters
   ControlTowerProductId:
     Type: String
-    Description: Service Catalog Product ID for Control Tower Account Factory (leave empty to auto-discover)
+    Description: Service Catalog Product ID for Control Tower Account Factory (required for control_tower strategy)
     Default: ''
   
-  ControlTowerArtifactId:
+  # Organizations API Parameters
+  OrganizationsRoleName:
     Type: String
-    Description: Service Catalog Provisioning Artifact ID for Control Tower (leave empty to use latest)
-    Default: ''
+    Description: Name of IAM role to create in new accounts (for organizations_api strategy)
+    Default: OrganizationAccountAccessRole
+    AllowedPattern: '^[\w+=,.@-]{1,64}$'
+  
+  IamUserAccessToBilling:
+    Type: String
+    Description: Allow IAM users to access billing (for organizations_api strategy)
+    Default: ALLOW
+    AllowedValues:
+      - ALLOW
+      - DENY
   
   ProjectTag:
     Type: String
@@ -83,15 +104,14 @@ Parameters:
     Description: Value for Owner tag
     Default: DataZoneAdmin
 
-  # StackSet Configuration
-  ApprovedStackSetTemplates:
-    Type: CommaDelimitedList
-    Description: S3 URLs of approved CloudFormation templates that can be deployed to new accounts
-    Default: ''
-
 Conditions:
   EnableForwarding: !Equals [!Ref EnableEventForwarding, 'true']
-  HasApprovedTemplates: !Not [!Equals [!Join ['', !Ref ApprovedStackSetTemplates], '']]
+  UseControlTower: !Or
+    - !Equals [!Ref AccountCreationStrategy, 'control_tower']
+    - !Equals [!Ref AccountCreationStrategy, 'both']
+  UseOrganizationsApi: !Or
+    - !Equals [!Ref AccountCreationStrategy, 'organizations_api']
+    - !Equals [!Ref AccountCreationStrategy, 'both']
   HasControlTowerProductId: !Not [!Equals [!Ref ControlTowerProductId, '']]
 
 Resources:
@@ -100,19 +120,20 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Sub '${AWS::StackName}-AcctCreation'
-      Description: Allows requesting account to trigger Control Tower account creation
+      Description: Allows requesting account to create accounts using selected strategy
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
           - Effect: Allow
             Principal:
-              AWS: !Sub 'arn:aws:iam::${RequestingAccountId}:root'
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${RequestingAccountId}:root'
             Action: 'sts:AssumeRole'
             Condition:
               StringEquals:
                 'sts:ExternalId': !Sub '${AWS::StackName}-${RequestingAccountId}'
       ManagedPolicyArns:
-        - !Ref AccountCreationPolicy
+        - !If [UseControlTower, !Ref ControlTowerAccountCreationPolicy, !Ref 'AWS::NoValue']
+        - !If [UseOrganizationsApi, !Ref OrganizationsApiAccountCreationPolicy, !Ref 'AWS::NoValue']
       Tags:
         - Key: Project
           Value: !Ref ProjectTag
@@ -123,16 +144,16 @@ Resources:
         - Key: ManagedBy
           Value: CloudFormation
 
-  # Policy for account creation via Service Catalog
-  AccountCreationPolicy:
+  # Policy for Control Tower account creation (Strategy 1)
+  ControlTowerAccountCreationPolicy:
     Type: AWS::IAM::ManagedPolicy
+    Condition: UseControlTower
     Properties:
-      ManagedPolicyName: !Sub '${AWS::StackName}-AccountCreationPolicy'
-      Description: Permissions to create accounts via Control Tower Account Factory
+      ManagedPolicyName: !Sub '${AWS::StackName}-ControlTowerPolicy'
+      Description: Permissions for Control Tower Account Factory account creation
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
-          # Service Catalog permissions for Account Factory
           - Sid: ServiceCatalogAccountFactory
             Effect: Allow
             Action:
@@ -154,7 +175,6 @@ Resources:
               StringEquals:
                 'servicecatalog:productType': 'CONTROL_TOWER_ACCOUNT'
           
-          # Organizations read permissions
           - Sid: OrganizationsRead
             Effect: Allow
             Action:
@@ -167,7 +187,6 @@ Resources:
               - 'organizations:ListRoots'
             Resource: '*'
           
-          # SSO read permissions (required for Account Factory)
           - Sid: SSORead
             Effect: Allow
             Action:
@@ -175,6 +194,44 @@ Resources:
               - 'sso:ListProfiles'
               - 'sso:ListDirectoryAssociations'
             Resource: '*'
+
+  # Policy for Organizations API account creation (Strategy 2)
+  OrganizationsApiAccountCreationPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Condition: UseOrganizationsApi
+    Properties:
+      ManagedPolicyName: !Sub '${AWS::StackName}-OrganizationsApiPolicy'
+      Description: Permissions for Organizations API account creation
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: OrganizationsAccountCreation
+            Effect: Allow
+            Action:
+              - 'organizations:CreateAccount'
+              - 'organizations:DescribeCreateAccountStatus'
+              - 'organizations:MoveAccount'
+              - 'organizations:TagResource'
+              - 'organizations:ListTagsForResource'
+            Resource: '*'
+          
+          - Sid: OrganizationsRead
+            Effect: Allow
+            Action:
+              - 'organizations:DescribeOrganization'
+              - 'organizations:DescribeOrganizationalUnit'
+              - 'organizations:DescribeAccount'
+              - 'organizations:ListAccounts'
+              - 'organizations:ListAccountsForParent'
+              - 'organizations:ListOrganizationalUnitsForParent'
+              - 'organizations:ListRoots'
+            Resource: '*'
+          
+          - Sid: EventBridgePutEvents
+            Effect: Allow
+            Action:
+              - 'events:PutEvents'
+            Resource: !GetAtt AccountLifecycleEventBus.Arn
 
   # EventBridge Event Bus for account lifecycle events
   AccountLifecycleEventBus:
@@ -192,9 +249,9 @@ Resources:
   # EventBridge Rule to capture Control Tower account creation events
   ControlTowerAccountCreationRule:
     Type: AWS::Events::Rule
-    Condition: EnableForwarding
+    Condition: UseControlTower
     Properties:
-      Name: !Sub '${AWS::StackName}-ControlTowerAccountCreation'
+      Name: !Sub '${AWS::StackName}-ControlTowerEvents'
       Description: Capture Control Tower CreateManagedAccount events
       EventBusName: default
       EventPattern:
@@ -212,10 +269,58 @@ Resources:
           Id: AccountLifecycleEventBus
           RoleArn: !GetAtt EventBridgeForwardingRole.Arn
 
+  # EventBridge Rule to capture Organizations API custom events
+  # Note: This rule is on the default bus to capture custom events from Lambda
+  # and forward them to the AccountLifecycleEventBus
+  OrganizationsApiAccountCreationRule:
+    Type: AWS::Events::Rule
+    Condition: UseOrganizationsApi
+    Properties:
+      Name: !Sub '${AWS::StackName}-OrganizationsApiEvents'
+      Description: Capture Organizations API account creation events from default bus
+      EventBusName: default
+      EventPattern:
+        source:
+          - accountpoolfactory.organizations
+        detail-type:
+          - Account Creation Status Change
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt AccountLifecycleEventBus.Arn
+          Id: AccountLifecycleEventBus
+          RoleArn: !GetAtt OrganizationsApiEventForwardingRole.Arn
+
+  # IAM Role for EventBridge to forward Organizations API events
+  OrganizationsApiEventForwardingRole:
+    Type: AWS::IAM::Role
+    Condition: UseOrganizationsApi
+    Properties:
+      RoleName: !Sub '${AWS::StackName}-OrgsApiEBForward'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: PutEventsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: 'events:PutEvents'
+                Resource: !GetAtt AccountLifecycleEventBus.Arn
+      Tags:
+        - Key: Project
+          Value: !Ref ProjectTag
+        - Key: Environment
+          Value: !Ref EnvironmentTag
+
   # IAM Role for EventBridge to forward events
   EventBridgeForwardingRole:
     Type: AWS::IAM::Role
-    Condition: EnableForwarding
+    Condition: UseControlTower
     Properties:
       RoleName: !Sub '${AWS::StackName}-EBForward'
       AssumeRolePolicyDocument:
@@ -250,11 +355,10 @@ Resources:
       EventPattern:
         source:
           - aws.controltower
-        detail-type:
-          - AWS Service Event via CloudTrail
+          - accountpoolfactory.organizations
       State: ENABLED
       Targets:
-        - Arn: !Sub 'arn:aws:events:${AWS::Region}:${RequestingAccountId}:event-bus/default'
+        - Arn: !Sub 'arn:${AWS::Partition}:events:${AWS::Region}:${RequestingAccountId}:event-bus/default'
           Id: RequestingAccountEventBus
           RoleArn: !GetAtt CrossAccountEventForwardingRole.Arn
 
@@ -278,14 +382,14 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: 'events:PutEvents'
-                Resource: !Sub 'arn:aws:events:${AWS::Region}:${RequestingAccountId}:event-bus/default'
+                Resource: !Sub 'arn:${AWS::Partition}:events:${AWS::Region}:${RequestingAccountId}:event-bus/default'
       Tags:
         - Key: Project
           Value: !Ref ProjectTag
         - Key: Environment
           Value: !Ref EnvironmentTag
 
-  # StackSet Administration Role - allows CloudFormation to assume execution role in target accounts
+  # StackSet Administration Role
   StackSetAdministrationRole:
     Type: AWS::IAM::Role
     Properties:
@@ -305,7 +409,7 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: 'sts:AssumeRole'
-                Resource: 'arn:aws:iam::*:role/AWSControlTowerExecution'
+                Resource: !Sub 'arn:${AWS::Partition}:iam::*:role/AWSControlTowerExecution'
       Tags:
         - Key: Project
           Value: !Ref ProjectTag
@@ -325,7 +429,7 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              AWS: !Sub 'arn:aws:iam::${RequestingAccountId}:root'
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${RequestingAccountId}:root'
             Action: 'sts:AssumeRole'
             Condition:
               StringEquals:
@@ -349,7 +453,6 @@ Resources:
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
-          # Allow creating/deleting stack instances for approved StackSets
           - Sid: ManageApprovedStackSetInstances
             Effect: Allow
             Action:
@@ -358,9 +461,8 @@ Resources:
               - 'cloudformation:UpdateStackInstances'
               - 'cloudformation:DescribeStackInstance'
               - 'cloudformation:ListStackInstances'
-            Resource: !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stackset/${AWS::StackName}-*:*'
+            Resource: !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stackset/${AWS::StackName}-*:*'
           
-          # Allow read-only operations on approved StackSets
           - Sid: ReadApprovedStackSets
             Effect: Allow
             Action:
@@ -368,16 +470,14 @@ Resources:
               - 'cloudformation:DescribeStackSetOperation'
               - 'cloudformation:ListStackSetOperations'
               - 'cloudformation:ListStackSetOperationResults'
-            Resource: !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stackset/${AWS::StackName}-*:*'
+            Resource: !Sub 'arn:${AWS::Partition}:cloudformation:${AWS::Region}:${AWS::AccountId}:stackset/${AWS::StackName}-*:*'
           
-          # Allow listing StackSets (filtered by name prefix)
           - Sid: ListStackSets
             Effect: Allow
             Action:
               - 'cloudformation:ListStackSets'
             Resource: '*'
           
-          # Explicitly DENY creating, updating, or deleting StackSets
           - Sid: DenyStackSetModification
             Effect: Deny
             Action:
@@ -386,28 +486,21 @@ Resources:
               - 'cloudformation:DeleteStackSet'
             Resource: '*'
 
-  # SSM Parameter to store approved StackSet names
-  ApprovedStackSetsParameter:
+  # SSM Parameters for configuration
+  AccountCreationStrategyParameter:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: !Sub '/${AWS::StackName}/ApprovedStackSets'
-      Description: List of approved StackSet names that requesting account can deploy
-      Type: StringList
-      Value: !If
-        - HasApprovedTemplates
-        - !Join
-          - ','
-          - - !Sub '${AWS::StackName}-BaselineSecurity'
-            - !Sub '${AWS::StackName}-DataZoneIntegration'
-            - !Sub '${AWS::StackName}-CustomNetworking'
-        - !Sub '${AWS::StackName}-Placeholder'
+      Name: !Sub '/${AWS::StackName}/AccountCreationStrategy'
+      Description: Selected account creation strategy
+      Type: String
+      Value: !Ref AccountCreationStrategy
       Tags:
         Project: !Ref ProjectTag
         Environment: !Ref EnvironmentTag
 
-  # SSM Parameter to store Control Tower Product ID (for reference)
   ControlTowerProductIdParameter:
     Type: AWS::SSM::Parameter
+    Condition: UseControlTower
     Properties:
       Name: !Sub '/${AWS::StackName}/ControlTowerProductId'
       Description: Service Catalog Product ID for Control Tower Account Factory
@@ -420,7 +513,29 @@ Resources:
         Project: !Ref ProjectTag
         Environment: !Ref EnvironmentTag
 
+  OrganizationsConfigParameter:
+    Type: AWS::SSM::Parameter
+    Condition: UseOrganizationsApi
+    Properties:
+      Name: !Sub '/${AWS::StackName}/OrganizationsConfig'
+      Description: Organizations API configuration
+      Type: String
+      Value: !Sub |
+        {
+          "roleName": "${OrganizationsRoleName}",
+          "iamUserAccessToBilling": "${IamUserAccessToBilling}"
+        }
+      Tags:
+        Project: !Ref ProjectTag
+        Environment: !Ref EnvironmentTag
+
 Outputs:
+  AccountCreationStrategy:
+    Description: Selected account creation strategy
+    Value: !Ref AccountCreationStrategy
+    Export:
+      Name: !Sub '${AWS::StackName}-Strategy'
+
   AccountCreationRoleArn:
     Description: ARN of the IAM role for requesting account to assume for account creation
     Value: !GetAtt AccountCreationRole.Arn
@@ -451,16 +566,8 @@ Outputs:
     Export:
       Name: !Sub '${AWS::StackName}-EventBusName'
   
-  StackName:
-    Description: Name of this CloudFormation stack
-    Value: !Ref AWS::StackName
-  
-  Region:
-    Description: AWS Region where this stack is deployed
-    Value: !Ref AWS::Region
-  
   StackSetAdministrationRoleArn:
-    Description: ARN of the StackSet administration role (used by CloudFormation service)
+    Description: ARN of the StackSet administration role
     Value: !GetAtt StackSetAdministrationRole.Arn
     Export:
       Name: !Sub '${AWS::StackName}-StackSetAdminRoleArn'
@@ -478,7 +585,7 @@ Outputs:
       Name: !Sub '${AWS::StackName}-StackSetExternalId'
   
   ApprovedStackSetPrefix:
-    Description: Prefix for approved StackSet names (requesting account can only deploy StackSets with this prefix)
+    Description: Prefix for approved StackSet names
     Value: !Sub '${AWS::StackName}-'
     Export:
       Name: !Sub '${AWS::StackName}-StackSetPrefix'
