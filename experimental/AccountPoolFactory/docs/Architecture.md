@@ -114,10 +114,42 @@ Pool Manager → Triggers replenishment if needed
   ↓
 ProvisionAccount Lambda → Creates new account (Org Admin)
   ↓
-Setup Orchestrator Lambda → Configures account in 6 waves (Domain)
+Setup Orchestrator Lambda → Configures account in 2 waves (Domain)
   ↓
 Account Available → Ready for next user
 ```
+
+## Account Lifecycle with Recycling
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Account Lifecycle                         │
+└─────────────────────────────────────────────────────────────┘
+
+CREATE PATH (New Account):
+  ProvisionAccount → SETTING_UP → Setup Orchestrator → AVAILABLE
+
+ASSIGNMENT PATH:
+  AVAILABLE → User Creates Project → ASSIGNED
+
+RECLAIM PATH (DELETE Strategy):
+  ASSIGNED → Project Deleted → Removed from Pool
+  
+RECLAIM PATH (REUSE Strategy):
+  ASSIGNED → Project Deleted → CLEANING → DeprovisionAccount
+    ├─ Success → AVAILABLE (back to pool)
+    └─ Failure → FAILED (blocks replenishment)
+
+FAILURE HANDLING:
+  FAILED → Manual Investigation → Delete from Pool → Replenishment Unblocked
+```
+
+**State Transitions**:
+- `SETTING_UP`: Account being configured by Setup Orchestrator (6-8 minutes)
+- `AVAILABLE`: Ready for assignment, in pool inventory
+- `ASSIGNED`: In use by a project
+- `CLEANING`: Being cleaned by DeprovisionAccount (10-15 minutes)
+- `FAILED`: Setup or cleanup failed, requires manual intervention
 
 ## Key Design Decisions
 
@@ -144,6 +176,29 @@ Account Available → Ready for next user
 **Problem**: Sequential deployment takes 10-12 minutes
 **Solution**: Deploy independent resources in parallel waves
 **Benefit**: 45% faster (5.5 minutes), maximizes parallelization by eliminating false dependencies
+
+### Why Two Reclaim Strategies (DELETE vs REUSE)?
+
+**Problem**: Different organizations have different priorities (compliance vs cost vs speed)
+**Solution**: Configurable ReclaimStrategy via SSM parameter
+
+**DELETE Strategy** (default):
+- Accounts removed from pool after project deletion
+- Accounts remain in AWS Organizations (manual cleanup required)
+- Pool replenishes by creating new accounts
+- **Use when**: Compliance requires fresh accounts, account limits not a concern
+- **Pros**: Simple, no cleanup complexity, guaranteed clean state
+- **Cons**: Slower replenishment, higher costs, account limit pressure
+
+**REUSE Strategy** (cost-optimized):
+- Accounts cleaned and returned to pool after project deletion
+- DeprovisionAccount removes all project resources automatically
+- Pool reuses existing accounts instead of creating new ones
+- **Use when**: Cost optimization important, account limits constrained
+- **Pros**: Faster replenishment (no account creation), lower costs, stays within limits
+- **Cons**: Cleanup complexity, potential for cleanup failures, requires monitoring
+
+**Configuration**: Set `/AccountPoolFactory/PoolManager/ReclaimStrategy` SSM parameter to `DELETE` or `REUSE`
 
 ## Detailed Component Architecture
 
@@ -193,10 +248,11 @@ This section describes each account type, the resources deployed in it, and how 
 - EventBridge central bus: `AccountPoolFactory-CentralBus`
 - SNS topic: `AccountPoolFactory-Alerts`
 - SSM parameters: `/AccountPoolFactory/*` (configuration)
-- Three Lambda functions:
+- Four Lambda functions:
   - Account Provider Lambda
   - Pool Manager Lambda
   - Setup Orchestrator Lambda
+  - DeprovisionAccount Lambda
 - CloudWatch dashboards (4 dashboards)
 - CloudWatch Logs for all Lambdas
 
@@ -229,17 +285,19 @@ This section describes each account type, the resources deployed in it, and how 
 5. Invokes ProvisionAccount Lambda (cross-account) to create new accounts
 6. Creates DynamoDB records for new accounts (state: SETTING_UP)
 7. Invokes Setup Orchestrator Lambda (async) to configure accounts
-8. Handles account deletion and reclamation (DELETE or REUSE strategy)
+8. Handles account deletion and reclamation:
+   - DELETE strategy: Removes account from pool (account still exists in Organizations)
+   - REUSE strategy: Invokes DeprovisionAccount Lambda to clean and recycle account
 
-**Why it exists**: This is the orchestrator for pool-level operations. It monitors pool health, triggers replenishment, and manages the account lifecycle.
+**Why it exists**: This is the orchestrator for pool-level operations. It monitors pool health, triggers replenishment, and manages the account lifecycle including account recycling.
 
 **IAM Permissions**:
-- Lambda: InvokeFunction (ProvisionAccount in Org Admin, Setup Orchestrator in Domain)
+- Lambda: InvokeFunction (ProvisionAccount in Org Admin, Setup Orchestrator and DeprovisionAccount in Domain)
 - DynamoDB: Query, PutItem, UpdateItem, DeleteItem
 - SNS: Publish
 - CloudWatch: PutMetricData
 - SSM: GetParameter, GetParameters
-- STS: AssumeRole (for checking remaining stacks in project accounts)
+- STS: AssumeRole (AccountPoolFactory-DomainAccess for checking remaining stacks in project accounts)
 
 **Configuration** (SSM Parameters):
 - PoolName, TargetOUId, MinimumPoolSize (default: 5), TargetPoolSize (default: 10)
@@ -282,6 +340,45 @@ This section describes each account type, the resources deployed in it, and how 
 - DomainId, DomainAccountId, RootDomainUnitId, Region
 - RetryConfig (exponential backoff for failures)
 
+**Lambda: DeprovisionAccount**
+
+**Trigger**: Async invocation from Pool Manager Lambda (when ReclaimStrategy=REUSE)
+
+**What it does**:
+1. Assumes AccountPoolFactory-DomainAccess role in project account (with ExternalId)
+2. Lists all CloudFormation stacks in the account
+3. Categorizes stacks:
+   - Approved infrastructure (AccountPoolFactory-*, StackSet-*) - protected, never deleted
+   - Project stacks (DataZone-*, user-created) - must be deleted
+4. Builds dependency graph from stack exports/imports
+5. Performs reverse topological sort to determine safe deletion order
+6. Deletes project stacks sequentially with retry logic
+7. Waits for each stack deletion to complete (timeout: 10 minutes per stack)
+8. Updates DynamoDB state:
+   - Success: CLEANING → AVAILABLE (account returned to pool)
+   - Failure: CLEANING → FAILED (manual intervention required)
+9. Publishes CloudWatch metrics and SNS notifications
+
+**Why it exists**: Account recycling (REUSE strategy) reduces costs and speeds up replenishment by cleaning existing accounts instead of creating new ones. This Lambda safely removes all project resources while preserving the approved infrastructure, allowing accounts to be reused multiple times.
+
+**IAM Permissions** (shares SetupOrchestratorRole):
+- CloudFormation: ListStacks, DescribeStacks, DeleteStack, DescribeStackEvents
+- DynamoDB: Query, UpdateItem
+- SNS: Publish
+- CloudWatch: PutMetricData
+- STS: AssumeRole (AccountPoolFactory-DomainAccess role with ExternalId)
+
+**Configuration** (Environment Variables):
+- DELETION_TIMEOUT (default: 600 seconds per stack)
+- MAX_RETRIES (default: 3 attempts per stack)
+- DOMAIN_ID (for ExternalId in cross-account role assumption)
+
+**Error Handling**:
+- Stack deletion failures mark account as FAILED with detailed error information
+- Failed accounts block pool replenishment until manually resolved
+- SNS notifications sent for both success and failure cases
+- CloudWatch metrics track cleanup duration and success rate
+
 ### Project Account (Pool)
 
 **Purpose**: Pre-configured accounts ready for SageMaker Unified Studio project assignment
@@ -308,11 +405,34 @@ This section describes each account type, the resources deployed in it, and how 
 4. Account removed from pool inventory
 
 **What happens when deleted**:
-1. DataZone deletes project CloudFormation stacks
-2. CloudFormation DELETE_COMPLETE events trigger Pool Manager
-3. Pool Manager checks for remaining stacks
-4. If DELETE strategy: Account removed from pool (still exists in Organizations)
-5. If REUSE strategy: Setup Orchestrator cleans account, returns to pool
+1. User deletes project in SMUS UI
+2. DataZone deletes project CloudFormation stacks
+3. CloudFormation DELETE_COMPLETE events trigger Pool Manager
+4. Pool Manager checks for remaining DataZone stacks in the account
+5. Account reclamation based on ReclaimStrategy:
+   
+   **DELETE Strategy** (default):
+   - Pool Manager removes account from DynamoDB
+   - Account still exists in AWS Organizations (manual deletion required)
+   - Pool replenishes by creating new accounts
+   - Use case: Compliance requirements, account limits not a concern
+   
+   **REUSE Strategy** (cost-optimized):
+   - Pool Manager invokes DeprovisionAccount Lambda
+   - DynamoDB state: ASSIGNED → CLEANING
+   - DeprovisionAccount removes all project stacks (preserves infrastructure)
+   - Stack deletion in reverse dependency order (10-15 minutes typical)
+   - On success: DynamoDB state CLEANING → AVAILABLE (account returned to pool)
+   - On failure: DynamoDB state CLEANING → FAILED (blocks replenishment, requires manual fix)
+   - Pool reuses cleaned accounts instead of creating new ones
+   - Use case: Cost optimization, faster replenishment, account limit constraints
+
+**Account Recycling Benefits** (REUSE strategy):
+- Reduces AWS account creation costs
+- Faster replenishment (no account creation delay)
+- Stays within AWS Organizations account limits
+- Maintains approved infrastructure (no re-deployment needed)
+- Automatic cleanup with dependency-aware deletion
 
 
 
