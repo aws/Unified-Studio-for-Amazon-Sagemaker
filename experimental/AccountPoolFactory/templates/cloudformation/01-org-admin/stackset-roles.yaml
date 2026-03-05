@@ -1,0 +1,88 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'StackSet Administration and Execution Roles for Account Pool Factory'
+
+Resources:
+Parameters:
+  DomainAccountId:
+    Type: String
+    Description: Domain account ID that hosts SetupOrchestrator Lambda
+
+Resources:
+  # Administration role in the Org Admin account
+  # Used by CloudFormation service to manage StackSets
+  StackSetAdministrationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AWSCloudFormationStackSetAdministrationRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AssumeStackSetExecutionRole
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sts:AssumeRole
+                Resource: 'arn:aws:iam::*:role/AWSCloudFormationStackSetExecutionRole'
+
+  # Role for SetupOrchestrator Lambda to create/delete StackSet instances
+  # This role is assumed by SetupOrchestrator running in the Domain account
+  # ONLY allows operations on approved AccountPoolFactory StackSets
+  StackSetManagementRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AccountPoolFactory-StackSetManagement
+      Description: Allows SetupOrchestrator to deploy/remove StackSet instances for new accounts
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${DomainAccountId}:role/AccountPoolFactory-SetupOrchestrator-Role'
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                'sts:ExternalId': !Sub 'AccountPoolFactory-${DomainAccountId}'
+      Policies:
+        - PolicyName: StackSetInstanceManagement
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # ONLY allow instance operations on approved StackSets
+              - Effect: Allow
+                Action:
+                  - cloudformation:CreateStackInstances
+                  - cloudformation:DeleteStackInstances
+                  - cloudformation:DescribeStackSetOperation
+                  - cloudformation:ListStackInstances
+                Resource: 'arn:aws:cloudformation:*:*:stackset/AccountPoolFactory-TrustPolicy:*'
+              # Read-only access to verify StackSet exists
+              - Effect: Allow
+                Action:
+                  - cloudformation:DescribeStackSet
+                  - cloudformation:ListStackSets
+                Resource: '*'
+      Tags:
+        - Key: Project
+          Value: AccountPoolFactory
+        - Key: ManagedBy
+          Value: CloudFormation
+
+Outputs:
+  AdministrationRoleArn:
+    Description: ARN of the StackSet Administration Role
+    Value: !GetAtt StackSetAdministrationRole.Arn
+    Export:
+      Name: AccountPoolFactory-StackSetAdministrationRoleArn
+  
+  StackSetManagementRoleArn:
+    Description: ARN of the StackSet Management Role for SetupOrchestrator
+    Value: !GetAtt StackSetManagementRole.Arn
+    Export:
+      Name: AccountPoolFactory-StackSetManagementRoleArn

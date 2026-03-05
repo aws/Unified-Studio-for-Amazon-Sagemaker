@@ -1,0 +1,479 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Account Pool Factory infrastructure in domain account'
+
+Parameters:
+  DomainId:
+    Type: String
+    Description: DataZone domain ID
+  
+  DomainAccountId:
+    Type: String
+    Description: Domain account ID
+  
+  RootDomainUnitId:
+    Type: String
+    Description: Root domain unit ID
+  
+  OrgAdminAccountId:
+    Type: String
+    Description: Organization admin account ID
+  
+  PoolName:
+    Type: String
+    Default: AccountPoolFactory
+    Description: Name for the account pool
+  
+  TargetOUId:
+    Type: String
+    Default: root
+    Description: OU ID where accounts should be moved
+  
+  MinimumPoolSize:
+    Type: Number
+    Default: 5
+    Description: Minimum pool size
+  
+  TargetPoolSize:
+    Type: Number
+    Default: 10
+    Description: Target pool size
+  
+  MaxConcurrentSetups:
+    Type: Number
+    Default: 3
+    Description: Maximum concurrent setups
+  
+  EmailPrefix:
+    Type: String
+    Default: accountpool
+    Description: Email prefix for account creation
+  
+  EmailDomain:
+    Type: String
+    Default: example.com
+    Description: Email domain for account creation
+
+Resources:
+  # DynamoDB Table
+  AccountStateTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: AccountPoolFactory-AccountState
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: accountId
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: N
+        - AttributeName: state
+          AttributeType: S
+        - AttributeName: createdDate
+          AttributeType: S
+        - AttributeName: projectId
+          AttributeType: S
+        - AttributeName: assignedDate
+          AttributeType: S
+      KeySchema:
+        - AttributeName: accountId
+          KeyType: HASH
+        - AttributeName: timestamp
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: StateIndex
+          KeySchema:
+            - AttributeName: state
+              KeyType: HASH
+            - AttributeName: createdDate
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: ProjectIndex
+          KeySchema:
+            - AttributeName: projectId
+              KeyType: HASH
+            - AttributeName: assignedDate
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: ManagedBy
+          Value: AccountPoolFactory
+
+  # SNS Topic
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: AccountPoolFactory-Alerts
+      DisplayName: Account Pool Factory Alerts
+      Tags:
+        - Key: ManagedBy
+          Value: AccountPoolFactory
+
+  # EventBridge Central Bus
+  CentralEventBus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: AccountPoolFactory-CentralBus
+      Tags:
+        - Key: ManagedBy
+          Value: AccountPoolFactory
+
+  # EventBridge Rule to trigger Pool Manager
+  PoolManagerTriggerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: AccountPoolFactory-PoolManager-Trigger
+      Description: Trigger Pool Manager on CloudFormation events
+      EventBusName: !Ref CentralEventBus
+      EventPattern:
+        source:
+          - aws.cloudformation
+        detail-type:
+          - CloudFormation Stack Status Change
+        detail:
+          stack-name:
+            - prefix: DataZone-
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt PoolManagerFunction.Arn
+          Id: PoolManagerLambda
+
+  # Permission for EventBridge to invoke Pool Manager
+  PoolManagerInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref PoolManagerFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt PoolManagerTriggerRule.Arn
+
+  # IAM Role for Pool Manager Lambda
+  PoolManagerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AccountPoolFactory-PoolManager-Role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: PoolManagerPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - organizations:CreateAccount
+                  - organizations:DescribeAccount
+                  - organizations:DescribeCreateAccountStatus
+                  - organizations:CloseAccount
+                  - organizations:ListAccounts
+                  - organizations:DescribeOrganization
+                  - organizations:MoveAccount
+                  - organizations:ListParents
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - dynamodb:Query
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:GetItem
+                Resource:
+                  - !GetAtt AccountStateTable.Arn
+                  - !Sub '${AccountStateTable.Arn}/index/*'
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: !GetAtt SetupOrchestratorFunction.Arn
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !Ref AlertTopic
+              - Effect: Allow
+                Action:
+                  - cloudwatch:PutMetricData
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/AccountPoolFactory/PoolManager/*'
+              - Effect: Allow
+                Action:
+                  - sts:AssumeRole
+                Resource:
+                  - 'arn:aws:iam::*:role/OrganizationAccountAccessRole'
+                  - !Sub 'arn:aws:iam::${OrgAdminAccountId}:role/AccountPoolFactory-AccountCreation'
+      Tags:
+        - Key: ManagedBy
+          Value: AccountPoolFactory
+
+  # Pool Manager Lambda Function
+  PoolManagerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: PoolManager
+      Runtime: python3.12
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt PoolManagerRole.Arn
+      Timeout: 300
+      MemorySize: 512
+      ReservedConcurrentExecutions: 10
+      Environment:
+        Variables:
+          DYNAMODB_TABLE_NAME: !Ref AccountStateTable
+          SNS_TOPIC_ARN: !Ref AlertTopic
+          SETUP_ORCHESTRATOR_FUNCTION_NAME: !Ref SetupOrchestratorFunction
+          DOMAIN_ACCOUNT_ID: !Ref DomainAccountId
+      Code:
+        ZipFile: |
+          # Placeholder - deploy actual code separately
+          def lambda_handler(event, context):
+              return {'statusCode': 200, 'body': 'Placeholder'}
+      Tags:
+        - Key: ManagedBy
+          Value: AccountPoolFactory
+
+  # IAM Role for Setup Orchestrator Lambda
+  SetupOrchestratorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AccountPoolFactory-SetupOrchestrator-Role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: SetupOrchestratorPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - organizations:DescribeAccount
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - dynamodb:Query
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:GetItem
+                Resource:
+                  - !GetAtt AccountStateTable.Arn
+                  - !Sub '${AccountStateTable.Arn}/index/*'
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !Ref AlertTopic
+              - Effect: Allow
+                Action:
+                  - cloudwatch:PutMetricData
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/AccountPoolFactory/SetupOrchestrator/*'
+              - Effect: Allow
+                Action:
+                  - sts:AssumeRole
+                Resource:
+                  - 'arn:aws:iam::*:role/OrganizationAccountAccessRole'
+                  - 'arn:aws:iam::*:role/AccountPoolFactory-DomainAccess'
+                  - !Sub 'arn:aws:iam::${OrgAdminAccountId}:role/AccountPoolFactory-StackSetManagement'
+              - Effect: Allow
+                Action:
+                  - ram:CreateResourceShare
+                  - ram:GetResourceShares
+                  - ram:ListResources
+                  - ram:TagResource
+                  - ram:AssociateResourceShare
+                  - ram:DisassociateResourceShare
+                  - ram:UpdateResourceShare
+                Resource: '*'
+      Tags:
+        - Key: ManagedBy
+          Value: AccountPoolFactory
+
+  # Setup Orchestrator Lambda Function
+  SetupOrchestratorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: SetupOrchestrator
+      Runtime: python3.12
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt SetupOrchestratorRole.Arn
+      Timeout: 900
+      MemorySize: 1024
+      ReservedConcurrentExecutions: 5
+      Environment:
+        Variables:
+          DYNAMODB_TABLE_NAME: !Ref AccountStateTable
+          SNS_TOPIC_ARN: !Ref AlertTopic
+          DOMAIN_ID: !Ref DomainId
+          DOMAIN_ACCOUNT_ID: !Ref DomainAccountId
+          ROOT_DOMAIN_UNIT_ID: !Ref RootDomainUnitId
+          ORG_ADMIN_ACCOUNT_ID: !Ref OrgAdminAccountId
+      Code:
+        ZipFile: |
+          # Placeholder - deploy actual code separately
+          def lambda_handler(event, context):
+              return {'statusCode': 200, 'body': 'Placeholder'}
+      Tags:
+        - Key: ManagedBy
+          Value: AccountPoolFactory
+
+  # SSM Parameters - Pool Manager
+  PoolNameParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AccountPoolFactory/PoolManager/PoolName
+      Type: String
+      Value: !Ref PoolName
+      Description: Name for the account pool
+
+  TargetOUIdParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AccountPoolFactory/PoolManager/TargetOUId
+      Type: String
+      Value: !Ref TargetOUId
+      Description: OU ID where accounts should be moved
+
+  MinimumPoolSizeParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AccountPoolFactory/PoolManager/MinimumPoolSize
+      Type: String
+      Value: !Ref MinimumPoolSize
+      Description: Minimum pool size
+
+  TargetPoolSizeParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AccountPoolFactory/PoolManager/TargetPoolSize
+      Type: String
+      Value: !Ref TargetPoolSize
+      Description: Target pool size
+
+  MaxConcurrentSetupsParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AccountPoolFactory/PoolManager/MaxConcurrentSetups
+      Type: String
+      Value: !Ref MaxConcurrentSetups
+      Description: Maximum concurrent setups
+
+  ReclaimStrategyParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AccountPoolFactory/PoolManager/ReclaimStrategy
+      Type: String
+      Value: DELETE
+      Description: Reclaim strategy (DELETE or REUSE)
+
+  EmailPrefixParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AccountPoolFactory/PoolManager/EmailPrefix
+      Type: String
+      Value: !Ref EmailPrefix
+      Description: Email prefix for account creation
+
+  EmailDomainParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AccountPoolFactory/PoolManager/EmailDomain
+      Type: String
+      Value: !Ref EmailDomain
+      Description: Email domain for account creation
+
+  NamePrefixParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AccountPoolFactory/PoolManager/NamePrefix
+      Type: String
+      Value: DataZone-Pool
+      Description: Account name prefix
+
+  # SSM Parameters - Setup Orchestrator
+  DomainIdParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AccountPoolFactory/SetupOrchestrator/DomainId
+      Type: String
+      Value: !Ref DomainId
+      Description: DataZone domain ID
+
+  DomainAccountIdParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AccountPoolFactory/SetupOrchestrator/DomainAccountId
+      Type: String
+      Value: !Ref DomainAccountId
+      Description: Domain account ID
+
+  RootDomainUnitIdParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AccountPoolFactory/SetupOrchestrator/RootDomainUnitId
+      Type: String
+      Value: !Ref RootDomainUnitId
+      Description: Root domain unit ID
+
+  AlertTopicArnParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AccountPoolFactory/SetupOrchestrator/AlertTopicArn
+      Type: String
+      Value: !Ref AlertTopic
+      Description: SNS topic ARN for alerts
+
+Outputs:
+  DynamoDBTableName:
+    Description: DynamoDB table name
+    Value: !Ref AccountStateTable
+    Export:
+      Name: AccountPoolFactory-TableName
+
+  SNSTopicArn:
+    Description: SNS topic ARN
+    Value: !Ref AlertTopic
+    Export:
+      Name: AccountPoolFactory-AlertTopicArn
+
+  CentralEventBusArn:
+    Description: Central event bus ARN
+    Value: !GetAtt CentralEventBus.Arn
+    Export:
+      Name: AccountPoolFactory-CentralEventBusArn
+
+  PoolManagerFunctionArn:
+    Description: Pool Manager Lambda function ARN
+    Value: !GetAtt PoolManagerFunction.Arn
+    Export:
+      Name: AccountPoolFactory-PoolManagerArn
+
+  SetupOrchestratorFunctionArn:
+    Description: Setup Orchestrator Lambda function ARN
+    Value: !GetAtt SetupOrchestratorFunction.Arn
+    Export:
+      Name: AccountPoolFactory-SetupOrchestratorArn

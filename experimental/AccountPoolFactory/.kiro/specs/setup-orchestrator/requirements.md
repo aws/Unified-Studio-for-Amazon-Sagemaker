@@ -547,18 +547,24 @@ This automation eliminates manual intervention by maintaining a shadow pool of p
 5. THE Setup_Orchestrator SHALL track total execution time across multiple invocations in the DynamoDB_Table record
 6. IF total execution time across all invocations exceeds 30 minutes, THEN THE Setup_Orchestrator SHALL mark the setup state as FAILED and send SNS notification
 
-### Requirement 14: Parallel Step Execution Optimization
+### Requirement 14: Wave-Based Parallel Step Execution Optimization
 
-**User Story:** As a domain administrator, I want independent setup steps to execute in parallel, so that total setup time is minimized.
+**User Story:** As a domain administrator, I want independent setup steps to execute in parallel using wave-based execution, so that total setup time is reduced from 10-12 minutes to 6-8 minutes.
 
 #### Acceptance Criteria
 
-1. WHEN VPC deployment and IAM roles deployment have no dependencies, THE Setup_Orchestrator SHALL execute them in parallel
-2. WHEN S3 bucket creation completes, THE Setup_Orchestrator SHALL start blueprint enablement immediately without waiting for policy grants
-3. WHEN blueprint enablement and domain sharing have no dependencies, THE Setup_Orchestrator SHALL execute them in parallel
-4. THE Setup_Orchestrator SHALL wait for all parallel operations to complete before proceeding to dependent steps
-5. IF any parallel operation fails, THEN THE Setup_Orchestrator SHALL cancel remaining parallel operations and mark the setup state as FAILED
-6. THE Setup_Orchestrator SHALL record parallel execution metrics in CloudWatch with dimension ExecutionMode set to PARALLEL
+1. THE Setup_Orchestrator SHALL organize the 8 setup steps into 6 waves based on topological dependencies
+2. THE Setup_Orchestrator SHALL execute Wave 1 (VPC Deployment) as a single step with no parallelism
+3. THE Setup_Orchestrator SHALL execute Wave 2 (IAM Roles + EventBridge Rules) with 2 steps in parallel, both depending on VPC completion
+4. THE Setup_Orchestrator SHALL execute Wave 3 (S3 Bucket + RAM Share) with 2 steps in parallel, S3 depending on IAM and RAM having no dependencies
+5. THE Setup_Orchestrator SHALL execute Wave 4 (Blueprint Enablement) as a single step depending on VPC, IAM, and S3 completion
+6. THE Setup_Orchestrator SHALL execute Wave 5 (Policy Grants) as a single step depending on Blueprint Enablement completion
+7. THE Setup_Orchestrator SHALL execute Wave 6 (Domain Visibility Verification) as a single step depending on RAM Share completion
+8. THE Setup_Orchestrator SHALL wait for all steps in a wave to complete before proceeding to the next wave
+9. IF any step in a wave fails, THEN THE Setup_Orchestrator SHALL cancel remaining steps in that wave and mark the setup state as FAILED
+10. THE Setup_Orchestrator SHALL record wave execution metrics in CloudWatch with dimensions WaveNumber and StepCount
+11. THE Setup_Orchestrator SHALL publish metric WaveExecutionDuration for each wave with dimension WaveNumber
+12. THE Setup_Orchestrator SHALL achieve target total setup duration of 6-8 minutes through wave-based parallelism (compared to 10-12 minutes sequential)
 
 ### Requirement 15: Configuration Management
 

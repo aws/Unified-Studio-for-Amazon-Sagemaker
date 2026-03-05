@@ -1,159 +1,83 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'IAM roles for DataZone blueprint management and provisioning'
+Description: 'IAM roles for DataZone (ManageAccessRole and ProvisioningRole)'
 
 Parameters:
-  ProjectTag:
+  DomainAccountId:
     Type: String
-    Description: Value for Project tag
-    Default: AccountPoolFactory
+    Description: Domain account ID
   
-  EnvironmentTag:
+  DomainId:
     Type: String
-    Description: Value for Environment tag
-    Default: Production
-  
-  UseCustomProvisioningPolicy:
-    Type: String
-    Description: Use custom provisioning policy instead of AWS managed policy
-    Default: 'false'
-    AllowedValues:
-      - 'true'
-      - 'false'
-  
-  CustomProvisioningPolicyArn:
-    Type: String
-    Description: ARN of custom provisioning policy (only used if UseCustomProvisioningPolicy is true)
-    Default: ''
-
-Conditions:
-  UseCustomPolicy: !Equals [!Ref UseCustomProvisioningPolicy, 'true']
-  UseManagedPolicy: !Equals [!Ref UseCustomProvisioningPolicy, 'false']
+    Description: DataZone domain ID
 
 Resources:
-  # ManageAccessRole - for blueprint management
-  ManageAccessRole:
+  DataZoneManageAccessRole:
     Type: AWS::IAM::Role
     Properties:
       RoleName: DataZoneManageAccessRole
-      Description: IAM role to manage access to DataZone environments
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
           - Effect: Allow
             Principal:
               Service: datazone.amazonaws.com
-            Action: 'sts:AssumeRole'
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                'aws:SourceAccount': !Ref DomainAccountId
+              ArnLike:
+                'aws:SourceArn': !Sub 'arn:aws:datazone:${AWS::Region}:${DomainAccountId}:domain/${DomainId}'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonDataZoneGlueManageAccessRolePolicy
       Policies:
-        - PolicyName: ManageAccessPolicy
+        - PolicyName: DataZoneManageAccessPolicy
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
-              # Lake Formation permissions
-              - Sid: LakeFormationPermissions
-                Effect: Allow
+              - Effect: Allow
                 Action:
-                  - 'lakeformation:GrantPermissions'
-                  - 'lakeformation:RevokePermissions'
-                  - 'lakeformation:GetDataAccess'
-                  - 'lakeformation:GetDataLakeSettings'
-                  - 'lakeformation:PutDataLakeSettings'
-                  - 'lakeformation:RegisterResource'
-                  - 'lakeformation:DeregisterResource'
-                  - 'lakeformation:DescribeResource'
-                  - 'lakeformation:ListResources'
-                  - 'lakeformation:ListPermissions'
-                Resource: '*'
-              
-              # IAM permissions for role management
-              - Sid: IAMRoleManagement
-                Effect: Allow
-                Action:
-                  - 'iam:GetRole'
-                  - 'iam:GetRolePolicy'
-                  - 'iam:ListRolePolicies'
-                  - 'iam:ListAttachedRolePolicies'
-                  - 'iam:PassRole'
-                Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:role/*'
-              
-              # Glue permissions for catalog management
-              - Sid: GlueCatalogPermissions
-                Effect: Allow
-                Action:
-                  - 'glue:GetDatabase'
-                  - 'glue:GetDatabases'
-                  - 'glue:GetTable'
-                  - 'glue:GetTables'
-                  - 'glue:GetPartition'
-                  - 'glue:GetPartitions'
-                  - 'glue:BatchGetPartition'
-                  - 'glue:CreateDatabase'
-                  - 'glue:UpdateDatabase'
-                  - 'glue:DeleteDatabase'
-                Resource: '*'
-              
-              # S3 permissions for data access
-              - Sid: S3DataAccess
-                Effect: Allow
-                Action:
-                  - 's3:GetObject'
-                  - 's3:GetObjectVersion'
-                  - 's3:PutObject'
-                  - 's3:DeleteObject'
-                  - 's3:ListBucket'
-                  - 's3:GetBucketLocation'
+                  - lakeformation:*
+                  - glue:*
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:ListBucket
+                  - iam:PassRole
                 Resource: '*'
       Tags:
-        - Key: Project
-          Value: !Ref ProjectTag
-        - Key: Environment
-          Value: !Ref EnvironmentTag
         - Key: ManagedBy
-          Value: CloudFormation
+          Value: AccountPoolFactory
 
-  # ProvisioningRole - for environment provisioning
-  ProvisioningRole:
+  DataZoneProvisioningRole:
     Type: AWS::IAM::Role
     Properties:
       RoleName: DataZoneProvisioningRole
-      Description: IAM role to provision DataZone environments
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
           - Effect: Allow
             Principal:
               Service: datazone.amazonaws.com
-            Action: 'sts:AssumeRole'
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                'aws:SourceAccount': !Ref DomainAccountId
+              ArnLike:
+                'aws:SourceArn': !Sub 'arn:aws:datazone:${AWS::Region}:${DomainAccountId}:domain/${DomainId}'
       ManagedPolicyArns:
-        - 'arn:aws:iam::aws:policy/AdministratorAccess'
+        - arn:aws:iam::aws:policy/AdministratorAccess
       Tags:
-        - Key: Project
-          Value: !Ref ProjectTag
-        - Key: Environment
-          Value: !Ref EnvironmentTag
         - Key: ManagedBy
-          Value: CloudFormation
+          Value: AccountPoolFactory
 
 Outputs:
   ManageAccessRoleArn:
-    Description: ARN of the ManageAccessRole for blueprint management
-    Value: !GetAtt ManageAccessRole.Arn
+    Description: ARN of DataZoneManageAccessRole
+    Value: !GetAtt DataZoneManageAccessRole.Arn
     Export:
       Name: !Sub '${AWS::StackName}-ManageAccessRoleArn'
-  
-  ManageAccessRoleName:
-    Description: Name of the ManageAccessRole
-    Value: !Ref ManageAccessRole
-    Export:
-      Name: !Sub '${AWS::StackName}-ManageAccessRoleName'
-  
+
   ProvisioningRoleArn:
-    Description: ARN of the ProvisioningRole for environment provisioning
-    Value: !GetAtt ProvisioningRole.Arn
+    Description: ARN of DataZoneProvisioningRole
+    Value: !GetAtt DataZoneProvisioningRole.Arn
     Export:
       Name: !Sub '${AWS::StackName}-ProvisioningRoleArn'
-  
-  ProvisioningRoleName:
-    Description: Name of the ProvisioningRole
-    Value: !Ref ProvisioningRole
-    Export:
-      Name: !Sub '${AWS::StackName}-ProvisioningRoleName'

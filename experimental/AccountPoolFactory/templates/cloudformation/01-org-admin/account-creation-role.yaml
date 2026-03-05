@@ -1,0 +1,82 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Cross-account role for Pool Manager to create accounts in Org Admin account'
+
+Parameters:
+  DomainAccountId:
+    Type: String
+    Description: Domain account ID that will assume this role
+    AllowedPattern: '^\d{12}$'
+
+Resources:
+  AccountCreationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AccountPoolFactory-AccountCreation
+      Description: Allows Pool Manager Lambda in Domain account to create AWS accounts
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${DomainAccountId}:role/AccountPoolFactory-PoolManager-Role'
+            Action: 'sts:AssumeRole'
+            Condition:
+              StringEquals:
+                'sts:ExternalId': !Sub 'AccountPoolFactory-${DomainAccountId}'
+      Policies:
+        - PolicyName: AccountPoolFactoryOrganizationsAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Account creation and status checking
+              - Effect: Allow
+                Action:
+                  - 'organizations:CreateAccount'
+                  - 'organizations:DescribeCreateAccountStatus'
+                Resource: '*'
+              # Account management - only for accounts created by this system
+              - Effect: Allow
+                Action:
+                  - 'organizations:DescribeAccount'
+                  - 'organizations:ListParents'
+                  - 'organizations:MoveAccount'
+                  - 'organizations:CloseAccount'
+                Resource: '*'
+              # Read-only access to organization structure
+              - Effect: Allow
+                Action:
+                  - 'organizations:DescribeOrganization'
+                  - 'organizations:ListRoots'
+                  - 'organizations:ListOrganizationalUnitsForParent'
+                  - 'organizations:DescribeOrganizationalUnit'
+                Resource: '*'
+              # CloudFormation StackSet read access for deployment polling
+              - Effect: Allow
+                Action:
+                  - 'cloudformation:DescribeStackSet'
+                  - 'cloudformation:ListStackInstances'
+                  - 'cloudformation:DescribeStackInstance'
+                Resource: 'arn:aws:cloudformation:*:*:stackset/AccountPoolFactory-*:*'
+              # Cross-account role assumption for trust policy updates
+              - Effect: Allow
+                Action:
+                  - 'sts:AssumeRole'
+                Resource: 'arn:aws:iam::*:role/OrganizationAccountAccessRole'
+      Tags:
+        - Key: Project
+          Value: AccountPoolFactory
+        - Key: ManagedBy
+          Value: CloudFormation
+
+Outputs:
+  RoleArn:
+    Description: ARN of the account creation role
+    Value: !GetAtt AccountCreationRole.Arn
+    Export:
+      Name: AccountPoolFactory-AccountCreationRoleArn
+  
+  ExternalId:
+    Description: External ID for assuming the role
+    Value: !Sub 'AccountPoolFactory-${DomainAccountId}'
+    Export:
+      Name: AccountPoolFactory-ExternalId

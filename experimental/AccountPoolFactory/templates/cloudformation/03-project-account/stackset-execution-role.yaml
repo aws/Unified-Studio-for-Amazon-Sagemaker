@@ -1,0 +1,28 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'StackSet Execution Role for Account Pool Factory project accounts'
+
+Parameters:
+  AdministratorAccountId:
+    Type: String
+    Description: AWS Account ID of the administrator account (Org Admin)
+    AllowedPattern: '^\d{12}$'
+
+Resources:
+  StackSetExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AWSCloudFormationStackSetExecutionRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AdministratorAccountId}:role/AWSCloudFormationStackSetAdministrationRole'
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+
+Outputs:
+  ExecutionRoleArn:
+    Description: ARN of the StackSet Execution Role
+    Value: !GetAtt StackSetExecutionRole.Arn

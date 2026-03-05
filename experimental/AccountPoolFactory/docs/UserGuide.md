@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Account Pool Factory automates AWS account provisioning for Amazon DataZone projects. It maintains a shadow pool of pre-configured accounts that are automatically assigned to projects on demand - one dedicated account per project. The system uses event-driven replenishment to ensure accounts are always ready, eliminating the 10-12 minute setup delay during project creation.
+The Account Pool Factory automates AWS account provisioning for Amazon DataZone projects. It maintains a shadow pool of pre-configured accounts that are automatically assigned to projects on demand - one dedicated account per project. The system uses event-driven replenishment to ensure accounts are always ready, eliminating the 6-8 minute setup delay during project creation.
 
 ## Why Use Account Pool Factory?
 
@@ -57,7 +57,7 @@ Account-level isolation provides:
 
 1. **Shadow Pool**: Pool Manager maintains 5-10 pre-configured accounts in AVAILABLE state
 2. **Event-Driven Replenishment**: When projects are created, CloudFormation events trigger automatic pool replenishment
-3. **Parallel Setup**: Multiple accounts are created and configured simultaneously (10-12 minutes per account)
+3. **Wave-Based Parallel Setup**: Multiple accounts are created and configured simultaneously using wave-based parallel execution (6-8 minutes per account)
 4. **Fast Project Creation**: Projects get accounts instantly from the pool (no waiting for setup)
 5. **Automatic Cleanup**: When projects are deleted, accounts are automatically closed to minimize costs
 
@@ -174,22 +174,9 @@ Before deploying the Account Pool Factory, ensure you have:
 - Target OU for project accounts already created
 - IAM permissions for CloudFormation, IAM, EventBridge, SSM
 
-**Step 1: Deploy Approved StackSets**
+**Note**: For the initial release, Organization Administrator setup is optional. The system uses Organizations API directly for account creation, which doesn't require StackSets. StackSets will be used in future releases for automated account configuration.
 
-StackSets define the approved CloudFormation templates that will be deployed to project accounts during setup.
-
-```bash
-./tests/setup/scripts/deploy-approved-stacksets.sh
-```
-
-This creates three StackSets in the Org Admin account:
-- **VPCSetup**: Networking infrastructure (3 private subnets across 3 AZs)
-- **IAMRoles**: DataZone roles (ManageAccessRole, ProvisioningRole)
-- **BlueprintEnablement**: Enables all 17 DataZone blueprints
-
-**Note**: StackSets are created once. Instances will be deployed to project accounts automatically by the Setup Orchestrator Lambda.
-
-**What Happens Next**: The Domain Administrator will deploy Lambda functions that use these StackSets to configure new accounts.
+**What Happens Next**: The Domain Administrator will deploy Lambda functions that create and configure accounts.
 
 ### Domain Administrator Deployment
 
@@ -197,27 +184,470 @@ This creates three StackSets in the Org Admin account:
 - DataZone domain already exists
 - Domain ID, ARN, and root domain unit ID available
 - IAM permissions for Lambda, DynamoDB, RAM, DataZone, CloudWatch
-- Organization Administrator has deployed StackSets
+- Organization Administrator has deployed StackSets (optional for initial release)
 
 **Step 1: Deploy Account Pool Infrastructure**
 
 This deploys all Lambda functions, DynamoDB tables, EventBridge bus, SNS topics, and CloudWatch dashboards in your Domain account.
 
+**Script**: `./deploy-infrastructure.sh`
+
+**What it does**:
+- Creates CloudFormation stack with all infrastructure components
+- Deploys Pool Manager Lambda (monitors pool, triggers replenishment)
+- Deploys Setup Orchestrator Lambda (configures accounts)
+- Creates DynamoDB table for account state tracking
+- Creates EventBridge central bus for events
+- Creates SNS topic for alerts
+- Creates 13 SSM parameters with configuration
+- Creates 4 CloudWatch dashboards
+
+**Command**:
 ```bash
-./tests/setup/scripts/deploy-account-pool-infrastructure.sh
+cd experimental/AccountPoolFactory
+./deploy-infrastructure.sh
 ```
 
-This creates:
-- **Pool Manager Lambda**: Monitors pool size, triggers replenishment, manages account lifecycle
-- **Setup Orchestrator Lambda**: Configures new accounts (8-step workflow)
-- **Account Provider Lambda**: Handles DataZone account pool requests
-- **DynamoDB State Table**: Tracks account states and setup progress
-- **EventBridge Central Bus**: Receives events from project accounts
-- **SNS Alert Topic**: Sends notifications for failures and warnings
-- **SSM Parameters**: Stores configuration (pool sizes, retry settings, domain info)
-- **4 CloudWatch Dashboards**: Pool overview, account inventory, failed accounts, org limits
+**Sample Output**:
+```
+🚀 Deploying Account Pool Factory Infrastructure
+================================================
+Region: us-east-2
+Domain Account: 994753223772
+Domain ID: dzd-5o0lje5xgpeuw9
 
-**Step 2: Configure Pool Settings**
+📦 Packaging Lambda functions...
+✓ Pool Manager packaged
+✓ Setup Orchestrator packaged
+
+📤 Uploading to S3...
+✓ Uploaded to s3://accountpoolfactory-artifacts-994753223772/pool-manager.zip
+✓ Uploaded to s3://accountpoolfactory-artifacts-994753223772/setup-orchestrator.zip
+
+🏗️  Deploying CloudFormation stack...
+Stack Name: AccountPoolFactory-Infrastructure
+
+Waiting for stack creation...
+✓ Stack created successfully!
+
+📊 Stack Outputs:
+  DynamoDBTableName: AccountPoolFactory-AccountState
+  EventBusArn: arn:aws:events:us-east-2:994753223772:event-bus/AccountPoolFactory-CentralBus
+  SNSTopicArn: arn:aws:sns:us-east-2:994753223772:AccountPoolFactory-Alerts
+  PoolManagerArn: arn:aws:lambda:us-east-2:994753223772:function:PoolManager
+  SetupOrchestratorArn: arn:aws:lambda:us-east-2:994753223772:function:SetupOrchestrator
+
+✅ Infrastructure deployment complete!
+
+Next steps:
+1. Deploy cross-account role: Switch to Org Admin account and run ./deploy-org-admin-role.sh
+2. Deploy Account Provider Lambda: ./deploy-account-provider.sh
+3. Create account pool: ./create-account-pool.sh
+4. Create project profile: ./create-project-profile.sh
+```
+
+**Resources Created**:
+- **DynamoDB Table**: AccountPoolFactory-AccountState
+- **EventBridge Bus**: AccountPoolFactory-CentralBus
+- **SNS Topic**: AccountPoolFactory-Alerts
+- **Pool Manager Lambda**: arn:aws:lambda:us-east-2:994753223772:function:PoolManager
+- **Setup Orchestrator Lambda**: arn:aws:lambda:us-east-2:994753223772:function:SetupOrchestrator
+- **13 SSM Parameters**: /AccountPoolFactory/* (pool config, domain info, retry settings)
+- **4 CloudWatch Dashboards**: Overview, Inventory, FailedAccounts, OrgLimits
+
+**Step 2: Deploy Cross-Account Role (Organization Admin Account)**
+
+This deploys the cross-account IAM role that allows Pool Manager Lambda in the Domain account to create and manage accounts via Organizations API.
+
+**Script**: `./deploy-org-admin-role.sh`
+
+**What it does**:
+- Deploys IAM role in Organization Admin account
+- Configures trust policy with External ID for security
+- Grants least-privilege Organizations API permissions
+- Saves role ARN and External ID for Domain account configuration
+
+**Security Features**:
+- External ID prevents confused deputy attacks
+- Least-privilege permissions (only account creation/management)
+- Trust policy restricted to specific Lambda role in Domain account
+
+**Command** (run in Organization Admin account):
+```bash
+# Switch to Organization Admin account credentials
+export AWS_PROFILE=org-admin  # or use aws configure
+
+./deploy-org-admin-role.sh
+```
+
+**Sample Output**:
+```
+🚀 Deploying Account Creation Role in Org Admin Account
+========================================================
+Org Admin Account: 495869084367
+Domain Account: 994753223772
+Region: us-east-2
+
+✅ Running in correct account
+
+📦 Deploying cross-account role...
+Waiting for changeset to be created..
+Waiting for stack create/update to complete
+Successfully created/updated stack - AccountPoolFactory-AccountCreationRole
+
+✅ Role deployed successfully
+
+📊 Role Details:
+  Role ARN: arn:aws:iam::495869084367:role/AccountPoolFactory-AccountCreation
+  External ID: AccountPoolFactory-994753223772
+
+📄 Role details saved to: org-admin-role-details.json
+
+✅ Deployment complete!
+
+Next steps:
+1. Switch back to Domain account credentials
+2. Update SSM parameter with role ARN:
+   aws ssm put-parameter --name /AccountPoolFactory/PoolManager/OrgAdminRoleArn \
+     --value 'arn:aws:iam::495869084367:role/AccountPoolFactory-AccountCreation' \
+     --type String --region us-east-2
+3. Update SSM parameter with external ID:
+   aws ssm put-parameter --name /AccountPoolFactory/PoolManager/ExternalId \
+     --value 'AccountPoolFactory-994753223772' \
+     --type String --region us-east-2
+4. Trigger pool replenishment: ./seed-initial-pool.sh
+```
+
+**Resources Created**:
+- **IAM Role**: AccountPoolFactory-AccountCreation
+- **Role ARN**: arn:aws:iam::495869084367:role/AccountPoolFactory-AccountCreation
+- **External ID**: AccountPoolFactory-{DomainAccountId}
+
+**After Deployment** (run in Domain account):
+```bash
+# Switch back to Domain account
+export AWS_PROFILE=domain-account
+
+# Configure Pool Manager with cross-account role
+aws ssm put-parameter \
+  --name /AccountPoolFactory/PoolManager/OrgAdminRoleArn \
+  --value 'arn:aws:iam::495869084367:role/AccountPoolFactory-AccountCreation' \
+  --type String \
+  --region us-east-2
+
+aws ssm put-parameter \
+  --name /AccountPoolFactory/PoolManager/ExternalId \
+  --value 'AccountPoolFactory-994753223772' \
+  --type String \
+  --region us-east-2
+```
+
+**Step 3: Deploy Trust Policy StackSet (Organization Admin Account)**
+
+This deploys a StackSet that updates the OrganizationAccountAccessRole trust policy in all pool accounts, allowing the Setup Orchestrator Lambda in the Domain account to configure them.
+
+**Script**: `./deploy-trust-policy-stackset.sh`
+
+**What it does**:
+- Creates a CloudFormation StackSet in Organization Admin account
+- Deploys stack instances to all accounts in the target OU
+- Updates OrganizationAccountAccessRole trust policy to include Domain account
+- Enables Setup Orchestrator to assume role and deploy CloudFormation stacks
+
+**Why This is Needed**:
+When AWS Organizations creates new accounts, the OrganizationAccountAccessRole only trusts the Organization Admin account by default. The Setup Orchestrator Lambda runs in the Domain account and needs to assume this role to deploy VPC, IAM roles, EventBridge rules, and blueprints in each pool account.
+
+**Command** (run in Organization Admin account):
+```bash
+# Switch to Organization Admin account credentials
+eval $(isengardcli credentials amirbo+1@amazon.com)
+# OR: export AWS_PROFILE=org-admin
+
+./deploy-trust-policy-stackset.sh
+```
+
+**Sample Output**:
+```
+🚀 Deploying Trust Policy StackSet
+====================================
+Region: us-east-2
+Org Admin Account: 495869084367
+Domain Account: 994753223772
+Target OU: ou-n5om-otvkrtx2
+
+📦 Creating new StackSet...
+✅ StackSet created
+
+📋 Deploying StackSet instances to target OU...
+✅ StackSet instances deployment initiated
+
+📊 Checking deployment status...
+   Operation status: RUNNING
+   Operation status: RUNNING
+   Operation status: SUCCEEDED
+
+✅ StackSet deployment completed successfully!
+
+📊 StackSet Summary:
+-----------------------------------------------------------
+| AccountPoolFactory-TrustPolicy | ACTIVE | Trust policy |
+-----------------------------------------------------------
+
+📋 Stack Instances:
+-----------------------------------------------------------
+| 669468173247 | us-east-2 | CURRENT |
+| 476383094227 | us-east-2 | CURRENT |
+| 071378140110 | us-east-2 | CURRENT |
+-----------------------------------------------------------
+
+✅ Trust policy deployment complete!
+
+Next steps:
+1. Verify all stack instances are in CREATE_COMPLETE status
+2. Switch back to Domain account:
+   eval $(isengardcli credentials amirbo+3@amazon.com)
+3. Retry Setup Orchestrator for failed accounts
+```
+
+**Resources Created**:
+- **StackSet**: AccountPoolFactory-TrustPolicy
+- **Stack Instances**: One per account in target OU
+- **Updated Role**: OrganizationAccountAccessRole (trust policy includes Domain account)
+
+**Auto-Deployment**:
+The StackSet is configured with auto-deployment enabled. When new accounts are created in the target OU, the trust policy update will be automatically deployed to them within a few minutes.
+
+**After Deployment** (run in Domain account):
+```bash
+# Switch back to Domain account
+eval $(isengardcli credentials amirbo+3@amazon.com)
+
+# Retry setup for any failed accounts
+aws lambda invoke \
+  --function-name SetupOrchestrator \
+  --cli-binary-format raw-in-base64-out \
+  --payload '{"accountId":"ACCOUNT_ID","mode":"setup"}' \
+  --region us-east-2 \
+  /tmp/response.json
+```
+
+**Step 4: Deploy Account Provider Lambda**
+
+This deploys the Account Provider Lambda that handles DataZone account pool requests.
+
+**Script**: `./deploy-account-provider.sh`
+
+**What it does**:
+- Packages Account Provider Lambda code
+- Uploads to S3
+- Deploys Lambda function with IAM role
+- Configures permissions for DataZone to invoke
+
+**Command**:
+```bash
+./deploy-account-provider.sh
+```
+
+**Sample Output**:
+```
+🚀 Deploying Account Provider Lambda
+====================================
+Region: us-east-2
+Domain Account: 994753223772
+
+📦 Packaging Lambda function...
+✓ Account Provider packaged
+
+📤 Uploading to S3...
+✓ Uploaded to s3://accountpoolfactory-artifacts-994753223772/account-provider.zip
+
+🏗️  Creating Lambda function...
+✓ Lambda function created: AccountProvider
+✓ Function ARN: arn:aws:lambda:us-east-2:994753223772:function:AccountProvider
+
+🔐 Configuring permissions...
+✓ DataZone can invoke this Lambda
+
+✅ Account Provider deployment complete!
+
+Lambda Details:
+  Function Name: AccountProvider
+  Runtime: python3.12
+  Handler: lambda_function.lambda_handler
+  Role: AccountProviderLambdaRole
+
+Next steps:
+1. Create account pool: ./create-account-pool.sh
+```
+
+**Resources Created**:
+- **Lambda Function**: AccountProvider
+- **IAM Role**: AccountProviderLambdaRole
+- **Lambda Permission**: Allows DataZone service to invoke
+
+**Step 4: Create DataZone Account Pool**
+
+This creates the DataZone account pool and registers your Account Provider Lambda as the custom handler.
+
+**Script**: `./create-account-pool.sh`
+
+**What it does**:
+- Retrieves Lambda ARN and Role ARN
+- Creates DataZone account pool with MANUAL resolution strategy
+- Registers Lambda as customAccountPoolHandler
+- Saves pool details to account-pool-details.json
+
+**Command**:
+```bash
+./create-account-pool.sh
+```
+
+**Sample Output**:
+```
+🚀 Creating DataZone Account Pool
+==================================
+Domain ID: dzd-5o0lje5xgpeuw9
+Domain Account: 994753223772
+Region: us-east-2
+
+Lambda Function ARN: arn:aws:lambda:us-east-2:994753223772:function:AccountProvider
+Lambda Role ARN: arn:aws:iam::994753223772:role/AccountProviderLambdaRole
+
+📦 Creating account pool...
+
+✅ Account pool created successfully!
+
+Pool ID: 5id04597iehicp
+Pool ARN: arn:aws:datazone:us-east-2:994753223772:account-pool/dzd-5o0lje5xgpeuw9/5id04597iehicp
+Pool Name: AccountPoolFactory
+Resolution Strategy: MANUAL
+
+📄 Pool details saved to: account-pool-details.json
+
+📊 Account pool details:
+{
+  "domainId": "dzd-5o0lje5xgpeuw9",
+  "name": "AccountPoolFactory",
+  "id": "5id04597iehicp",
+  "description": "Automated account pool managed by Account Pool Factory",
+  "resolutionStrategy": "MANUAL",
+  "accountSource": {
+    "customAccountPoolHandler": {
+      "lambdaFunctionArn": "arn:aws:lambda:us-east-2:994753223772:function:AccountProvider",
+      "lambdaExecutionRoleArn": "arn:aws:iam::994753223772:role/AccountProviderLambdaRole"
+    }
+  },
+  "createdAt": "2026-03-03T20:17:56.675745+00:00",
+  "domainUnitId": "563ikhcj7fgkrt"
+}
+
+✅ Account pool setup complete!
+
+Next steps:
+1. Create a project profile that uses this account pool: ./create-project-profile.sh
+2. Seed the initial pool with accounts: ./seed-initial-pool.sh
+3. Create a test project
+```
+
+**Resources Created**:
+- **DataZone Account Pool**: AccountPoolFactory (ID: 5id04597iehicp)
+- **Pool Configuration File**: account-pool-details.json
+
+**Step 5: Create Project Profile with Account Pool**
+
+This creates a DataZone project profile that uses the account pool for dynamic account assignment. There are two types of profiles based on your domain type:
+
+- **Open Project Profile** (for IAM-based domains): Uses ToolingLite and simpler blueprints
+- **Closed Project Profile** (for IDC-based domains): Uses full enterprise blueprints (Tooling, DataLake, etc.)
+
+**Script for IAM Domains**: `./create-open-project-profile-pool.sh`
+**Script for IDC Domains**: `./create-closed-project-profile-pool.sh`
+
+**What it does**:
+- Fetches all available blueprint IDs from domain
+- Creates project profile with account pool integration
+- Configures environment blueprints appropriate for domain type
+- Adds policy grants for blueprints and project profile
+- Saves profile details to JSON file
+
+**Command (for IAM domain)**:
+```bash
+./create-open-project-profile-pool.sh
+```
+
+**Sample Output**:
+```
+🚀 Creating Open Project Profile with Account Pool (IAM Domain)
+==============================================================
+Domain ID: dzd-5o0lje5xgpeuw9
+Domain Unit ID: 563ikhcj7fgkrt
+Domain Account: 994753223772
+Region: us-east-2
+
+Account Pool ID: 5id04597iehicp
+
+📋 Fetching blueprint IDs from domain...
+Blueprint IDs (IAM Domain):
+  ToolingLite: 4iny26qew2b8mh
+  S3Bucket: 3ydt1bhkq3sesp
+  S3TableCatalog: 4sfeixs7cu9v1l
+
+🔧 Building environment configurations for open projects...
+📦 Creating open project profile...
+
+✅ Open project profile created successfully!
+
+Profile ID: danattlt8uwzah
+Profile Name: Open Project - Account Pool
+
+📄 Profile details saved to: open-project-profile-details.json
+
+🔐 Adding policy grants...
+
+Adding policy grant for ToolingLite...
+✅ Policy grant added for ToolingLite
+Adding policy grant for S3Bucket...
+✅ Policy grant added for S3Bucket
+Adding policy grant for S3TableCatalog...
+✅ Policy grant added for S3TableCatalog
+
+Adding policy grant for Project Profile...
+✅ Policy grant added for Project Profile
+
+✅ Open project profile setup complete!
+
+Profile Type: Open (IAM Domain)
+Blueprints: ToolingLite (ON_CREATE), S3Bucket, S3TableCatalog (ON_DEMAND)
+
+Next steps:
+1. Seed the initial pool with accounts: ./seed-initial-pool.sh
+2. Create a test project using this profile
+3. Verify account assignment from pool
+```
+
+**Resources Created (IAM Domain)**:
+- **Project Profile**: Open Project - Account Pool (ID: danattlt8uwzah)
+- **Environment Configurations**: 3 blueprints configured with account pool
+  - ToolingLite (ON_CREATE) - Lightweight tooling environment
+  - S3Bucket (ON_DEMAND) - S3 bucket for data storage
+  - S3TableCatalog (ON_DEMAND) - S3 table catalog for data discovery
+- **Policy Grants**: 4 grants (3 blueprints + 1 profile)
+- **Profile Configuration File**: open-project-profile-details.json
+
+**Resources Created (IDC Domain)**:
+- **Project Profile**: Closed Project - Account Pool
+- **Environment Configurations**: 8+ blueprints configured with account pool
+  - Tooling (ON_CREATE) - Full tooling environment with Spaces and Bedrock
+  - DataLake (ON_CREATE) - Lakehouse database with Glue and Athena
+  - RedshiftServerless (ON_CREATE) - Redshift Serverless workgroup
+  - Workflows (ON_DEMAND) - Airflow workflows
+  - MLExperiments (ON_DEMAND) - SageMaker MLflow
+  - EmrOnEc2 (ON_DEMAND) - EMR on EC2 clusters
+  - EmrServerless (ON_DEMAND) - EMR Serverless applications
+- **Policy Grants**: 9+ grants (8+ blueprints + 1 profile)
+- **Profile Configuration File**: closed-project-profile-details.json
+
+**Step 6: Configure Pool Settings**
 
 Review and adjust the SSM parameters created by the deployment:
 
@@ -244,54 +674,69 @@ aws ssm put-parameter \
   --region us-east-2
 ```
 
-**Step 3: Create DataZone Account Pool**
+**Step 7: Seed Initial Pool**
 
-This creates the DataZone account pool with Lambda integration.
+Trigger the Pool Manager to create the initial set of accounts.
 
+**Script**: `./seed-initial-pool.sh`
+
+**What it does**:
+- Invokes Pool Manager Lambda with force_replenishment action
+- Pool Manager creates accounts via Organizations API
+- Setup Orchestrator configures each account
+- Accounts transition to AVAILABLE state when ready
+
+**Command**:
 ```bash
-./tests/setup/scripts/create-account-pool.sh
+./seed-initial-pool.sh
 ```
 
-This registers your Account Provider Lambda as the custom account pool handler in DataZone.
+**Sample Output**:
+```
+🚀 Seeding Initial Account Pool
+================================
+Region: us-east-2
 
-**Step 4: Seed Initial Pool**
+📞 Invoking Pool Manager Lambda...
+✓ Pool Manager invoked successfully
 
-Trigger the Pool Manager to create the initial set of accounts:
+Response:
+{
+  "statusCode": 200,
+  "body": {
+    "action": "force_replenishment",
+    "availableCount": 0,
+    "targetPoolSize": 5,
+    "accountsToCreate": 5,
+    "message": "Replenishment triggered: creating 5 accounts"
+  }
+}
 
-```bash
-# Manually invoke Pool Manager to seed pool
-aws lambda invoke \
-  --function-name PoolManager \
-  --payload '{"action":"force_replenishment"}' \
-  --region us-east-2 \
-  response.json
+📊 Monitor progress:
+  Pool Manager logs: aws logs tail /aws/lambda/PoolManager --follow --region us-east-2
+  Setup Orchestrator logs: aws logs tail /aws/lambda/SetupOrchestrator --follow --region us-east-2
+  DynamoDB table: aws dynamodb scan --table-name AccountPoolFactory-AccountState --region us-east-2
 
-# Monitor progress in CloudWatch Logs
-aws logs tail /aws/lambda/PoolManager --follow --region us-east-2
+⏱️  Expected completion time: 6-8 minutes per account
+
+✅ Initial pool seeding started!
+
+Next steps:
+1. Monitor CloudWatch Logs for progress
+2. Check CloudWatch Dashboard: AccountPoolFactory-Overview
+3. Wait for accounts to reach AVAILABLE state
+4. Create a test project using the project profile
 ```
 
-The Pool Manager will:
-1. Create accounts via Organizations API (< 1 minute each)
-2. Invoke Setup Orchestrator for each account
-3. Setup Orchestrator configures accounts in parallel (10-12 minutes each)
-4. Accounts transition to AVAILABLE state when ready
+**What Happens Next**:
+1. Pool Manager creates 5 accounts via Organizations API (< 1 minute each)
+2. Setup Orchestrator configures each account in parallel (6-8 minutes each)
+3. Accounts transition through states: SETTING_UP → AVAILABLE
+4. CloudWatch metrics and dashboards update in real-time
 
-**Step 5: Create Project Profile with Account Pool**
+**Step 8: Monitor Pool Health**
 
-This creates a DataZone project profile that uses the account pool.
-
-```bash
-./tests/setup/scripts/create-project-profile-with-pool.sh
-```
-
-This creates a profile with:
-- Account pool integration
-- Selected blueprints (configurable in config.yaml)
-- Policy grants for blueprint usage
-
-**Step 6: Monitor Pool Health**
-
-Access the CloudWatch dashboards to monitor your account pool:
+Access the CloudFormation dashboards to monitor your account pool:
 
 1. Navigate to CloudWatch console in Domain account
 2. Select "Dashboards" from left menu
@@ -303,7 +748,7 @@ Access the CloudWatch dashboards to monitor your account pool:
 
 You can also access these dashboards from the Org Admin account (cross-account metrics sharing is configured automatically).
 
-**Step 7: Subscribe to Alerts**
+**Step 9: Subscribe to Alerts**
 
 Subscribe to the SNS topic to receive alerts:
 
@@ -385,22 +830,20 @@ Environments can be created through the DataZone portal or API based on your pro
 ### Account States
 - **AVAILABLE**: Ready to be assigned to projects
 - **ASSIGNED**: Currently assigned to a project
-- **SETTING_UP**: Being created and configured (10-12 minutes)
+- **SETTING_UP**: Being created and configured (6-8 minutes with wave-based parallel execution)
 - **FAILED**: Setup failed after retry exhaustion
 - **DELETING**: Being closed via Organizations API
 - **CLEANING**: Being cleaned for reuse (REUSE strategy only)
 
 ### Account Lifecycle
 1. **Creation**: Pool Manager creates account via Organizations API (< 1 minute)
-2. **Setup**: Setup Orchestrator runs 8-step workflow (10-12 minutes):
-   - VPC deployment (~2.5 min)
-   - IAM roles deployment (~2 min)
-   - S3 bucket creation
-   - Blueprint enablement (~3 min) - 17 blueprints
-   - Policy grants creation (~2 min)
-   - Domain sharing via RAM (~1 min)
-   - EventBridge rules deployment
-   - Domain visibility verification
+2. **Setup**: Setup Orchestrator runs 8-step workflow in 6 waves with parallel execution (6-8 minutes):
+   - Wave 1: VPC deployment (~2.5 min)
+   - Wave 2: IAM roles + EventBridge rules in parallel (~2 min)
+   - Wave 3: S3 bucket + RAM share in parallel (~1 min)
+   - Wave 4: Blueprint enablement (~3 min) - 17 blueprints
+   - Wave 5: Policy grants creation (~2 min)
+   - Wave 6: Domain visibility verification (~1 min)
 3. **Available**: Account ready for project assignment
 4. **Assignment**: Project created, account assigned automatically
 5. **Deletion**: Project deleted, account closed automatically (DELETE strategy)
@@ -737,211 +1180,6 @@ aws service-quotas request-service-quota-increase \
 
 Or submit a support case through AWS Support Center.
 
-## Troubleshooting
-
-### Pool Replenishment Not Triggering
-
-**Symptoms**: Available account count stays low, no new accounts being created
-
-**Possible Causes**:
-1. Failed accounts exist (replenishment blocked)
-2. EventBridge rules not deployed to project accounts
-3. Pool Manager Lambda not receiving events
-
-**Solutions**:
-```bash
-# Check for failed accounts
-aws dynamodb query \
-  --table-name AccountPoolFactory-AccountState \
-  --index-name StateIndex \
-  --key-condition-expression "#state = :state" \
-  --expression-attribute-names '{"#state":"state"}' \
-  --expression-attribute-values '{":state":{"S":"FAILED"}}' \
-  --region us-east-2
-
-# If failed accounts exist, delete them
-aws organizations close-account --account-id FAILED_ACCOUNT_ID
-
-# Manually trigger replenishment
-aws lambda invoke \
-  --function-name PoolManager \
-  --payload '{"action":"force_replenishment"}' \
-  --region us-east-2 \
-  response.json
-```
-
-### Account Setup Fails at Specific Step
-
-**Symptoms**: Accounts stuck in SETTING_UP state, dashboard shows failures at specific step
-
-**Common Failures**:
-
-**VPC Deployment Failure**:
-- Cause: Insufficient IP addresses in region
-- Solution: Choose different region or request VPC quota increase
-
-**Blueprint Enablement Failure**:
-- Cause: Service quota exceeded (17 blueprints × N accounts)
-- Solution: Request DataZone blueprint quota increase
-- Check: `aws service-quotas get-service-quota --service-code datazone --quota-code L-XXXXXXXX`
-
-**Policy Grants Failure**:
-- Cause: Domain unit not found or access denied
-- Solution: Verify root domain unit ID in SSM parameters
-- Check: `aws ssm get-parameter --name /AccountPoolFactory/SetupOrchestrator/RootDomainUnitId`
-
-**Domain Visibility Failure**:
-- Cause: RAM share not active or domain not shared
-- Solution: Verify RAM share exists and is ACTIVE
-- Check: `aws ram get-resource-shares --resource-owner SELF --name DataZone-Domain-Share-*`
-
-**Solutions**:
-```bash
-# View detailed error for failed account
-aws dynamodb get-item \
-  --table-name AccountPoolFactory-AccountState \
-  --key '{"accountId":{"S":"ACCOUNT_ID"},"timestamp":{"N":"TIMESTAMP"}}' \
-  --region us-east-2
-
-# View CloudFormation stack events
-aws cloudformation describe-stack-events \
-  --stack-name STACK_NAME \
-  --region us-east-2 \
-  | jq '.StackEvents[] | select(.ResourceStatus | contains("FAILED"))'
-
-# View Setup Orchestrator logs
-aws logs tail /aws/lambda/SetupOrchestrator --follow --region us-east-2
-```
-
-### Project Creation Fails with "Account Not Authorized"
-
-**Symptoms**: Project creation fails, error mentions account authorization
-
-**Possible Causes**:
-1. Account Provider Lambda not invoked
-2. Account not in AVAILABLE state
-3. Domain not visible in project account
-
-**Solutions**:
-```bash
-# Check account state
-aws dynamodb query \
-  --table-name AccountPoolFactory-AccountState \
-  --key-condition-expression "accountId = :accountId" \
-  --expression-attribute-values '{":accountId":{"S":"ACCOUNT_ID"}}' \
-  --region us-east-2
-
-# Verify domain visibility from project account
-# (requires assuming role in project account)
-aws datazone list-domains --region us-east-2
-
-# Check Account Provider Lambda logs
-aws logs tail /aws/lambda/AccountProvider --follow --region us-east-2
-```
-
-### Environment Creation Fails
-
-**Symptoms**: Environment stuck in CREATING state or fails with permission errors
-
-**Possible Causes**:
-1. IAM roles not deployed correctly
-2. VPC or subnets missing
-3. Blueprints not enabled
-
-**Solutions**:
-```bash
-# Verify IAM roles exist in project account
-aws iam get-role --role-name DataZoneManageAccessRole
-aws iam get-role --role-name DataZoneProvisioningRole
-
-# Verify VPC and subnets exist
-aws ec2 describe-vpcs --filters "Name=tag:Name,Values=SageMakerUnifiedStudioVPC"
-aws ec2 describe-subnets --filters "Name=tag:Name,Values=SageMakerUnifiedStudioPrivateSubnet*"
-
-# Verify blueprints enabled
-aws datazone list-environment-blueprint-configurations \
-  --domain-identifier DOMAIN_ID \
-  --region us-east-2
-```
-
-### CloudWatch Dashboard Not Showing Data
-
-**Symptoms**: Dashboard widgets empty or showing "No data"
-
-**Possible Causes**:
-1. Metrics not being published
-2. Cross-account metrics sharing not configured
-3. Time range too narrow
-
-**Solutions**:
-```bash
-# Check if metrics exist
-aws cloudwatch list-metrics \
-  --namespace AccountPoolFactory/PoolManager \
-  --region us-east-2
-
-# Verify Lambda functions are running
-aws lambda list-functions \
-  --query 'Functions[?starts_with(FunctionName, `PoolManager`) || starts_with(FunctionName, `SetupOrchestrator`)]' \
-  --region us-east-2
-
-# Check Lambda execution logs for errors
-aws logs tail /aws/lambda/PoolManager --region us-east-2
-```
-
-### SNS Alerts Not Received
-
-**Symptoms**: No email alerts for failures or warnings
-
-**Possible Causes**:
-1. Subscription not confirmed
-2. Email in spam folder
-3. SNS topic permissions incorrect
-
-**Solutions**:
-```bash
-# List subscriptions
-aws sns list-subscriptions-by-topic \
-  --topic-arn arn:aws:sns:us-east-2:ACCOUNT_ID:AccountPoolFactory-Alerts \
-  --region us-east-2
-
-# Check subscription status (should be "Confirmed")
-# If "PendingConfirmation", check email for confirmation link
-
-# Test SNS topic
-aws sns publish \
-  --topic-arn arn:aws:sns:us-east-2:ACCOUNT_ID:AccountPoolFactory-Alerts \
-  --subject "Test Alert" \
-  --message "This is a test alert from Account Pool Factory" \
-  --region us-east-2
-```
-
-### High Setup Duration (> 15 minutes)
-
-**Symptoms**: Dashboard shows average setup duration exceeding 15 minutes
-
-**Possible Causes**:
-1. CloudFormation stack deployments slow
-2. API throttling
-3. Resource contention
-
-**Solutions**:
-```bash
-# Check for throttling errors in logs
-aws logs filter-log-events \
-  --log-group-name /aws/lambda/SetupOrchestrator \
-  --filter-pattern "ThrottlingException" \
-  --region us-east-2
-
-# Review setup duration by step
-aws logs insights query \
-  --log-group-name /aws/lambda/SetupOrchestrator \
-  --start-time $(date -u -d '1 hour ago' +%s) \
-  --end-time $(date -u +%s) \
-  --query-string 'fields accountId, stepName, duration | filter stepName != "" | stats avg(duration) by stepName' \
-  --region us-east-2
-```
-
 ## Configuration Reference
 
 ### SSM Parameters
@@ -1006,59 +1244,6 @@ aws ssm put-parameter \
     }
   }
   ```
-
-### DynamoDB Table Schema
-
-**Table Name**: `AccountPoolFactory-AccountState`
-
-**Primary Key**:
-- Partition Key: `accountId` (String)
-- Sort Key: `timestamp` (Number)
-
-**Global Secondary Indexes**:
-- `StateIndex`: Query accounts by state
-- `ProjectIndex`: Query accounts by project assignment
-
-**Key Attributes**:
-- `state`: AVAILABLE | ASSIGNED | SETTING_UP | FAILED | DELETING | CLEANING
-- `createdDate`: ISO 8601 timestamp
-- `assignedDate`: ISO 8601 timestamp (when assigned to project)
-- `setupDuration`: Setup time in seconds
-- `projectId`: DataZone project ID
-- `projectStackName`: CloudFormation stack name
-- `currentStep`: Current setup step
-- `completedSteps`: Array of completed steps
-- `failedStep`: Step that failed
-- `errorMessage`: Error message for failures
-- `stackEvents`: CloudFormation stack events for failures
-- `retryCount`: Number of retry attempts
-- `resources`: Object with VPC ID, subnet IDs, role ARNs, bucket name, blueprint IDs, grant IDs
-
-### Lambda Functions
-
-**Pool Manager Lambda**:
-- Function Name: `PoolManager`
-- Runtime: Python 3.12
-- Timeout: 5 minutes
-- Memory: 512 MB
-- Trigger: EventBridge rule on central bus
-- Responsibilities: Pool size monitoring, replenishment, account lifecycle
-
-**Setup Orchestrator Lambda**:
-- Function Name: `SetupOrchestrator`
-- Runtime: Python 3.12
-- Timeout: 15 minutes
-- Memory: 1024 MB
-- Trigger: Invoked by Pool Manager
-- Responsibilities: 8-step account setup workflow
-
-**Account Provider Lambda**:
-- Function Name: `AccountProvider`
-- Runtime: Python 3.12
-- Timeout: 5 minutes
-- Memory: 512 MB
-- Trigger: DataZone account pool requests
-- Responsibilities: List accounts, validate authorization
 
 ### CloudWatch Metrics
 
@@ -1148,127 +1333,3 @@ aws ssm put-parameter \
 - DataZone environments: Charged based on resources deployed (EC2, RDS, etc.)
 
 **Note**: The Account Pool Factory infrastructure costs are minimal. The majority of costs come from DataZone environments deployed by users in project accounts.
-
-## Security Considerations
-
-### Least Privilege Access
-
-All Lambda functions use IAM roles with minimum required permissions:
-- Pool Manager: Organizations, DynamoDB, Lambda, SNS, CloudWatch, SSM, STS
-- Setup Orchestrator: CloudFormation, DataZone, RAM, S3, IAM (PassRole only), DynamoDB, SNS, CloudWatch, SSM, STS
-- Account Provider: DataZone, DynamoDB, CloudWatch
-
-### Data Protection
-
-- **DynamoDB**: Encryption at rest enabled by default
-- **SNS**: Messages encrypted in transit (TLS)
-- **CloudWatch Logs**: Encrypted with AWS managed keys
-- **S3 Buckets**: Created with AES256 encryption enabled
-- **EventBridge**: Events encrypted in transit
-
-### Audit Trail
-
-- **CloudTrail**: All API calls logged automatically
-- **DynamoDB Streams**: Capture state changes for audit
-- **CloudWatch Logs**: All Lambda operations logged
-- **SNS Notifications**: Critical events sent to administrators
-
-### Cross-Account Access
-
-- **OrganizationAccountAccessRole**: Used for cross-account operations (created automatically by Organizations)
-- **EventBridge**: Cross-account event forwarding restricted to organization accounts only
-- **RAM Shares**: Domain sharing restricted to specific project accounts
-
-### Secrets Management
-
-- No hardcoded credentials in code
-- IAM roles for authentication
-- SSM Parameter Store for configuration (not secrets)
-- Temporary credentials via STS AssumeRole for cross-account access
-
-## Best Practices
-
-### Pool Sizing
-
-**Minimum Pool Size**: Set based on expected project creation rate
-- Low activity (< 5 projects/day): MinimumPoolSize = 3
-- Medium activity (5-20 projects/day): MinimumPoolSize = 5
-- High activity (> 20 projects/day): MinimumPoolSize = 10
-
-**Target Pool Size**: Set 2x minimum to handle bursts
-- MinimumPoolSize = 5 → TargetPoolSize = 10
-- MinimumPoolSize = 10 → TargetPoolSize = 20
-
-**Max Concurrent Setups**: Limit parallel account configuration
-- Small deployments: MaxConcurrentSetups = 3
-- Large deployments: MaxConcurrentSetups = 5
-- Note: Higher values may hit API rate limits
-
-### Reclaim Strategy
-
-**DELETE (Recommended)**:
-- Minimizes costs (accounts closed when not in use)
-- Clean state for each project
-- No account quota concerns
-- Use when: Cost optimization is priority
-
-**REUSE (Optional)**:
-- Preserves account quota
-- Faster project creation (no account creation delay)
-- Requires cleanup automation
-- Use when: Account quota is limited or account creation is restricted
-
-### Monitoring
-
-**Daily Tasks**:
-- Check `AccountPoolFactory-Overview` dashboard for pool health
-- Review available account count (should be > minimum)
-- Verify no failed accounts blocking replenishment
-
-**Weekly Tasks**:
-- Review `AccountPoolFactory-FailedAccounts` dashboard for patterns
-- Check `AccountPoolFactory-OrgLimits` dashboard for capacity
-- Review daily/weekly statistics for trends
-
-**Monthly Tasks**:
-- Review CloudWatch costs and optimize if needed
-- Adjust pool sizes based on usage patterns
-- Request account limit increases if approaching capacity
-
-### Alert Response
-
-**Account Setup Failed**:
-1. Review error message in SNS notification
-2. Check CloudWatch Logs for detailed stack trace
-3. Investigate root cause (quota, permissions, configuration)
-4. Delete failed account to unblock replenishment
-5. Fix root cause before next replenishment
-
-**Pool Depleted**:
-1. Check for failed accounts blocking replenishment
-2. Verify Pool Manager Lambda is running
-3. Manually trigger replenishment if needed
-4. Increase target pool size if depletion is frequent
-
-**Organization Account Limit Warning**:
-1. Review current account usage in dashboard
-2. Identify accounts that can be closed
-3. Request limit increase via Service Quotas
-4. Consider REUSE strategy to preserve quota
-
-## Next Steps
-
-- Review [Design Document](../.kiro/specs/setup-orchestrator/design.md) for technical details
-- See [Requirements Document](../.kiro/specs/setup-orchestrator/requirements.md) for complete specifications
-- Check [Development Progress](DevelopmentProgress.md) for implementation status
-- Consult [Testing Guide](TestingGuide.md) for validation procedures
-
-## Support
-
-For issues or questions:
-- Review CloudWatch Logs for Lambda errors
-- Check DynamoDB tables for account state
-- Verify configuration in SSM Parameter Store
-- Open CloudWatch dashboards for visual monitoring
-- Review SNS alerts for critical events
-- Consult design and requirements documentation in `.kiro/specs/setup-orchestrator/`

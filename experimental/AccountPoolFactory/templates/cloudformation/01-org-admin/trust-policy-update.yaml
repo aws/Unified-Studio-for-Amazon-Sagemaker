@@ -1,0 +1,39 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Update OrganizationAccountAccessRole trust policy to allow Domain account access'
+
+Parameters:
+  DomainAccountId:
+    Type: String
+    Description: Domain account ID that needs to assume the role
+    AllowedPattern: '^\d{12}$'
+
+Resources:
+  # This template updates the existing OrganizationAccountAccessRole
+  # to add the Domain account to its trust policy
+  
+  OrganizationAccessRoleTrustUpdate:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: OrganizationAccountAccessRole
+      Description: 'Allows organization management and domain accounts to access this account'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          # Trust the organization management account (default)
+          - Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: sts:AssumeRole
+          # Trust the domain account for Setup Orchestrator
+          - Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${DomainAccountId}:root'
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+      MaxSessionDuration: 3600
+
+Outputs:
+  RoleArn:
+    Description: ARN of the updated OrganizationAccountAccessRole
+    Value: !GetAtt OrganizationAccessRoleTrustUpdate.Arn
