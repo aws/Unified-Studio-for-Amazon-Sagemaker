@@ -1,0 +1,74 @@
+# Account Pool Factory Configuration - For Existing Accounts
+# This configuration is for Audience 1b: Deploying to existing AWS accounts and SMUS domain
+
+# IaC Provider Selection
+iac:
+  provider: cloudformation  # cloudformation | cdk | terraform
+
+# AWS Configuration
+aws:
+  region: us-east-2
+  org_admin_account_id: "REPLACE_WITH_ORG_ADMIN_ACCOUNT_ID"
+  domain_account_id: "REPLACE_WITH_DOMAIN_ACCOUNT_ID"
+
+# DataZone Domain Configuration (existing domain)
+datazone:
+  domain_id: REPLACE_WITH_EXISTING_DOMAIN_ID
+  domain_name: REPLACE_WITH_EXISTING_DOMAIN_NAME
+  domain_arn: arn:aws:datazone:us-east-2:DOMAIN_ACCOUNT_ID:domain/DOMAIN_ID
+  root_domain_unit_id: REPLACE_WITH_EXISTING_ROOT_DOMAIN_UNIT_ID
+  portal_url: https://DOMAIN_ID.sagemaker.us-east-2.on.aws
+  domain_execution_role_arn: arn:aws:iam::DOMAIN_ACCOUNT_ID:role/AmazonDataZoneDomainExecutionRole
+  default_project_owner: REPLACE_WITH_USERNAME
+
+# Account Pool Configuration
+account_pool:
+  name: AccountPoolFactory-Production
+  resolution_strategy: MANUAL
+  minimum_pool_size: 5
+  maximum_pool_size: 20
+  replenishment_threshold: 8
+
+# Account Naming Configuration
+accounts:
+  name_prefix: datazone-project-
+  email_domain: example.com
+  supported_regions:
+    - us-east-2
+    - us-east-1
+
+# Lambda Configuration
+lambda:
+  runtime: python3.12
+  timeout: 900
+  memory_size: 1024
+  log_retention_days: 30
+
+# DynamoDB Configuration
+dynamodb:
+  billing_mode: PAY_PER_REQUEST
+  point_in_time_recovery: true
+
+# Monitoring Configuration
+monitoring:
+  alert_email: YOUR_EMAIL@amazon.com
+  enable_detailed_monitoring: true
+  dashboard_name: AccountPoolFactory-Production
+
+# Tags
+tags:
+  Project: AccountPoolFactory
+  Environment: Production
+  ManagedBy: CloudFormation
+  Owner: YOUR_USERNAME
+
+# Testing Configuration (disabled for production)
+testing:
+  enabled: false
+
+# Organization Structure (existing OU)
+organization:
+  organization_id: REPLACE_WITH_ORG_ID
+  target_ou_id: REPLACE_WITH_TARGET_OU_ID
+  target_ou_name: REPLACE_WITH_OU_NAME
+  target_ou_path: REPLACE_WITH_OU_PATH

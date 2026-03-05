@@ -1,0 +1,147 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Enable IAM-compatible DataZone blueprints for project account
+
+Parameters:
+  DomainId:
+    Description: DataZone Domain ID
+    Type: String
+  
+  DomainUnitId:
+    Description: Root Domain Unit ID for authorization
+    Type: String
+  
+  ProjectAccountId:
+    Description: AWS Account ID where blueprints are being enabled
+    Type: String
+  
+  ManageAccessRoleArn:
+    Type: String
+    Description: IAM role ARN to manage access to environments
+  
+  ProvisioningRoleArn:
+    Description: IAM role ARN to provision environments
+    Type: String
+  
+  S3Location:
+    Type: String
+    Description: S3 location for environment artifacts
+  
+  Subnets:
+    Type: String
+    Description: Comma-separated list of subnet IDs
+  
+  VpcId:
+    Type: String
+    Description: VPC ID for environments
+
+Resources:
+  # IAM Domain compatible blueprints only
+  ToolingLite:
+    Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EnvironmentBlueprintIdentifier: "ToolingLite"
+      ManageAccessRoleArn: !Ref ManageAccessRoleArn
+      ProvisioningRoleArn: !Ref ProvisioningRoleArn
+      RegionalParameters:
+        - Region: !Ref 'AWS::Region'
+          Parameters: {}
+      EnabledRegions:
+        - !Ref 'AWS::Region'
+
+  S3Bucket:
+    Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: ToolingLite
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EnvironmentBlueprintIdentifier: "S3Bucket"
+      ManageAccessRoleArn: !Ref ManageAccessRoleArn
+      ProvisioningRoleArn: !Ref ProvisioningRoleArn
+      RegionalParameters:
+        - Region: !Ref 'AWS::Region'
+          Parameters: {}
+      EnabledRegions:
+        - !Ref 'AWS::Region'
+
+  S3TableCatalog:
+    Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: S3Bucket
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EnvironmentBlueprintIdentifier: "S3TableCatalog"
+      ManageAccessRoleArn: !Ref ManageAccessRoleArn
+      ProvisioningRoleArn: !Ref ProvisioningRoleArn
+      RegionalParameters:
+        - Region: !Ref 'AWS::Region'
+          Parameters: {}
+      EnabledRegions:
+        - !Ref 'AWS::Region'
+
+  # Policy Grants for IAM blueprints
+  ToolingLitePolicyGrant:
+    Type: AWS::DataZone::PolicyGrant
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EntityType: ENVIRONMENT_BLUEPRINT_CONFIGURATION
+      EntityIdentifier: !Sub '${ProjectAccountId}:${ToolingLite.EnvironmentBlueprintId}'
+      PolicyType: CREATE_ENVIRONMENT_FROM_BLUEPRINT
+      Detail:
+        CreateEnvironmentFromBlueprint: {}
+      Principal:
+        Project:
+          ProjectDesignation: CONTRIBUTOR
+          ProjectGrantFilter:
+            DomainUnitFilter:
+              DomainUnit: !Ref DomainUnitId
+              IncludeChildDomainUnits: true
+
+  S3BucketPolicyGrant:
+    Type: AWS::DataZone::PolicyGrant
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EntityType: ENVIRONMENT_BLUEPRINT_CONFIGURATION
+      EntityIdentifier: !Sub '${ProjectAccountId}:${S3Bucket.EnvironmentBlueprintId}'
+      PolicyType: CREATE_ENVIRONMENT_FROM_BLUEPRINT
+      Detail:
+        CreateEnvironmentFromBlueprint: {}
+      Principal:
+        Project:
+          ProjectDesignation: CONTRIBUTOR
+          ProjectGrantFilter:
+            DomainUnitFilter:
+              DomainUnit: !Ref DomainUnitId
+              IncludeChildDomainUnits: true
+
+  S3TableCatalogPolicyGrant:
+    Type: AWS::DataZone::PolicyGrant
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EntityType: ENVIRONMENT_BLUEPRINT_CONFIGURATION
+      EntityIdentifier: !Sub '${ProjectAccountId}:${S3TableCatalog.EnvironmentBlueprintId}'
+      PolicyType: CREATE_ENVIRONMENT_FROM_BLUEPRINT
+      Detail:
+        CreateEnvironmentFromBlueprint: {}
+      Principal:
+        Project:
+          ProjectDesignation: CONTRIBUTOR
+          ProjectGrantFilter:
+            DomainUnitFilter:
+              DomainUnit: !Ref DomainUnitId
+              IncludeChildDomainUnits: true
+
+Outputs:
+  ToolingLiteBlueprintId:
+    Description: ToolingLite Blueprint ID
+    Value: !GetAtt ToolingLite.EnvironmentBlueprintId
+  
+  S3BucketBlueprintId:
+    Description: S3Bucket Blueprint ID
+    Value: !GetAtt S3Bucket.EnvironmentBlueprintId
+  
+  S3TableCatalogBlueprintId:
+    Description: S3TableCatalog Blueprint ID
+    Value: !GetAtt S3TableCatalog.EnvironmentBlueprintId
+  
+  BlueprintCount:
+    Description: Number of blueprints enabled
+    Value: 3

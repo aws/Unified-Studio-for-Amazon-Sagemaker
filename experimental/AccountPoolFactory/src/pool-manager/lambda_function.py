@@ -19,7 +19,6 @@ import boto3
 from botocore.exceptions import ClientError
 
 # Initialize AWS clients
-organizations = boto3.client('organizations')
 dynamodb = boto3.client('dynamodb')
 lambda_client = boto3.client('lambda')
 sns = boto3.client('sns')
@@ -72,17 +71,6 @@ def load_config() -> Dict[str, Any]:
         print(f"📋 Loaded {total_params} parameters from SSM (with pagination)")
         print(f"   Parameter names: {sorted(config.keys())}")
         
-        # Log critical cross-account parameters
-        if 'OrgAdminRoleArn' in config:
-            print(f"   ✅ OrgAdminRoleArn found: {config['OrgAdminRoleArn']}")
-        else:
-            print(f"   ⚠️ OrgAdminRoleArn NOT found")
-            
-        if 'ExternalId' in config:
-            print(f"   ✅ ExternalId found: {config['ExternalId']}")
-        else:
-            print(f"   ⚠️ ExternalId NOT found")
-        
         # Apply defaults for missing parameters
         config.setdefault('PoolName', 'AccountPoolFactory')
         config.setdefault('TargetOUId', 'root')
@@ -111,58 +99,6 @@ def load_config() -> Dict[str, Any]:
             'EmailDomain': 'example.com',
             'NamePrefix': 'DataZone-Pool'
         }
-
-
-def get_organizations_client(config: Dict[str, Any]):
-    """Get Organizations client with cross-account role assumption if configured"""
-    org_admin_role_arn = config.get('OrgAdminRoleArn')
-    external_id = config.get('ExternalId')
-    
-    print(f"🔍 Cross-account role config check:")
-    print(f"   OrgAdminRoleArn: {org_admin_role_arn}")
-    print(f"   ExternalId: {external_id}")
-    
-    if org_admin_role_arn:
-        print(f"🔐 Assuming cross-account role: {org_admin_role_arn}")
-        try:
-            # Assume role in Org Admin account
-            assume_role_params = {
-                'RoleArn': org_admin_role_arn,
-                'RoleSessionName': 'AccountPoolFactory-PoolManager'
-            }
-            
-            if external_id:
-                assume_role_params['ExternalId'] = external_id
-                print(f"   Using ExternalId: {external_id}")
-            else:
-                print(f"   ⚠️ No ExternalId provided!")
-            
-            print(f"   Calling sts.assume_role with params: {json.dumps({k: v for k, v in assume_role_params.items() if k != 'ExternalId'}, indent=2)}")
-            
-            response = sts.assume_role(**assume_role_params)
-            
-            credentials = response['Credentials']
-            
-            # Create Organizations client with assumed role credentials
-            org_client = boto3.client(
-                'organizations',
-                aws_access_key_id=credentials['AccessKeyId'],
-                aws_secret_access_key=credentials['SecretAccessKey'],
-                aws_session_token=credentials['SessionToken']
-            )
-            
-            print(f"✅ Successfully assumed role in Org Admin account")
-            print(f"   Session expires: {credentials['Expiration']}")
-            return org_client
-            
-        except Exception as e:
-            print(f"❌ Failed to assume cross-account role: {e}")
-            print(f"   Error type: {type(e).__name__}")
-            print("⚠️ Falling back to local Organizations client")
-            return organizations
-    else:
-        print("ℹ️ No cross-account role configured, using local Organizations client")
-        return organizations
 
 
 def get_config() -> Dict[str, Any]:
@@ -348,275 +284,115 @@ def count_accounts_by_state(state: str) -> int:
 
 
 def create_accounts_parallel(count: int, config: Dict[str, Any]):
-    """Create multiple accounts in parallel"""
-    timestamp = int(time.time())
+    """Create multiple accounts sequentially with delays to avoid concurrent modification errors
     
-    # Get Organizations client (with cross-account role if configured)
-    org_client = get_organizations_client(config)
+    AWS Organizations has rate limits and doesn't support true parallel account creation.
+    We create accounts one at a time with delays between each to avoid ConcurrentModificationException.
+    """
+    import uuid
+    
+    # Get ProvisionAccount Lambda ARN from environment or config
+    org_admin_account_id = config.get('OrgAdminAccountId', os.environ.get('ORG_ADMIN_ACCOUNT_ID'))
+    region = os.environ.get('AWS_REGION', 'us-east-2')
+    provision_account_arn = f"arn:aws:lambda:{region}:{org_admin_account_id}:function:ProvisionAccount"
+    
+    print(f"📞 Using ProvisionAccount Lambda: {provision_account_arn}")
+    print(f"⚠️  Creating accounts sequentially to avoid AWS Organizations rate limits")
+    
+    timestamp = int(time.time())
+    successful_accounts = []
+    
+    # Get pool name for account naming (sanitize for AWS account name requirements)
+    pool_name = config.get('PoolName', 'AccountPoolFactory')
+    # Remove spaces, convert to lowercase, keep only alphanumeric and hyphens
+    pool_name_clean = ''.join(c if c.isalnum() or c == '-' else '-' for c in pool_name.lower())
+    pool_name_clean = pool_name_clean.strip('-')[:20]  # Max 20 chars for pool name part
     
     for i in range(count):
         try:
-            # Generate unique email and name
-            email = f"{config['EmailPrefix']}+{timestamp}-{i}@{config['EmailDomain']}"
-            name = f"{config['NamePrefix']}-{timestamp}-{i}"
+            # Generate unique email and name using UUID to avoid conflicts
+            # Format: smus-{pool-name}-{12-char-uuid}
+            # Using 12 chars instead of 8 to reduce collision probability with 200+ test accounts
+            unique_id = str(uuid.uuid4()).replace('-', '')[:12]  # 12 hex chars from UUID
+            
+            # Account name format: smus-{pool-name}-{unique-id}
+            # Example: smus-test-a3f8b2c1
+            name = f"smus-{pool_name_clean}-{unique_id}"
+            
+            # Email format: {prefix}+{unique-id}@{domain}
+            # Example: accountpool+a3f8b2c1@example.com
+            email = f"{config['EmailPrefix']}+{unique_id}@{config['EmailDomain']}"
             
             print(f"📧 Creating account {i+1}/{count}: {name} ({email})")
             
-            # Create account via Organizations API
-            response = org_client.create_account(
-                Email=email,
-                AccountName=name,
-                RoleName='OrganizationAccountAccessRole',
-                IamUserAccessToBilling='ALLOW'
+            # Invoke ProvisionAccount Lambda in Org Admin account
+            payload = {
+                'action': 'provision',
+                'accountName': name,
+                'accountEmail': email,
+                'ouId': config.get('TargetOUId', 'root'),
+                'domainId': os.environ.get('DOMAIN_ID'),
+                'domainAccountId': DOMAIN_ACCOUNT_ID,
+                'orgAdminAccountId': org_admin_account_id
+            }
+            
+            print(f"   Invoking ProvisionAccount with payload: {json.dumps(payload, indent=2)}")
+            
+            response = lambda_client.invoke(
+                FunctionName=provision_account_arn,
+                InvocationType='RequestResponse',  # Synchronous - wait for account to be ready
+                Payload=json.dumps(payload)
             )
             
-            request_id = response['CreateAccountStatus']['Id']
-            print(f"✅ Account creation initiated: request_id={request_id}")
+            # Parse response
+            response_payload = json.loads(response['Payload'].read())
+            print(f"   ProvisionAccount response: {json.dumps(response_payload, indent=2)}")
             
-            # Wait for account creation to complete
-            account_id = wait_for_account_creation(request_id, org_client)
-            
-            if account_id:
-                # Move account to target OU if specified
-                move_account_to_target_ou(account_id, config, org_client)
+            if response_payload.get('status') == 'SUCCESS':
+                account_id = response_payload['accountId']
+                print(f"✅ Account provisioned and ready: {account_id}")
                 
                 # Create DynamoDB record
-                create_account_record(account_id, request_id, name, email)
-                
-                # Wait for StackSet to deploy AccountPoolFactory-DomainAccess role
-                wait_for_stackset_deployment(account_id, config)
+                create_account_record(account_id, f"provision-{timestamp}-{i}", name, email)
                 
                 # Invoke Setup Orchestrator asynchronously
-                invoke_setup_orchestrator(account_id, request_id)
+                invoke_setup_orchestrator(account_id, f"provision-{timestamp}-{i}")
                 
                 publish_metric('AccountCreationStarted', 1, [{'Name': 'AccountId', 'Value': account_id}])
+                successful_accounts.append(account_id)
+                
+                # Add delay between account creations to avoid concurrent modification errors
+                # AWS Organizations needs time to process each account creation
+                if i < count - 1:  # Don't delay after last account
+                    delay = 15  # 15 seconds between accounts
+                    print(f"   ⏳ Waiting {delay}s before creating next account...")
+                    time.sleep(delay)
+            else:
+                error_msg = response_payload.get('message', 'Unknown error')
+                print(f"❌ Account provisioning failed: {error_msg}")
+                
+                # Handle specific error cases
+                if 'EMAIL_ALREADY_EXISTS' in error_msg:
+                    # This should be handled by ProvisionAccount Lambda now
+                    # If we still get this error, it means the account exists but couldn't be found
+                    print(f"   ⚠️  Email collision detected, skipping to next account")
+                    publish_metric('EmailCollision', 1)
+                elif 'ConcurrentModificationException' in error_msg:
+                    print(f"   ⏳ Waiting 30s due to concurrent modification...")
+                    time.sleep(30)
+                
+                # Continue to next account
+                continue
             
         except Exception as e:
             print(f"❌ Error creating account {i+1}: {e}")
+            # Wait before retrying next account
+            time.sleep(15)
             continue
-
-
-def wait_for_account_creation(request_id: str, org_client, timeout: int = 300) -> Optional[str]:
-    """Wait for account creation to complete"""
-    start_time = time.time()
     
-    while time.time() - start_time < timeout:
-        try:
-            response = org_client.describe_create_account_status(
-                CreateAccountRequestId=request_id
-            )
-            
-            status = response['CreateAccountStatus']
-            state = status['State']
-            
-            if state == 'SUCCEEDED':
-                account_id = status['AccountId']
-                print(f"✅ Account created successfully: {account_id}")
-                return account_id
-            elif state == 'FAILED':
-                reason = status.get('FailureReason', 'Unknown')
-                print(f"❌ Account creation failed: {reason}")
-                return None
-            
-            print(f"⏳ Account creation in progress... ({state})")
-            time.sleep(5)
-            
-        except Exception as e:
-            print(f"❌ Error checking account status: {e}")
-            return None
-    
-    print(f"⏱️ Account creation timed out after {timeout} seconds")
-    return None
-
-
-def move_account_to_target_ou(account_id: str, config: Dict[str, Any], org_client):
-    """Move account to target OU if specified"""
-    target_ou_id = config.get('TargetOUId', 'root')
-    
-    if target_ou_id == 'root' or not target_ou_id:
-        print(f"⏭️ Leaving account {account_id} in organization root")
-        return
-    
-    try:
-        # Get current parent
-        response = org_client.list_parents(ChildId=account_id)
-        if not response.get('Parents'):
-            print(f"⚠️ No parent found for account {account_id}")
-            return
-        
-        current_parent_id = response['Parents'][0]['Id']
-        
-        # Move account to target OU
-        org_client.move_account(
-            AccountId=account_id,
-            SourceParentId=current_parent_id,
-            DestinationParentId=target_ou_id
-        )
-        
-        print(f"✅ Moved account {account_id} to OU {target_ou_id}")
-        
-    except Exception as e:
-        print(f"⚠️ Failed to move account {account_id} to OU: {e}")
-
-
-def update_account_trust_policy(account_id: str, config: Dict[str, Any], org_client):
-    """Update OrganizationAccountAccessRole trust policy to allow Domain account access"""
-    print(f"🔐 Updating trust policy for account {account_id}")
-    
-    domain_account_id = DOMAIN_ACCOUNT_ID
-    
-    try:
-        # First assume the cross-account role in Org Admin account
-        # This gives us Organizations permissions
-        org_admin_role_arn = config.get('OrgAdminRoleArn')
-        external_id = config.get('ExternalId')
-        
-        if not org_admin_role_arn:
-            print(f"⚠️ No OrgAdminRoleArn configured, skipping trust policy update")
-            return
-        
-        # Assume role in Org Admin account
-        assume_role_params = {
-            'RoleArn': org_admin_role_arn,
-            'RoleSessionName': 'PoolManager-TrustUpdate'
-        }
-        if external_id:
-            assume_role_params['ExternalId'] = external_id
-        
-        org_admin_creds = sts.assume_role(**assume_role_params)['Credentials']
-        
-        # Now use those credentials to assume OrganizationAccountAccessRole in the new account
-        org_admin_sts = boto3.client(
-            'sts',
-            aws_access_key_id=org_admin_creds['AccessKeyId'],
-            aws_secret_access_key=org_admin_creds['SecretAccessKey'],
-            aws_session_token=org_admin_creds['SessionToken']
-        )
-        
-        assumed_role = org_admin_sts.assume_role(
-            RoleArn=f"arn:aws:iam::{account_id}:role/OrganizationAccountAccessRole",
-            RoleSessionName='PoolManager-TrustUpdate'
-        )
-        
-        credentials = assumed_role['Credentials']
-        
-        # Create IAM client with assumed role credentials
-        iam_client = boto3.client(
-            'iam',
-            aws_access_key_id=credentials['AccessKeyId'],
-            aws_secret_access_key=credentials['SecretAccessKey'],
-            aws_session_token=credentials['SessionToken']
-        )
-        
-        # Build new trust policy that includes both Org Admin and Domain accounts
-        role_name = 'OrganizationAccountAccessRole'
-        new_policy = {
-            'Version': '2012-10-17',
-            'Statement': [
-                {
-                    'Effect': 'Allow',
-                    'Principal': {
-                        'AWS': f"arn:aws:iam::{account_id}:root"
-                    },
-                    'Action': 'sts:AssumeRole'
-                },
-                {
-                    'Effect': 'Allow',
-                    'Principal': {
-                        'AWS': f"arn:aws:iam::{domain_account_id}:root"
-                    },
-                    'Action': 'sts:AssumeRole'
-                }
-            ]
-        }
-        
-        # Update trust policy
-        iam_client.update_assume_role_policy(
-            RoleName=role_name,
-            PolicyDocument=json.dumps(new_policy)
-        )
-        
-        print(f"✅ Trust policy updated for account {account_id}")
-        
-    except Exception as e:
-        print(f"⚠️ Failed to update trust policy for account {account_id}: {e}")
-        # Don't fail the entire account creation - Setup Orchestrator will handle this
-
-
-def wait_for_stackset_deployment(account_id: str, config: Dict[str, Any], timeout: int = 300):
-    """Wait for StackSet to deploy AccountPoolFactory-DomainAccess role to account"""
-    print(f"⏳ Waiting for StackSet to deploy AccountPoolFactory-DomainAccess role to account {account_id}")
-    
-    # Get Organizations client with cross-account role
-    org_client = get_organizations_client(config)
-    
-    stackset_name = "AccountPoolFactory-DomainAccessRole"
-    start_time = time.time()
-    check_interval = 10  # Check every 10 seconds
-    
-    while time.time() - start_time < timeout:
-        try:
-            # Check if stack instance exists and is in CURRENT state
-            # We need to use the Org Admin account to check StackSet status
-            org_admin_role_arn = config.get('OrgAdminRoleArn')
-            external_id = config.get('ExternalId')
-            
-            if not org_admin_role_arn:
-                print(f"⚠️ No OrgAdminRoleArn configured, skipping StackSet wait")
-                return
-            
-            # Assume role in Org Admin account to check StackSet
-            assume_role_params = {
-                'RoleArn': org_admin_role_arn,
-                'RoleSessionName': 'PoolManager-StackSetCheck'
-            }
-            if external_id:
-                assume_role_params['ExternalId'] = external_id
-            
-            org_admin_creds = sts.assume_role(**assume_role_params)['Credentials']
-            
-            # Create CloudFormation client with Org Admin credentials
-            cfn_client = boto3.client(
-                'cloudformation',
-                aws_access_key_id=org_admin_creds['AccessKeyId'],
-                aws_secret_access_key=org_admin_creds['SecretAccessKey'],
-                aws_session_token=org_admin_creds['SessionToken']
-            )
-            
-            # Check stack instance status
-            response = cfn_client.list_stack_instances(
-                StackSetName=stackset_name,
-                StackInstanceAccount=account_id,
-                MaxResults=1
-            )
-            
-            if response.get('Summaries'):
-                instance = response['Summaries'][0]
-                status = instance.get('Status')
-                
-                print(f"   StackSet instance status: {status}")
-                
-                if status == 'CURRENT':
-                    elapsed = int(time.time() - start_time)
-                    print(f"✅ StackSet deployed successfully to account {account_id} (took {elapsed}s)")
-                    return
-                elif status in ['FAILED', 'CANCELLED']:
-                    print(f"❌ StackSet deployment failed with status: {status}")
-                    print(f"   StatusReason: {instance.get('StatusReason', 'Unknown')}")
-                    # Continue anyway - Setup Orchestrator will fail with better error
-                    return
-            else:
-                print(f"   StackSet instance not found yet, waiting...")
-            
-            time.sleep(check_interval)
-            
-        except Exception as e:
-            print(f"⚠️ Error checking StackSet status: {e}")
-            time.sleep(check_interval)
-    
-    elapsed = int(time.time() - start_time)
-    print(f"⏱️ StackSet deployment timed out after {elapsed}s")
-    print(f"   Proceeding anyway - Setup Orchestrator will retry if needed")
+    print(f"✅ Successfully created {len(successful_accounts)}/{count} accounts")
+    if successful_accounts:
+        print(f"   Account IDs: {', '.join(successful_accounts)}")
 
 
 def create_account_record(account_id: str, request_id: str, name: str, email: str):
@@ -746,11 +522,8 @@ def has_remaining_datazone_stacks(account_id: str) -> bool:
 
 
 def reclaim_account_delete(account_id: str, item: Dict, config: Dict[str, Any]) -> Dict[str, Any]:
-    """Reclaim account using DELETE strategy"""
+    """Reclaim account using DELETE strategy - just removes from pool"""
     print(f"🗑️ Reclaiming account {account_id} using DELETE strategy")
-    
-    # Get Organizations client (with cross-account role if configured)
-    org_client = get_organizations_client(config)
     
     try:
         # Update state to DELETING
@@ -768,10 +541,9 @@ def reclaim_account_delete(account_id: str, item: Dict, config: Dict[str, Any]) 
             }
         )
         
-        # Close account via Organizations API
-        org_client.close_account(AccountId=account_id)
-        
-        print(f"✅ Account {account_id} closure initiated")
+        print(f"✅ Account {account_id} marked for deletion")
+        print(f"⚠️  Note: Account deletion via Organizations API requires Org Admin permissions")
+        print(f"⚠️  Account will be removed from pool but still exists in AWS Organizations")
         
         # Delete DynamoDB record
         dynamodb.delete_item(
@@ -784,10 +556,10 @@ def reclaim_account_delete(account_id: str, item: Dict, config: Dict[str, Any]) 
         
         publish_metric('AccountDeleted', 1, [{'Name': 'AccountId', 'Value': account_id}])
         
-        return {'statusCode': 200, 'body': 'Account deleted'}
+        return {'statusCode': 200, 'body': 'Account removed from pool'}
         
     except Exception as e:
-        print(f"❌ Error deleting account {account_id}: {e}")
+        print(f"❌ Error removing account {account_id}: {e}")
         
         # Mark as FAILED
         dynamodb.update_item(
@@ -876,11 +648,8 @@ def handle_force_replenishment(config: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def handle_delete_failed_account(account_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
-    """Handle manual deletion of failed account"""
-    print(f"🗑️ Deleting failed account {account_id}")
-    
-    # Get Organizations client (with cross-account role if configured)
-    org_client = get_organizations_client(config)
+    """Handle manual deletion of failed account - just removes from DynamoDB"""
+    print(f"🗑️ Removing failed account {account_id} from pool")
     
     try:
         # Query DynamoDB to get account record
@@ -897,10 +666,7 @@ def handle_delete_failed_account(account_id: str, config: Dict[str, Any]) -> Dic
         
         item = response['Items'][0]
         
-        # Close account
-        org_client.close_account(AccountId=account_id)
-        
-        # Delete DynamoDB record
+        # Delete DynamoDB record (account deletion must be done manually via Organizations console)
         dynamodb.delete_item(
             TableName=DYNAMODB_TABLE_NAME,
             Key={
@@ -911,12 +677,13 @@ def handle_delete_failed_account(account_id: str, config: Dict[str, Any]) -> Dic
         
         publish_metric('FailedAccountDeleted', 1, [{'Name': 'AccountId', 'Value': account_id}])
         
-        print(f"✅ Failed account {account_id} deleted")
+        print(f"✅ Failed account {account_id} removed from pool")
+        print(f"⚠️  Note: Account still exists in AWS Organizations - delete manually if needed")
         
-        return {'statusCode': 200, 'body': 'Failed account deleted'}
+        return {'statusCode': 200, 'body': 'Failed account removed from pool'}
         
     except Exception as e:
-        print(f"❌ Error deleting failed account: {e}")
+        print(f"❌ Error removing failed account: {e}")
         return {'statusCode': 500, 'body': str(e)}
 
 

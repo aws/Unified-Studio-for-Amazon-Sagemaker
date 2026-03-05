@@ -1,0 +1,119 @@
+<mxfile host="drawio.corp.amazon.com" modified="2026-03-05T13:04:05.966Z" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36" version="21.7.4" etag="xwNXs3Zk8tCaNc5Qc54a" type="device">
+  <diagram name="Multi-Account Architecture" id="multi-account">
+    <mxGraphModel dx="1301" dy="615" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="org-account" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6e6;strokeColor=#d79b00;strokeWidth=2;" parent="1" vertex="1">
+          <mxGeometry x="30" y="80" width="340" height="280" as="geometry" />
+        </mxCell>
+        <mxCell id="org-title" value="Organization Admin Account" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontStyle=1;fontSize=14;" parent="1" vertex="1">
+          <mxGeometry x="50" y="90" width="240" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="orgs-api" value="AWS Organizations API" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff4e6;strokeColor=#d79b00;" parent="1" vertex="1">
+          <mxGeometry x="70" y="140" width="260" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="provision-lambda" value="ProvisionAccount Lambda" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffd6d6;strokeColor=#d79b00;" parent="1" vertex="1">
+          <mxGeometry x="70" y="200" width="260" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="stackset-admin" value="StackSet Admin Role" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffd6d6;strokeColor=#d79b00;" parent="1" vertex="1">
+          <mxGeometry x="70" y="260" width="120" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="dashboards-org" value="CloudWatch Dashboards" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffd6d6;strokeColor=#d79b00;" parent="1" vertex="1">
+          <mxGeometry x="210" y="260" width="120" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="domain-account" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e6f3ff;strokeColor=#0066cc;strokeWidth=2;" parent="1" vertex="1">
+          <mxGeometry x="410" y="40" width="450" height="430" as="geometry" />
+        </mxCell>
+        <mxCell id="domain-title" value="Domain Account" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontStyle=1;fontSize=14;" parent="1" vertex="1">
+          <mxGeometry x="540" y="50" width="240" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="smus" value="SageMaker Unified Studio Domain" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d6e9ff;strokeColor=#0066cc;fontStyle=1;" parent="1" vertex="1">
+          <mxGeometry x="490" y="85" width="260" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="pool-manager" value="Pool Manager Lambda" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" parent="1" vertex="1">
+          <mxGeometry x="440" y="200" width="120" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="setup-orch" value="Setup Orchestrator" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" parent="1" vertex="1">
+          <mxGeometry x="720" y="200" width="120" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="account-provider" value="Account Provider" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" parent="1" vertex="1">
+          <mxGeometry x="560" y="260" width="120" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="dynamodb" value="DynamoDB State Table" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#e6ffe6;strokeColor=#00cc00;" parent="1" vertex="1">
+          <mxGeometry x="720" y="250" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="eventbridge" value="EventBridge Bus" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0e6ff;strokeColor=#9900cc;" parent="1" vertex="1">
+          <mxGeometry x="560" y="340" width="150" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="sns" value="SNS Alerts" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0e6ff;strokeColor=#9900cc;" parent="1" vertex="1">
+          <mxGeometry x="560" y="394" width="70" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="ssm" value="SSM Config" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0e6ff;strokeColor=#9900cc;" parent="1" vertex="1">
+          <mxGeometry x="640" y="394" width="70" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="project-pool" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e6ffe6;strokeColor=#00cc00;strokeWidth=2;dashed=1;" parent="1" vertex="1">
+          <mxGeometry x="900" y="40" width="260" height="380" as="geometry" />
+        </mxCell>
+        <mxCell id="pool-title" value="Project Accounts (Pool)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontStyle=1;fontSize=14;" parent="1" vertex="1">
+          <mxGeometry x="920" y="50" width="240" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="project1" value="Account 1 (AVAILABLE)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ccffcc;strokeColor=#00cc00;align=left;verticalAlign=top;" parent="1" vertex="1">
+          <mxGeometry x="940" y="100" width="160" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="p1-vpc" value="VPC" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;" parent="1" vertex="1">
+          <mxGeometry x="950" y="130" width="50" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="p1-iam" value="IAM Roles" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;" parent="1" vertex="1">
+          <mxGeometry x="1010" y="130" width="70" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="p1-s3" value="S3" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;" parent="1" vertex="1">
+          <mxGeometry x="950" y="165" width="50" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="p1-bp" value="Blueprints" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;" parent="1" vertex="1">
+          <mxGeometry x="1010" y="165" width="70" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="project2" value="Account 2 (ASSIGNED)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffcc;strokeColor=#cccc00;align=left;verticalAlign=top;" parent="1" vertex="1">
+          <mxGeometry x="940" y="230" width="140" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="p2-project" value="SMUS Project Active" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;fontSize=10;" parent="1" vertex="1">
+          <mxGeometry x="950" y="260" width="110" height="35" as="geometry" />
+        </mxCell>
+        <mxCell id="projectn" value="Account N (SETTING_UP)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff4e6;strokeColor=#ff9900;align=left;verticalAlign=top;" parent="1" vertex="1">
+          <mxGeometry x="940" y="330" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="pn-progress" value="Wave 3/6 in progress..." style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;fontSize=10;" parent="1" vertex="1">
+          <mxGeometry x="955" y="360" width="110" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow2" value="Create Account" style="endArrow=classic;html=1;exitX=0;exitY=0.5;strokeWidth=2;strokeColor=#0066cc;dashed=1;" parent="1" source="pool-manager" target="provision-lambda" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="350" y="310" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="arrow3" value="" style="endArrow=classic;html=1;exitX=0.5;exitY=0;entryX=0.5;entryY=1;strokeWidth=2;strokeColor=#d79b00;" parent="1" source="provision-lambda" target="orgs-api" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow4" value="Invoke" style="endArrow=classic;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeWidth=2;strokeColor=#0066cc;" parent="1" source="pool-manager" target="setup-orch" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow5" value="Configure" style="endArrow=classic;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeWidth=2;strokeColor=#00cc00;" parent="1" source="setup-orch" target="projectn" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow6" value="Request Account" style="endArrow=classic;html=1;entryX=0.5;entryY=0;strokeWidth=2;strokeColor=#0066cc;" parent="1" source="smus" target="account-provider" edge="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="690" y="180" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="arrow7" value="Query" style="endArrow=classic;html=1;exitX=1;exitY=0.5;entryX=0;entryY=0.5;strokeWidth=2;strokeColor=#00cc00;" parent="1" source="account-provider" target="dynamodb" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow8" value="CloudFormation Events" style="endArrow=classic;html=1;exitX=0;exitY=1;entryX=1;entryY=0.5;strokeWidth=2;strokeColor=#9900cc;dashed=1;" parent="1" source="project2" target="eventbridge" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow9" value="Trigger" style="endArrow=classic;html=1;exitX=0;exitY=0.5;entryX=0.5;entryY=1;strokeWidth=2;strokeColor=#9900cc;exitDx=0;exitDy=0;" parent="1" source="eventbridge" target="pool-manager" edge="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

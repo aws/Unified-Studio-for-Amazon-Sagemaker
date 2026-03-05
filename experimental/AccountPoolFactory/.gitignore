@@ -1,5 +1,6 @@
 # Environment configuration (contains sensitive data)
 config.yaml
+tests/config/test-config.yaml
 
 # Python
 __pycache__/
@@ -36,10 +37,27 @@ dist/
 build/
 *.egg-info/
 
-# CloudFormation outputs
+# CloudFormation outputs and deployment artifacts
 ou-ids.json
 stack-outputs.json
+*-outputs.json
+cf1-outputs.json
+account-pool-details.json
+account-provider-lambda-details.json
+open-project-profile-details.json
+org-admin-role-details.json
+project-profile-details.json
+project-profile-full-details.json
+test-project-details.json
+test-project-pool-details.json
+payload.json
+
+# Log files
+*.log
+ram-share-test-*.log
+test-ram-share-output.log
 
 # Temporary files
 *.tmp
 temp/
+setup-orchestrator-templates.zip

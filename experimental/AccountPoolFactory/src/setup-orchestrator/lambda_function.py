@@ -178,72 +178,7 @@ def get_account_state(account_id: str) -> Optional[Dict]:
         return None
 
 
-def update_trust_policy(account_id: str, config: Dict[str, Any]):
-    """Update OrganizationAccountAccessRole trust policy to allow Domain account access"""
-    print(f"🔐 Updating trust policy for account {account_id}")
-    
-    domain_account_id = config.get('DomainAccountId', DOMAIN_ACCOUNT_ID)
-    
-    try:
-        # Assume OrganizationAccountAccessRole in the new account
-        # This role trusts the Org Admin account by default
-        role_arn = f"arn:aws:iam::{account_id}:role/OrganizationAccountAccessRole"
-        
-        assumed_role = sts.assume_role(
-            RoleArn=role_arn,
-            RoleSessionName='SetupOrchestrator-TrustUpdate'
-        )
-        
-        credentials = assumed_role['Credentials']
-        
-        # Create IAM client with assumed role credentials
-        iam_client = boto3.client(
-            'iam',
-            aws_access_key_id=credentials['AccessKeyId'],
-            aws_secret_access_key=credentials['SecretAccessKey'],
-            aws_session_token=credentials['SessionToken']
-        )
-        
-        # Get current trust policy
-        role_name = 'OrganizationAccountAccessRole'
-        current_policy = iam_client.get_role(RoleName=role_name)['Role']['AssumeRolePolicyDocument']
-        
-        print(f"📋 Current trust policy: {json.dumps(current_policy, indent=2)}")
-        
-        # Build new trust policy that includes both Org Admin and Domain accounts
-        # Keep existing principals and add Domain account
-        new_policy = {
-            'Version': '2012-10-17',
-            'Statement': [
-                {
-                    'Effect': 'Allow',
-                    'Principal': {
-                        'AWS': f"arn:aws:iam::{account_id}:root"
-                    },
-                    'Action': 'sts:AssumeRole'
-                },
-                {
-                    'Effect': 'Allow',
-                    'Principal': {
-                        'AWS': f"arn:aws:iam::{domain_account_id}:root"
-                    },
-                    'Action': 'sts:AssumeRole'
-                }
-            ]
-        }
-        
-        # Update trust policy
-        iam_client.update_assume_role_policy(
-            RoleName=role_name,
-            PolicyDocument=json.dumps(new_policy)
-        )
-        
-        print(f"✅ Trust policy updated for account {account_id}")
-        print(f"   Added Domain account {domain_account_id} to trust policy")
-        
-    except Exception as e:
-        print(f"❌ Failed to update trust policy for account {account_id}: {e}")
-        raise Exception(f"Trust policy update failed: {e}")
+# update_trust_policy() function removed - duplicate, already defined below
 
 
 def get_account_state(account_id: str) -> Optional[Dict]:
@@ -261,134 +196,21 @@ def get_account_state(account_id: str) -> Optional[Dict]:
         return None
 
 
-def deploy_stackset_instance(account_id: str, config: Dict[str, Any]):
-    """Deploy StackSet instance to new account to create AccountPoolFactory-DomainAccess role
-    
-    This must be done BEFORE any other operations because all subsequent steps need this role.
-    The StackSet is managed in the Org Admin account and creates the trust policy role.
-    
-    SetupOrchestrator assumes AccountPoolFactory-StackSetManagement role in Org Admin account
-    to create the StackSet instance.
-    """
-    print(f"📦 Deploying StackSet instance to account {account_id}")
-    
-    stackset_name = "AccountPoolFactory-TrustPolicy"
-    org_admin_account_id = os.environ.get('ORG_ADMIN_ACCOUNT_ID')
-    
-    if not org_admin_account_id:
-        raise Exception("ORG_ADMIN_ACCOUNT_ID environment variable not set")
-    
-    try:
-        # Assume StackSet management role in Org Admin account
-        stackset_role_arn = f"arn:aws:iam::{org_admin_account_id}:role/AccountPoolFactory-StackSetManagement"
-        external_id = f"AccountPoolFactory-{config['DomainAccountId']}"
-        
-        print(f"   🔐 Assuming StackSet management role in Org Admin account...")
-        print(f"      Role: {stackset_role_arn}")
-        print(f"      ExternalId: {external_id}")
-        
-        assumed_role = sts.assume_role(
-            RoleArn=stackset_role_arn,
-            RoleSessionName='SetupOrchestrator-StackSetDeploy',
-            ExternalId=external_id,
-            DurationSeconds=900
-        )
-        
-        credentials = assumed_role['Credentials']
-        
-        # Create CloudFormation client with assumed role credentials
-        cf_org_admin = boto3.client(
-            'cloudformation',
-            region_name=REGION,
-            aws_access_key_id=credentials['AccessKeyId'],
-            aws_secret_access_key=credentials['SecretAccessKey'],
-            aws_session_token=credentials['SessionToken']
-        )
-        
-        print(f"   ✅ Successfully assumed StackSet management role")
-        print(f"   Creating StackSet instance for account {account_id}...")
-        
-        # Create stack instance in the target account
-        response = cf_org_admin.create_stack_instances(
-            StackSetName=stackset_name,
-            Accounts=[account_id],
-            Regions=[REGION],
-            OperationPreferences={
-                'FailureToleranceCount': 0,
-                'MaxConcurrentCount': 1
-            }
-        )
-        
-        operation_id = response['OperationId']
-        print(f"   Operation ID: {operation_id}")
-        
-        # Wait for StackSet instance creation to complete
-        print(f"   ⏳ Waiting for StackSet instance to be created...")
-        max_wait = 180  # 3 minutes
-        start_time = time.time()
-        
-        while time.time() - start_time < max_wait:
-            try:
-                op_response = cf_org_admin.describe_stack_set_operation(
-                    StackSetName=stackset_name,
-                    OperationId=operation_id
-                )
-                
-                status = op_response['StackSetOperation']['Status']
-                print(f"   StackSet operation status: {status}")
-                
-                if status == 'SUCCEEDED':
-                    print(f"   ✅ StackSet instance created successfully")
-                    
-                    # Wait additional 10 seconds for IAM role propagation
-                    print(f"   ⏳ Waiting 10 seconds for IAM role propagation...")
-                    time.sleep(10)
-                    return
-                    
-                elif status in ['FAILED', 'STOPPED']:
-                    # Get failure details
-                    instances = cf_org_admin.list_stack_instances(
-                        StackSetName=stackset_name,
-                        StackInstanceAccount=account_id,
-                        StackInstanceRegion=REGION
-                    )
-                    
-                    if instances['Summaries']:
-                        status_reason = instances['Summaries'][0].get('StatusReason', 'Unknown')
-                        raise Exception(f"StackSet instance creation failed: {status_reason}")
-                    else:
-                        raise Exception(f"StackSet instance creation failed with status: {status}")
-                
-                time.sleep(10)
-                
-            except Exception as e:
-                if 'StackInstanceNotFoundException' in str(e):
-                    # Instance not created yet, keep waiting
-                    time.sleep(10)
-                    continue
-                else:
-                    raise
-        
-        raise Exception(f"StackSet instance creation timed out after {max_wait} seconds")
-        
-    except Exception as e:
-        print(f"❌ StackSet instance deployment failed: {e}")
-        raise
+# deploy_stackset_instance() function removed - now handled by ProvisionAccount Lambda in Org Admin account
 
 
 def execute_setup_workflow(account_id: str, config: Dict[str, Any], resume_from: Optional[str] = None) -> Dict[str, Any]:
-    """Execute wave-based parallel setup workflow"""
+    """Execute wave-based parallel setup workflow
+    
+    Note: Wave 0 (StackSet deployment) is now handled by ProvisionAccount Lambda in Org Admin account.
+    SetupOrchestrator assumes AccountPoolFactory-DomainAccess role already exists.
+    """
     print(f"🚀 Starting setup workflow for account {account_id}")
     
     start_time = time.time()
     resources = {}
     
     try:
-        # Wave 0: Deploy StackSet Instance (creates AccountPoolFactory-DomainAccess role)
-        print("🌊 Wave 0: Deploying StackSet Instance")
-        deploy_stackset_instance(account_id, config)
-        update_progress(account_id, 'stackset_deployment', {'status': 'completed'})
-        
         # Wave 1: VPC Deployment (foundation)
         print("🌊 Wave 1: VPC Deployment")
         vpc_result = deploy_vpc(account_id, config)

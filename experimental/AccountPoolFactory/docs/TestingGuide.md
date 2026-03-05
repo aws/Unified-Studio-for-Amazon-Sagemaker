@@ -167,7 +167,7 @@ Total: 4 OUs
 
 **Implementation**:
 - CloudFormation template: `tests/setup/templates/organization-structure.yaml`
-- Deployment script: `tests/setup/scripts/deploy-organization.sh`
+- Deployment script: `tests/setup/deploy-organization.sh`
 
 **Commands**:
 ```bash
@@ -175,7 +175,7 @@ Total: 4 OUs
 cd experimental/AccountPoolFactory
 
 # Deploy the CloudFormation stack
-./tests/setup/scripts/deploy-organization.sh
+./tests/setup/deploy-organization.sh
 
 # View stack outputs
 cat ou-ids.json
@@ -235,8 +235,8 @@ The CF1 template sets up the Organization Admin account to work with any account
 This template is completely independent of DataZone and can be used by any system that needs to create AWS accounts programmatically.
 
 **Implementation**:
-- CloudFormation template: `templates/cloudformation/01-org-admin/account-factory-setup.yaml`
-- Deployment script: `tests/setup/scripts/deploy-account-factory.sh`
+- CloudFormation template: `templates/cloudformation/01-org-mgmt-account/deploy/account-factory-setup.yaml`
+- Deployment script: `tests/setup/deploy-account-factory.sh`
 
 **Commands**:
 ```bash
@@ -244,7 +244,7 @@ This template is completely independent of DataZone and can be used by any syste
 cd experimental/AccountPoolFactory
 
 # Deploy the CF1 CloudFormation stack
-./tests/setup/scripts/deploy-account-factory.sh
+./tests/setup/deploy-account-factory.sh
 
 # View stack outputs
 cat cf1-outputs.json
@@ -341,14 +341,14 @@ The Account Pool Factory supports multiple account creation strategies. You must
 **Checking Your Environment**:
 ```bash
 # Check if Control Tower is enabled
-./tests/setup/scripts/check-control-tower.sh
+./tests/setup/check-control-tower.sh
 ```
 
 **Updating CF1 Strategy**:
 If you need to change strategies after CF1 deployment:
 ```bash
 # Update CF1 stack with new strategy
-./tests/setup/scripts/update-cf1-multi-strategy.sh
+./tests/setup/update-cf1-multi-strategy.sh
 
 # Choose one of:
 # - organizations_api (Organizations API only)
@@ -395,7 +395,7 @@ We've created separate scripts for each strategy:
 **Email Format**: Test accounts use `amirbo+NNN@amazon.com` format (starting at 100, auto-increments)
 
 **Implementation**:
-- Test scripts: `tests/setup/scripts/test-*.sh`
+- Test scripts: `tests/setup/test-*.sh`
 - Provision files: `tests/setup/test-accounts/test-account-provision-NNN.json` (tracks status)
 - Async operation: Can disconnect and reconnect without losing progress
 
@@ -409,7 +409,7 @@ We've created separate scripts for each strategy:
 cd experimental/AccountPoolFactory
 
 # Step 1: Create a test account
-./tests/setup/scripts/test-create-account-orgs-api.sh
+./tests/setup/test-create-account-orgs-api.sh
 
 # The script will:
 # - Find next available email number (100, 101, 102, etc.)
@@ -420,16 +420,16 @@ cd experimental/AccountPoolFactory
 # - Complete in < 1 minute!
 
 # Step 2: Check status (if needed)
-./tests/setup/scripts/test-check-status-orgs-api.sh 100
+./tests/setup/test-check-status-orgs-api.sh 100
 
 # Or check latest:
-./tests/setup/scripts/test-check-status-orgs-api.sh
+./tests/setup/test-check-status-orgs-api.sh
 
 # Step 3: Verify account setup
-./tests/setup/scripts/test-verify-account.sh 100
+./tests/setup/test-verify-account.sh 100
 
 # Step 4: Delete account when done testing
-./tests/setup/scripts/test-delete-account.sh 100
+./tests/setup/test-delete-account.sh 100
 ```
 
 **Account Creation Details**:
@@ -509,7 +509,7 @@ Next steps:
 cd experimental/AccountPoolFactory
 
 # Step 1: Create a test account
-./tests/setup/scripts/test-create-account.sh
+./tests/setup/test-create-account.sh
 
 # The script will:
 # - Find next available email number (100, 101, 102, etc.)
@@ -518,35 +518,35 @@ cd experimental/AccountPoolFactory
 # - Optionally monitor provisioning (or you can exit and check later)
 
 # Step 2: Check status (if you exited during provisioning)
-./tests/setup/scripts/test-check-status.sh 100
+./tests/setup/test-check-status.sh 100
 
 # Or check latest:
-./tests/setup/scripts/test-check-status.sh
+./tests/setup/test-check-status.sh
 
 # Step 3: Verify account setup
-./tests/setup/scripts/test-verify-account.sh 100
+./tests/setup/test-verify-account.sh 100
 
 # Step 4: Delete account when done testing
-./tests/setup/scripts/test-delete-account.sh 100
+./tests/setup/test-delete-account.sh 100
 ```
 
 **Async Workflow**:
 ```bash
 # Start account creation
-./tests/setup/scripts/test-create-account.sh
+./tests/setup/test-create-account.sh
 # Choose "no" when asked to monitor
 # Script saves state to test-account-provision-100.json
 
 # Later (even after disconnect/reconnect):
-./tests/setup/scripts/test-check-status.sh 100
+./tests/setup/test-check-status.sh 100
 # Shows current status: PROVISIONING, SUCCEEDED, or FAILED
 
 # When SUCCEEDED:
-./tests/setup/scripts/test-verify-account.sh 100
+./tests/setup/test-verify-account.sh 100
 # Runs 6 verification checks
 
 # When done testing:
-./tests/setup/scripts/test-delete-account.sh 100
+./tests/setup/test-delete-account.sh 100
 # Terminates provisioned product and optionally closes account
 ```
 
@@ -797,9 +797,9 @@ These templates are deployed as CloudFormation StackSets in the Org Admin accoun
 - CF1 stack deployed with StackSet roles
 
 **Implementation**:
-- Approved templates: `templates/cloudformation/03-project-account/*.yaml`
-- StackSets template: `templates/cloudformation/01-org-admin/approved-stacksets.yaml`
-- Deployment script: `tests/setup/scripts/deploy-approved-stacksets.sh`
+- Approved templates: `templates/cloudformation/03-project-account/deploy/*.yaml`
+- StackSets template: `templates/cloudformation/01-org-mgmt-account/deploy/approved-stacksets.yaml`
+- Deployment script: `tests/setup/deploy-approved-stacksets.sh`
 - Documentation: `APPROVED_TEMPLATES_SUMMARY.md`
 
 **Commands**:
@@ -808,7 +808,7 @@ These templates are deployed as CloudFormation StackSets in the Org Admin accoun
 cd experimental/AccountPoolFactory
 
 # Step 1: Deploy approved StackSets (one-time setup in Org Admin account)
-./tests/setup/scripts/deploy-approved-stacksets.sh
+./tests/setup/deploy-approved-stacksets.sh
 
 # This creates:
 # - S3 bucket for StackSet templates
@@ -1823,7 +1823,7 @@ See `specs/tasks.md` for complete implementation task list.
 
 **Objective**: Create a DataZone account pool with placeholder Lambda ARNs.
 
-**Script**: `tests/setup/scripts/create-account-pool.sh`
+**Script**: `tests/setup/04-create-account-pool.sh`
 
 **Commands**:
 ```bash
@@ -1833,7 +1833,7 @@ cd experimental/AccountPoolFactory
 eval $(isengardcli creds amirbo+3 --role Admin)  # Or your credential method
 
 # Create account pool
-./tests/setup/scripts/create-account-pool.sh
+./tests/setup/04-create-account-pool.sh
 ```
 
 **What This Does**:
@@ -1880,7 +1880,7 @@ Project profiles with account pools use the `accountPools` property in environme
 - Cannot specify `awsRegion` (region comes from pool)
 - Account and region are selected dynamically when creating a project
 
-**Script**: `tests/setup/scripts/create-project-profile-with-pool.sh`
+**Script**: `tests/setup/05-create-project-profile-with-pool.sh`
 
 **Commands**:
 ```bash
@@ -1890,7 +1890,7 @@ cd experimental/AccountPoolFactory
 eval $(isengardcli creds amirbo+3 --role Admin)  # Or your credential method
 
 # Create project profile
-./tests/setup/scripts/create-project-profile-with-pool.sh
+./tests/setup/05-create-project-profile-with-pool.sh
 ```
 
 **What This Does**:

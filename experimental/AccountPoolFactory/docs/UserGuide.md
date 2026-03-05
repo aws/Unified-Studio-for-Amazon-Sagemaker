@@ -190,7 +190,9 @@ Before deploying the Account Pool Factory, ensure you have:
 
 This deploys all Lambda functions, DynamoDB tables, EventBridge bus, SNS topics, and CloudWatch dashboards in your Domain account.
 
-**Script**: `./deploy-infrastructure.sh`
+**Audience**: 1b (Existing Accounts - Production)
+
+**Script**: `scripts/02-domain-account/deploy/01-deploy-infrastructure.sh`
 
 **What it does**:
 - Creates CloudFormation stack with all infrastructure components
@@ -205,7 +207,7 @@ This deploys all Lambda functions, DynamoDB tables, EventBridge bus, SNS topics,
 **Command**:
 ```bash
 cd experimental/AccountPoolFactory
-./deploy-infrastructure.sh
+./scripts/02-domain-account/deploy/01-deploy-infrastructure.sh
 ```
 
 **Sample Output**:
@@ -257,9 +259,11 @@ Next steps:
 
 **Step 2: Deploy Cross-Account Role (Organization Admin Account)**
 
+**Audience**: 1b (Existing Accounts - Production)
+
 This deploys the cross-account IAM role that allows Pool Manager Lambda in the Domain account to create and manage accounts via Organizations API.
 
-**Script**: `./deploy-org-admin-role.sh`
+**Script**: `scripts/01-org-mgmt-account/deploy/02-deploy-account-creation-role.sh`
 
 **What it does**:
 - Deploys IAM role in Organization Admin account
@@ -277,7 +281,7 @@ This deploys the cross-account IAM role that allows Pool Manager Lambda in the D
 # Switch to Organization Admin account credentials
 export AWS_PROFILE=org-admin  # or use aws configure
 
-./deploy-org-admin-role.sh
+./scripts/01-org-mgmt-account/deploy/02-deploy-account-creation-role.sh
 ```
 
 **Sample Output**:
@@ -344,9 +348,11 @@ aws ssm put-parameter \
 
 **Step 3: Deploy Trust Policy StackSet (Organization Admin Account)**
 
+**Audience**: 1b (Existing Accounts - Production)
+
 This deploys a StackSet that updates the OrganizationAccountAccessRole trust policy in all pool accounts, allowing the Setup Orchestrator Lambda in the Domain account to configure them.
 
-**Script**: `./deploy-trust-policy-stackset.sh`
+**Script**: `scripts/01-org-mgmt-account/deploy/03-deploy-trust-policy-stackset.sh`
 
 **What it does**:
 - Creates a CloudFormation StackSet in Organization Admin account
@@ -363,7 +369,7 @@ When AWS Organizations creates new accounts, the OrganizationAccountAccessRole o
 eval $(isengardcli credentials amirbo+1@amazon.com)
 # OR: export AWS_PROFILE=org-admin
 
-./deploy-trust-policy-stackset.sh
+./scripts/01-org-mgmt-account/deploy/03-deploy-trust-policy-stackset.sh
 ```
 
 **Sample Output**:
@@ -433,9 +439,11 @@ aws lambda invoke \
 
 **Step 4: Deploy Account Provider Lambda**
 
+**Audience**: 1b (Existing Accounts - Production)
+
 This deploys the Account Provider Lambda that handles DataZone account pool requests.
 
-**Script**: `./deploy-account-provider.sh`
+**Script**: `scripts/02-domain-account/deploy/02-deploy-lambdas.sh`
 
 **What it does**:
 - Packages Account Provider Lambda code
@@ -445,7 +453,7 @@ This deploys the Account Provider Lambda that handles DataZone account pool requ
 
 **Command**:
 ```bash
-./deploy-account-provider.sh
+./scripts/02-domain-account/deploy/02-deploy-lambdas.sh
 ```
 
 **Sample Output**:
@@ -487,9 +495,11 @@ Next steps:
 
 **Step 4: Create DataZone Account Pool**
 
+**Audience**: 1a (New Accounts - Testing) and 1b (Existing Accounts - Production)
+
 This creates the DataZone account pool and registers your Account Provider Lambda as the custom handler.
 
-**Script**: `./create-account-pool.sh`
+**Script**: `tests/setup/04-create-account-pool.sh` (for testing) or use AWS CLI directly (for production)
 
 **What it does**:
 - Retrieves Lambda ARN and Role ARN
@@ -499,7 +509,11 @@ This creates the DataZone account pool and registers your Account Provider Lambd
 
 **Command**:
 ```bash
-./create-account-pool.sh
+# For testing (Audience 1a)
+./tests/setup/04-create-account-pool.sh
+
+# For production (Audience 1b) - use AWS CLI directly
+# See script for reference implementation
 ```
 
 **Sample Output**:
@@ -555,13 +569,15 @@ Next steps:
 
 **Step 5: Create Project Profile with Account Pool**
 
+**Audience**: 1a (New Accounts - Testing) and 1b (Existing Accounts - Production)
+
 This creates a DataZone project profile that uses the account pool for dynamic account assignment. There are two types of profiles based on your domain type:
 
 - **Open Project Profile** (for IAM-based domains): Uses ToolingLite and simpler blueprints
 - **Closed Project Profile** (for IDC-based domains): Uses full enterprise blueprints (Tooling, DataLake, etc.)
 
-**Script for IAM Domains**: `./create-open-project-profile-pool.sh`
-**Script for IDC Domains**: `./create-closed-project-profile-pool.sh`
+**Script for IAM Domains**: `tests/setup/05-create-open-profile.sh` (testing) or AWS CLI (production)
+**Script for IDC Domains**: `tests/setup/06-create-closed-profile.sh` (testing) or AWS CLI (production)
 
 **What it does**:
 - Fetches all available blueprint IDs from domain
@@ -572,7 +588,11 @@ This creates a DataZone project profile that uses the account pool for dynamic a
 
 **Command (for IAM domain)**:
 ```bash
-./create-open-project-profile-pool.sh
+# For testing (Audience 1a)
+./tests/setup/05-create-open-profile.sh
+
+# For production (Audience 1b) - use AWS CLI directly
+# See script for reference implementation
 ```
 
 **Sample Output**:
@@ -676,9 +696,11 @@ aws ssm put-parameter \
 
 **Step 7: Seed Initial Pool**
 
+**Audience**: 1a (New Accounts - Testing)
+
 Trigger the Pool Manager to create the initial set of accounts.
 
-**Script**: `./seed-initial-pool.sh`
+**Script**: `tests/setup/03-seed-test-accounts.sh`
 
 **What it does**:
 - Invokes Pool Manager Lambda with force_replenishment action
@@ -688,7 +710,7 @@ Trigger the Pool Manager to create the initial set of accounts.
 
 **Command**:
 ```bash
-./seed-initial-pool.sh
+./tests/setup/03-seed-test-accounts.sh
 ```
 
 **Sample Output**:

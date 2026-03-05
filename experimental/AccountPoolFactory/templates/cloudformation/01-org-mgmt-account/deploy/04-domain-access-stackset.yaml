@@ -1,0 +1,39 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Create AccountPoolFactory-DomainAccess role with ExternalId protection'
+
+Parameters:
+  DomainAccountId:
+    Type: String
+    Description: Domain account ID that needs to assume the role
+    AllowedPattern: '^\d{12}$'
+
+  DomainId:
+    Type: String
+    Description: DataZone Domain ID used as ExternalId
+    AllowedPattern: '^dzd-[a-z0-9]+$'
+
+Resources:
+  # Create NEW role for Domain account access with ExternalId protection
+  DomainAccessRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AccountPoolFactory-DomainAccess
+      Description: 'Allows Domain account SetupOrchestrator to configure this account (with ExternalId)'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${DomainAccountId}:root'
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref DomainId
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+      MaxSessionDuration: 3600
+
+Outputs:
+  RoleArn:
+    Description: ARN of the AccountPoolFactory-DomainAccess role
+    Value: !GetAtt DomainAccessRole.Arn

@@ -1,0 +1,103 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'ProvisionAccount Lambda for secure account provisioning'
+
+Parameters:
+  DomainAccountId:
+    Type: String
+    Description: Domain account ID that will invoke this Lambda
+    AllowedPattern: '^\d{12}$'
+
+Resources:
+  # IAM Role for ProvisionAccount Lambda
+  ProvisionAccountRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AccountPoolFactory-ProvisionAccount-Role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: ProvisionAccountPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Organizations permissions
+              - Effect: Allow
+                Action:
+                  - organizations:CreateAccount
+                  - organizations:DescribeAccount
+                  - organizations:DescribeCreateAccountStatus
+                  - organizations:MoveAccount
+                  - organizations:ListParents
+                  - organizations:ListAccounts
+                  - organizations:DescribeOrganization
+                Resource: '*'
+              
+              # Assume OrganizationAccountAccessRole in new accounts
+              - Effect: Allow
+                Action:
+                  - sts:AssumeRole
+                Resource: 'arn:aws:iam::*:role/OrganizationAccountAccessRole'
+              
+              # StackSet operations
+              - Effect: Allow
+                Action:
+                  - cloudformation:CreateStackInstances
+                  - cloudformation:DescribeStackSetOperation
+                  - cloudformation:ListStackInstances
+                  - cloudformation:DescribeStackSet
+                Resource: 
+                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stackset/AccountPoolFactory-DomainAccess:*'
+                  - !Sub 'arn:aws:cloudformation:${AWS::Region}::type/resource/*'
+                  - 'arn:aws:cloudformation:*:*:stackset-target/*'
+      Tags:
+        - Key: ManagedBy
+          Value: AccountPoolFactory
+
+  # ProvisionAccount Lambda Function
+  ProvisionAccountFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: ProvisionAccount
+      Runtime: python3.12
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt ProvisionAccountRole.Arn
+      Timeout: 600  # 10 minutes (account creation + StackSet deployment)
+      MemorySize: 512
+      ReservedConcurrentExecutions: 5
+      Code:
+        ZipFile: |
+          # Placeholder - deploy actual code separately
+          def lambda_handler(event, context):
+              return {'statusCode': 200, 'body': 'Placeholder'}
+      Tags:
+        - Key: ManagedBy
+          Value: AccountPoolFactory
+
+  # Lambda Resource Policy - Allow Domain account to invoke
+  ProvisionAccountInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ProvisionAccountFunction
+      Action: lambda:InvokeFunction
+      Principal: !Ref DomainAccountId
+      SourceArn: !Sub 'arn:aws:iam::${DomainAccountId}:role/AccountPoolFactory-PoolManager-Role'
+
+Outputs:
+  ProvisionAccountFunctionArn:
+    Description: ARN of the ProvisionAccount Lambda function
+    Value: !GetAtt ProvisionAccountFunction.Arn
+    Export:
+      Name: AccountPoolFactory-ProvisionAccountArn
+
+  ProvisionAccountRoleArn:
+    Description: ARN of the ProvisionAccount Lambda role
+    Value: !GetAtt ProvisionAccountRole.Arn
+    Export:
+      Name: AccountPoolFactory-ProvisionAccountRoleArn

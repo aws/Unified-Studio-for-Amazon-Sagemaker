@@ -1,7 +1,0 @@
-{
-  "functionArn": "arn:aws:lambda:us-east-2:994753223772:function:AccountProvider-dzd-4igt64u5j25ko9",
-  "roleArn": "arn:aws:iam::994753223772:role/AccountProviderLambdaRole-dzd-4igt64u5j25ko9",
-  "logGroup": "/aws/lambda/AccountProvider-dzd-4igt64u5j25ko9",
-  "stackName": "AccountPoolFactory-AccountProvider-Test",
-  "domainId": "dzd-4igt64u5j25ko9"
-}

@@ -1,0 +1,79 @@
+# Account Pool Factory Configuration - For Testing New Accounts
+# This configuration is for Audience 1a: Testing with completely new accounts
+
+# IaC Provider Selection
+iac:
+  provider: cloudformation  # cloudformation | cdk | terraform
+
+# AWS Configuration
+aws:
+  region: us-east-2
+  org_admin_account_id: "REPLACE_WITH_ORG_ADMIN_ACCOUNT_ID"
+  domain_account_id: "REPLACE_WITH_DOMAIN_ACCOUNT_ID"
+
+# DataZone Domain Configuration
+datazone:
+  domain_id: REPLACE_WITH_DOMAIN_ID
+  domain_name: REPLACE_WITH_DOMAIN_NAME
+  domain_arn: arn:aws:datazone:us-east-2:DOMAIN_ACCOUNT_ID:domain/DOMAIN_ID
+  root_domain_unit_id: REPLACE_WITH_ROOT_DOMAIN_UNIT_ID
+  portal_url: https://DOMAIN_ID.sagemaker.us-east-2.on.aws
+  domain_execution_role_arn: arn:aws:iam::DOMAIN_ACCOUNT_ID:role/AmazonDataZoneDomainExecutionRole
+  default_project_owner: REPLACE_WITH_USERNAME
+
+# Account Pool Configuration
+account_pool:
+  name: AccountPoolFactory-Test
+  resolution_strategy: MANUAL
+  minimum_pool_size: 3
+  maximum_pool_size: 10
+  replenishment_threshold: 5
+
+# Account Naming Configuration
+accounts:
+  name_prefix: test-project-
+  email_domain: example.com
+  supported_regions:
+    - us-east-2
+    - us-east-1
+
+# Lambda Configuration
+lambda:
+  runtime: python3.12
+  timeout: 300
+  memory_size: 512
+  log_retention_days: 7
+
+# DynamoDB Configuration
+dynamodb:
+  billing_mode: PAY_PER_REQUEST
+  point_in_time_recovery: true
+
+# Monitoring Configuration
+monitoring:
+  alert_email: YOUR_EMAIL@amazon.com
+  enable_detailed_monitoring: true
+  dashboard_name: AccountPoolFactory-Test
+
+# Tags
+tags:
+  Project: AccountPoolFactory
+  Environment: Test
+  ManagedBy: CloudFormation
+  Owner: YOUR_USERNAME
+
+# Testing Configuration (for new accounts testing)
+testing:
+  enabled: true
+  mode: single_account
+  test_ou_name: TestAccounts
+  test_domain_name: TestDomain
+  simulate_accounts: true
+  mock_control_tower: true
+
+# Organization Structure (will be populated by setup scripts)
+organization:
+  organization_id: ""
+  target_ou_id: ""
+  target_ou_name: ""
+  target_ou_path: ""
