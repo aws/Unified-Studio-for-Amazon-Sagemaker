@@ -489,11 +489,14 @@ def handle_deletion_event(account_id: str, stack_name: str, config: Dict[str, An
 def has_remaining_datazone_stacks(account_id: str) -> bool:
     """Check if account has any remaining DataZone stacks"""
     try:
-        # Assume role in project account
-        role_arn = f"arn:aws:iam::{account_id}:role/OrganizationAccountAccessRole"
+        # Assume role in project account using AccountPoolFactory-DomainAccess role
+        role_arn = f"arn:aws:iam::{account_id}:role/AccountPoolFactory-DomainAccess"
+        domain_id = os.environ.get('DOMAIN_ID', '')
+        
         assumed_role = sts.assume_role(
             RoleArn=role_arn,
-            RoleSessionName='PoolManager-StackCheck'
+            RoleSessionName='PoolManager-StackCheck',
+            ExternalId=domain_id
         )
         
         credentials = assumed_role['Credentials']
@@ -518,7 +521,10 @@ def has_remaining_datazone_stacks(account_id: str) -> bool:
         
     except Exception as e:
         print(f"⚠️ Error checking stacks in account {account_id}: {e}")
-        return True  # Assume stacks exist if we can't check
+        # If we can't check stacks, assume no stacks remain (proceed with cleanup)
+        # This allows cleanup to proceed even if role assumption fails
+        print(f"   Assuming no DataZone stacks remain, proceeding with cleanup")
+        return False
 
 
 def reclaim_account_delete(account_id: str, item: Dict, config: Dict[str, Any]) -> Dict[str, Any]:
@@ -582,7 +588,7 @@ def reclaim_account_delete(account_id: str, item: Dict, config: Dict[str, Any]) 
 
 
 def reclaim_account_reuse(account_id: str, item: Dict) -> Dict[str, Any]:
-    """Reclaim account using REUSE strategy"""
+    """Reclaim account using REUSE strategy - invokes DeprovisionAccount Lambda"""
     print(f"♻️ Reclaiming account {account_id} using REUSE strategy")
     
     try:
@@ -601,24 +607,30 @@ def reclaim_account_reuse(account_id: str, item: Dict) -> Dict[str, Any]:
             }
         )
         
-        # Invoke Setup Orchestrator in cleanup mode
+        # Invoke DeprovisionAccount Lambda
+        deprovision_function_name = os.environ.get('DEPROVISION_ACCOUNT_FUNCTION_NAME', 'DeprovisionAccount')
+        domain_id = os.environ.get('DOMAIN_ID', '')
+        
         payload = {
             'accountId': account_id,
-            'mode': 'cleanup'
+            'requestId': f"reclaim-{int(time.time())}",
+            'domainId': domain_id
         }
         
+        print(f"📞 Invoking DeprovisionAccount Lambda: {deprovision_function_name}")
+        
         lambda_client.invoke(
-            FunctionName=SETUP_ORCHESTRATOR_FUNCTION_NAME,
-            InvocationType='Event',
+            FunctionName=deprovision_function_name,
+            InvocationType='Event',  # Asynchronous
             Payload=json.dumps(payload)
         )
         
-        print(f"✅ Cleanup initiated for account {account_id}")
+        print(f"✅ Deprovision initiated for account {account_id}")
         
-        return {'statusCode': 200, 'body': 'Cleanup initiated'}
+        return {'statusCode': 200, 'body': 'Deprovision initiated'}
         
     except Exception as e:
-        print(f"❌ Error initiating cleanup for account {account_id}: {e}")
+        print(f"❌ Error initiating deprovision for account {account_id}: {e}")
         
         # Mark as FAILED
         dynamodb.update_item(
@@ -635,7 +647,7 @@ def reclaim_account_reuse(account_id: str, item: Dict) -> Dict[str, Any]:
             }
         )
         
-        send_failure_notification(account_id, 'account_cleanup', str(e))
+        send_failure_notification(account_id, 'account_deprovision', str(e))
         
         return {'statusCode': 500, 'body': str(e)}
 

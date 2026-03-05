@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-# Deploy Account Provider Lambda
-# This Lambda handles DataZone account pool requests
+# Deploy Lambda Functions (PoolManager, SetupOrchestrator, DeprovisionAccount)
+# Updates Lambda function code for functions created by infrastructure stack
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
@@ -16,13 +16,11 @@ fi
 
 REGION=$(grep "region:" config.yaml | awk '{print $2}')
 DOMAIN_ACCOUNT_ID=$(grep "domain_account_id:" config.yaml | awk '{print $2}' | tr -d '"')
-DOMAIN_ID=$(grep "domain_id:" config.yaml | awk '{print $2}')
 
-echo "🚀 Deploying Account Provider Lambda"
-echo "====================================="
+echo "🚀 Deploying Lambda Functions"
+echo "=============================="
 echo "Region: $REGION"
 echo "Domain Account: $DOMAIN_ACCOUNT_ID"
-echo "Domain ID: $DOMAIN_ID"
 echo ""
 
 # Verify we're in the correct account
@@ -36,78 +34,58 @@ fi
 echo "✅ Running in correct account"
 echo ""
 
-# Deploy AccountProvider Lambda using CloudFormation
-echo "📦 Deploying AccountProvider Lambda stack..."
-aws cloudformation deploy \
-    --template-file templates/cloudformation/02-domain-account/deploy/02-account-provider-lambda.yaml \
-    --stack-name AccountPoolFactory-AccountProvider \
-    --parameter-overrides DomainId="$DOMAIN_ID" \
-    --capabilities CAPABILITY_NAMED_IAM \
-    --region "$REGION"
+# Deploy PoolManager Lambda code
+echo "📦 Deploying PoolManager Lambda code..."
+cd src/pool-manager
+zip -q ../../pool-manager.zip lambda_function.py
+cd ../..
 
-echo "✅ AccountProvider Lambda stack deployed"
-echo ""
-
-# Get stack outputs
-LAMBDA_ARN=$(aws cloudformation describe-stacks \
-    --stack-name AccountPoolFactory-AccountProvider \
+aws lambda update-function-code \
+    --function-name PoolManager \
+    --zip-file fileb://pool-manager.zip \
     --region "$REGION" \
-    --query 'Stacks[0].Outputs[?OutputKey==`LambdaFunctionArn`].OutputValue' \
-    --output text)
+    > /dev/null
 
-ACCOUNT_RESOLUTION_ROLE_ARN=$(aws cloudformation describe-stacks \
-    --stack-name AccountPoolFactory-AccountProvider \
+rm -f pool-manager.zip
+echo "✅ PoolManager code deployed"
+echo ""
+
+# Deploy SetupOrchestrator Lambda code
+echo "📦 Deploying SetupOrchestrator Lambda code..."
+cd src/setup-orchestrator
+zip -q ../../setup-orchestrator.zip lambda_function.py
+cd ../..
+
+aws lambda update-function-code \
+    --function-name SetupOrchestrator \
+    --zip-file fileb://setup-orchestrator.zip \
     --region "$REGION" \
-    --query 'Stacks[0].Outputs[?OutputKey==`AccountResolutionRoleArn`].OutputValue' \
-    --output text)
+    > /dev/null
 
-echo "📊 Stack Outputs:"
-echo "  Lambda ARN: $LAMBDA_ARN"
-echo "  Account Resolution Role ARN: $ACCOUNT_RESOLUTION_ROLE_ARN"
+rm -f setup-orchestrator.zip
+echo "✅ SetupOrchestrator code deployed"
 echo ""
 
-# Update Lambda function code (if needed)
-LAMBDA_FUNCTION_NAME="AccountProvider-${DOMAIN_ID}"
+# Deploy DeprovisionAccount Lambda code
+echo "📦 Deploying DeprovisionAccount Lambda code..."
+cd src/deprovision-account
+zip -q ../../deprovision-account.zip lambda_function.py
+cd ../..
 
-if aws lambda get-function --function-name "$LAMBDA_FUNCTION_NAME" --region "$REGION" 2>/dev/null; then
-    echo "🔄 Updating Lambda function code..."
-    
-    # The Lambda code is embedded in the CloudFormation template
-    # To update it, we need to redeploy the stack or update via Lambda API
-    
-    # Check if there's production code to deploy
-    if [ -f "src/account-provider/lambda_function_prod.py" ]; then
-        echo "📦 Creating deployment package from production code..."
-        cd src/account-provider
-        cp lambda_function_prod.py lambda_function.py
-        zip -r ../../account-provider.zip lambda_function.py
-        rm lambda_function.py
-        cd ../..
-        
-        aws lambda update-function-code \
-            --function-name "$LAMBDA_FUNCTION_NAME" \
-            --zip-file fileb://account-provider.zip \
-            --region "$REGION" \
-            > /dev/null
-        
-        rm -f account-provider.zip
-        echo "✅ Lambda function code updated"
-    else
-        echo "ℹ️  No production code found, using template's embedded code"
-    fi
-else
-    echo "ℹ️  Lambda function will be created by CloudFormation stack"
-fi
+aws lambda update-function-code \
+    --function-name DeprovisionAccount \
+    --zip-file fileb://deprovision-account.zip \
+    --region "$REGION" \
+    > /dev/null
 
+rm -f deprovision-account.zip
+echo "✅ DeprovisionAccount code deployed"
 echo ""
-echo "✅ Deployment complete!"
+
+echo "✅ All Lambda functions deployed successfully!"
 echo ""
-echo "📋 Resources created:"
-echo "  - Lambda Function: $LAMBDA_FUNCTION_NAME"
-echo "  - Lambda Execution Role: AccountProviderLambdaRole-${DOMAIN_ID}"
-echo "  - Account Resolution Role: AccountResolutionRole-${DOMAIN_ID}"
-echo ""
-echo "Next steps:"
-echo "1. Create Account Pool in DataZone using the Account Resolution Role ARN"
-echo "2. The Account Pool will automatically use this Lambda"
+echo "📋 Functions updated:"
+echo "  - PoolManager"
+echo "  - SetupOrchestrator"
+echo "  - DeprovisionAccount"
 echo ""

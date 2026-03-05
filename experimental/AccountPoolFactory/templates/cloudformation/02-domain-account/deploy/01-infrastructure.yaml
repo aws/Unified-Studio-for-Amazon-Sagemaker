@@ -199,6 +199,12 @@ Resources:
                   - lambda:InvokeFunction
                 Resource: !GetAtt SetupOrchestratorFunction.Arn
               
+              # Invoke DeprovisionAccount
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: !GetAtt DeprovisionAccountFunction.Arn
+              
               # SNS notifications
               - Effect: Allow
                 Action:
@@ -238,7 +244,9 @@ Resources:
           DYNAMODB_TABLE_NAME: !Ref AccountStateTable
           SNS_TOPIC_ARN: !Ref AlertTopic
           SETUP_ORCHESTRATOR_FUNCTION_NAME: !Ref SetupOrchestratorFunction
+          DEPROVISION_ACCOUNT_FUNCTION_NAME: !Ref DeprovisionAccountFunction
           DOMAIN_ACCOUNT_ID: !Ref DomainAccountId
+          DOMAIN_ID: !Ref DomainId
       Code:
         ZipFile: |
           # Placeholder - deploy actual code separately
@@ -344,6 +352,33 @@ Resources:
           DOMAIN_ACCOUNT_ID: !Ref DomainAccountId
           ROOT_DOMAIN_UNIT_ID: !Ref RootDomainUnitId
           ORG_ADMIN_ACCOUNT_ID: !Ref OrgAdminAccountId
+      Code:
+        ZipFile: |
+          # Placeholder - deploy actual code separately
+          def lambda_handler(event, context):
+              return {'statusCode': 200, 'body': 'Placeholder'}
+      Tags:
+        - Key: ManagedBy
+          Value: AccountPoolFactory
+
+  # Deprovision Account Lambda Function (reuses SetupOrchestratorRole)
+  DeprovisionAccountFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: DeprovisionAccount
+      Runtime: python3.12
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt SetupOrchestratorRole.Arn
+      Timeout: 900
+      MemorySize: 512
+      ReservedConcurrentExecutions: 3
+      Environment:
+        Variables:
+          DYNAMODB_TABLE_NAME: !Ref AccountStateTable
+          SNS_TOPIC_ARN: !Ref AlertTopic
+          DOMAIN_ID: !Ref DomainId
+          DELETION_TIMEOUT: '600'
+          MAX_RETRIES: '3'
       Code:
         ZipFile: |
           # Placeholder - deploy actual code separately
@@ -489,3 +524,9 @@ Outputs:
     Value: !GetAtt SetupOrchestratorFunction.Arn
     Export:
       Name: AccountPoolFactory-SetupOrchestratorArn
+
+  DeprovisionAccountFunctionArn:
+    Description: Deprovision Account Lambda function ARN
+    Value: !GetAtt DeprovisionAccountFunction.Arn
+    Export:
+      Name: AccountPoolFactory-DeprovisionAccountArn

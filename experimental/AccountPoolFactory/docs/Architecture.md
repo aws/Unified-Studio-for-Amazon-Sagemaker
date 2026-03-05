@@ -4,11 +4,11 @@
 
 When a user creates a new project in **Amazon SageMaker Unified Studio**, that project requires a dedicated AWS account for security isolation. Each project gets its own account to ensure complete separation of resources, data, and permissions between different teams and workloads.
 
-However, creating and configuring a new AWS account takes 6-8 minutes:
+However, creating and configuring a new AWS account takes 5-6 minutes:
 - Creating the account via AWS Organizations: ~1 minute
-- Deploying VPC, IAM roles, S3 buckets: ~2 minutes
+- Deploying VPC, IAM roles, S3 buckets, RAM share: ~2.5 minutes (parallel)
 - Enabling 17 DataZone blueprints: ~3 minutes
-- Configuring policy grants and permissions: ~2 minutes
+- Verifying domain visibility: included in Wave 1
 
 This delay frustrates users who expect instant project creation. The Account Pool Factory solves this by maintaining a pool of pre-configured accounts that are ready before users need them.
 
@@ -17,7 +17,7 @@ This delay frustrates users who expect instant project creation. The Account Poo
 The Account Pool Factory is an event-driven automation system that:
 - Maintains a pool of 5-10 pre-configured AWS accounts (configurable)
 - Monitors the pool size and automatically replenishes when accounts are assigned
-- Provides instant account assignment (< 5 seconds instead of 6-8 minutes)
+- Provides instant account assignment (< 5 seconds instead of 5-6 minutes)
 - Handles account lifecycle from creation through assignment to cleanup
 
 **Key Benefit**: Users get immediate project creation with zero wait time for account setup.
@@ -143,7 +143,7 @@ Account Available → Ready for next user
 
 **Problem**: Sequential deployment takes 10-12 minutes
 **Solution**: Deploy independent resources in parallel waves
-**Benefit**: 17% faster (6-8 minutes), respects CloudFormation dependencies
+**Benefit**: 45% faster (5.5 minutes), maximizes parallelization by eliminating false dependencies
 
 ## Detailed Component Architecture
 
@@ -253,17 +253,19 @@ This section describes each account type, the resources deployed in it, and how 
 **What it does**:
 1. Validates account exists in DynamoDB
 2. Checks for idempotency (skips if already AVAILABLE)
-3. Executes 6-wave configuration workflow:
-   - Wave 1: VPC deployment (2.5 min)
-   - Wave 2: IAM roles + EventBridge rules in parallel (2 min)
-   - Wave 3: S3 bucket + RAM share in parallel (1 min)
-   - Wave 4: Enable 17 blueprints (3 min)
-   - Wave 5: Policy grants (included in blueprint template)
-   - Wave 6: Domain visibility verification (1 min)
+3. Executes 2-wave configuration workflow:
+   - Wave 1: Foundation + Domain Access (parallel, 2.5 min)
+     - VPC deployment with 3 private subnets
+     - IAM roles (ManageAccessRole, ProvisioningRole)
+     - EventBridge rules for event forwarding
+     - S3 bucket for blueprint artifacts
+     - RAM share creation and domain visibility verification
+   - Wave 2: Blueprint Enablement (3 min)
+     - Enable 17 DataZone blueprints with policy grants
 4. Updates DynamoDB with progress after each wave
 5. Marks account as AVAILABLE when complete
 
-**Why it exists**: This Lambda handles the complex multi-step configuration workflow. By using wave-based parallel execution, it reduces setup time from 10-12 minutes to 6-8 minutes.
+**Why it exists**: This Lambda handles the complex multi-step configuration workflow. By using wave-based parallel execution and eliminating false dependencies, it reduces setup time from 10-12 minutes to 5.5 minutes.
 
 **IAM Permissions**:
 - CloudFormation: CreateStack, DescribeStacks, DeleteStack
