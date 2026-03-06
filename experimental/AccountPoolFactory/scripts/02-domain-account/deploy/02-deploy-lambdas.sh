@@ -53,8 +53,25 @@ echo ""
 # Deploy SetupOrchestrator Lambda code
 echo "📦 Deploying SetupOrchestrator Lambda code..."
 cd src/setup-orchestrator
-zip -q ../../setup-orchestrator.zip lambda_function.py
-cd ../..
+
+# Create a temporary directory for packaging
+TEMP_DIR=$(mktemp -d)
+cp lambda_function.py "$TEMP_DIR/"
+
+# Copy CloudFormation templates
+echo "   📄 Including CloudFormation templates..."
+cp ../../templates/cloudformation/03-project-account/deploy/02-vpc-setup.yaml "$TEMP_DIR/02-vpc-setup.yaml"
+cp ../../templates/cloudformation/03-project-account/deploy/03-iam-roles.yaml "$TEMP_DIR/03-iam-roles.yaml"
+cp ../../templates/cloudformation/03-project-account/deploy/04-eventbridge-rules.yaml "$TEMP_DIR/04-eventbridge-rules.yaml"
+cp ../../templates/cloudformation/03-project-account/deploy/blueprint-enablement-iam.yaml "$TEMP_DIR/blueprint-enablement-iam.yaml"
+
+# Create zip from temp directory
+cd "$TEMP_DIR"
+zip -q -r "$PROJECT_ROOT/setup-orchestrator.zip" .
+cd "$PROJECT_ROOT"
+
+# Clean up temp directory
+rm -rf "$TEMP_DIR"
 
 aws lambda update-function-code \
     --function-name SetupOrchestrator \
@@ -63,7 +80,7 @@ aws lambda update-function-code \
     > /dev/null
 
 rm -f setup-orchestrator.zip
-echo "✅ SetupOrchestrator code deployed"
+echo "✅ SetupOrchestrator code deployed (with templates)"
 echo ""
 
 # Deploy DeprovisionAccount Lambda code
