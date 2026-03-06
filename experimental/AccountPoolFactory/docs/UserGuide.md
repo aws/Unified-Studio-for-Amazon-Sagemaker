@@ -302,7 +302,7 @@ Successfully created/updated stack - AccountPoolFactory-AccountCreationRole
 ✅ Role deployed successfully
 
 📊 Role Details:
-  Role ARN: arn:aws:iam::495869084367:role/AccountPoolFactory-AccountCreation
+  Role ARN: arn:aws:iam::495869084367:role/SMUS-AccountPoolFactory-AccountCreation
   External ID: AccountPoolFactory-994753223772
 
 📄 Role details saved to: org-admin-role-details.json
@@ -313,7 +313,7 @@ Next steps:
 1. Switch back to Domain account credentials
 2. Update SSM parameter with role ARN:
    aws ssm put-parameter --name /AccountPoolFactory/PoolManager/OrgAdminRoleArn \
-     --value 'arn:aws:iam::495869084367:role/AccountPoolFactory-AccountCreation' \
+     --value 'arn:aws:iam::495869084367:role/SMUS-AccountPoolFactory-AccountCreation' \
      --type String --region us-east-2
 3. Update SSM parameter with external ID:
    aws ssm put-parameter --name /AccountPoolFactory/PoolManager/ExternalId \
@@ -323,8 +323,8 @@ Next steps:
 ```
 
 **Resources Created**:
-- **IAM Role**: AccountPoolFactory-AccountCreation
-- **Role ARN**: arn:aws:iam::495869084367:role/AccountPoolFactory-AccountCreation
+- **IAM Role**: SMUS-AccountPoolFactory-AccountCreation
+- **Role ARN**: arn:aws:iam::495869084367:role/SMUS-AccountPoolFactory-AccountCreation
 - **External ID**: AccountPoolFactory-{DomainAccountId}
 
 **After Deployment** (run in Domain account):
@@ -335,7 +335,7 @@ export AWS_PROFILE=domain-account
 # Configure Pool Manager with cross-account role
 aws ssm put-parameter \
   --name /AccountPoolFactory/PoolManager/OrgAdminRoleArn \
-  --value 'arn:aws:iam::495869084367:role/AccountPoolFactory-AccountCreation' \
+  --value 'arn:aws:iam::495869084367:role/SMUS-AccountPoolFactory-AccountCreation' \
   --type String \
   --region us-east-2
 

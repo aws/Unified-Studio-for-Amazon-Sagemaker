@@ -8,14 +8,14 @@ Responsibilities:
 1. Create account via Organizations API
 2. Move account to target OU
 3. Deploy StackSet execution role to new account
-4. Deploy TrustPolicy StackSet (creates AccountPoolFactory-DomainAccess role)
+4. Deploy TrustPolicy StackSet (creates SMUS-AccountPoolFactory-DomainAccess role)
 5. Wait for StackSet completion
 6. Return ready-to-use account ID
 
 Security:
 - Only Lambda that touches OrganizationAccountAccessRole
 - Invoked cross-account by PoolManager (Domain account)
-- Creates AccountPoolFactory-DomainAccess with ExternalId protection
+- Creates SMUS-AccountPoolFactory-DomainAccess with ExternalId protection
 """
 
 import json
@@ -32,7 +32,7 @@ sts = boto3.client('sts')
 
 # Constants
 REGION = 'us-east-2'
-DOMAIN_ACCESS_STACKSET_NAME = 'AccountPoolFactory-DomainAccess'
+DOMAIN_ACCESS_STACKSET_NAME = 'SMUS-AccountPoolFactory-DomainAccess'
 
 
 def lambda_handler(event, context):
@@ -90,10 +90,10 @@ def provision_account(event: Dict[str, Any]) -> Dict[str, Any]:
         deploy_stackset_execution_role(account_id, org_admin_account_id)
         print(f"   ✅ StackSet execution role deployed")
         
-        # Step 4: Deploy AccountPoolFactory-DomainAccess role via StackSet
-        print(f"🔐 Step 4: Deploying AccountPoolFactory-DomainAccess role...")
+        # Step 4: Deploy SMUS-AccountPoolFactory-DomainAccess role via StackSet
+        print(f"🔐 Step 4: Deploying SMUS-AccountPoolFactory-DomainAccess role...")
         deploy_domain_access_role_stackset(account_id, domain_id, domain_account_id)
-        print(f"   ✅ AccountPoolFactory-DomainAccess role deployed")
+        print(f"   ✅ SMUS-AccountPoolFactory-DomainAccess role deployed")
         
         # Step 5: Wait for IAM role propagation
         print(f"⏳ Step 5: Waiting for IAM role propagation...")
@@ -304,7 +304,7 @@ def wait_for_role_availability(account_id: str, max_wait: int = 120):
 def deploy_stackset_execution_role(account_id: str, org_admin_account_id: str):
     """Deploy StackSet execution role directly to new account using CloudFormation"""
     
-    stack_name = 'AccountPoolFactory-StackSetExecutionRole'
+    stack_name = 'SMUS-AccountPoolFactory-StackSetExecutionRole'
     
     # CloudFormation template for StackSet execution role
     template_body = f"""
@@ -315,13 +315,13 @@ Resources:
   StackSetExecutionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: AWSCloudFormationStackSetExecutionRole
+      RoleName: SMUS-AccountPoolFactory-StackSetExecution
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
           - Effect: Allow
             Principal:
-              AWS: arn:aws:iam::{org_admin_account_id}:role/AWSCloudFormationStackSetAdministrationRole
+              AWS: arn:aws:iam::{org_admin_account_id}:role/SMUS-AccountPoolFactory-StackSetAdmin
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AdministratorAccess
@@ -417,7 +417,7 @@ Outputs:
 
 
 def deploy_domain_access_role_stackset(account_id: str, domain_id: str, domain_account_id: str):
-    """Deploy StackSet to create AccountPoolFactory-DomainAccess role with ExternalId protection"""
+    """Deploy StackSet to create SMUS-AccountPoolFactory-DomainAccess role with ExternalId protection"""
     
     print(f"   📦 Checking StackSet instance for account {account_id}")
     

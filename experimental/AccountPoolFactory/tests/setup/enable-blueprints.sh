@@ -4,7 +4,7 @@ set -e
 # Enable DataZone blueprints in the domain
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Load configuration
 CONFIG_FILE="$PROJECT_ROOT/config.yaml"
@@ -22,16 +22,24 @@ echo "Domain ID: $DOMAIN_ID"
 echo "Region: $REGION"
 echo ""
 
-# List of blueprint IDs from the project profile
+# List of blueprint IDs from the project profile template
+# These must match the blueprints referenced in 02-project-profile-with-pool.yaml
 BLUEPRINTS=(
     "3owsbi7jjppvc9:Tooling"
     "6bbrztdwfxomeh:DataLake"
     "6vtt2ycs570ezt:LakehouseCatalog"
     "5zux18nxyx6pd5:RedshiftServerless"
     "b0eis75ozsqhd5:Workflows"
-    "6r38ttlmkm3isp:MLExperiments"
+    "b78loa64t9oyuh:MLExperiments"
     "atyconez9k8zjd:EmrOnEc2"
-    "c1vpqx2w5jxsh5:EMRServerless"
+    "c1vpqx2w5jxsh5:EmrServerless"
+    "d55dwbwfj35qax:AmazonBedrockChatAgent"
+    "5smdhnwnnk8j55:AmazonBedrockKnowledgeBase"
+    "4q5zrcfovzaq5l:AmazonBedrockGuardrail"
+    "da33e9jk0oyq95:AmazonBedrockFunction"
+    "40xpt2w3xewr1l:AmazonBedrockFlow"
+    "bx74dti0en1e95:AmazonBedrockPrompt"
+    "6cxr3kg2f90uw9:AmazonBedrockEvaluation"
 )
 
 echo "Blueprints to enable:"

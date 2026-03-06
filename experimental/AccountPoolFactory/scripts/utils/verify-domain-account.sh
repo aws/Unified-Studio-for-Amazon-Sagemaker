@@ -180,7 +180,7 @@ echo ""
 echo "4️⃣  IAM Roles:"
 echo "=============="
 
-ROLES=("AccountPoolFactory-PoolManager-Role" "AccountPoolFactory-SetupOrchestrator-Role")
+ROLES=("SMUS-AccountPoolFactory-PoolManager-Role" "SMUS-AccountPoolFactory-SetupOrchestrator-Role")
 for ROLE in "${ROLES[@]}"; do
     ROLE_ARN=$(aws iam get-role \
         --role-name "$ROLE" \
@@ -215,7 +215,7 @@ echo "=========================="
 
 echo "   Testing SetupOrchestrator → StackSetManagement role..."
 ASSUME_RESULT=$(aws sts assume-role \
-    --role-arn "arn:aws:iam::${ORG_ADMIN_ACCOUNT_ID}:role/AccountPoolFactory-StackSetManagement" \
+    --role-arn "arn:aws:iam::${ORG_ADMIN_ACCOUNT_ID}:role/SMUS-AccountPoolFactory-StackSetAdmin" \
     --role-session-name "VerificationTest" \
     --external-id "AccountPoolFactory-${DOMAIN_ACCOUNT_ID}" \
     --query 'Credentials.AccessKeyId' \

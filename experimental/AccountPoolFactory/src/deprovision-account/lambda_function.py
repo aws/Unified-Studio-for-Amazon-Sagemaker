@@ -14,7 +14,7 @@ Responsibilities:
 7. Send notifications
 
 Security:
-- Assumes AccountPoolFactory-DomainAccess role in project account
+- Assumes SMUS-AccountPoolFactory-DomainAccess role in project account
 - Never deletes approved infrastructure stacks
 - Comprehensive error handling and state management
 """
@@ -48,8 +48,8 @@ APPROVED_STACK_PATTERNS = [
 ]
 
 APPROVED_STACK_NAMES = {
-    'AccountPoolFactory-StackSetExecutionRole',
-    'AccountPoolFactory-DomainAccess',
+    'SMUS-AccountPoolFactory-StackSetExecutionRole',
+    'SMUS-AccountPoolFactory-DomainAccess',
 }
 
 
@@ -231,7 +231,7 @@ def cleanup_account(account_id: str, domain_id: str) -> Dict[str, Any]:
 def get_cloudformation_client(account_id: str, domain_id: str):
     """Get CloudFormation client for project account"""
     
-    role_arn = f"arn:aws:iam::{account_id}:role/AccountPoolFactory-DomainAccess"
+    role_arn = f"arn:aws:iam::{account_id}:role/SMUS-AccountPoolFactory-DomainAccess"
     
     assumed_role = sts.assume_role(
         RoleArn=role_arn,

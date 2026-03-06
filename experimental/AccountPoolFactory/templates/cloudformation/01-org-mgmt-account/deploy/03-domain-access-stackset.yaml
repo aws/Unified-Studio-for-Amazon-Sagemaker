@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Create AccountPoolFactory-DomainAccess role with ExternalId protection'
+Description: 'Create SMUS-AccountPoolFactory-DomainAccess role with ExternalId protection'
 
 Parameters:
   DomainAccountId:
@@ -17,7 +17,7 @@ Resources:
   DomainAccessRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: AccountPoolFactory-DomainAccess
+      RoleName: SMUS-AccountPoolFactory-DomainAccess
       Description: 'Allows Domain account SetupOrchestrator to configure this account (with ExternalId)'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -35,5 +35,5 @@ Resources:
 
 Outputs:
   RoleArn:
-    Description: ARN of the AccountPoolFactory-DomainAccess role
+    Description: ARN of the SMUS-AccountPoolFactory-DomainAccess role
     Value: !GetAtt DomainAccessRole.Arn

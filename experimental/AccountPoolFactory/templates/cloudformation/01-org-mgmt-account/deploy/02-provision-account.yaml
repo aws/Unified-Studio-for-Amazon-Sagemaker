@@ -1,0 +1,166 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'SMUS Account Pool Factory - ProvisionAccount Lambda, AccountCreation cross-account role'
+
+Parameters:
+  DomainAccountId:
+    Type: String
+    Description: Domain account ID (where PoolManager runs)
+    AllowedPattern: '^\d{12}$'
+
+Resources:
+
+  # =========================================================
+  # AccountCreation Role - allows PoolManager to create accounts
+  # =========================================================
+  AccountCreationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: SMUS-AccountPoolFactory-AccountCreation
+      Description: Allows Pool Manager Lambda in Domain account to create AWS accounts
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${DomainAccountId}:role/SMUS-AccountPoolFactory-PoolManager-Role'
+            Action: 'sts:AssumeRole'
+            Condition:
+              StringEquals:
+                'sts:ExternalId': !Sub 'AccountPoolFactory-${DomainAccountId}'
+      Policies:
+        - PolicyName: AccountPoolFactoryOrganizationsAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'organizations:CreateAccount'
+                  - 'organizations:DescribeCreateAccountStatus'
+                  - 'organizations:DescribeAccount'
+                  - 'organizations:ListParents'
+                  - 'organizations:MoveAccount'
+                  - 'organizations:CloseAccount'
+                  - 'organizations:DescribeOrganization'
+                  - 'organizations:ListRoots'
+                  - 'organizations:ListOrganizationalUnitsForParent'
+                  - 'organizations:DescribeOrganizationalUnit'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'cloudformation:DescribeStackSet'
+                  - 'cloudformation:ListStackInstances'
+                  - 'cloudformation:DescribeStackInstance'
+                Resource: 'arn:aws:cloudformation:*:*:stackset/SMUS-AccountPoolFactory-*:*'
+              - Effect: Allow
+                Action:
+                  - 'sts:AssumeRole'
+                Resource: 'arn:aws:iam::*:role/OrganizationAccountAccessRole'
+      Tags:
+        - Key: Project
+          Value: AccountPoolFactory
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # =========================================================
+  # ProvisionAccount Lambda execution role
+  # =========================================================
+  ProvisionAccountRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: SMUS-AccountPoolFactory-ProvisionAccount-Role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: ProvisionAccountPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - organizations:CreateAccount
+                  - organizations:DescribeAccount
+                  - organizations:DescribeCreateAccountStatus
+                  - organizations:MoveAccount
+                  - organizations:ListParents
+                  - organizations:ListAccounts
+                  - organizations:DescribeOrganization
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - sts:AssumeRole
+                Resource: 'arn:aws:iam::*:role/OrganizationAccountAccessRole'
+              - Effect: Allow
+                Action:
+                  - cloudformation:CreateStackInstances
+                  - cloudformation:DescribeStackSetOperation
+                  - cloudformation:ListStackInstances
+                  - cloudformation:DescribeStackSet
+                Resource:
+                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stackset/SMUS-AccountPoolFactory-DomainAccess:*'
+                  - !Sub 'arn:aws:cloudformation:${AWS::Region}::type/resource/*'
+                  - 'arn:aws:cloudformation:*:*:stackset-target/*'
+      Tags:
+        - Key: ManagedBy
+          Value: AccountPoolFactory
+
+  # =========================================================
+  # ProvisionAccount Lambda function
+  # =========================================================
+  ProvisionAccountFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: ProvisionAccount
+      Runtime: python3.12
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt ProvisionAccountRole.Arn
+      Timeout: 600
+      MemorySize: 512
+      ReservedConcurrentExecutions: 5
+      Code:
+        ZipFile: |
+          # Placeholder - deploy actual code via deploy script
+          def lambda_handler(event, context):
+              return {'statusCode': 200, 'body': 'Placeholder'}
+      Tags:
+        - Key: ManagedBy
+          Value: AccountPoolFactory
+
+  # Allow Domain account to invoke this Lambda
+  ProvisionAccountInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ProvisionAccountFunction
+      Action: lambda:InvokeFunction
+      Principal: !Ref DomainAccountId
+
+Outputs:
+  AccountCreationRoleArn:
+    Description: ARN of the AccountCreation cross-account role
+    Value: !GetAtt AccountCreationRole.Arn
+    Export:
+      Name: AccountPoolFactory-AccountCreationRoleArn
+
+  ExternalId:
+    Description: External ID for assuming the AccountCreation role
+    Value: !Sub 'AccountPoolFactory-${DomainAccountId}'
+    Export:
+      Name: AccountPoolFactory-ExternalId
+
+  ProvisionAccountFunctionArn:
+    Description: ARN of the ProvisionAccount Lambda function
+    Value: !GetAtt ProvisionAccountFunction.Arn
+    Export:
+      Name: AccountPoolFactory-ProvisionAccountArn
+
+  ProvisionAccountRoleArn:
+    Description: ARN of the ProvisionAccount Lambda role
+    Value: !GetAtt ProvisionAccountRole.Arn
+    Export:
+      Name: AccountPoolFactory-ProvisionAccountRoleArn

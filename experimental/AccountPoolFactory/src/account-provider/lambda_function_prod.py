@@ -44,12 +44,16 @@ def lambda_handler(event, context):
     try:
         operation_request = event.get('operationRequest', {})
         
-        if 'listAuthorizedAccountsRequest' in operation_request:
-            logger.info("📋 ListAuthorizedAccountsRequest received")
-            response = list_authorized_accounts()
-        elif 'validateAccountAuthorizationRequest' in operation_request:
+        if operation_request.get('validateAccountAuthorizationRequest'):
             logger.info("✅ ValidateAccountAuthorizationRequest received")
             response = validate_account_authorization(operation_request['validateAccountAuthorizationRequest'])
+        elif operation_request.get('listAuthorizedAccountsRequest') is not None:
+            logger.info("📋 ListAuthorizedAccountsRequest received")
+            response = list_authorized_accounts()
+        elif 'listAuthorizedAccountsRequest' in operation_request:
+            # listAuthorizedAccountsRequest is null but key exists — treat as list request
+            logger.info("📋 ListAuthorizedAccountsRequest received (null payload)")
+            response = list_authorized_accounts()
         else:
             error_msg = f"❌ Unsupported operation: {operation_request}"
             logger.error(error_msg)

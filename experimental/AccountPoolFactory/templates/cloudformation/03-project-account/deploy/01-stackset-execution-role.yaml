@@ -11,13 +11,13 @@ Resources:
   StackSetExecutionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: AWSCloudFormationStackSetExecutionRole
+      RoleName: SMUS-AccountPoolFactory-StackSetExecution
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
           - Effect: Allow
             Principal:
-              AWS: !Sub 'arn:aws:iam::${AdministratorAccountId}:role/AWSCloudFormationStackSetAdministrationRole'
+              AWS: !Sub 'arn:aws:iam::${AdministratorAccountId}:role/SMUS-AccountPoolFactory-StackSetAdmin'
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AdministratorAccess

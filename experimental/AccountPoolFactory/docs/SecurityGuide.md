@@ -20,12 +20,12 @@ Attacker → Invokes Pool Manager → Pool Manager assumes role in Org Admin →
 
 ### The Solution - ExternalId in Trust Policies
 
-Setup Orchestrator uses ExternalId when assuming AccountPoolFactory-DomainAccess role in project accounts:
+Setup Orchestrator uses ExternalId when assuming SMUS-AccountPoolFactory-DomainAccess role in project accounts:
 
 ```python
 # From setup-orchestrator/lambda_function.py
 def get_cross_account_client(service: str, account_id: str, config: Dict[str, Any] = None):
-    role_arn = f"arn:aws:iam::{account_id}:role/AccountPoolFactory-DomainAccess"
+    role_arn = f"arn:aws:iam::{account_id}:role/SMUS-AccountPoolFactory-DomainAccess"
     domain_id = config.get('DomainId', DOMAIN_ID)
     
     assumed_role = sts.assume_role(
@@ -59,7 +59,7 @@ Trust policy in project accounts requires matching ExternalId:
 **ExternalId Value**: DataZone Domain ID (stored in environment variable)
 
 **Where ExternalId is Used**:
-- Setup Orchestrator → AccountPoolFactory-DomainAccess role (project accounts)
+- Setup Orchestrator → SMUS-AccountPoolFactory-DomainAccess role (project accounts)
 
 **Where ExternalId is NOT Used**:
 - ProvisionAccount Lambda → OrganizationAccountAccessRole (same account)
@@ -83,7 +83,7 @@ Invocation control:
 ```json
 {
   "Principal": {
-    "AWS": "arn:aws:iam::DOMAIN_ACCOUNT:role/AccountPoolFactory-PoolManager-Role"
+    "AWS": "arn:aws:iam::DOMAIN_ACCOUNT:role/SMUS-AccountPoolFactory-PoolManager-Role"
   },
   "Action": "lambda:InvokeFunction"
 }
@@ -109,10 +109,10 @@ Why no Organizations API: Delegates to ProvisionAccount Lambda for separation of
 Why: Configures project accounts with DataZone resources.
 
 Key permissions:
-- `sts:AssumeRole` - Assume AccountPoolFactory-DomainAccess with ExternalId
+- `sts:AssumeRole` - Assume SMUS-AccountPoolFactory-DomainAccess with ExternalId
 - `dynamodb:Query|PutItem|UpdateItem` - Track setup progress
 
-Why ExternalId required: All project account operations go through AccountPoolFactory-DomainAccess role.
+Why ExternalId required: All project account operations go through SMUS-AccountPoolFactory-DomainAccess role.
 
 **Account Provider Lambda Role**
 
@@ -125,7 +125,7 @@ Why most restrictive: No cross-account access, no write operations.
 
 ### Project Account
 
-**AccountPoolFactory-DomainAccess Role**
+**SMUS-AccountPoolFactory-DomainAccess Role**
 
 Created by: ProvisionAccount Lambda via StackSet during provisioning.
 

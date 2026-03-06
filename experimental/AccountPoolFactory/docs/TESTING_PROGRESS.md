@@ -250,7 +250,7 @@ Blueprints: ToolingLite (ON_CREATE), S3Bucket, S3TableCatalog (ON_DEMAND)
 **Test Results**:
 ✅ Pool Manager successfully loaded all 11 SSM parameters with pagination
 ✅ ExternalId loaded correctly: `AccountPoolFactory-994753223772`
-✅ OrgAdminRoleArn loaded correctly: `arn:aws:iam::495869084367:role/AccountPoolFactory-AccountCreation`
+✅ OrgAdminRoleArn loaded correctly: `arn:aws:iam::495869084367:role/SMUS-AccountPoolFactory-AccountCreation`
 ✅ Cross-account role assumption successful
 ✅ 3 AWS accounts created successfully:
    - Account 1: 669468173247 (DataZone-Pool-1772588955-0)
@@ -263,7 +263,7 @@ Blueprints: ToolingLite (ON_CREATE), S3Bucket, S3TableCatalog (ON_DEMAND)
 **Known Issues**:
 1. ✅ FIXED: Setup Orchestrator AssumeRole permission issue
    - Root cause: OrganizationAccountAccessRole trust policy only trusted Org Admin account
-   - Solution: Created StackSet to deploy AccountPoolFactory-DomainAccess role
+   - Solution: Created StackSet to deploy SMUS-AccountPoolFactory-DomainAccess role
    - StackSet auto-deploys to all accounts in target OU
    - Pool Manager polls for StackSet deployment before invoking Setup Orchestrator
    - Setup Orchestrator now successfully assumes DomainAccess role
@@ -291,12 +291,12 @@ Blueprints: ToolingLite (ON_CREATE), S3Bucket, S3TableCatalog (ON_DEMAND)
 **Latest Test Results** (March 4, 2026 13:50 UTC):
 ✅ Pool Manager successfully loaded all 11 SSM parameters with pagination
 ✅ ExternalId loaded correctly: `AccountPoolFactory-994753223772`
-✅ OrgAdminRoleArn loaded correctly: `arn:aws:iam::495869084367:role/AccountPoolFactory-AccountCreation`
+✅ OrgAdminRoleArn loaded correctly: `arn:aws:iam::495869084367:role/SMUS-AccountPoolFactory-AccountCreation`
 ✅ Cross-account role assumption successful
 ✅ StackSet polling working (no more AccessDenied errors)
 ✅ StackSet deployment detected (status changed from OUTDATED → CURRENT in 72 seconds)
 ✅ Setup Orchestrator invoked after StackSet ready
-✅ Setup Orchestrator successfully assumed AccountPoolFactory-DomainAccess role
+✅ Setup Orchestrator successfully assumed SMUS-AccountPoolFactory-DomainAccess role
 ✅ VPC deployment started successfully for account 863148076418
 ⏳ IAM roles and EventBridge rules deploying (Wave 2)
 ⏳ Waiting for complete setup workflow (6-8 minutes total)

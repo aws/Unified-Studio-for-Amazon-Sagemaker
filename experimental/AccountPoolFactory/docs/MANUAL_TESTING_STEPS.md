@@ -44,7 +44,7 @@ cd experimental/AccountPoolFactory
 ```
 
 **What this does:**
-- Creates IAM role: `AccountPoolFactory-AccountCreation`
+- Creates IAM role: `SMUS-AccountPoolFactory-AccountCreation`
 - Configures trust policy with External ID
 - Grants least-privilege Organizations API permissions
 - Saves role details to `org-admin-role-details.json`
@@ -67,7 +67,7 @@ Successfully created/updated stack - AccountPoolFactory-AccountCreationRole
 ✅ Role deployed successfully
 
 📊 Role Details:
-  Role ARN: arn:aws:iam::495869084367:role/AccountPoolFactory-AccountCreation
+  Role ARN: arn:aws:iam::495869084367:role/SMUS-AccountPoolFactory-AccountCreation
   External ID: AccountPoolFactory-994753223772
 
 📄 Role details saved to: org-admin-role-details.json
@@ -76,7 +76,7 @@ Successfully created/updated stack - AccountPoolFactory-AccountCreationRole
 ```
 
 **Copy these values** (you'll need them in Part 2):
-- Role ARN: `arn:aws:iam::495869084367:role/AccountPoolFactory-AccountCreation`
+- Role ARN: `arn:aws:iam::495869084367:role/SMUS-AccountPoolFactory-AccountCreation`
 - External ID: `AccountPoolFactory-994753223772`
 
 ---
@@ -110,7 +110,7 @@ cd experimental/AccountPoolFactory
 # Add the cross-account role ARN
 aws ssm put-parameter \
   --name /AccountPoolFactory/PoolManager/OrgAdminRoleArn \
-  --value 'arn:aws:iam::495869084367:role/AccountPoolFactory-AccountCreation' \
+  --value 'arn:aws:iam::495869084367:role/SMUS-AccountPoolFactory-AccountCreation' \
   --type String \
   --region us-east-2
 
@@ -146,7 +146,7 @@ aws ssm get-parameters \
 |                              GetParameters                              |
 +-----------------------------------------------------+-------------------+
 |  /AccountPoolFactory/PoolManager/ExternalId        |  AccountPoolFactory-994753223772  |
-|  /AccountPoolFactory/PoolManager/OrgAdminRoleArn   |  arn:aws:iam::495869084367:role/AccountPoolFactory-AccountCreation  |
+|  /AccountPoolFactory/PoolManager/OrgAdminRoleArn   |  arn:aws:iam::495869084367:role/SMUS-AccountPoolFactory-AccountCreation  |
 +-----------------------------------------------------+-------------------+
 ```
 
@@ -194,10 +194,10 @@ aws logs tail /aws/lambda/PoolManager --follow --region us-east-2
   "MinimumPoolSize": "3",
   "TargetPoolSize": "10",
   "TargetOUId": "ou-n5om-otvkrtx2",
-  "OrgAdminRoleArn": "arn:aws:iam::495869084367:role/AccountPoolFactory-AccountCreation",
+  "OrgAdminRoleArn": "arn:aws:iam::495869084367:role/SMUS-AccountPoolFactory-AccountCreation",
   "ExternalId": "AccountPoolFactory-994753223772"
 }
-🔐 Assuming cross-account role: arn:aws:iam::495869084367:role/AccountPoolFactory-AccountCreation
+🔐 Assuming cross-account role: arn:aws:iam::495869084367:role/SMUS-AccountPoolFactory-AccountCreation
 ✅ Successfully assumed role in Org Admin account
 🔄 Force replenishment triggered
 📊 Checking pool size...
@@ -397,7 +397,7 @@ aws dynamodb scan \
 **Check:**
 ```bash
 # Verify role exists
-aws iam get-role --role-name AccountPoolFactory-AccountCreation --profile org-admin
+aws iam get-role --role-name SMUS-AccountPoolFactory-AccountCreation --profile org-admin
 
 # Verify SSM parameters
 aws ssm get-parameters \

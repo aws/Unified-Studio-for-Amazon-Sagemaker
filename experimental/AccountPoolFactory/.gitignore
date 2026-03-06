@@ -61,3 +61,4 @@ test-ram-share-output.log
 *.tmp
 temp/
 setup-orchestrator-templates.zip
+.tmp-creds.json

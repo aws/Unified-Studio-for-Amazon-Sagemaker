@@ -2,13 +2,12 @@
 set -e
 
 # Cleanup Organization Management Account Resources
-# This script removes all Account Pool Factory resources from the Org Admin account
+# Removes all Account Pool Factory stacks and StackSets from the Org Admin account
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 cd "$PROJECT_ROOT"
 
-# Load configuration
 if [ ! -f "config.yaml" ]; then
     echo "❌ config.yaml not found"
     exit 1
@@ -17,123 +16,183 @@ fi
 REGION=$(grep "region:" config.yaml | awk '{print $2}')
 ORG_ADMIN_ACCOUNT_ID=$(grep "account_id:" config.yaml | head -1 | awk '{print $2}' | tr -d '"')
 
-echo "🧹 Cleaning up Organization Management Account Resources"
+echo "🧹 Cleaning up Org Admin Account ($ORG_ADMIN_ACCOUNT_ID)"
 echo "========================================================="
 echo "Region: $REGION"
-echo "Org Admin Account: $ORG_ADMIN_ACCOUNT_ID"
 echo ""
 
-# Check if we're in the correct account
 CURRENT_ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
 if [ "$CURRENT_ACCOUNT" != "$ORG_ADMIN_ACCOUNT_ID" ]; then
-    echo "❌ Error: This script must be run in the Organization Management account ($ORG_ADMIN_ACCOUNT_ID)"
-    echo "   Current account: $CURRENT_ACCOUNT"
+    echo "❌ Must run in Org Admin account ($ORG_ADMIN_ACCOUNT_ID), currently in $CURRENT_ACCOUNT"
     exit 1
 fi
 
-echo "⚠️  WARNING: This will delete all Account Pool Factory resources in this account"
-echo ""
-read -p "Are you sure you want to continue? (yes/no): " CONFIRM
-
+echo "⚠️  This will delete ALL AccountPoolFactory resources in this account."
+read -p "Continue? (yes/no): " CONFIRM
 if [ "$CONFIRM" != "yes" ]; then
-    echo "Cleanup cancelled"
+    echo "Cancelled"
     exit 0
 fi
-
 echo ""
 
-# Step 1: Delete StackSet instances
-echo "📦 Step 1: Deleting StackSet instances..."
-STACKSET_NAME="AccountPoolFactory-TrustPolicy"
+# Helper: delete a StackSet and all its instances
+delete_stackset() {
+    local STACKSET_NAME="$1"
+    echo "📦 Deleting StackSet: $STACKSET_NAME"
 
-# Check if StackSet exists
-if aws cloudformation describe-stack-set --stack-set-name "$STACKSET_NAME" --region "$REGION" &>/dev/null; then
-    # Get all stack instances
-    INSTANCES=$(aws cloudformation list-stack-instances \
+    if ! aws cloudformation describe-stack-set --stack-set-name "$STACKSET_NAME" --region "$REGION" &>/dev/null; then
+        echo "   Not found, skipping"
+        return
+    fi
+
+    # Get all instances
+    ACCOUNTS=$(aws cloudformation list-stack-instances \
         --stack-set-name "$STACKSET_NAME" \
         --region "$REGION" \
-        --query 'Summaries[*].[Account,Region]' \
-        --output text)
-    
-    if [ -n "$INSTANCES" ]; then
-        ACCOUNTS=$(echo "$INSTANCES" | awk '{print $1}' | sort -u | tr '\n' ' ')
-        REGIONS=$(echo "$INSTANCES" | awk '{print $2}' | sort -u | tr '\n' ' ')
-        
-        echo "   Deleting instances in accounts: $ACCOUNTS"
-        echo "   Regions: $REGIONS"
-        
-        aws cloudformation delete-stack-instances \
+        --query 'Summaries[*].Account' \
+        --output text 2>/dev/null)
+
+    if [ -n "$ACCOUNTS" ] && [ "$ACCOUNTS" != "None" ]; then
+        UNIQUE_ACCOUNTS=$(echo "$ACCOUNTS" | tr '\t' '\n' | sort -u | tr '\n' ' ')
+        echo "   Deleting instances in $(echo "$UNIQUE_ACCOUNTS" | wc -w | tr -d ' ') account(s)..."
+
+        # Try --no-retain-stacks first (clean delete)
+        OPERATION_ID=$(aws cloudformation delete-stack-instances \
             --stack-set-name "$STACKSET_NAME" \
-            --accounts $ACCOUNTS \
-            --regions $REGIONS \
+            --accounts $UNIQUE_ACCOUNTS \
+            --regions "$REGION" \
             --no-retain-stacks \
-            --region "$REGION"
-        
-        echo "   Waiting for instances to delete..."
-        sleep 30
+            --region "$REGION" \
+            --query 'OperationId' \
+            --output text 2>/dev/null || echo "")
+
+        if [ -n "$OPERATION_ID" ] && [ "$OPERATION_ID" != "None" ]; then
+            echo "   Waiting for instance deletion (op: $OPERATION_ID)..."
+            local WAIT=0
+            while [ $WAIT -lt 300 ]; do
+                STATUS=$(aws cloudformation describe-stack-set-operation \
+                    --stack-set-name "$STACKSET_NAME" \
+                    --operation-id "$OPERATION_ID" \
+                    --region "$REGION" \
+                    --query 'StackSetOperation.Status' \
+                    --output text 2>/dev/null || echo "UNKNOWN")
+                if [ "$STATUS" = "SUCCEEDED" ] || [ "$STATUS" = "FAILED" ] || [ "$STATUS" = "STOPPED" ]; then
+                    echo "   Instance deletion: $STATUS"
+                    break
+                fi
+                sleep 10
+                WAIT=$((WAIT + 10))
+            done
+        fi
+
+        # If instances remain (e.g. execution role gone), retry with --retain-stacks
+        REMAINING_ACCOUNTS=$(aws cloudformation list-stack-instances \
+            --stack-set-name "$STACKSET_NAME" \
+            --region "$REGION" \
+            --query 'Summaries[*].Account' \
+            --output text 2>/dev/null)
+
+        if [ -n "$REMAINING_ACCOUNTS" ] && [ "$REMAINING_ACCOUNTS" != "None" ]; then
+            UNIQUE_REMAINING=$(echo "$REMAINING_ACCOUNTS" | tr '\t' '\n' | sort -u | tr '\n' ' ')
+            echo "   ⚠️  Instances remain, retrying with --retain-stacks..."
+            RETRY_OP=$(aws cloudformation delete-stack-instances \
+                --stack-set-name "$STACKSET_NAME" \
+                --accounts $UNIQUE_REMAINING \
+                --regions "$REGION" \
+                --retain-stacks \
+                --region "$REGION" \
+                --query 'OperationId' \
+                --output text 2>/dev/null || echo "")
+
+            if [ -n "$RETRY_OP" ] && [ "$RETRY_OP" != "None" ]; then
+                local WAIT2=0
+                while [ $WAIT2 -lt 120 ]; do
+                    STATUS=$(aws cloudformation describe-stack-set-operation \
+                        --stack-set-name "$STACKSET_NAME" \
+                        --operation-id "$RETRY_OP" \
+                        --region "$REGION" \
+                        --query 'StackSetOperation.Status' \
+                        --output text 2>/dev/null || echo "UNKNOWN")
+                    if [ "$STATUS" = "SUCCEEDED" ] || [ "$STATUS" = "FAILED" ] || [ "$STATUS" = "STOPPED" ]; then
+                        echo "   Retain-stacks deletion: $STATUS"
+                        break
+                    fi
+                    sleep 10
+                    WAIT2=$((WAIT2 + 10))
+                done
+            fi
+        fi
     fi
-    
-    # Delete the StackSet
-    echo "   Deleting StackSet..."
+
     aws cloudformation delete-stack-set \
         --stack-set-name "$STACKSET_NAME" \
-        --region "$REGION" || echo "   StackSet already deleted or doesn't exist"
-    
-    echo "✅ StackSet deleted"
-else
-    echo "   StackSet not found (already deleted)"
-fi
+        --region "$REGION" 2>/dev/null && echo "   ✅ Deleted" || echo "   ⚠️  Could not delete (may have remaining instances)"
+}
 
+# Helper: delete a CF stack
+delete_stack() {
+    local STACK_NAME="$1"
+    echo "📦 Deleting stack: $STACK_NAME"
+
+    STATUS=$(aws cloudformation describe-stacks \
+        --stack-name "$STACK_NAME" \
+        --region "$REGION" \
+        --query 'Stacks[0].StackStatus' \
+        --output text 2>/dev/null || echo "NOT_FOUND")
+
+    if [ "$STATUS" = "NOT_FOUND" ]; then
+        echo "   Not found, skipping"
+        return
+    fi
+
+    aws cloudformation delete-stack --stack-name "$STACK_NAME" --region "$REGION"
+    echo "   Waiting for deletion..."
+    aws cloudformation wait stack-delete-complete --stack-name "$STACK_NAME" --region "$REGION" 2>/dev/null \
+        && echo "   ✅ Deleted" \
+        || echo "   ⚠️  Delete may have failed, check console"
+}
+
+# Step 1: Delete all StackSets (must delete instances first)
+echo "=== Step 1: StackSets ==="
+delete_stackset "SMUS-AccountPoolFactory-DomainAccess"
+delete_stackset "AccountPoolFactory-DomainAccess"
+delete_stackset "AccountPoolFactory-DomainAccessRole"
+delete_stackset "AccountPoolFactory-TrustPolicy"
+delete_stackset "AccountPoolFactory-ControlTower-Test-IAMRoles"
+delete_stackset "AccountPoolFactory-ControlTower-Test-VPCSetup"
 echo ""
 
-# Step 2: Delete Account Creation Role stack
-echo "📦 Step 2: Deleting Account Creation Role..."
-aws cloudformation delete-stack \
-    --stack-name AccountPoolFactory-AccountCreationRole \
-    --region "$REGION" || echo "   Stack not found"
-
-aws cloudformation wait stack-delete-complete \
-    --stack-name AccountPoolFactory-AccountCreationRole \
-    --region "$REGION" 2>/dev/null || echo "   Stack already deleted"
-
-echo "✅ Account Creation Role deleted"
+# Step 2: Delete CF stacks (order matters — ProvisionAccount first since it has Lambda)
+echo "=== Step 2: CloudFormation Stacks ==="
+delete_stack "AccountPoolFactory-ProvisionAccount"
+delete_stack "AccountPoolFactory-AccountCreationRole"
+delete_stack "AccountPoolFactory-StackSetRoles"
 echo ""
 
-# Step 3: Delete StackSet Roles stack
-echo "📦 Step 3: Deleting StackSet Roles..."
-aws cloudformation delete-stack \
-    --stack-name AccountPoolFactory-StackSetRoles \
-    --region "$REGION" || echo "   Stack not found"
-
-aws cloudformation wait stack-delete-complete \
-    --stack-name AccountPoolFactory-StackSetRoles \
-    --region "$REGION" 2>/dev/null || echo "   Stack already deleted"
-
-echo "✅ StackSet Roles deleted"
-echo ""
-
-# Step 4: Clean up any remaining resources
-echo "📦 Step 4: Checking for remaining resources..."
-
-# Check for any remaining CloudFormation stacks
-REMAINING_STACKS=$(aws cloudformation list-stacks \
+# Step 3: Check for anything remaining
+echo "=== Step 3: Verification ==="
+REMAINING=$(aws cloudformation list-stacks \
     --region "$REGION" \
     --query 'StackSummaries[?contains(StackName, `AccountPoolFactory`) && StackStatus != `DELETE_COMPLETE`].StackName' \
-    --output text)
+    --output text 2>/dev/null)
 
-if [ -n "$REMAINING_STACKS" ]; then
-    echo "⚠️  Found remaining stacks:"
-    echo "$REMAINING_STACKS"
-    echo ""
-    echo "Please delete these manually if needed"
+if [ -n "$REMAINING" ] && [ "$REMAINING" != "None" ]; then
+    echo "⚠️  Remaining stacks: $REMAINING"
 else
-    echo "✅ No remaining stacks found"
+    echo "✅ No remaining stacks"
+fi
+
+REMAINING_SS=$(aws cloudformation list-stack-sets \
+    --region "$REGION" \
+    --status ACTIVE \
+    --query 'Summaries[?contains(StackSetName, `AccountPoolFactory`) || contains(StackSetName, `SMUS`)].StackSetName' \
+    --output text 2>/dev/null)
+
+if [ -n "$REMAINING_SS" ] && [ "$REMAINING_SS" != "None" ]; then
+    echo "⚠️  Remaining StackSets: $REMAINING_SS"
+else
+    echo "✅ No remaining StackSets"
 fi
 
 echo ""
-echo "✅ Cleanup complete!"
-echo ""
-echo "Next steps:"
-echo "1. Switch to Domain account and run cleanup:"
-echo "   ./scripts/cleanup/02-domain-account/cleanup-domain-account.sh"
-echo "2. Verify all resources are deleted in AWS Console"
+echo "✅ Org Admin cleanup complete!"

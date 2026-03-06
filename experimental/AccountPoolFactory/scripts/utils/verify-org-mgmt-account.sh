@@ -81,51 +81,38 @@ if [ "$STACK_STATUS" = "NOT_FOUND" ]; then
 else
     echo "   ✅ Stack exists: $STACK_STATUS"
     
-    # Check for StackSet Management role
-    MGMT_ROLE=$(aws iam get-role \
-        --role-name AccountPoolFactory-StackSetManagement \
-        --query 'Role.RoleName' \
-        --output text 2>/dev/null || echo "NOT_FOUND")
-    
-    if [ "$MGMT_ROLE" = "NOT_FOUND" ]; then
-        echo "   ❌ AccountPoolFactory-StackSetManagement role NOT found"
-        echo "   Action: Redeploy stack with updated template"
-    else
-        echo "   ✅ AccountPoolFactory-StackSetManagement role exists"
-    fi
-    
     # Check for StackSet Administration role
     ADMIN_ROLE=$(aws iam get-role \
-        --role-name AWSCloudFormationStackSetAdministrationRole \
+        --role-name SMUS-AccountPoolFactory-StackSetAdmin \
         --query 'Role.RoleName' \
         --output text 2>/dev/null || echo "NOT_FOUND")
     
     if [ "$ADMIN_ROLE" = "NOT_FOUND" ]; then
-        echo "   ❌ AWSCloudFormationStackSetAdministrationRole NOT found"
+        echo "   ❌ SMUS-AccountPoolFactory-StackSetAdmin NOT found"
     else
-        echo "   ✅ AWSCloudFormationStackSetAdministrationRole exists"
+        echo "   ✅ SMUS-AccountPoolFactory-StackSetAdmin exists"
     fi
 fi
 echo ""
 
-# 2. Account Creation Role
-echo "2️⃣  AccountPoolFactory-AccountCreationRole"
+# 2. ProvisionAccount Lambda
+echo "2️⃣  AccountPoolFactory-ProvisionAccount"
 STACK_STATUS=$(aws cloudformation describe-stacks \
-    --stack-name AccountPoolFactory-AccountCreationRole \
+    --stack-name AccountPoolFactory-ProvisionAccount \
     --region "$REGION" \
     --query 'Stacks[0].StackStatus' \
     --output text 2>/dev/null || echo "NOT_FOUND")
 
 if [ "$STACK_STATUS" = "NOT_FOUND" ]; then
     echo "   ❌ Stack NOT found"
-    echo "   Action: Deploy using scripts/01-org-mgmt-account/deploy/02-deploy-account-creation-role.sh"
+    echo "   Action: Deploy using scripts/01-org-mgmt-account/deploy/05-deploy-provision-account.sh"
 else
     echo "   ✅ Stack exists: $STACK_STATUS"
     
     ROLE_ARN=$(aws cloudformation describe-stacks \
-        --stack-name AccountPoolFactory-AccountCreationRole \
+        --stack-name AccountPoolFactory-ProvisionAccount \
         --region "$REGION" \
-        --query 'Stacks[0].Outputs[?OutputKey==`RoleArn`].OutputValue' \
+        --query 'Stacks[0].Outputs[?OutputKey==`ProvisionAccountRoleArn`].OutputValue' \
         --output text 2>/dev/null || echo "ERROR")
     
     if [ "$ROLE_ARN" != "ERROR" ]; then
@@ -188,8 +175,9 @@ echo "=========="
 echo ""
 echo "Expected stacks in Organization Management Account:"
 echo "  1. AccountPoolFactory-StackSetRoles"
-echo "  2. AccountPoolFactory-AccountCreationRole"
+echo "  2. AccountPoolFactory-ProvisionAccount"
 echo "  3. AccountPoolFactory-TrustPolicy (StackSet)"
+echo "  4. SMUS-AccountPoolFactory-DomainAccess (StackSet)"
 echo ""
 echo "Should NOT exist:"
 echo "  - AccountPoolFactory-Infrastructure (Domain account only)"

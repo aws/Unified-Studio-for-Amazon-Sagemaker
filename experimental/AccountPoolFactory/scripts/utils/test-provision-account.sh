@@ -108,7 +108,7 @@ if [ "$STATUS" = "SUCCESS" ]; then
     echo "   aws organizations describe-account --account-id $ACCOUNT_ID --region $REGION"
     echo ""
     echo "🔍 Check StackSet instance:"
-    echo "   aws cloudformation list-stack-instances --stack-set-name AccountPoolFactory-DomainAccess --stack-instance-account $ACCOUNT_ID --stack-instance-region $REGION --region $REGION"
+    echo "   aws cloudformation list-stack-instances --stack-set-name SMUS-AccountPoolFactory-DomainAccess --stack-instance-account $ACCOUNT_ID --stack-instance-region $REGION --region $REGION"
     echo ""
 else
     echo "❌ Account provisioning failed!"

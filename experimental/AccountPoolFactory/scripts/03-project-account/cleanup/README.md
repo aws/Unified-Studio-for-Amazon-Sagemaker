@@ -43,8 +43,8 @@ aws cloudformation delete-stack --stack-name AccountPoolFactory-TrustPolicy --re
 aws cloudformation wait stack-delete-complete --stack-name AccountPoolFactory-TrustPolicy --region us-east-2
 
 # 4. Delete the StackSet execution role
-aws cloudformation delete-stack --stack-name AccountPoolFactory-StackSetExecutionRole --region us-east-2
-aws cloudformation wait stack-delete-complete --stack-name AccountPoolFactory-StackSetExecutionRole --region us-east-2
+aws cloudformation delete-stack --stack-name SMUS-AccountPoolFactory-StackSetExecutionRole --region us-east-2
+aws cloudformation wait stack-delete-complete --stack-name SMUS-AccountPoolFactory-StackSetExecutionRole --region us-east-2
 ```
 
 ## Cleanup Failed Accounts

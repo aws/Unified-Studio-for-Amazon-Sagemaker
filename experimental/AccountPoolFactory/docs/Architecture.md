@@ -211,8 +211,8 @@ This section describes each account type, the resources deployed in it, and how 
 **Deployed Resources**:
 - CloudFormation StackSet Administration Role
 - CloudFormation StackSets:
-  - `AccountPoolFactory-StackSetExecutionRole` - Deploys execution role to new accounts
-  - `AccountPoolFactory-DomainAccess` - Deploys cross-account access role with ExternalId
+  - `SMUS-AccountPoolFactory-StackSetExecution` - Deploys execution role to new accounts
+  - `SMUS-AccountPoolFactory-DomainAccess` - Deploys cross-account access role with ExternalId
 - ProvisionAccount Lambda function
 - CloudWatch Logs for Lambda execution
 
@@ -224,7 +224,7 @@ This section describes each account type, the resources deployed in it, and how 
 1. Creates account via Organizations API (~1 minute)
 2. Moves account to target OU
 3. Deploys StackSet execution role to new account
-4. Deploys AccountPoolFactory-DomainAccess role with ExternalId protection
+4. Deploys SMUS-AccountPoolFactory-DomainAccess role with ExternalId protection
 5. Waits for IAM role propagation
 6. Returns ready-to-use account ID
 
@@ -297,7 +297,7 @@ This section describes each account type, the resources deployed in it, and how 
 - SNS: Publish
 - CloudWatch: PutMetricData
 - SSM: GetParameter, GetParameters
-- STS: AssumeRole (AccountPoolFactory-DomainAccess for checking remaining stacks in project accounts)
+- STS: AssumeRole (SMUS-AccountPoolFactory-DomainAccess for checking remaining stacks in project accounts)
 
 **Configuration** (SSM Parameters):
 - PoolName, TargetOUId, MinimumPoolSize (default: 5), TargetPoolSize (default: 10)
@@ -334,7 +334,7 @@ This section describes each account type, the resources deployed in it, and how 
 - SNS: Publish
 - CloudWatch: PutMetricData
 - SSM: GetParameter
-- STS: AssumeRole (AccountPoolFactory-DomainAccess role with ExternalId)
+- STS: AssumeRole (SMUS-AccountPoolFactory-DomainAccess role with ExternalId)
 
 **Configuration** (SSM Parameters):
 - DomainId, DomainAccountId, RootDomainUnitId, Region
@@ -345,7 +345,7 @@ This section describes each account type, the resources deployed in it, and how 
 **Trigger**: Async invocation from Pool Manager Lambda (when ReclaimStrategy=REUSE)
 
 **What it does**:
-1. Assumes AccountPoolFactory-DomainAccess role in project account (with ExternalId)
+1. Assumes SMUS-AccountPoolFactory-DomainAccess role in project account (with ExternalId)
 2. Lists all CloudFormation stacks in the account
 3. Categorizes stacks:
    - Approved infrastructure (AccountPoolFactory-*, StackSet-*) - protected, never deleted
@@ -366,7 +366,7 @@ This section describes each account type, the resources deployed in it, and how 
 - DynamoDB: Query, UpdateItem
 - SNS: Publish
 - CloudWatch: PutMetricData
-- STS: AssumeRole (AccountPoolFactory-DomainAccess role with ExternalId)
+- STS: AssumeRole (SMUS-AccountPoolFactory-DomainAccess role with ExternalId)
 
 **Configuration** (Environment Variables):
 - DELETION_TIMEOUT (default: 600 seconds per stack)
@@ -388,8 +388,8 @@ This section describes each account type, the resources deployed in it, and how 
 - IAM roles:
   - ManageAccessRole (DataZone project management)
   - ProvisioningRole (DataZone environment provisioning)
-  - AccountPoolFactory-DomainAccess (cross-account access with ExternalId)
-  - AWSCloudFormationStackSetExecutionRole (StackSet deployments)
+  - SMUS-AccountPoolFactory-DomainAccess (cross-account access with ExternalId)
+  - SMUS-AccountPoolFactory-StackSetExecution (StackSet deployments)
 - EventBridge rules (forward events to Domain account central bus)
 - S3 bucket for blueprint artifacts (versioned, encrypted)
 - RAM share for DataZone domain access

@@ -62,33 +62,33 @@ else
     WARNINGS=$((WARNINGS + 1))
 fi
 
-# Check StackSet Management role
-MGMT_ROLE=$(aws iam get-role \
-    --role-name AccountPoolFactory-StackSetManagement \
+# Check StackSet Admin role
+ADMIN_ROLE=$(aws iam get-role \
+    --role-name SMUS-AccountPoolFactory-StackSetAdmin \
     --query 'Role.RoleName' \
     --output text 2>/dev/null || echo "NOT_FOUND")
 
-if [ "$MGMT_ROLE" = "NOT_FOUND" ]; then
-    echo "❌ AccountPoolFactory-StackSetManagement role NOT found"
+if [ "$ADMIN_ROLE" = "NOT_FOUND" ]; then
+    echo "❌ SMUS-AccountPoolFactory-StackSetAdmin role NOT found"
     ERRORS=$((ERRORS + 1))
 else
-    echo "✅ AccountPoolFactory-StackSetManagement role exists"
+    echo "✅ SMUS-AccountPoolFactory-StackSetAdmin role exists"
 fi
 
-# Check Account Creation Role stack
+# Check ProvisionAccount stack
 STACK_STATUS=$(aws cloudformation describe-stacks \
-    --stack-name AccountPoolFactory-AccountCreationRole \
+    --stack-name AccountPoolFactory-ProvisionAccount \
     --region "$REGION" \
     --query 'Stacks[0].StackStatus' \
     --output text 2>/dev/null || echo "NOT_FOUND")
 
 if [ "$STACK_STATUS" = "NOT_FOUND" ]; then
-    echo "❌ AccountPoolFactory-AccountCreationRole stack NOT found"
+    echo "❌ AccountPoolFactory-ProvisionAccount stack NOT found"
     ERRORS=$((ERRORS + 1))
 elif [[ "$STACK_STATUS" == *"COMPLETE"* ]]; then
-    echo "✅ AccountPoolFactory-AccountCreationRole: $STACK_STATUS"
+    echo "✅ AccountPoolFactory-ProvisionAccount: $STACK_STATUS"
 else
-    echo "⚠️  AccountPoolFactory-AccountCreationRole: $STACK_STATUS"
+    echo "⚠️  AccountPoolFactory-ProvisionAccount: $STACK_STATUS"
     WARNINGS=$((WARNINGS + 1))
 fi
 
@@ -205,24 +205,24 @@ fi
 # Check cross-account access (verify trust policy exists)
 # Note: We can't test this directly as Admin user - only SetupOrchestrator Lambda can assume this role
 TRUST_POLICY=$(aws iam get-role \
-    --role-name AccountPoolFactory-SetupOrchestrator-Role \
+    --role-name SMUS-AccountPoolFactory-SetupOrchestrator-Role \
     --query 'Role.AssumeRolePolicyDocument' \
     --output json 2>/dev/null || echo "{}")
 
 SETUP_POLICY=$(aws iam get-role-policy \
-    --role-name AccountPoolFactory-SetupOrchestrator-Role \
+    --role-name SMUS-AccountPoolFactory-SetupOrchestrator-Role \
     --policy-name SetupOrchestratorPolicy \
     --query 'PolicyDocument.Statement[?Effect==`Allow`]' \
     --output json 2>/dev/null || echo "[]")
 
-# Check if SetupOrchestrator has permission to assume StackSetManagement role
-HAS_ASSUME=$(echo "$SETUP_POLICY" | jq -r '.[] | select(.Action[] | contains("sts:AssumeRole")) | .Resource[] | select(contains("AccountPoolFactory-StackSetManagement"))' || echo "")
+# Check if SetupOrchestrator has permission to assume DomainAccess role
+HAS_ASSUME=$(echo "$SETUP_POLICY" | jq -r '.[] | select(.Action[] | contains("sts:AssumeRole")) | .Resource[] | select(contains("SMUS-AccountPoolFactory-DomainAccess"))' || echo "")
 
 if [ -z "$HAS_ASSUME" ]; then
-    echo "❌ SetupOrchestrator missing permission to assume StackSetManagement role"
+    echo "❌ SetupOrchestrator missing permission to assume DomainAccess role"
     ERRORS=$((ERRORS + 1))
 else
-    echo "✅ SetupOrchestrator has permission to assume StackSetManagement role"
+    echo "✅ SetupOrchestrator has permission to assume DomainAccess role"
     echo "   (Trust policy verified - actual assume will work from Lambda)"
 fi
 

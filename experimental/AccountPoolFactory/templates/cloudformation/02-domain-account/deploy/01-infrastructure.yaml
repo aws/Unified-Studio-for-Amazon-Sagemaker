@@ -57,6 +57,22 @@ Parameters:
     Default: example.com
     Description: Email domain for account creation
 
+  ProjectRoleEnabled:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: Whether to create a project execution role in pool accounts
+
+  ProjectRoleName:
+    Type: String
+    Default: AmazonSageMakerProjectRole
+    Description: Name of the project execution role
+
+  ProjectRoleManagedPolicyArn:
+    Type: String
+    Default: arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+    Description: Managed policy ARN for the project execution role
+
 Resources:
   # DynamoDB Table
   AccountStateTable:
@@ -160,7 +176,7 @@ Resources:
   PoolManagerRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: AccountPoolFactory-PoolManager-Role
+      RoleName: SMUS-AccountPoolFactory-PoolManager-Role
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -260,7 +276,7 @@ Resources:
   SetupOrchestratorRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: AccountPoolFactory-SetupOrchestrator-Role
+      RoleName: SMUS-AccountPoolFactory-SetupOrchestrator-Role
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -280,7 +296,7 @@ Resources:
                 Action:
                   - sts:AssumeRole
                 Resource:
-                  - 'arn:aws:iam::*:role/AccountPoolFactory-DomainAccess'
+                  - 'arn:aws:iam::*:role/SMUS-AccountPoolFactory-DomainAccess'
                   - 'arn:aws:iam::*:role/OrganizationAccountAccessRole'
 
               # RAM - create shares, associate principals/resources, query state
@@ -398,6 +414,108 @@ Resources:
         - Key: ManagedBy
           Value: AccountPoolFactory
 
+  # ============================================================
+  # Account Provider Lambda (DataZone Account Pool integration)
+  # ============================================================
+
+  # Account Resolution Role - DataZone assumes this role to invoke the Lambda
+  AccountResolutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: SMUS-AccountPoolFactory-AccountResolution-Role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: datazone.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvokeLambdaPermission
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt AccountProviderFunction.Arn
+      Tags:
+        - Key: ManagedBy
+          Value: AccountPoolFactory
+
+  # Account Provider Lambda Execution Role
+  AccountProviderRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: SMUS-AccountPoolFactory-AccountProvider-Role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: AccountProviderPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # DynamoDB - query available accounts
+              - Effect: Allow
+                Action:
+                  - dynamodb:Query
+                  - dynamodb:GetItem
+                Resource:
+                  - !GetAtt AccountStateTable.Arn
+                  - !Sub '${AccountStateTable.Arn}/index/*'
+              
+              # CloudWatch metrics
+              - Effect: Allow
+                Action:
+                  - cloudwatch:PutMetricData
+                Resource: '*'
+              
+              # SNS - pool depletion alerts
+              - Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !Ref AlertTopic
+      Tags:
+        - Key: ManagedBy
+          Value: AccountPoolFactory
+
+  # Account Provider Lambda Function
+  AccountProviderFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: AccountProvider
+      Description: Queries DynamoDB for available accounts and returns them to DataZone
+      Runtime: python3.12
+      Handler: lambda_function_prod.lambda_handler
+      Role: !GetAtt AccountProviderRole.Arn
+      Timeout: 60
+      MemorySize: 256
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref AccountStateTable
+          SNS_TOPIC_ARN: !Ref AlertTopic
+      Code:
+        ZipFile: |
+          # Placeholder - deploy actual code separately
+          def lambda_handler(event, context):
+              return {'statusCode': 200, 'body': 'Placeholder'}
+      Tags:
+        - Key: ManagedBy
+          Value: AccountPoolFactory
+
+  # Account Provider CloudWatch Log Group
+  AccountProviderLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/AccountProvider
+      RetentionInDays: 7
+
   # SSM Parameters - Pool Manager
   PoolNameParameter:
     Type: AWS::SSM::Parameter
@@ -504,6 +622,30 @@ Resources:
       Value: !Ref AlertTopic
       Description: SNS topic ARN for alerts
 
+  ProjectRoleEnabledParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AccountPoolFactory/SetupOrchestrator/ProjectRoleEnabled
+      Type: String
+      Value: !Ref ProjectRoleEnabled
+      Description: Whether to create project execution role in pool accounts
+
+  ProjectRoleNameParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AccountPoolFactory/SetupOrchestrator/ProjectRoleName
+      Type: String
+      Value: !Ref ProjectRoleName
+      Description: Name of the project execution role
+
+  ProjectRoleManagedPolicyArnParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AccountPoolFactory/SetupOrchestrator/ProjectRoleManagedPolicyArn
+      Type: String
+      Value: !Ref ProjectRoleManagedPolicyArn
+      Description: Managed policy ARN for the project execution role
+
 Outputs:
   DynamoDBTableName:
     Description: DynamoDB table name
@@ -540,3 +682,21 @@ Outputs:
     Value: !GetAtt DeprovisionAccountFunction.Arn
     Export:
       Name: AccountPoolFactory-DeprovisionAccountArn
+
+  AccountProviderFunctionArn:
+    Description: Account Provider Lambda function ARN
+    Value: !GetAtt AccountProviderFunction.Arn
+    Export:
+      Name: AccountPoolFactory-AccountProviderArn
+
+  AccountResolutionRoleArn:
+    Description: Account Resolution Role ARN (used by DataZone to invoke Lambda)
+    Value: !GetAtt AccountResolutionRole.Arn
+    Export:
+      Name: AccountPoolFactory-AccountResolutionRoleArn
+
+  AccountProviderRoleArn:
+    Description: Account Provider Lambda Execution Role ARN
+    Value: !GetAtt AccountProviderRole.Arn
+    Export:
+      Name: AccountPoolFactory-AccountProviderRoleArn

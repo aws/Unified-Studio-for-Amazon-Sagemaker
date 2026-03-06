@@ -5,6 +5,7 @@ Executes optimized 2-wave account setup workflow with maximum parallelization:
 - Wave 1: Foundation + Domain Access (parallel, ~2.5 min)
   - VPC deployment with 3 private subnets
   - IAM roles (ManageAccessRole, ProvisioningRole)
+  - Project execution role (optional, for ToolingLite blueprint)
   - EventBridge rules for event forwarding
   - S3 bucket for blueprint artifacts
   - RAM share creation and domain visibility verification
@@ -210,7 +211,7 @@ def execute_setup_workflow(account_id: str, config: Dict[str, Any], resume_from:
     """Execute wave-based parallel setup workflow
     
     Note: Wave 0 (StackSet deployment) is now handled by ProvisionAccount Lambda in Org Admin account.
-    SetupOrchestrator assumes AccountPoolFactory-DomainAccess role already exists.
+    SetupOrchestrator assumes SMUS-AccountPoolFactory-DomainAccess role already exists.
     """
     print(f"🚀 Starting setup workflow for account {account_id}")
     
@@ -220,11 +221,12 @@ def execute_setup_workflow(account_id: str, config: Dict[str, Any], resume_from:
     try:
         # Wave 1: Foundation + Domain Access (all parallel)
         print("🌊 Wave 1: Foundation + Domain Access (parallel)")
-        print("   Deploying: VPC, IAM roles, EventBridge, S3 bucket, RAM share + domain visibility")
+        print("   Deploying: VPC, IAM roles, Project role, EventBridge, S3 bucket, RAM share + domain visibility")
         
-        vpc_result, iam_result, eb_result, s3_result, ram_result = execute_wave_parallel([
+        vpc_result, iam_result, project_role_result, eb_result, s3_result, ram_result = execute_wave_parallel([
             lambda: deploy_vpc(account_id, config),
             lambda: deploy_iam_roles(account_id, config),
+            lambda: deploy_project_role(account_id, config),
             lambda: deploy_eventbridge_rules(account_id, config),
             lambda: create_s3_bucket(account_id, config),
             lambda: create_ram_share_and_verify_domain(account_id, config)
@@ -232,6 +234,7 @@ def execute_setup_workflow(account_id: str, config: Dict[str, Any], resume_from:
         
         resources.update(vpc_result)
         resources.update(iam_result)
+        resources.update(project_role_result)
         resources.update(eb_result)
         resources.update(s3_result)
         resources.update(ram_result)
@@ -239,6 +242,7 @@ def execute_setup_workflow(account_id: str, config: Dict[str, Any], resume_from:
         update_progress(account_id, 'wave1_foundation', {
             'vpc': vpc_result,
             'iam': iam_result,
+            'project_role': project_role_result,
             'eventbridge': eb_result,
             's3': s3_result,
             'ram_and_domain': ram_result
@@ -557,6 +561,73 @@ def deploy_eventbridge_rules(account_id: str, config: Dict[str, Any]) -> Dict[st
 
     except Exception as e:
         print(f"❌ EventBridge rules deployment failed: {e}")
+        raise
+
+
+def deploy_project_role(account_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
+    """Deploy project execution role for ToolingLite blueprint (optional, controlled by config)"""
+    enabled = config.get('ProjectRoleEnabled', 'true').lower()
+    if enabled != 'true':
+        print(f"⏭️ Project role deployment disabled (ProjectRoleEnabled={enabled})")
+        return {}
+
+    role_name = config.get('ProjectRoleName', 'AmazonSageMakerProjectRole')
+    policy_arn = config.get('ProjectRoleManagedPolicyArn', 'arn:aws:iam::aws:policy/AmazonSageMakerFullAccess')
+
+    print(f"👤 Deploying project execution role '{role_name}' for account {account_id}")
+
+    stack_name = f"DataZone-ProjectRole-{account_id}"
+    template_path = '04-project-role.yaml'
+
+    try:
+        cf_client = get_cross_account_client('cloudformation', account_id)
+
+        # Check if stack already exists
+        try:
+            response = cf_client.describe_stacks(StackName=stack_name)
+            stack_status = response['Stacks'][0]['StackStatus']
+            if stack_status in ('CREATE_COMPLETE', 'UPDATE_COMPLETE'):
+                print(f"✅ ProjectRole stack already exists ({stack_status}), reading outputs")
+                outputs = response['Stacks'][0].get('Outputs', [])
+                return {
+                    'projectRoleArn': get_output_value(outputs, 'ProjectRoleArn')
+                }
+        except cf_client.exceptions.ClientError:
+            pass
+
+        with open(template_path, 'r') as f:
+            template_body = f.read()
+
+        cf_client.create_stack(
+            StackName=stack_name,
+            TemplateBody=template_body,
+            Parameters=[
+                {'ParameterKey': 'RoleName', 'ParameterValue': role_name},
+                {'ParameterKey': 'ManagedPolicyArn', 'ParameterValue': policy_arn}
+            ],
+            Capabilities=['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM'],
+            OnFailure='ROLLBACK',
+            TimeoutInMinutes=30,
+            Tags=[
+                {'Key': 'ManagedBy', 'Value': 'AccountPoolFactory'},
+                {'Key': 'AccountId', 'Value': account_id}
+            ]
+        )
+
+        wait_for_stack_complete(cf_client, stack_name)
+
+        response = cf_client.describe_stacks(StackName=stack_name)
+        outputs = response['Stacks'][0].get('Outputs', [])
+
+        result = {
+            'projectRoleArn': get_output_value(outputs, 'ProjectRoleArn')
+        }
+
+        print(f"✅ Project role deployed: {result.get('projectRoleArn')}")
+        return result
+
+    except Exception as e:
+        print(f"❌ Project role deployment failed: {e}")
         raise
 
 
@@ -1016,11 +1087,11 @@ def execute_cleanup_workflow(account_id: str, config: Dict[str, Any]) -> Dict[st
 
 
 def get_cross_account_client(service: str, account_id: str, config: Dict[str, Any] = None):
-    """Get boto3 client for cross-account access using AccountPoolFactory-DomainAccess role"""
+    """Get boto3 client for cross-account access using SMUS-AccountPoolFactory-DomainAccess role"""
     if config is None:
         config = get_config()
     
-    role_arn = f"arn:aws:iam::{account_id}:role/AccountPoolFactory-DomainAccess"
+    role_arn = f"arn:aws:iam::{account_id}:role/SMUS-AccountPoolFactory-DomainAccess"
     domain_id = config.get('DomainId', DOMAIN_ID)
     
     print(f"🔐 Assuming role: {role_arn}")

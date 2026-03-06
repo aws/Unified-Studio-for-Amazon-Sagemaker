@@ -8,7 +8,7 @@ Project account resources are deployed **automatically** via the Setup Orchestra
 
 When a new account is created by the Pool Manager:
 
-1. **Wave 0**: StackSet deploys the `AccountPoolFactory-DomainAccess` role (automatic)
+1. **Wave 0**: StackSet deploys the `SMUS-AccountPoolFactory-DomainAccess` role (automatic)
 2. **Wave 1**: Setup Orchestrator deploys VPC stack
 3. **Wave 2**: Setup Orchestrator deploys IAM roles and EventBridge rules (parallel)
 4. **Wave 3**: Setup Orchestrator creates S3 bucket and RAM share (parallel)
@@ -58,7 +58,7 @@ In rare cases, you may need to manually deploy to a project account:
 ```bash
 # Assume the DomainAccess role
 aws sts assume-role \
-  --role-arn arn:aws:iam::ACCOUNT_ID:role/AccountPoolFactory-DomainAccess \
+  --role-arn arn:aws:iam::ACCOUNT_ID:role/SMUS-AccountPoolFactory-DomainAccess \
   --role-session-name manual-deploy \
   --external-id dzd-5o0lje5xgpeuw9
 

@@ -24,6 +24,11 @@ EMAIL_PREFIX=$(grep "email_prefix:" config.yaml | awk '{print $2}')
 EMAIL_DOMAIN=$(grep "email_domain:" config.yaml | awk '{print $2}')
 TARGET_OU_ID=$(grep "target_ou_id:" config.yaml | awk '{print $2}')
 
+# Extract project role config
+PROJECT_ROLE_ENABLED=$(python3 -c "import yaml; c=yaml.safe_load(open('config.yaml')); print(str(c.get('project_role',{}).get('enabled', True)).lower())" 2>/dev/null || echo "true")
+PROJECT_ROLE_NAME=$(python3 -c "import yaml; c=yaml.safe_load(open('config.yaml')); print(c.get('project_role',{}).get('role_name', 'AmazonSageMakerProjectRole'))" 2>/dev/null || echo "AmazonSageMakerProjectRole")
+PROJECT_ROLE_POLICY=$(python3 -c "import yaml; c=yaml.safe_load(open('config.yaml')); print(c.get('project_role',{}).get('managed_policy_arn', 'arn:aws:iam::aws:policy/AmazonSageMakerFullAccess'))" 2>/dev/null || echo "arn:aws:iam::aws:policy/AmazonSageMakerFullAccess")
+
 echo "🚀 Deploying Account Pool Factory Infrastructure"
 echo "================================================"
 echo "Region: $REGION"
@@ -32,6 +37,16 @@ echo "Org Admin Account: $ORG_ADMIN_ACCOUNT_ID"
 echo "Domain ID: $DOMAIN_ID"
 echo "Root Domain Unit ID: $ROOT_DOMAIN_UNIT_ID"
 echo "Target OU ID: $TARGET_OU_ID"
+echo "Project Role: $PROJECT_ROLE_ENABLED ($PROJECT_ROLE_NAME)"
+echo ""
+
+# Verify we're in the correct account
+CURRENT_ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+if [ "$CURRENT_ACCOUNT" != "$DOMAIN_ACCOUNT_ID" ]; then
+    echo "❌ Error: Must run in Domain account ($DOMAIN_ACCOUNT_ID), currently in $CURRENT_ACCOUNT"
+    exit 1
+fi
+echo "✅ Running in correct account"
 echo ""
 
 # Deploy infrastructure stack
@@ -48,6 +63,9 @@ aws cloudformation deploy \
         TargetOUId="$TARGET_OU_ID" \
         EmailPrefix="$EMAIL_PREFIX" \
         EmailDomain="$EMAIL_DOMAIN" \
+        ProjectRoleEnabled="$PROJECT_ROLE_ENABLED" \
+        ProjectRoleName="$PROJECT_ROLE_NAME" \
+        ProjectRoleManagedPolicyArn="$PROJECT_ROLE_POLICY" \
     --capabilities CAPABILITY_NAMED_IAM \
     --region "$REGION"
 
@@ -104,18 +122,43 @@ aws lambda update-function-code \
 
 echo "✅ Setup Orchestrator code updated"
 
+echo ""
+echo "🔄 Updating DeprovisionAccount Lambda code..."
+cd src/deprovision-account
+zip -q ../../deprovision-account.zip lambda_function.py
+cd ../..
+
+aws lambda update-function-code \
+    --function-name DeprovisionAccount \
+    --zip-file fileb://deprovision-account.zip \
+    --region "$REGION" \
+    > /dev/null
+
+echo "✅ DeprovisionAccount code updated"
+
+echo ""
+echo "🔄 Updating AccountProvider Lambda code..."
+cd src/account-provider
+zip -q ../../account-provider.zip lambda_function_prod.py
+cd ../..
+
+aws lambda update-function-code \
+    --function-name AccountProvider \
+    --zip-file fileb://account-provider.zip \
+    --region "$REGION" \
+    > /dev/null
+
+echo "✅ AccountProvider code updated"
+
 # Clean up zip files
-rm -f pool-manager.zip setup-orchestrator.zip
+rm -f pool-manager.zip setup-orchestrator.zip deprovision-account.zip account-provider.zip
 
 echo ""
 echo "✅ Deployment complete!"
 echo ""
-echo "Next steps:"
-echo "1. Subscribe to SNS alerts:"
-echo "   aws sns subscribe --topic-arn \$(aws cloudformation describe-stacks --stack-name AccountPoolFactory-Infrastructure --query 'Stacks[0].Outputs[?OutputKey==\`SNSTopicArn\`].OutputValue' --output text --region $REGION) --protocol email --notification-endpoint YOUR_EMAIL --region $REGION"
+echo "Deployed resources:"
+echo "  - CloudFormation stack: AccountPoolFactory-Infrastructure"
+echo "  - Lambda functions: PoolManager, SetupOrchestrator, DeprovisionAccount, AccountProvider"
 echo ""
-echo "2. Seed initial pool:"
-echo "   ./seed-initial-pool.sh"
-echo ""
-echo "3. Monitor pool status:"
-echo "   aws cloudwatch get-dashboard --dashboard-name AccountPoolFactory-Overview --region $REGION"
+echo "Next step: Deploy project profile"
+echo "  ./scripts/02-domain-account/deploy/02-deploy-project-profile.sh"

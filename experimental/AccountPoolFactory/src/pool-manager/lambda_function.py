@@ -489,8 +489,8 @@ def handle_deletion_event(account_id: str, stack_name: str, config: Dict[str, An
 def has_remaining_datazone_stacks(account_id: str) -> bool:
     """Check if account has any remaining DataZone stacks"""
     try:
-        # Assume role in project account using AccountPoolFactory-DomainAccess role
-        role_arn = f"arn:aws:iam::{account_id}:role/AccountPoolFactory-DomainAccess"
+        # Assume role in project account using SMUS-AccountPoolFactory-DomainAccess role
+        role_arn = f"arn:aws:iam::{account_id}:role/SMUS-AccountPoolFactory-DomainAccess"
         domain_id = os.environ.get('DOMAIN_ID', '')
         
         assumed_role = sts.assume_role(

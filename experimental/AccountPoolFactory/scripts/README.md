@@ -50,7 +50,6 @@ aws sts get-caller-identity
 
 # Manually delete stacks
 aws cloudformation delete-stack --stack-name AccountPoolFactory-StackSetRoles --region us-east-2
-aws cloudformation delete-stack --stack-name AccountPoolFactory-AccountCreationRole --region us-east-2
 
 # Delete StackSet (requires removing all instances first)
 aws cloudformation delete-stack-set --stack-set-name AccountPoolFactory-TrustPolicy --region us-east-2
@@ -109,7 +108,6 @@ This removes:
 
 ### Organization Management Account Cleanup
 - ✅ StackSet Administration Role
-- ✅ StackSet Management Role
 - ✅ Account Creation Role
 - ✅ Trust Policy StackSet
 - ✅ StackSet instances in project accounts
