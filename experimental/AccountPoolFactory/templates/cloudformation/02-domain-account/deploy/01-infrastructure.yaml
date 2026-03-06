@@ -275,13 +275,35 @@ Resources:
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
-              # Organizations read-only
+              # Cross-account assume role into project accounts
               - Effect: Allow
                 Action:
-                  - organizations:DescribeAccount
+                  - sts:AssumeRole
+                Resource:
+                  - 'arn:aws:iam::*:role/AccountPoolFactory-DomainAccess'
+                  - 'arn:aws:iam::*:role/OrganizationAccountAccessRole'
+
+              # RAM - create shares, associate principals/resources, query state
+              - Effect: Allow
+                Action:
+                  - ram:CreateResourceShare
+                  - ram:DeleteResourceShare
+                  - ram:AssociateResourceShare
+                  - ram:DisassociateResourceShare
+                  - ram:GetResourceShares
+                  - ram:GetResourceShareAssociations
+                  - ram:ListResources
+                  - ram:TagResource
                 Resource: '*'
-              
-              # DynamoDB operations
+
+              # DataZone - domain sharing policy (needed for RAM resource association)
+              - Effect: Allow
+                Action:
+                  - datazone:PutDomainSharingPolicy
+                  - datazone:GetDomain
+                Resource: !Sub 'arn:aws:datazone:${AWS::Region}:${AWS::AccountId}:domain/${DomainId}'
+
+              # DynamoDB - account state tracking
               - Effect: Allow
                 Action:
                   - dynamodb:Query
@@ -291,43 +313,31 @@ Resources:
                 Resource:
                   - !GetAtt AccountStateTable.Arn
                   - !Sub '${AccountStateTable.Arn}/index/*'
-              
-              # SNS notifications
+
+              # SNS - failure notifications
               - Effect: Allow
                 Action:
                   - sns:Publish
                 Resource: !Ref AlertTopic
-              
-              # CloudWatch metrics
-              - Effect: Allow
-                Action:
-                  - cloudwatch:PutMetricData
-                Resource: '*'
-              
-              # SSM parameters
+
+              # SSM - read configuration parameters
               - Effect: Allow
                 Action:
                   - ssm:GetParameter
                   - ssm:GetParameters
                   - ssm:GetParametersByPath
-                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/AccountPoolFactory/SetupOrchestrator/*'
-              
-              # Assume AccountPoolFactory-DomainAccess role in project accounts (with ExternalId)
+                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/AccountPoolFactory/*'
+
+              # CloudWatch - publish metrics
               - Effect: Allow
                 Action:
-                  - sts:AssumeRole
-                Resource: 'arn:aws:iam::*:role/AccountPoolFactory-DomainAccess'
-              
-              # RAM share operations
+                  - cloudwatch:PutMetricData
+                Resource: '*'
+
+              # KMS - decrypt SSM SecureString parameters
               - Effect: Allow
                 Action:
-                  - ram:CreateResourceShare
-                  - ram:GetResourceShares
-                  - ram:ListResources
-                  - ram:TagResource
-                  - ram:AssociateResourceShare
-                  - ram:DisassociateResourceShare
-                  - ram:UpdateResourceShare
+                  - kms:Decrypt
                 Resource: '*'
       Tags:
         - Key: ManagedBy

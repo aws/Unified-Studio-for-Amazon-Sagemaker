@@ -6,14 +6,6 @@ Parameters:
     Description: DataZone Domain ID
     Type: String
   
-  DomainUnitId:
-    Description: Root Domain Unit ID for authorization
-    Type: String
-  
-  ProjectAccountId:
-    Description: AWS Account ID where blueprints are being enabled
-    Type: String
-  
   ManageAccessRoleArn:
     Type: String
     Description: IAM role ARN to manage access to environments
@@ -21,18 +13,6 @@ Parameters:
   ProvisioningRoleArn:
     Description: IAM role ARN to provision environments
     Type: String
-  
-  S3Location:
-    Type: String
-    Description: S3 location for environment artifacts
-  
-  Subnets:
-    Type: String
-    Description: Comma-separated list of subnet IDs
-  
-  VpcId:
-    Type: String
-    Description: VPC ID for environments
 
 Resources:
   # IAM Domain compatible blueprints only
@@ -76,58 +56,6 @@ Resources:
           Parameters: {}
       EnabledRegions:
         - !Ref 'AWS::Region'
-
-  # Policy Grants for IAM blueprints
-  ToolingLitePolicyGrant:
-    Type: AWS::DataZone::PolicyGrant
-    Properties:
-      DomainIdentifier: !Ref DomainId
-      EntityType: ENVIRONMENT_BLUEPRINT_CONFIGURATION
-      EntityIdentifier: !Sub '${ProjectAccountId}:${ToolingLite.EnvironmentBlueprintId}'
-      PolicyType: CREATE_ENVIRONMENT_FROM_BLUEPRINT
-      Detail:
-        CreateEnvironmentFromBlueprint: {}
-      Principal:
-        Project:
-          ProjectDesignation: CONTRIBUTOR
-          ProjectGrantFilter:
-            DomainUnitFilter:
-              DomainUnit: !Ref DomainUnitId
-              IncludeChildDomainUnits: true
-
-  S3BucketPolicyGrant:
-    Type: AWS::DataZone::PolicyGrant
-    Properties:
-      DomainIdentifier: !Ref DomainId
-      EntityType: ENVIRONMENT_BLUEPRINT_CONFIGURATION
-      EntityIdentifier: !Sub '${ProjectAccountId}:${S3Bucket.EnvironmentBlueprintId}'
-      PolicyType: CREATE_ENVIRONMENT_FROM_BLUEPRINT
-      Detail:
-        CreateEnvironmentFromBlueprint: {}
-      Principal:
-        Project:
-          ProjectDesignation: CONTRIBUTOR
-          ProjectGrantFilter:
-            DomainUnitFilter:
-              DomainUnit: !Ref DomainUnitId
-              IncludeChildDomainUnits: true
-
-  S3TableCatalogPolicyGrant:
-    Type: AWS::DataZone::PolicyGrant
-    Properties:
-      DomainIdentifier: !Ref DomainId
-      EntityType: ENVIRONMENT_BLUEPRINT_CONFIGURATION
-      EntityIdentifier: !Sub '${ProjectAccountId}:${S3TableCatalog.EnvironmentBlueprintId}'
-      PolicyType: CREATE_ENVIRONMENT_FROM_BLUEPRINT
-      Detail:
-        CreateEnvironmentFromBlueprint: {}
-      Principal:
-        Project:
-          ProjectDesignation: CONTRIBUTOR
-          ProjectGrantFilter:
-            DomainUnitFilter:
-              DomainUnit: !Ref DomainUnitId
-              IncludeChildDomainUnits: true
 
 Outputs:
   ToolingLiteBlueprintId:

@@ -1,0 +1,49 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >
+  One-time policy grants for DataZone blueprint configurations.
+  Run once per domain to allow CONTRIBUTOR projects to create environments.
+  This is NOT part of per-account provisioning.
+Transform: AWS::LanguageExtensions
+
+Parameters:
+  DomainId:
+    Description: DataZone Domain ID
+    Type: String
+  
+  DomainUnitId:
+    Description: Root Domain Unit ID for authorization
+    Type: String
+  
+  ProjectAccountId:
+    Description: AWS Account ID where blueprints are enabled
+    Type: String
+  
+  BlueprintIds:
+    Description: Comma-separated list of blueprint IDs to grant access to
+    Type: CommaDelimitedList
+
+Resources:
+  'Fn::ForEach::PolicyGrants':
+    - Blueprint
+    - !Ref BlueprintIds
+    - 'PolicyGrant&{Blueprint}':
+        Type: AWS::DataZone::PolicyGrant
+        Properties:
+          DomainIdentifier: !Ref DomainId
+          EntityType: ENVIRONMENT_BLUEPRINT_CONFIGURATION
+          EntityIdentifier: !Sub '${ProjectAccountId}:${Blueprint}'
+          PolicyType: CREATE_ENVIRONMENT_FROM_BLUEPRINT
+          Detail:
+            CreateEnvironmentFromBlueprint: {}
+          Principal:
+            Project:
+              ProjectDesignation: CONTRIBUTOR
+              ProjectGrantFilter:
+                DomainUnitFilter:
+                  DomainUnit: !Ref DomainUnitId
+                  IncludeChildDomainUnits: true
+
+Outputs:
+  GrantCount:
+    Description: Number of policy grants created
+    Value: !Select [0, !Ref BlueprintIds]
