@@ -209,3 +209,31 @@ Permissions:
 - SSM: GetParameter on `/AccountPoolFactory/PoolManager/*`
 - CloudWatch: PutMetricData
 - SNS: Publish to AlertTopic
+
+## Org-Wide RAM Share
+
+Instead of per-account RAM shares (which caused resource policy bloat), the system uses a single org-wide RAM share in the domain account:
+
+- **Principal**: OU ARN — all accounts in the target OU automatically receive domain access
+- **No per-account shares**: SetupOrchestrator no longer creates RAM shares; it only verifies domain visibility
+- **Single point of management**: One share to monitor, one share to audit
+
+The org-wide share was enabled via `enable_sharing_with_aws_organization` from the Org Admin account.
+
+## Blueprint Policy Grants via CloudFormation
+
+`AWS::DataZone::PolicyGrant` resources for `ENVIRONMENT_BLUEPRINT_CONFIGURATION` entity type cannot be created by the Admin IAM role directly — DataZone requires the caller to be a domain owner identity. These grants must be deployed via CloudFormation, which uses the domain's service role internally.
+
+The `blueprint-enablement-iam.yaml` template includes 17 `PolicyGrant` resources (one per blueprint). Each grant:
+- `EntityType: ENVIRONMENT_BLUEPRINT_CONFIGURATION`
+- `EntityIdentifier: {AWS::AccountId}:{BlueprintId}` — auto-resolves to the project account
+- `PolicyType: CREATE_ENVIRONMENT_FROM_BLUEPRINT`
+- `Principal: CONTRIBUTOR projects in root domain unit, IncludeChildDomainUnits: true`
+
+This means grants are automatically applied when SetupOrchestrator deploys the blueprint stack — no separate grant step per account.
+
+## CREATE_PROJECT_FROM_PROJECT_PROFILE Grant
+
+The domain unit grant allowing users to create projects from the "All Capabilities - Account Pool" profile is managed via the `tests/setup/deploy-policy-grants-cf.sh` script. This calls `AddPolicyGrant` directly via the Admin role (which IS permitted for `DOMAIN_UNIT` entity type, unlike `ENVIRONMENT_BLUEPRINT_CONFIGURATION`).
+
+This is a one-time domain-level grant — not per-account.

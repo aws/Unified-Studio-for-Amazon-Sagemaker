@@ -306,22 +306,25 @@ This section describes each account type, the resources deployed in it, and how 
 
 **Lambda: Setup Orchestrator**
 
-**Trigger**: Async invocation from Pool Manager Lambda
+**Trigger**: Async invocation from Pool Manager Lambda or AccountRecycler
 
 **What it does**:
 1. Validates account exists in DynamoDB
 2. Checks for idempotency (skips if already AVAILABLE)
 3. Executes 2-wave configuration workflow:
-   - Wave 1: Foundation + Domain Access (parallel, 2.5 min)
+   - Wave 1: Foundation + Domain Access (parallel, ~2.5 min)
      - VPC deployment with 3 private subnets
      - IAM roles (ManageAccessRole, ProvisioningRole)
+     - Project execution role (AmazonSageMakerProjectRole)
      - EventBridge rules for event forwarding
      - S3 bucket for blueprint artifacts
-     - RAM share creation and domain visibility verification
-   - Wave 2: Blueprint Enablement (3 min)
-     - Enable 17 DataZone blueprints with policy grants
-4. Updates DynamoDB with progress after each wave
-5. Marks account as AVAILABLE when complete
+     - Domain visibility verification (via org-wide RAM share — no per-account share created)
+   - Wave 2: Blueprint Enablement (~3 min)
+     - Enable 17 DataZone blueprints with VPC/S3 regional parameters
+     - Deploy 17 `AWS::DataZone::PolicyGrant` resources (CREATE_ENVIRONMENT_FROM_BLUEPRINT)
+4. Supports `mode: updateBlueprints` — updates only the Blueprints stack (VPC/S3 params + grants) without deprovisioning
+5. Updates DynamoDB with progress after each wave
+6. Marks account as AVAILABLE when complete
 
 **Why it exists**: This Lambda handles the complex multi-step configuration workflow. By using wave-based parallel execution and eliminating false dependencies, it reduces setup time from 10-12 minutes to 5.5 minutes.
 
@@ -440,68 +443,102 @@ The Account Pool Factory includes two additional Lambda functions for self-heali
 
 ### Lambda: AccountReconciler
 
-**Trigger**: Manual invocation or scheduled EventBridge rule
+**Trigger**: EventBridge scheduled rule (hourly) or manual invocation
+
+**Design principle**: Detect-only. The reconciler never fixes anything — it only detects problems and marks accounts FAILED with a descriptive reason. All fixing is delegated to the AccountRecycler.
 
 **What it does**:
 1. Assumes `SMUS-AccountPoolFactory-AccountCreation` role in Org Admin account
-2. Lists accounts in the Target OU via `list_accounts_for_parent` (scoped, not full org)
-3. Filters by name prefix, then verifies/backfills `ManagedBy: AccountPoolFactory` + `PoolName` tags
-4. Multi-pool isolation: skips accounts tagged with a different `PoolName`
-5. Reconciles against DynamoDB:
+2. Lists accounts in the Target OU via `list_accounts_for_parent`
+3. Filters by name prefix, verifies/backfills `ManagedBy: AccountPoolFactory` + `PoolName` tags
+4. Reconciles against DynamoDB:
    - Untracked org accounts → creates ORPHANED records
-   - AVAILABLE accounts → validates `SMUS-AccountPoolFactory-DomainAccess` role exists (STS assume)
-   - ASSIGNED accounts → verifies `projectStackName` attribute
+   - AVAILABLE accounts → validates DomainAccess role + all 5 setup stacks
    - DynamoDB records with no matching org account → SUSPENDED
-6. Backfills tags on legacy accounts identified by name prefix only
-7. Publishes CloudWatch metrics (`ReconciliationCompleted`)
-8. Optionally invokes AccountRecycler (`autoRecycle=true`) for ORPHANED/FAILED accounts
-9. Optionally invokes Pool Manager (`autoReplenish=true`) if AVAILABLE count < MinimumPoolSize
-
-**Key features**:
-- Dry-run mode: compute changes without writing to DynamoDB
-- Conditional DynamoDB writes prevent overwriting concurrent changes
-- Rate-limited tag API calls for large OUs
-- Replaces manual seeding when used with `autoReplenish=true`
+5. Marks unhealthy AVAILABLE accounts as FAILED with descriptive reason:
+   - `NEEDS_STACKSET: DomainAccess role not assumable`
+   - `NEEDS_SETUP: Missing: DataZone-VPC-*, DataZone-Blueprints-*, ...`
+6. Publishes CloudWatch metrics
+7. With `autoRecycle=true`: invokes AccountRecycler for FAILED/ORPHANED accounts
+8. With `autoReplenish=true`: invokes Pool Manager if AVAILABLE < MinimumPoolSize
 
 **IAM Role**: `SMUS-AccountPoolFactory-AccountReconciler-Role`
 
 ### Lambda: AccountRecycler
 
-**Trigger**: Invoked by AccountReconciler (`autoRecycle`) or manual invocation
+**Trigger**: Invoked by AccountReconciler (`autoRecycle=true`), EventBridge, or manual invocation
+
+**Design principle**: The fixer. Routes accounts based on failure reason, fixes in parallel, self-triggers near the 900s timeout so processing continues across Lambda invocations.
 
 **What it does**:
-1. Processes accounts based on current state:
-   - **CLEANING**: Invoke DeprovisionAccount → SetupOrchestrator → AVAILABLE
-   - **FAILED**: Classify recoverable vs non-recoverable; retry with limit or transition to DELETING
-   - **ORPHANED**: Check DomainAccess role → SetupOrchestrator (or ProvisionAccount first if role missing)
-   - **AVAILABLE**: No-op (idempotent)
-2. Clears project-specific attributes on AVAILABLE transition
-3. Tracks retry count per account; stops after `MaxRecycleRetries` (default 3)
-4. Batch mode (`recycleAll=true`): processes CLEANING/FAILED/ORPHANED accounts concurrently
-5. Publishes CloudWatch metrics (`RecyclingSucceeded`, `RecyclingFailed`, `BatchRecyclingCompleted`)
-6. Sends SNS notifications on failures
+1. Pre-processes `NEEDS_STACKSET` accounts as a single batch StackSet operation (avoids `OperationInProgressException` from concurrent calls)
+2. Processes accounts based on state + failure reason:
+   - `NEEDS_STACKSET` → deploy DomainAccess StackSet → run SetupOrchestrator → AVAILABLE
+   - `NEEDS_SETUP` → run SetupOrchestrator (idempotent, skips healthy stacks) → AVAILABLE
+   - `CLEANING` → DeprovisionAccount → SetupOrchestrator → AVAILABLE
+   - `ORPHANED` → ensure StackSet → SetupOrchestrator → AVAILABLE
+3. Recoverable failures (NEEDS_SETUP, NEEDS_STACKSET) auto-reset retryCount — never permanently stuck
+4. Near 900s timeout: checks for remaining work, self-triggers async, returns
+5. `updateBlueprints` mode: updates Blueprints stack on all AVAILABLE accounts (rolling, no deprovision)
 
 **IAM Role**: `SMUS-AccountPoolFactory-AccountRecycler-Role`
 
-### Reconciliation + Recycling Flow
+### Self-Healing Loop
 
 ```
-AccountReconciler (scheduled or manual)
+EventBridge (rate: 1 hour)
   │
-  ├─ Discovers untracked org accounts → ORPHANED in DynamoDB
-  ├─ Validates AVAILABLE accounts (role check)
-  ├─ Detects stale records → SUSPENDED
-  ├─ Backfills tags on legacy accounts
-  │
-  ├─ autoRecycle=true?
-  │   └─ Invoke AccountRecycler for ORPHANED/FAILED accounts
-  │       ├─ CLEANING → Deprovision → Setup → AVAILABLE
-  │       ├─ FAILED → Retry or DELETING
-  │       └─ ORPHANED → Setup (or Provision first) → AVAILABLE
-  │
-  └─ autoReplenish=true?
-      └─ AVAILABLE < MinimumPoolSize → Invoke Pool Manager force_replenishment
+  └─► AccountReconciler
+        ├─ Lists all pool accounts in target OU
+        ├─ Validates AVAILABLE accounts (role + stacks)
+        ├─ Marks unhealthy → FAILED (with reason)
+        └─ autoRecycle=true → invokes AccountRecycler
+                │
+                └─► AccountRecycler (batch, 10 concurrent)
+                      ├─ Batch StackSet fix for NEEDS_STACKSET accounts
+                      ├─ SetupOrchestrator for NEEDS_SETUP accounts
+                      ├─ Full deprovision+setup for CLEANING/ORPHANED
+                      ├─ Self-triggers near 900s if work remains
+                      └─ All accounts → AVAILABLE
 ```
 
+## Domain Access: Org-Wide RAM Share
+
+Instead of creating individual RAM shares per pool account (which caused resource policy bloat with 200+ shares), the system uses a single org-wide RAM share:
+
+- **Share name**: `DataZone-Domain-Share-OrgWide`
+- **Principal**: OU ARN (`arn:aws:organizations::ACCOUNT:ou/ORG/OU-ID`)
+- **Resource**: DataZone domain ARN
+- **Coverage**: All accounts in the target OU automatically see the domain
+
+This eliminates per-account RAM share creation from the SetupOrchestrator workflow. The `create_ram_share_and_verify_domain()` function now just verifies domain visibility without creating any shares.
+
+## Blueprint Policy Grants
+
+Each pool account's `DataZone-Blueprints-{account_id}` CloudFormation stack includes 17 `AWS::DataZone::PolicyGrant` resources (one per blueprint). These grants:
+
+- Allow CONTRIBUTOR projects in the root domain unit (and all child units) to create environments from each blueprint
+- Are deployed via CloudFormation using the domain's service role — the Admin IAM role cannot call `AddPolicyGrant` directly for `ENVIRONMENT_BLUEPRINT_CONFIGURATION` entity type
+- Use `EntityIdentifier: {AWS::AccountId}:{BlueprintId}` which auto-resolves to the correct account
+
+This means policy grants are automatically applied when SetupOrchestrator deploys the blueprint stack — no separate grant step needed per account.
 
 
+
+
+
+## Known Limitations
+
+### ON_CREATE Not Supported with Account Pools
+
+DataZone account pools only support `MANUAL` resolution strategy. Environment configurations with `ON_CREATE` deployment mode do not work — the Lambda is never invoked during project creation for ON_CREATE environments.
+
+**Impact**: All environment configurations in pool-backed project profiles must use `ON_DEMAND` deployment mode. Users create environments manually after project creation.
+
+### StackSet Operations Are Serialized
+
+CloudFormation StackSets only allow one operation at a time per StackSet. When the recycler processes multiple `NEEDS_STACKSET` accounts concurrently, it batches them into a single `create_stack_instances` call with all account IDs to avoid `OperationInProgressException`.
+
+### Lambda Timeout for Large Pools
+
+The AccountRecycler has a 900s Lambda timeout. With 200+ accounts to process, it self-triggers near the timeout to continue in the next invocation. Each wave processes ~10 accounts concurrently (~5 min per wave for setup).

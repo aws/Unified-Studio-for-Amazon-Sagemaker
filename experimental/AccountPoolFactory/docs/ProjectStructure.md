@@ -1,204 +1,138 @@
 # Account Pool Factory - Project Structure
 
-This document provides an overview of the project structure created for the Account Pool Factory.
-
 ## Directory Tree
 
 ```
 experimental/AccountPoolFactory/
-├── README.md                                    # Main project documentation
-├── PROJECT_STRUCTURE.md                         # This file
+├── README.md
+├── config.yaml                          # Environment config (copy from config.yaml.template)
+├── config.yaml.template
 │
-├── docs/                                        # Documentation
-│   └── .gitkeep
+├── src/                                 # Lambda source code
+│   ├── account-provider/
+│   │   └── lambda_function_prod.py      # DataZone custom pool handler
+│   ├── pool-manager/
+│   │   └── lambda_function.py           # Pool monitoring + replenishment
+│   ├── setup-orchestrator/
+│   │   └── lambda_function.py           # Account setup (VPC, IAM, blueprints, grants)
+│   ├── deprovision-account/
+│   │   └── lambda_function.py           # Account cleanup (REUSE strategy)
+│   ├── provision-account/
+│   │   └── lambda_function.py           # Account creation + StackSet deployment (Org Admin)
+│   ├── account-reconciler/
+│   │   └── lambda_function.py           # Drift detection (detect-only, no fixes)
+│   └── account-recycler/
+│       └── lambda_function.py           # Self-healing fixer (FAILED → AVAILABLE)
 │
-├── specs/                                       # Requirements and design
-│   └── requirements.md                          # Functional requirements (already exists)
+├── templates/cloudformation/
+│   ├── 01-org-mgmt-account/deploy/
+│   │   ├── 01-stackset-roles.yaml       # StackSet admin/execution roles
+│   │   ├── 02-provision-account.yaml    # ProvisionAccount Lambda + AccountCreation role
+│   │   └── 03-domain-access-stackset.yaml  # StackSet template body (not standalone stack)
+│   ├── 02-domain-account/deploy/
+│   │   ├── 01-infrastructure.yaml       # All domain infra: DynamoDB, Lambdas, EventBridge, SNS, SSM
+│   │   └── 02-project-profile-with-pool.yaml  # DataZone project profile
+│   └── 03-project-account/deploy/
+│       ├── 02-vpc-setup.yaml            # VPC + 3 private subnets
+│       ├── 03-iam-roles.yaml            # ManageAccessRole + ProvisioningRole
+│       ├── 04-eventbridge-rules.yaml    # Event forwarding to domain account
+│       ├── 04-project-role.yaml         # AmazonSageMakerProjectRole
+│       └── blueprint-enablement-iam.yaml  # 17 blueprints + 17 PolicyGrant resources
 │
-├── templates/                                   # Infrastructure as Code
-│   ├── cloudformation/                          # CloudFormation (primary)
-│   │   ├── 01-org-admin/                        # CF1: Org Admin setup
-│   │   │   └── README.md
-│   │   ├── 02-domain-account/                   # CF2: Domain account setup
-│   │   │   └── README.md
-│   │   └── 03-project-account/                  # CF3: Project account setup
-│   │       └── README.md
-│   ├── cdk/                                     # AWS CDK (future)
-│   │   └── README.md
-│   └── terraform/                               # Terraform (future)
-│       └── README.md
+├── scripts/
+│   ├── 01-org-mgmt-account/
+│   │   ├── deploy/
+│   │   │   ├── 01-deploy-stackset-roles.sh
+│   │   │   └── 02-deploy-provision-account.sh  # --lambdas-only flag supported
+│   │   └── cleanup/
+│   ├── 02-domain-account/
+│   │   ├── deploy/
+│   │   │   ├── 01-deploy-infrastructure.sh  # --lambdas-only flag supported
+│   │   │   └── 02-deploy-project-profile.sh
+│   │   └── cleanup/
+│   └── utils/
+│       ├── check-pool-status.sh         # Pool state counts + recent Lambda logs
+│       ├── check-account-state.sh       # Single account: DynamoDB state + CF stacks
+│       ├── invoke-reconciler.sh         # --dry-run, --auto-recycle, --account ID
+│       ├── invoke-recycler.sh           # --all, --account, --force, --async, --update-blueprints
+│       ├── cleanup-per-account-ram-shares.sh  # Migration: delete old per-account RAM shares
+│       ├── invoke-reconciler.sh
+│       └── validate-config.sh
 │
-├── src/                                         # Lambda function source code
-│   ├── account-provider/                        # DataZone account provider
-│   │   └── README.md
-│   ├── pool-manager/                            # Pool management
-│   │   └── README.md
-│   ├── account-creator/                         # Account creation trigger
-│   │   └── README.md
-│   ├── account-reconciler/                      # Account reconciliation (discovers untracked accounts)
-│   │   └── lambda_function.py
-│   ├── account-recycler/                        # Account recycling (reclaims ORPHANED/FAILED accounts)
-│   │   └── lambda_function.py
-│   ├── setup-orchestrator/                      # Account setup orchestration
-│   │   └── README.md
-│   └── shared/                                  # Shared utilities
-│       └── README.md
+├── tests/
+│   ├── .test-create-from-pool-IDC.py    # End-to-end test: IDC domain, pool account
+│   ├── .test-create-domain-account.py   # Test: domain account as env account (no pool)
+│   ├── .test-create-from-pool-IAM-DOMAIN.py  # Legacy: IAM domain test (not current)
+│   └── setup/
+│       ├── deploy-policy-grants-cf.sh   # Add CREATE_PROJECT_FROM_PROJECT_PROFILE grant
+│       ├── 04-create-account-pool.sh
+│       └── templates/
+│           └── policy-grants.yaml       # CF template for blueprint grants (reference)
 │
-├── tests/                                       # Test suites
-│   ├── README.md
-│   ├── setup/                                   # Test infrastructure setup
-│   │   ├── README.md                            # Test setup documentation
-│   │   ├── scripts/                             # Test setup scripts
-│   │   │   ├── deploy-organization.sh           # Deploy test org structure
-│   │   │   └── validate-organization.sh         # Validate test setup
-│   │   └── templates/                           # Test CloudFormation templates
-│   │       └── organization-structure.yaml      # Test OU structure
-│   ├── unit/                                    # Unit tests
-│   ├── integration/                             # Integration tests
-│   └── fixtures/                                # Test data and fixtures
+├── docs/
+│   ├── Architecture.md
+│   ├── UserGuide.md
+│   ├── TestingGuide.md
+│   ├── SecurityGuide.md
+│   └── ProjectStructure.md              # This file
 │
-├── examples/                                    # Example configurations
-│   └── README.md
-│
-└── scripts/                                     # Utility scripts
-    └── README.md
+└── .kiro/
+    ├── steering/
+    │   └── ai-rules.md                  # AI assistant rules for this project
+    └── specs/
+        └── account-reconciliation-recycling/
+            └── tasks.md                 # Implementation progress log
 ```
 
-## Key Components
+## Key Scripts Reference
 
-### 1. Templates (Infrastructure)
+### Deploy Scripts
 
-**CloudFormation** (Primary - Ready for Implementation)
-- `01-org-admin/`: Sets up Control Tower integration in Org Admin account
-- `02-domain-account/`: Deploys pool management system in Domain account
-- `03-project-account/`: Configures new accounts (deployed as StackSet)
+| Script | Account | What it does |
+|--------|---------|-------------|
+| `scripts/01-org-mgmt-account/deploy/02-deploy-provision-account.sh` | Org Admin | Deploys ProvisionAccount Lambda + DomainAccess StackSet. `--lambdas-only` skips CF stack. |
+| `scripts/02-domain-account/deploy/01-deploy-infrastructure.sh` | Domain | Deploys all domain infra + all 6 Lambdas. `--lambdas-only` skips CF stack. |
+| `scripts/02-domain-account/deploy/02-deploy-project-profile.sh` | Domain | Creates DataZone project profile with account pool. |
 
-**CDK & Terraform** (Future)
-- Placeholder directories with README explaining future support
-- Allows customers to choose their preferred IaC tool
+### Utility Scripts
 
-### 2. Source Code (Lambda Functions)
+| Script | What it does |
+|--------|-------------|
+| `scripts/utils/check-pool-status.sh` | Shows account counts by state + recent Lambda logs |
+| `scripts/utils/check-account-state.sh <account-id>` | DynamoDB state + CF stacks for one account |
+| `scripts/utils/invoke-reconciler.sh [--dry-run] [--auto-recycle] [--account ID]` | Run reconciler |
+| `scripts/utils/invoke-recycler.sh [--all] [--account ID] [--force] [--async] [--update-blueprints]` | Run recycler |
 
-Four main Lambda functions:
-1. **account-provider**: DataZone custom account pool handler
-2. **pool-manager**: Monitors and replenishes the pool
-3. **account-creator**: Triggers Control Tower account creation
-4. **setup-orchestrator**: Deploys CF3 to new accounts
-5. **account-reconciler**: Discovers untracked org accounts, validates pool state, backfills tags
-6. **account-recycler**: Reclaims ORPHANED/FAILED/CLEANING accounts back to AVAILABLE
+### Test Scripts
 
-Plus **shared** utilities for common functionality.
+| Script | What it does |
+|--------|-------------|
+| `.test-create-from-pool-IDC.py` | Full end-to-end: get account from pool, create project (IDC domain) |
+| `.test-create-domain-account.py` | Create project using domain account as env account (no pool) |
 
-### 3. Documentation
+## Lambda Deployment Packaging
 
-- Main README with project overview
-- Per-component READMEs with detailed information
-- Specs directory for requirements and design
-- Docs directory for additional documentation (to be populated)
+The `SetupOrchestrator` Lambda zip must include both the Python source and all CF templates flat (no subdirectory):
 
-### 4. Testing
+```
+setup-orchestrator.zip
+├── lambda_function.py
+├── 02-vpc-setup.yaml
+├── 03-iam-roles.yaml
+├── 04-eventbridge-rules.yaml
+├── 04-project-role.yaml
+└── blueprint-enablement-iam.yaml
+```
 
-Comprehensive test structure:
-- Unit tests for individual components
-- Integration tests for end-to-end workflows
-- Fixtures for test data
+The deploy script handles this automatically via `zip -j` (junk paths).
 
-### 5. Examples
+## Account States
 
-Three example configurations:
-- **Minimal**: Quick start, development
-- **Production**: Enterprise-ready
-- **Custom**: Specialized use cases
-
-### 6. Scripts
-
-Utility scripts for:
-- Deployment automation
-- Configuration validation
-- Resource cleanup
-- Pool monitoring
-- Testing
-
-## Next Steps
-
-### Immediate (Design Phase)
-1. Create `specs/design.md` with technical architecture
-2. Create `specs/tasks.md` with implementation breakdown
-3. Populate `docs/` with architecture diagrams and guides
-
-### Implementation Phase
-1. Implement CloudFormation templates (CF1, CF2, CF3)
-2. Implement Lambda functions
-3. Create shared utilities
-4. Write unit tests
-5. Create example configurations
-6. Write deployment scripts
-
-### Testing Phase
-1. Unit testing
-2. Integration testing
-3. End-to-end testing
-4. Performance testing
-
-### Documentation Phase
-1. Architecture documentation
-2. Deployment guide
-3. Configuration guide
-4. Troubleshooting guide
-5. API documentation
-
-## Design Principles
-
-### Modularity
-- Each component is self-contained
-- Clear interfaces between components
-- Easy to test and maintain
-
-### Flexibility
-- Support multiple IaC tools (CF, CDK, Terraform)
-- Configurable parameters
-- Customizable templates
-
-### Extensibility
-- Easy to add new blueprints
-- Support for custom configurations
-- Plugin architecture for future enhancements
-
-### Observability
-- Comprehensive logging
-- CloudWatch metrics
-- Monitoring dashboards
-- Alerting
-
-### Security
-- Least-privilege IAM roles
-- Encrypted data at rest
-- Audit logging
-- Compliance with AWS best practices
-
-## File Naming Conventions
-
-- **CloudFormation**: `kebab-case.yaml`
-- **Python**: `snake_case.py`
-- **Documentation**: `kebab-case.md`
-- **Scripts**: `kebab-case.sh`
-- **Configs**: `kebab-case.yaml` or `.json`
-
-## Status
-
-✅ **Completed**: Project structure created
-🚧 **In Progress**: Requirements documentation
-⏳ **Pending**: Design, implementation, testing
-
-## Contributing
-
-When adding new components:
-1. Follow the established directory structure
-2. Include a README in each new directory
-3. Update this PROJECT_STRUCTURE.md
-4. Follow naming conventions
-5. Add appropriate documentation
-
-## Questions?
-
-See the main [README.md](README.md) or individual component READMEs for more information.
+| State | Meaning |
+|-------|---------|
+| `AVAILABLE` | Ready for project assignment |
+| `ASSIGNED` | In use by a project |
+| `CLEANING` | Being deprovisioned (REUSE strategy) |
+| `FAILED` | Setup or cleanup failed — recycler will fix |
+| `ORPHANED` | Found in org but not in DynamoDB — recycler will set up |
+| `SUSPENDED` | In DynamoDB but not found in org |

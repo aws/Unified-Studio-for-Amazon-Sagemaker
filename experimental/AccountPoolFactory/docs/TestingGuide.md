@@ -191,31 +191,21 @@ Deploys all Account Pool Factory infrastructure to the Domain account in a singl
 
 ---
 
-### Step 6: Deploy Policy Grants (prerequisite)
+### Step 6: Add Policy Grant for Project Profile
 
-Creates `CREATE_ENVIRONMENT_FROM_BLUEPRINT` grants for all enabled blueprints. This is a one-time setup per domain — required so that project accounts can create environments using the domain's blueprints.
-
-> You need at least one project account already provisioned to get blueprint IDs from. If you don't have one yet, come back to this step after Step 8 (seed accounts).
+Adds the "All Capabilities - Account Pool" profile to the domain unit's `CREATE_PROJECT_FROM_PROJECT_PROFILE` grant. This is a one-time domain-level operation.
 
 ```bash
-./tests/setup/deploy-policy-grants-cf.sh <project-account-id> [blueprint-ids]
+eval $(isengardcli credentials amirbo+3@amazon.com)
+bash tests/setup/deploy-policy-grants-cf.sh
 ```
 
-**What it does:**
-- Deploys `tests/setup/templates/policy-grants.yaml`
-- Creates policy grants for each blueprint in the domain
-- If blueprint IDs are not provided, fetches them from the project account's blueprint stack outputs
-- Stack name: `AccountPoolFactory-PolicyGrants-<account-id>`
+**What it does**:
+- Reads current grants on the root domain unit
+- Adds a new grant for profile `5riu03k7l71zc9` (All Capabilities - Account Pool)
+- Does NOT touch existing grants for other profiles
 
-**Script:** `tests/setup/deploy-policy-grants-cf.sh`
-
-**Expected output:**
-```
-🔐 Deploying Policy Grants (one-time per domain)
-=================================================
-📦 Deploying policy grants stack...
-✅ Policy grants deployed for account <project-account-id>
-```
+> Note: `CREATE_ENVIRONMENT_FROM_BLUEPRINT` grants are now embedded directly in the `blueprint-enablement-iam.yaml` template and deployed automatically per pool account via SetupOrchestrator. No separate per-account grant step needed.
 
 ---
 
@@ -332,46 +322,43 @@ This shows account counts by state (CREATING → PROVISIONING → AVAILABLE) and
 
 ---
 
-### Step 10: Create a Test Project
+### Step 10: Create a Test Project (IDC Domain)
 
-Creates a DataZone project using the pool-backed profile. This is the real end-to-end test — DataZone calls the AccountProvider Lambda, which assigns an account from the pool.
-
-```bash
-./tests/setup/create-test-project.sh
-```
-
-**What it does:**
-- Creates a DataZone project using the project profile from Step 8
-- Waits for the project to become `ACTIVE`
-- Checks that an account was assigned from the pool
-- Shows environment details and Lambda logs
-
-**Script:** `tests/setup/create-test-project.sh`
-
-**Expected output:**
-```
-=== Creating DataZone Test Project ===
-Domain ID: dzd-5o0lje5xgpeuw9
-Profile ID: xxxxxxxxxx
-Project Name: test-project-pool-1709123456
-
-Creating project...
-✅ Project created!
-Project ID: xxxxxxxxxx
-Project Status: ACTIVE
-
-=== Checking Project Environments ===
-Number of environments: 1
-Environment Details:
-  - default: ACTIVE (Account: 004878717744, Region: us-east-2)
-
-✅ Account assignment verified!
-```
-
-The `create-test-project.sh` script already verifies account assignment and shows environment details. You can also re-run the domain verification script to see updated pool account states:
+Creates a DataZone project using the pool-backed profile. This is the real end-to-end test.
 
 ```bash
-./scripts/02-domain-account/deploy/verify-domain-account.sh
+eval $(isengardcli credentials amirbo+3@amazon.com)
+python3 .test-create-from-pool-IDC.py
+```
+
+**What it does**:
+1. Calls AccountProvider Lambda to get an available pool account
+2. Looks up the `default_project_owner` SSO user from config.yaml
+3. Creates project with all 17 env configs pointing to the pool account + pool ID
+4. Adds the owner as PROJECT_OWNER
+5. Polls until deployment completes
+6. Prints result + portal URL
+
+**Expected output**:
+```
+Running in domain account 994753223772
+Pool has 100 available accounts
+Using account: 054012425702
+Owner 'analyst1-amirbo': 9a6721e929-...
+
+Creating project 'test-pool-idc-1772979085'...
+  Project created: adwbpi493gd9k9
+  Owner added: analyst1-amirbo
+
+Polling...
+  [1] ACTIVE  IN_PROGRESS
+  [3] ACTIVE  SUCCESSFUL_DEPLOYMENT
+
+=== Result ===
+  Status:     ACTIVE
+  Deployment: SUCCESSFUL_DEPLOYMENT
+  No failures ✅
+  Portal: https://dzd-4h7jbz76qckoh5.sagemaker.us-east-2.on.aws/projects/adwbpi493gd9k9
 ```
 
 ---
@@ -440,107 +427,109 @@ For simpler setups, the Org Admin and Domain roles can run in the same AWS accou
 
 ## Account Reconciliation & Recycling Testing
 
-### Test AccountReconciler — Dry Run
+### Prerequisites
 
-Invoke the Reconciler in dry-run mode to see what it would do without making changes:
-
+Run all commands from the domain account:
 ```bash
-aws lambda invoke \
-  --function-name AccountReconciler \
-  --cli-binary-format raw-in-base64-out \
-  --payload '{"source":"manual","dryRun":true}' \
-  --region us-east-2 \
-  /tmp/reconciler-dryrun.json
-
-cat /tmp/reconciler-dryrun.json | python3 -m json.tool
+eval $(isengardcli credentials amirbo+3@amazon.com)
+cd experimental/AccountPoolFactory
 ```
 
-**Expected output**: Summary showing `totalOrgAccounts`, `totalPoolAccounts`, `orphanedCreated`, `staleUpdated`, `unchanged`, `tagsBackfilled` counts. No DynamoDB changes.
-
-### Test AccountReconciler — Live Run
+### Check Pool Status
 
 ```bash
-aws lambda invoke \
-  --function-name AccountReconciler \
-  --cli-binary-format raw-in-base64-out \
-  --payload '{"source":"manual","dryRun":false}' \
-  --region us-east-2 \
-  /tmp/reconciler-live.json
-
-cat /tmp/reconciler-live.json | python3 -m json.tool
+bash scripts/utils/check-pool-status.sh
 ```
 
-**Verify**: Check DynamoDB for new ORPHANED records and updated states:
-```bash
-aws dynamodb scan \
-  --table-name AccountPoolFactory-AccountState \
-  --filter-expression '#s = :orphaned' \
-  --expression-attribute-names '{"#s":"state"}' \
-  --expression-attribute-values '{":orphaned":{"S":"ORPHANED"}}' \
-  --region us-east-2
-```
-
-### Test AccountReconciler — With Auto-Recycle and Auto-Replenish
+### Check a Single Account
 
 ```bash
-aws lambda invoke \
-  --function-name AccountReconciler \
-  --cli-binary-format raw-in-base64-out \
-  --payload '{"source":"manual","dryRun":false,"autoRecycle":true,"autoReplenish":true}' \
-  --region us-east-2 \
-  /tmp/reconciler-full.json
+# Domain creds → DynamoDB state
+bash scripts/utils/check-account-state.sh 054012425702
 
-cat /tmp/reconciler-full.json | python3 -m json.tool
+# Org Admin creds → CloudFormation stacks
+eval $(isengardcli credentials amirbo+1@amazon.com)
+bash scripts/utils/check-account-state.sh 054012425702
 ```
 
-**Expected**: `recyclingTriggered: true` if ORPHANED/FAILED accounts exist, `replenishmentTriggered: true` if AVAILABLE < MinimumPoolSize.
-
-### Test AccountRecycler — Single Account
-
-Pick a FAILED or ORPHANED account from DynamoDB and recycle it:
+### Run Reconciler — Dry Run
 
 ```bash
-aws lambda invoke \
-  --function-name AccountRecycler \
-  --cli-binary-format raw-in-base64-out \
-  --payload '{"accountId":"ACCOUNT_ID_HERE"}' \
-  --region us-east-2 \
-  /tmp/recycler-single.json
-
-cat /tmp/recycler-single.json | python3 -m json.tool
+bash scripts/utils/invoke-reconciler.sh --dry-run
 ```
 
-**Verify**: Account should transition to AVAILABLE (or FAILED with error details if something went wrong).
+Shows what would change without writing to DynamoDB.
 
-### Test AccountRecycler — Batch (Recycle All)
+### Run Reconciler — Live with Auto-Recycle
 
 ```bash
-aws lambda invoke \
-  --function-name AccountRecycler \
-  --cli-binary-format raw-in-base64-out \
-  --payload '{"recycleAll":true}' \
-  --region us-east-2 \
-  /tmp/recycler-batch.json
-
-cat /tmp/recycler-batch.json | python3 -m json.tool
+bash scripts/utils/invoke-reconciler.sh --auto-recycle
 ```
 
-**Expected**: Summary with `totalProcessed`, `succeeded`, `failed`, `skipped` counts.
+Marks unhealthy accounts FAILED and triggers the recycler for them.
 
-### Verify CloudWatch Metrics
-
-After running reconciliation/recycling, check CloudWatch metrics:
+### Run Recycler — Single Account
 
 ```bash
-aws cloudwatch get-metric-statistics \
-  --namespace AccountPoolFactory \
-  --metric-name ReconciliationCompleted \
-  --start-time $(date -u -v-1H +%Y-%m-%dT%H:%M:%S) \
-  --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
-  --period 300 \
-  --statistics Sum \
-  --region us-east-2
+bash scripts/utils/invoke-recycler.sh --account 054012425702
+# Force re-process even if AVAILABLE:
+bash scripts/utils/invoke-recycler.sh --account 054012425702 --force
 ```
+
+### Run Recycler — All Recyclable Accounts (async)
+
+```bash
+bash scripts/utils/invoke-recycler.sh --all --async
+```
+
+Fires async — recycler self-triggers near 900s timeout until all accounts are healthy.
+
+### Update Blueprints on All Pool Accounts (rolling)
+
+Use this after updating `blueprint-enablement-iam.yaml` to push changes to all 213 accounts without deprovisioning:
+
+```bash
+bash scripts/utils/invoke-recycler.sh --update-blueprints --async
+```
+
+### End-to-End Test — IDC Domain (current)
+
+Creates a project from the pool using the IDC domain flow. No role configs needed.
+
+```bash
+eval $(isengardcli credentials amirbo+3@amazon.com)
+python3 .test-create-from-pool-IDC.py
+```
+
+**What it does**:
+1. Calls AccountProvider Lambda to get an available pool account
+2. Looks up `analyst1-amirbo` SSO user profile ID
+3. Creates project with all 17 env configs pointing to the pool account
+4. Adds `analyst1-amirbo` as PROJECT_OWNER
+5. Polls until deployment completes
+6. Prints result + portal URL
+
+### Test — Domain Account as Environment Account
+
+Creates a project using the domain account itself (no pool). Useful for isolating authorization issues.
+
+```bash
+eval $(isengardcli credentials amirbo+3@amazon.com)
+python3 .test-create-domain-account.py
+```
+
+### Monitor Recycler Progress
+
+```bash
+eval $(isengardcli credentials amirbo+3@amazon.com)
+aws logs tail /aws/lambda/AccountRecycler --follow --region us-east-2
+```
+
+Key log patterns to watch:
+- `Pre-processing N NEEDS_STACKSET accounts as batch` — batch StackSet fix starting
+- `[account_id] Blueprints updated` — blueprint update complete
+- `Transitioned to AVAILABLE` — account successfully recycled
+- `self-trigger` — recycler continuing in next wave
 
 **Differences from multi-account:**
 - One account hosts both AWS Organizations management and the DataZone domain

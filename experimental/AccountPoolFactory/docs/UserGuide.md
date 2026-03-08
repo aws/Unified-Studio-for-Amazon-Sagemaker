@@ -136,33 +136,26 @@ Before deploying the Account Pool Factory, ensure you have:
 2. Edit `config.yaml` with your values:
    ```yaml
    aws:
-     region: us-east-2                    # Your AWS region
+     region: us-east-2
      account_id: "495869084367"           # Org Admin account ID
      domain_account_id: "994753223772"    # Domain account ID
-   
+
    datazone:
-     domain_id: dzd-4igt64u5j25ko9        # Your existing DataZone domain ID
-     domain_arn: arn:aws:datazone:...     # Your domain ARN
-     root_domain_unit_id: 6kg8zlq8mvid9l  # Root domain unit ID
-   
-   account_pool:
-     minimum_pool_size: 5                 # Minimum accounts to maintain
-     maximum_pool_size: 10                # Target pool size
-     replenishment_threshold: 5           # Trigger replenishment below this
-     email_prefix: accountpool            # Email prefix for accounts
-     email_domain: example.com            # Email domain for accounts
-     name_prefix: DataZone-Pool           # Account name prefix
-   
+     domain_id: dzd-4h7jbz76qckoh5
+     root_domain_unit_id: bsmdc8e4dwye5l
+     default_project_owner: "analyst1-amirbo"  # SSO username added as PROJECT_OWNER on all created projects
+
    organization:
-     target_ou_name: ProjectAccounts      # Existing OU for project accounts
+     target_ou_id: ou-n5om-otvkrtx2      # OU where pool accounts live
    ```
 
-3. Configure AWS credentials:
+3. Configure AWS credentials using isengardcli:
    ```bash
-   aws configure
-   # OR
-   export AWS_ACCESS_KEY_ID=...
-   export AWS_SECRET_ACCESS_KEY=...
+   # Domain account
+   eval $(isengardcli credentials amirbo+3@amazon.com)
+
+   # Org Admin account
+   eval $(isengardcli credentials amirbo+1@amazon.com)
    ```
 
 ## Deployment by Persona
@@ -807,41 +800,20 @@ You'll receive alerts for:
 4. System automatically assigns a dedicated account from the pool
 5. Project is created with its own isolated AWS account
 
-**Via AWS CLI**:
+**Via AWS CLI / Python (IDC domain)**:
 
 ```bash
-# Step 1: Get an available account from the pool
-POOL_RESPONSE=$(aws datazone list-accounts-in-account-pool \
-  --domain-identifier YOUR_DOMAIN_ID \
-  --account-pool-identifier YOUR_POOL_ID \
-  --region YOUR_REGION)
-
-# Extract first available account ID and region
-ACCOUNT_ID=$(echo $POOL_RESPONSE | jq -r '.accounts[0].awsAccountId')
-REGION=$(echo $POOL_RESPONSE | jq -r '.accounts[0].regionName')
-
-echo "Using account: $ACCOUNT_ID in region: $REGION"
-
-# Step 2: Create project with the selected account
-aws datazone create-project \
-  --domain-identifier YOUR_DOMAIN_ID \
-  --name "My Project" \
-  --user-parameters '[{
-    "environmentConfigurationName": "Tooling",
-    "environmentResolvedAccount": {
-      "awsAccountId": "'$ACCOUNT_ID'",
-      "regionName": "'$REGION'",
-      "sourceAccountPoolId": "YOUR_POOL_ID"
-    }
-  }]' \
-  --region YOUR_REGION
+eval $(isengardcli credentials amirbo+3@amazon.com)
+python3 .test-create-from-pool-IDC.py
 ```
 
-**Note**: 
-- This automatically selects the first available account from the pool
-- Each project gets one dedicated account
-- The selected account will be assigned to your project
-- If your profile has multiple environment configurations with account pools, you must provide resolved accounts for all of them
+This script:
+1. Calls AccountProvider Lambda to get an available pool account
+2. Looks up the `default_project_owner` SSO user from config.yaml
+3. Creates project with all 17 env configs pointing to the pool account
+4. Adds the owner as PROJECT_OWNER via `create_project_membership`
+
+**Note for IDC domains**: No `customerProvidedRoleConfigs` needed — the domain creates roles automatically. Just pass `userParameters` with the resolved account for each environment configuration.
 
 **Create Environments**
 
@@ -938,18 +910,20 @@ aws lambda invoke \
 
 ### How Recycling Works by State
 
-| Current State | Action | Result |
-|---------------|--------|--------|
-| CLEANING | Deprovision → Setup → AVAILABLE | Account returned to pool |
-| FAILED (recoverable) | Retry from CLEANING flow | Up to MaxRecycleRetries attempts |
-| FAILED (non-recoverable) | Transition to DELETING | Account removed from pool |
-| ORPHANED (has DomainAccess role) | Setup → AVAILABLE | Account added to pool |
-| ORPHANED (no DomainAccess role) | Provision roles → Setup → AVAILABLE | Full setup from scratch |
-| AVAILABLE | No-op | Already ready (idempotent) |
+| Current State | Failure Reason | Action | Result |
+|---------------|---------------|--------|--------|
+| FAILED | NEEDS_STACKSET | Deploy DomainAccess StackSet → SetupOrchestrator | AVAILABLE |
+| FAILED | NEEDS_SETUP | SetupOrchestrator (idempotent, skips healthy stacks) | AVAILABLE |
+| FAILED | other | Full deprovision → SetupOrchestrator | AVAILABLE |
+| CLEANING | — | DeprovisionAccount → SetupOrchestrator | AVAILABLE |
+| ORPHANED | — | Ensure StackSet → SetupOrchestrator | AVAILABLE |
+| AVAILABLE | — | No-op (idempotent) | AVAILABLE |
+
+Recoverable failures (NEEDS_SETUP, NEEDS_STACKSET) auto-reset the retry counter — accounts never get permanently stuck. Non-recoverable failures (account suspended, access denied permanently) transition to DELETING.
 
 ### Configuration
 
-Two SSM parameters control recycling behavior:
+SSM parameters controlling recycling behavior:
 
 ```bash
 # Max retry attempts per account (default: 3)
@@ -957,10 +931,10 @@ aws ssm put-parameter \
   --name /AccountPoolFactory/PoolManager/MaxRecycleRetries \
   --value "3" --type String --overwrite --region us-east-2
 
-# Max accounts recycled concurrently in batch mode (default: 3)
+# Max accounts recycled concurrently (default: 10)
 aws ssm put-parameter \
   --name /AccountPoolFactory/PoolManager/MaxConcurrentRecycles \
-  --value "3" --type String --overwrite --region us-east-2
+  --value "10" --type String --overwrite --region us-east-2
 ```
 
 ### Tag-Based Account Identification
@@ -974,27 +948,25 @@ The ProvisionAccount Lambda tags new accounts at creation time. The Reconciler b
 ## Key Concepts
 
 ### Account States
-- **AVAILABLE**: Ready to be assigned to projects
-- **ASSIGNED**: Currently assigned to a project
-- **SETTING_UP**: Being created and configured (6-8 minutes with wave-based parallel execution)
-- **FAILED**: Setup failed after retry exhaustion
-- **DELETING**: Being closed via Organizations API
-- **CLEANING**: Being cleaned for reuse (REUSE strategy only)
-- **ORPHANED**: Discovered in org but not tracked in DynamoDB (created by Reconciler)
-- **SUSPENDED**: DynamoDB record with no matching active org account (detected by Reconciler)
+
+| State | Meaning |
+|-------|---------|
+| `AVAILABLE` | Ready for project assignment |
+| `ASSIGNED` | In use by a project |
+| `CLEANING` | Being deprovisioned (REUSE strategy) |
+| `FAILED` | Setup or cleanup failed — recycler will fix automatically |
+| `ORPHANED` | Found in org but not in DynamoDB — recycler will set up |
+| `SUSPENDED` | In DynamoDB but not found in org — investigate manually |
 
 ### Account Lifecycle
-1. **Creation**: Pool Manager creates account via Organizations API (< 1 minute)
-2. **Setup**: Setup Orchestrator runs 8-step workflow in 6 waves with parallel execution (6-8 minutes):
-   - Wave 1: VPC deployment (~2.5 min)
-   - Wave 2: IAM roles + EventBridge rules in parallel (~2 min)
-   - Wave 3: S3 bucket + RAM share in parallel (~1 min)
-   - Wave 4: Blueprint enablement (~3 min) - 17 blueprints
-   - Wave 5: Policy grants creation (~2 min)
-   - Wave 6: Domain visibility verification (~1 min)
-3. **Available**: Account ready for project assignment
-4. **Assignment**: Project created, account assigned automatically
-5. **Deletion**: Project deleted, account closed automatically (DELETE strategy)
+
+1. **Creation**: ProvisionAccount Lambda creates account via Organizations API (~1 min), deploys DomainAccess StackSet
+2. **Setup**: SetupOrchestrator runs 2-wave workflow (~5.5 min):
+   - Wave 1 (parallel): VPC, IAM roles, ProjectRole, EventBridge, S3, domain visibility check
+   - Wave 2: 17 blueprints with VPC/S3 regional params + 17 policy grants
+3. **Available**: Account in pool, ready for assignment
+4. **Assignment**: User creates project → AccountProvider returns account → DataZone deploys project stacks
+5. **Reclaim**: Project deleted → DELETE (account closed) or REUSE (DeprovisionAccount → back to pool)
 
 ### Event-Driven Replenishment
 - **Trigger**: CloudFormation stack CREATE_IN_PROGRESS events from project accounts
@@ -1341,6 +1313,8 @@ All configuration is stored in SSM Parameter Store for easy updates without rede
 - `TargetPoolSize`: Target pool size after replenishment (default: 10)
 - `MaxConcurrentSetups`: Maximum accounts being set up simultaneously (default: 3)
 - `ReclaimStrategy`: DELETE or REUSE (default: DELETE)
+- `MaxRecycleRetries`: Max recycling attempts per account (default: 3)
+- `MaxConcurrentRecycles`: Parallel recycler workers (default: 10)
 - `EmailPrefix`: Email prefix for account creation (default: accountpool)
 - `EmailDomain`: Email domain for account creation (default: example.com)
 - `NamePrefix`: Account name prefix (default: DataZone-Pool)
@@ -1373,25 +1347,9 @@ aws ssm put-parameter \
 - `DomainAccountId`: Domain account ID
 - `RootDomainUnitId`: Root domain unit ID
 - `Region`: AWS region
-- `AlertTopicArn`: SNS topic ARN for alerts
-- `RetryConfig`: JSON string with retry configuration:
-  ```json
-  {
-    "max_retries": 3,
-    "initial_backoff_seconds": 30,
-    "backoff_multiplier": 2,
-    "step_specific": {
-      "blueprint_enablement": {
-        "max_retries": 3,
-        "initial_backoff_seconds": 60
-      },
-      "domain_visibility": {
-        "max_retries": 10,
-        "initial_backoff_seconds": 15
-      }
-    }
-  }
-  ```
+- `ExpectedStackPatterns`: Comma-separated stack name patterns validated by reconciler (e.g. `DataZone-VPC-{account_id},DataZone-IAM-{account_id},...`)
+- `ProjectRoleEnabled`: Whether to deploy AmazonSageMakerProjectRole (default: true)
+- `ProjectRoleName`: Role name (default: AmazonSageMakerProjectRole)
 
 ### CloudWatch Metrics
 
