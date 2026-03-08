@@ -847,6 +847,130 @@ aws datazone create-project \
 
 Environments can be created through the DataZone portal or API based on your project profile configuration.
 
+## Account Reconciliation & Recycling
+
+The Account Pool Factory includes self-healing capabilities that keep the pool healthy without manual intervention.
+
+### What is Reconciliation?
+
+The AccountReconciler Lambda compares what's in AWS Organizations against what's tracked in DynamoDB. It discovers untracked accounts, validates existing records, and fixes inconsistencies.
+
+**When to use it**:
+- After initial deployment to discover existing accounts
+- On a schedule (e.g., daily) to catch drift
+- After manual account operations outside the pool system
+- Instead of the seed script — use `autoReplenish=true` to automatically create accounts if the pool is below minimum size
+
+### Invoking the Reconciler
+
+**Dry run** (see what would change without writing):
+```bash
+aws lambda invoke \
+  --function-name AccountReconciler \
+  --cli-binary-format raw-in-base64-out \
+  --payload '{"source":"manual","dryRun":true}' \
+  --region us-east-2 \
+  /tmp/reconciler-output.json
+
+cat /tmp/reconciler-output.json | python3 -m json.tool
+```
+
+**Live run** (apply changes):
+```bash
+aws lambda invoke \
+  --function-name AccountReconciler \
+  --cli-binary-format raw-in-base64-out \
+  --payload '{"source":"manual","dryRun":false}' \
+  --region us-east-2 \
+  /tmp/reconciler-output.json
+```
+
+**Full self-healing** (reconcile + recycle bad accounts + replenish pool):
+```bash
+aws lambda invoke \
+  --function-name AccountReconciler \
+  --cli-binary-format raw-in-base64-out \
+  --payload '{"source":"manual","dryRun":false,"autoRecycle":true,"autoReplenish":true}' \
+  --region us-east-2 \
+  /tmp/reconciler-output.json
+```
+
+**Reconcile specific accounts only**:
+```bash
+aws lambda invoke \
+  --function-name AccountReconciler \
+  --cli-binary-format raw-in-base64-out \
+  --payload '{"source":"manual","accountIds":["123456789012","234567890123"]}' \
+  --region us-east-2 \
+  /tmp/reconciler-output.json
+```
+
+### What is Recycling?
+
+The AccountRecycler Lambda takes accounts in ORPHANED, FAILED, or CLEANING states and attempts to return them to AVAILABLE by running deprovision and re-setup workflows.
+
+**When to use it**:
+- Automatically via the Reconciler's `autoRecycle=true` flag
+- Manually to reclaim a specific account
+- In batch mode to process all recyclable accounts at once
+
+### Invoking the Recycler
+
+**Single account**:
+```bash
+aws lambda invoke \
+  --function-name AccountRecycler \
+  --cli-binary-format raw-in-base64-out \
+  --payload '{"accountId":"123456789012"}' \
+  --region us-east-2 \
+  /tmp/recycler-output.json
+```
+
+**Batch — recycle all eligible accounts**:
+```bash
+aws lambda invoke \
+  --function-name AccountRecycler \
+  --cli-binary-format raw-in-base64-out \
+  --payload '{"recycleAll":true}' \
+  --region us-east-2 \
+  /tmp/recycler-output.json
+```
+
+### How Recycling Works by State
+
+| Current State | Action | Result |
+|---------------|--------|--------|
+| CLEANING | Deprovision → Setup → AVAILABLE | Account returned to pool |
+| FAILED (recoverable) | Retry from CLEANING flow | Up to MaxRecycleRetries attempts |
+| FAILED (non-recoverable) | Transition to DELETING | Account removed from pool |
+| ORPHANED (has DomainAccess role) | Setup → AVAILABLE | Account added to pool |
+| ORPHANED (no DomainAccess role) | Provision roles → Setup → AVAILABLE | Full setup from scratch |
+| AVAILABLE | No-op | Already ready (idempotent) |
+
+### Configuration
+
+Two SSM parameters control recycling behavior:
+
+```bash
+# Max retry attempts per account (default: 3)
+aws ssm put-parameter \
+  --name /AccountPoolFactory/PoolManager/MaxRecycleRetries \
+  --value "3" --type String --overwrite --region us-east-2
+
+# Max accounts recycled concurrently in batch mode (default: 3)
+aws ssm put-parameter \
+  --name /AccountPoolFactory/PoolManager/MaxConcurrentRecycles \
+  --value "3" --type String --overwrite --region us-east-2
+```
+
+### Tag-Based Account Identification
+
+Pool accounts are identified by AWS Organizations tags:
+- `ManagedBy: AccountPoolFactory` — marks the account as pool-managed
+- `PoolName: {pool name}` — identifies which pool the account belongs to
+
+The ProvisionAccount Lambda tags new accounts at creation time. The Reconciler backfills tags on legacy accounts identified by name prefix. This ensures all pool accounts converge to tag-based identification over time.
+
 ## Key Concepts
 
 ### Account States
@@ -856,6 +980,8 @@ Environments can be created through the DataZone portal or API based on your pro
 - **FAILED**: Setup failed after retry exhaustion
 - **DELETING**: Being closed via Organizations API
 - **CLEANING**: Being cleaned for reuse (REUSE strategy only)
+- **ORPHANED**: Discovered in org but not tracked in DynamoDB (created by Reconciler)
+- **SUSPENDED**: DynamoDB record with no matching active org account (detected by Reconciler)
 
 ### Account Lifecycle
 1. **Creation**: Pool Manager creates account via Organizations API (< 1 minute)

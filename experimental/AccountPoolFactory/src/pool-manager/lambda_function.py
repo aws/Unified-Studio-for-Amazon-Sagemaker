@@ -333,7 +333,8 @@ def create_accounts_parallel(count: int, config: Dict[str, Any]):
                 'ouId': config.get('TargetOUId', 'root'),
                 'domainId': os.environ.get('DOMAIN_ID'),
                 'domainAccountId': DOMAIN_ACCOUNT_ID,
-                'orgAdminAccountId': org_admin_account_id
+                'orgAdminAccountId': org_admin_account_id,
+                'poolName': config.get('PoolName', 'AccountPoolFactory')
             }
             
             print(f"   Invoking ProvisionAccount with payload: {json.dumps(payload, indent=2)}")

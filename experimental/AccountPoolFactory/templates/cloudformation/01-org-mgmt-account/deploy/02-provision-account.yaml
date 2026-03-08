@@ -10,19 +10,20 @@ Parameters:
 Resources:
 
   # =========================================================
-  # AccountCreation Role - allows PoolManager to create accounts
+  # AccountCreation Role - allows Domain account to manage accounts
   # =========================================================
   AccountCreationRole:
     Type: AWS::IAM::Role
     Properties:
       RoleName: SMUS-AccountPoolFactory-AccountCreation
-      Description: Allows Pool Manager Lambda in Domain account to create AWS accounts
+      Description: Allows Domain account to manage AWS accounts via Organizations
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
           - Effect: Allow
             Principal:
-              AWS: !Sub 'arn:aws:iam::${DomainAccountId}:role/SMUS-AccountPoolFactory-PoolManager-Role'
+              AWS:
+                - !Sub 'arn:aws:iam::${DomainAccountId}:root'
             Action: 'sts:AssumeRole'
             Condition:
               StringEquals:
@@ -44,6 +45,9 @@ Resources:
                   - 'organizations:ListRoots'
                   - 'organizations:ListOrganizationalUnitsForParent'
                   - 'organizations:DescribeOrganizationalUnit'
+                  - 'organizations:ListTagsForResource'
+                  - 'organizations:TagResource'
+                  - 'organizations:ListAccountsForParent'
                 Resource: '*'
               - Effect: Allow
                 Action:
@@ -91,6 +95,8 @@ Resources:
                   - organizations:ListParents
                   - organizations:ListAccounts
                   - organizations:DescribeOrganization
+                  - organizations:TagResource
+                  - organizations:ListTagsForResource
                 Resource: '*'
               - Effect: Allow
                 Action:

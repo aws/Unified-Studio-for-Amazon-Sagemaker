@@ -60,7 +60,7 @@ In rare cases, you may need to manually deploy to a project account:
 aws sts assume-role \
   --role-arn arn:aws:iam::ACCOUNT_ID:role/SMUS-AccountPoolFactory-DomainAccess \
   --role-session-name manual-deploy \
-  --external-id dzd-5o0lje5xgpeuw9
+  --external-id <DOMAIN_ID_FROM_CONFIG>
 
 # Deploy a specific stack
 aws cloudformation deploy \

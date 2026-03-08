@@ -79,8 +79,12 @@ def lambda_handler(event, context):
         cleanup_result = cleanup_account(account_id, domain_id)
         
         if cleanup_result['success']:
-            # Mark account as AVAILABLE
-            mark_account_available(account_id)
+            # Leave state as CLEANING — caller (recycler) decides next state.
+            # DeprovisionAccount's job is only to clean stacks, not manage
+            # lifecycle transitions. The recycler will invoke SetupOrchestrator
+            # next, and SetupOrchestrator will mark AVAILABLE on success.
+            update_account_state(account_id, 'CLEANING',
+                                 cleanupCompletedDate=datetime.now(timezone.utc).isoformat())
             
             # Publish success metric
             publish_metric('DeprovisionSucceeded', 1, [{'Name': 'AccountId', 'Value': account_id}])
@@ -94,7 +98,7 @@ def lambda_handler(event, context):
                 'status': 'SUCCESS',
                 'accountId': account_id,
                 'stacksDeleted': cleanup_result['stacks_deleted'],
-                'message': 'Account cleaned and returned to pool'
+                'message': 'Account cleaned, ready for re-setup'
             }
         else:
             # Mark account as FAILED

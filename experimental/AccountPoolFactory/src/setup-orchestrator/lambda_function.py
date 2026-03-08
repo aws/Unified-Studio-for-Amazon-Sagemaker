@@ -134,6 +134,8 @@ def lambda_handler(event, context):
     try:
         if mode == 'setup':
             result = execute_setup_workflow(account_id, config, resume_from_step)
+        elif mode == 'updateBlueprints':
+            result = execute_update_blueprints(account_id, config)
         elif mode == 'cleanup':
             result = execute_cleanup_workflow(account_id, config)
         else:
@@ -254,7 +256,7 @@ def execute_setup_workflow(account_id: str, config: Dict[str, Any], resume_from:
         print("🌊 Wave 2: Blueprint Enablement")
         print("   Domain is verified accessible - DataZone APIs will succeed")
         
-        bp_result = enable_blueprints(account_id, config, iam_result)
+        bp_result = enable_blueprints(account_id, config, iam_result, vpc_result, s3_result)
         resources.update(bp_result)
         update_progress(account_id, 'wave2_blueprints', bp_result)
         
@@ -395,25 +397,20 @@ def deploy_vpc(account_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
     try:
         cf_client = get_cross_account_client('cloudformation', account_id)
 
-        # Check if stack already exists
-        try:
-            response = cf_client.describe_stacks(StackName=stack_name)
-            stack_status = response['Stacks'][0]['StackStatus']
-            if stack_status in ('CREATE_COMPLETE', 'UPDATE_COMPLETE'):
-                print(f"✅ VPC stack already exists ({stack_status}), reading outputs")
-                outputs = response['Stacks'][0].get('Outputs', [])
-                result = {
-                    'vpcId': get_output_value(outputs, 'VpcId'),
-                    'subnetIds': [
-                        get_output_value(outputs, 'PrivateSubnet1Id'),
-                        get_output_value(outputs, 'PrivateSubnet2Id'),
-                        get_output_value(outputs, 'PrivateSubnet3Id')
-                    ]
-                }
-                print(f"✅ VPC: {result['vpcId']}")
-                return result
-        except cf_client.exceptions.ClientError:
-            pass  # Stack doesn't exist, create it
+        # Check if stack already exists (handles bad states too)
+        status, outputs = check_existing_stack(cf_client, stack_name)
+        if status == 'healthy':
+            print(f"✅ VPC stack already exists, reading outputs")
+            result = {
+                'vpcId': get_output_value(outputs, 'VpcId'),
+                'subnetIds': [
+                    get_output_value(outputs, 'PrivateSubnet1Id'),
+                    get_output_value(outputs, 'PrivateSubnet2Id'),
+                    get_output_value(outputs, 'PrivateSubnet3Id')
+                ]
+            }
+            print(f"✅ VPC: {result['vpcId']}")
+            return result
 
         with open(template_path, 'r') as f:
             template_body = f.read()
@@ -462,20 +459,15 @@ def deploy_iam_roles(account_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
     try:
         cf_client = get_cross_account_client('cloudformation', account_id)
 
-        # Check if stack already exists
-        try:
-            response = cf_client.describe_stacks(StackName=stack_name)
-            stack_status = response['Stacks'][0]['StackStatus']
-            if stack_status in ('CREATE_COMPLETE', 'UPDATE_COMPLETE'):
-                print(f"✅ IAM stack already exists ({stack_status}), reading outputs")
-                outputs = response['Stacks'][0].get('Outputs', [])
-                result = {
-                    'manageAccessRoleArn': get_output_value(outputs, 'ManageAccessRoleArn'),
-                    'provisioningRoleArn': get_output_value(outputs, 'ProvisioningRoleArn')
-                }
-                return result
-        except cf_client.exceptions.ClientError:
-            pass
+        # Check if stack already exists (handles bad states too)
+        status, outputs = check_existing_stack(cf_client, stack_name)
+        if status == 'healthy':
+            print(f"✅ IAM stack already exists, reading outputs")
+            result = {
+                'manageAccessRoleArn': get_output_value(outputs, 'ManageAccessRoleArn'),
+                'provisioningRoleArn': get_output_value(outputs, 'ProvisioningRoleArn')
+            }
+            return result
 
         with open(template_path, 'r') as f:
             template_body = f.read()
@@ -524,15 +516,11 @@ def deploy_eventbridge_rules(account_id: str, config: Dict[str, Any]) -> Dict[st
     try:
         cf_client = get_cross_account_client('cloudformation', account_id)
 
-        # Check if stack already exists
-        try:
-            response = cf_client.describe_stacks(StackName=stack_name)
-            stack_status = response['Stacks'][0]['StackStatus']
-            if stack_status in ('CREATE_COMPLETE', 'UPDATE_COMPLETE'):
-                print(f"✅ EventBridge stack already exists ({stack_status}), skipping")
-                return {'eventBridgeRulesDeployed': True}
-        except cf_client.exceptions.ClientError:
-            pass
+        # Check if stack already exists (handles bad states too)
+        status, outputs = check_existing_stack(cf_client, stack_name)
+        if status == 'healthy':
+            print(f"✅ EventBridge stack already exists, skipping")
+            return {'eventBridgeRulesDeployed': True}
 
         with open(template_path, 'r') as f:
             template_body = f.read()
@@ -582,18 +570,13 @@ def deploy_project_role(account_id: str, config: Dict[str, Any]) -> Dict[str, An
     try:
         cf_client = get_cross_account_client('cloudformation', account_id)
 
-        # Check if stack already exists
-        try:
-            response = cf_client.describe_stacks(StackName=stack_name)
-            stack_status = response['Stacks'][0]['StackStatus']
-            if stack_status in ('CREATE_COMPLETE', 'UPDATE_COMPLETE'):
-                print(f"✅ ProjectRole stack already exists ({stack_status}), reading outputs")
-                outputs = response['Stacks'][0].get('Outputs', [])
-                return {
-                    'projectRoleArn': get_output_value(outputs, 'ProjectRoleArn')
-                }
-        except cf_client.exceptions.ClientError:
-            pass
+        # Check if stack already exists (handles bad states too)
+        status, outputs = check_existing_stack(cf_client, stack_name)
+        if status == 'healthy':
+            print(f"✅ ProjectRole stack already exists, reading outputs")
+            return {
+                'projectRoleArn': get_output_value(outputs, 'ProjectRoleArn')
+            }
 
         with open(template_path, 'r') as f:
             template_body = f.read()
@@ -679,39 +662,25 @@ def create_s3_bucket(account_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def create_ram_share_and_verify_domain(account_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
-    """Create RAM share and verify domain visibility before returning
+    """Verify domain visibility via org-wide RAM share.
     
-    This function combines RAM share creation with domain visibility verification
-    to ensure the domain is accessible before any DataZone API calls in Wave 2.
+    The org-wide RAM share (DataZone-Domain-Share-OrgWide) covers all accounts in the OU,
+    so no per-account share creation is needed. We just verify the domain is accessible.
     
-    Steps:
-    1. Create RAM share with principal
-    2. Wait for RAM share to become ACTIVE
-    3. Explicitly associate domain resource
-    4. Wait for domain resource to appear in share (with exponential backoff)
-    5. Verify domain is accessible via DataZone GetDomain API
-    6. Return only when domain is confirmed visible
-    
-    Timing: Test shows resource appears in ~10-30 seconds
+    Pre-requisite: org-wide share must exist in the domain account targeting the OU.
     """
-    print(f"🔗 Creating RAM share and verifying domain visibility for account {account_id}")
+    print(f"🔍 Verifying domain visibility for account {account_id} (via org-wide RAM share)")
     
-    # Step 1: Create RAM share (includes resource association)
-    ram_result = create_ram_share(account_id, config)
-    share_arn = ram_result['ramShareArn']
+    # No ramShareArn for per-account share — pass empty dict, verify_domain_visibility
+    # only uses it for a mid-retry principal check which is not needed with org-wide share.
+    verify_result = verify_domain_visibility(account_id, config, {})
     
-    # Step 2: Verify domain visibility (includes all waiting)
-    print(f"🔍 Verifying domain visibility (this ensures DataZone APIs will work)")
-    verify_result = verify_domain_visibility(account_id, config, ram_result)
-    
-    # Combine results
     result = {
-        'ramShareArn': share_arn,
         'domainVisible': verify_result.get('domainVisible', False),
         'domainAccessible': verify_result.get('domainAccessible', False)
     }
     
-    print(f"✅ RAM share created and domain verified accessible")
+    print(f"✅ Domain verified accessible for account {account_id}")
     return result
 
 
@@ -753,6 +722,7 @@ def create_ram_share(account_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
             name=share_name
         )
         active_shares = [s for s in existing.get('resourceShares', []) if s['status'] == 'ACTIVE']
+        needs_recreate = False
         if active_shares:
             share_arn = active_shares[0]['resourceShareArn']
             print(f"   ✅ RAM share already exists: {share_arn}")
@@ -772,14 +742,63 @@ def create_ram_share(account_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
                 associationType='RESOURCE',
                 resourceShareArns=[share_arn]
             )
-            has_resource = any(a['associatedEntity'] == domain_arn and a['status'] == 'ASSOCIATED'
-                              for a in res_assocs.get('resourceShareAssociations', []))
-            if not has_resource:
-                print(f"   ⚠️  Resource missing, re-associating...")
+            resource_status = None
+            for a in res_assocs.get('resourceShareAssociations', []):
+                if a['associatedEntity'] == domain_arn:
+                    resource_status = a['status']
+                    break
+
+            if resource_status == 'ASSOCIATED':
+                print(f"   ✅ Resource already ASSOCIATED")
+            elif resource_status == 'FAILED':
+                # Strategy 1: Disassociate the FAILED resource, then re-associate
+                print(f"   ⚠️  Resource in FAILED state, attempting disassociate + re-associate...")
+                try:
+                    ram.disassociate_resource_share(
+                        resourceShareArn=share_arn,
+                        resourceArns=[domain_arn]
+                    )
+                    # Wait for disassociation to complete
+                    for _ in range(12):
+                        time.sleep(5)
+                        check = ram.get_resource_share_associations(
+                            associationType='RESOURCE',
+                            resourceShareArns=[share_arn]
+                        )
+                        still_there = any(
+                            a['associatedEntity'] == domain_arn and a['status'] != 'DISASSOCIATED'
+                            for a in check.get('resourceShareAssociations', [])
+                        )
+                        if not still_there:
+                            break
+                    print(f"   ✅ FAILED resource disassociated")
+                    ram.associate_resource_share(resourceShareArn=share_arn, resourceArns=[domain_arn])
+                    wait_for_ram_share_resources(share_arn, domain_arn)
+                    print(f"   ✅ Resource re-associated successfully")
+                except Exception as e1:
+                    # Strategy 2: Delete the entire share and recreate from scratch
+                    print(f"   ⚠️  Disassociate failed ({e1}), deleting share and recreating...")
+                    ram.delete_resource_share(resourceShareArn=share_arn)
+                    # Wait for deletion
+                    for _ in range(12):
+                        time.sleep(5)
+                        check = ram.get_resource_shares(
+                            resourceShareArns=[share_arn],
+                            resourceOwner='SELF'
+                        )
+                        if not check.get('resourceShares') or check['resourceShares'][0]['status'] == 'DELETED':
+                            break
+                    print(f"   ✅ Old share deleted, will recreate from scratch")
+                    needs_recreate = True
+            else:
+                # Resource missing or in another state — try associating
+                print(f"   ⚠️  Resource status: {resource_status}, re-associating...")
                 ram.associate_resource_share(resourceShareArn=share_arn, resourceArns=[domain_arn])
                 wait_for_ram_share_resources(share_arn, domain_arn)
-            print(f"   ✅ Existing RAM share verified with principal and resource")
-            return {'ramShareArn': share_arn}
+
+            if not needs_recreate:
+                print(f"   ✅ Existing RAM share verified with principal and resource")
+                return {'ramShareArn': share_arn}
         
         # Step 1: Create EMPTY RAM share (no principals, no resources)
         # CRITICAL: Do NOT pass principals here - under concurrent load they can
@@ -903,30 +922,85 @@ def wait_for_ram_principal_associated(share_arn: str, expected_principal: str, t
     )
 
 
-def enable_blueprints(account_id: str, config: Dict[str, Any], iam_result: Dict[str, Any]) -> Dict[str, Any]:
+def enable_blueprints(account_id: str, config: Dict[str, Any], iam_result: Dict[str, Any], vpc_result: Dict[str, Any] = None, s3_result: Dict[str, Any] = None) -> Dict[str, Any]:
     """Enable DataZone blueprints in project account"""
     print(f"📋 Enabling blueprints for account {account_id}")
     
     stack_name = f"DataZone-Blueprints-{account_id}"
     template_path = 'blueprint-enablement-iam.yaml'
+
+    # Build regional params from VPC and S3 results
+    vpc_id = (vpc_result or {}).get('vpcId', '')
+    subnet_ids_list = (vpc_result or {}).get('subnetIds', [])
+    subnet_ids = ','.join(s for s in subnet_ids_list if s)
+    bucket_name = (s3_result or {}).get('bucketName', '')
+    s3_location = f"s3://{bucket_name}" if bucket_name else ''
+
+    print(f"   VpcId:     {vpc_id or '(not provided)'}")
+    print(f"   SubnetIds: {subnet_ids or '(not provided)'}")
+    print(f"   S3:        {s3_location or '(not provided)'}")
     
     try:
+        cf_client = get_cross_account_client('cloudformation', account_id)
+
+        # Check if stack already exists (handles bad states too — same as other deploy_* functions)
+        status, outputs = check_existing_stack(cf_client, stack_name)
+        if status == 'healthy':
+            # Stack exists — update it if we now have VPC/S3 params (idempotent update)
+            if vpc_id and subnet_ids and s3_location:
+                print(f"   Blueprints stack exists — updating with VPC/S3 regional params...")
+                with open(template_path, 'r') as f:
+                    template_body = f.read()
+                try:
+                    cf_client.update_stack(
+                        StackName=stack_name,
+                        TemplateBody=template_body,
+                        Parameters=[
+                            {'ParameterKey': 'DomainId', 'ParameterValue': config['DomainId']},
+                            {'ParameterKey': 'ManageAccessRoleArn', 'ParameterValue': iam_result['manageAccessRoleArn']},
+                            {'ParameterKey': 'ProvisioningRoleArn', 'ParameterValue': iam_result['provisioningRoleArn']},
+                            {'ParameterKey': 'VpcId', 'ParameterValue': vpc_id},
+                            {'ParameterKey': 'SubnetIds', 'ParameterValue': subnet_ids},
+                            {'ParameterKey': 'S3BucketName', 'ParameterValue': s3_location},
+                            {'ParameterKey': 'DomainUnitId', 'ParameterValue': config.get('RootDomainUnitId', ROOT_DOMAIN_UNIT_ID)}
+                        ],
+                        Capabilities=['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM', 'CAPABILITY_AUTO_EXPAND'],
+                    )
+                    wait_for_stack_complete(cf_client, stack_name, timeout=3600)
+                    print(f"✅ Blueprints stack updated with regional params")
+                except cf_client.exceptions.ClientError as e:
+                    if 'No updates are to be performed' in str(e):
+                        print(f"✅ Blueprints stack already up to date")
+                    else:
+                        raise
+            else:
+                print(f"✅ Blueprints stack already exists, skipping (no VPC/S3 params available)")
+
+            response = cf_client.describe_stacks(StackName=stack_name)
+            outputs = response['Stacks'][0].get('Outputs', [])
+            blueprint_ids = [o['OutputValue'] for o in outputs if o['OutputKey'].endswith('BlueprintId')]
+            print(f"✅ {len(blueprint_ids)} blueprints enabled")
+            return {'blueprintIds': blueprint_ids}
+
         with open(template_path, 'r') as f:
             template_body = f.read()
         
-        # Deploy blueprint stack in PROJECT account
-        # EnvironmentBlueprintConfiguration resources are created in the project account
         print(f"   📍 Deploying blueprint stack in project account {account_id}")
-        cf_client = get_cross_account_client('cloudformation', account_id)
         
+        parameters = [
+            {'ParameterKey': 'DomainId', 'ParameterValue': config['DomainId']},
+            {'ParameterKey': 'ManageAccessRoleArn', 'ParameterValue': iam_result['manageAccessRoleArn']},
+            {'ParameterKey': 'ProvisioningRoleArn', 'ParameterValue': iam_result['provisioningRoleArn']},
+            {'ParameterKey': 'VpcId', 'ParameterValue': vpc_id},
+            {'ParameterKey': 'SubnetIds', 'ParameterValue': subnet_ids},
+            {'ParameterKey': 'S3BucketName', 'ParameterValue': s3_location},
+            {'ParameterKey': 'DomainUnitId', 'ParameterValue': config.get('RootDomainUnitId', ROOT_DOMAIN_UNIT_ID)}
+        ]
+
         cf_client.create_stack(
             StackName=stack_name,
             TemplateBody=template_body,
-            Parameters=[
-                {'ParameterKey': 'DomainId', 'ParameterValue': config['DomainId']},
-                {'ParameterKey': 'ManageAccessRoleArn', 'ParameterValue': iam_result['manageAccessRoleArn']},
-                {'ParameterKey': 'ProvisioningRoleArn', 'ParameterValue': iam_result['provisioningRoleArn']}
-            ],
+            Parameters=parameters,
             Capabilities=['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM', 'CAPABILITY_AUTO_EXPAND'],
             OnFailure='ROLLBACK',
             TimeoutInMinutes=60,
@@ -1031,6 +1105,60 @@ def verify_domain_visibility(account_id: str, config: Dict[str, Any], ram_result
     )
 
 
+def execute_update_blueprints(account_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
+    """Update only the Blueprints stack on an AVAILABLE account.
+
+    Reads VPC and S3 outputs from existing stacks, then calls enable_blueprints()
+    which will update_stack() if params changed or skip if already up to date.
+    Does NOT deprovision or touch any other stacks.
+    Account state is left as AVAILABLE throughout.
+    """
+    print(f"🔄 Updating blueprints for account {account_id}")
+
+    try:
+        cf_client = get_cross_account_client('cloudformation', account_id)
+
+        # Read VPC outputs from existing stack
+        vpc_result = {}
+        try:
+            resp = cf_client.describe_stacks(StackName=f"DataZone-VPC-{account_id}")
+            outputs = resp['Stacks'][0].get('Outputs', [])
+            vpc_result = {
+                'vpcId': get_output_value(outputs, 'VpcId'),
+                'subnetIds': [
+                    get_output_value(outputs, 'PrivateSubnet1Id'),
+                    get_output_value(outputs, 'PrivateSubnet2Id'),
+                    get_output_value(outputs, 'PrivateSubnet3Id')
+                ]
+            }
+        except Exception as e:
+            print(f"  ⚠️ Could not read VPC stack: {e}")
+
+        # Read IAM outputs from existing stack
+        iam_result = {}
+        try:
+            resp = cf_client.describe_stacks(StackName=f"DataZone-IAM-{account_id}")
+            outputs = resp['Stacks'][0].get('Outputs', [])
+            iam_result = {
+                'manageAccessRoleArn': get_output_value(outputs, 'ManageAccessRoleArn'),
+                'provisioningRoleArn': get_output_value(outputs, 'ProvisioningRoleArn')
+            }
+        except Exception as e:
+            print(f"  ⚠️ Could not read IAM stack: {e}")
+
+        # S3 bucket follows naming convention
+        s3_result = {'bucketName': f"datazone-blueprints-{account_id}-{config['Region']}"}
+
+        bp_result = enable_blueprints(account_id, config, iam_result, vpc_result, s3_result)
+
+        print(f"✅ Blueprints updated for {account_id}")
+        return {'status': 'UPDATED', 'accountId': account_id, 'blueprints': bp_result}
+
+    except Exception as e:
+        print(f"❌ Blueprint update failed for {account_id}: {e}")
+        raise
+
+
 def execute_cleanup_workflow(account_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
     """Execute cleanup workflow for REUSE strategy"""
     print(f"🧹 Starting cleanup workflow for account {account_id}")
@@ -1083,6 +1211,46 @@ def execute_cleanup_workflow(account_id: str, config: Dict[str, Any]) -> Dict[st
     except Exception as e:
         print(f"❌ Cleanup failed: {e}")
         mark_account_failed(account_id, 'cleanup', str(e))
+        raise
+
+
+def check_existing_stack(cf_client, stack_name):
+    """Check if a CloudFormation stack exists and handle bad states.
+
+    Returns:
+      ('healthy', outputs)  — stack is CREATE_COMPLETE/UPDATE_COMPLETE, use outputs
+      ('none', None)        — stack doesn't exist, caller should create it
+      ('cleaned', None)     — stack was in a bad state and has been deleted, caller should create it
+
+    This makes all deploy_* functions idempotent even when stacks are in
+    ROLLBACK_COMPLETE, DELETE_FAILED, or other terminal bad states.
+    """
+    HEALTHY = {'CREATE_COMPLETE', 'UPDATE_COMPLETE', 'UPDATE_ROLLBACK_COMPLETE'}
+    DELETABLE = {'ROLLBACK_COMPLETE', 'ROLLBACK_FAILED', 'CREATE_FAILED',
+                 'DELETE_FAILED', 'UPDATE_ROLLBACK_FAILED'}
+
+    try:
+        response = cf_client.describe_stacks(StackName=stack_name)
+        stack = response['Stacks'][0]
+        stack_status = stack['StackStatus']
+
+        if stack_status in HEALTHY:
+            return 'healthy', stack.get('Outputs', [])
+
+        if stack_status in DELETABLE:
+            print(f"  Stack {stack_name} in bad state ({stack_status}), deleting...")
+            cf_client.delete_stack(StackName=stack_name)
+            wait_for_stack_delete(cf_client, stack_name, timeout=300)
+            print(f"  Stack {stack_name} deleted, will recreate")
+            return 'cleaned', None
+
+        # Stack is in a transient state (IN_PROGRESS, etc.) — don't touch it
+        print(f"  Stack {stack_name} in transient state ({stack_status}), skipping")
+        raise Exception(f"Stack {stack_name} in transient state: {stack_status}")
+
+    except ClientError as e:
+        if 'does not exist' in str(e):
+            return 'none', None
         raise
 
 

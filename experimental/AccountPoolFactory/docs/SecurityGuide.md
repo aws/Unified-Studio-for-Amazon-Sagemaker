@@ -157,3 +157,55 @@ Why ExternalId: Prevents confused deputy - Setup Orchestrator must know secret E
 ## Related Documentation
 
 - [Architecture Guide](Architecture.md) - System architecture and component interactions
+
+## Tag-Based Account Identification
+
+Pool accounts are identified using a two-tier approach:
+
+1. **Primary**: AWS Organizations tags `ManagedBy: AccountPoolFactory` + `PoolName: {pool name}`
+2. **Fallback**: Account name prefix matching (for legacy accounts created before tagging was added)
+
+The ProvisionAccount Lambda tags new accounts immediately after creation. The AccountReconciler backfills tags on legacy accounts identified by name prefix only, ensuring all pool accounts converge to tag-based identification over time.
+
+Multi-pool isolation: each Reconciler instance only processes accounts with a matching `PoolName` tag. Accounts tagged with a different `PoolName` are skipped even if they have the `ManagedBy` tag.
+
+## Updated IAM Roles
+
+### AccountCreationRole Trust Update (Org Admin Account)
+
+The existing `SMUS-AccountPoolFactory-AccountCreation` role trust policy was updated to allow the AccountReconciler Lambda role as an additional trusted principal (alongside the existing Pool Manager role). No new role was created in the Org Admin account.
+
+Additional permissions added:
+- `organizations:ListTagsForResource` — read tags on org accounts
+- `organizations:TagResource` — backfill tags on legacy accounts
+- `organizations:ListAccountsForParent` — OU-scoped account listing
+
+### ProvisionAccountRole Update (Org Admin Account)
+
+Additional permissions added:
+- `organizations:TagResource` — tag newly created accounts
+- `organizations:ListTagsForResource` — verify tags
+
+### AccountReconcilerRole (Domain Account)
+
+New role: `SMUS-AccountPoolFactory-AccountReconciler-Role`
+
+Permissions:
+- DynamoDB: Query, PutItem, UpdateItem, GetItem on AccountState table + indexes
+- STS: AssumeRole on `SMUS-AccountPoolFactory-AccountCreation` (Org Admin) and `SMUS-AccountPoolFactory-DomainAccess` (project accounts)
+- SSM: GetParameter on `/AccountPoolFactory/PoolManager/*`
+- CloudWatch: PutMetricData
+- SNS: Publish to AlertTopic
+- Lambda: InvokeFunction on AccountRecycler and PoolManager
+
+### AccountRecyclerRole (Domain Account)
+
+New role: `SMUS-AccountPoolFactory-AccountRecycler-Role`
+
+Permissions:
+- DynamoDB: Query, PutItem, UpdateItem, GetItem on AccountState table + indexes
+- Lambda: InvokeFunction on DeprovisionAccount, SetupOrchestrator, ProvisionAccount (cross-account)
+- STS: AssumeRole on `SMUS-AccountPoolFactory-DomainAccess` (project accounts)
+- SSM: GetParameter on `/AccountPoolFactory/PoolManager/*`
+- CloudWatch: PutMetricData
+- SNS: Publish to AlertTopic

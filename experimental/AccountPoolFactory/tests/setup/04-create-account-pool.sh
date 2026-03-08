@@ -5,7 +5,8 @@ set -e
 # This script creates the account pool and registers the Lambda
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+cd "$PROJECT_ROOT"
 
 # Load configuration
 REGION=$(grep "region:" config.yaml | awk '{print $2}')
@@ -26,15 +27,14 @@ LAMBDA_ARN=$(aws lambda get-function \
     --query 'Configuration.FunctionArn' \
     --output text)
 
-# Get Lambda Role ARN
-LAMBDA_ROLE_ARN=$(aws lambda get-function \
-    --function-name AccountProvider \
-    --region "$REGION" \
-    --query 'Configuration.Role' \
+# Get AccountResolution role ARN (DataZone assumes this role to invoke the Lambda)
+LAMBDA_ROLE_ARN=$(aws iam get-role \
+    --role-name SMUS-AccountPoolFactory-AccountResolution-Role \
+    --query 'Role.Arn' \
     --output text)
 
 echo "Lambda Function ARN: $LAMBDA_ARN"
-echo "Lambda Role ARN: $LAMBDA_ROLE_ARN"
+echo "AccountResolution Role ARN: $LAMBDA_ROLE_ARN"
 echo ""
 
 # Account Pool Configuration
@@ -99,7 +99,7 @@ echo "Resolution Strategy: $RESOLUTION_STRATEGY"
 echo ""
 
 # Save pool details to file
-echo "$POOL_OUTPUT" | jq '.' > account-pool-details.json
+echo "$POOL_OUTPUT" | jq '.' > "$PROJECT_ROOT/account-pool-details.json"
 echo "📄 Pool details saved to: account-pool-details.json"
 echo ""
 

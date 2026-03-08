@@ -43,11 +43,143 @@ def lambda_handler(event, context):
     
     if action == 'provision':
         return provision_account(event)
+    elif action == 'fixStackSet':
+        return fix_stackset(event)
+    elif action == 'fixStackSetBatch':
+        return fix_stackset_batch(event)
     else:
         return {
             'status': 'ERROR',
             'message': f'Unknown action: {action}'
         }
+
+def fix_stackset_batch(event: Dict[str, Any]) -> Dict[str, Any]:
+    """Deploy DomainAccess StackSet instances for multiple accounts in one operation.
+
+    Uses a single create_stack_instances call with all account IDs to avoid
+    OperationInProgressException from concurrent single-account calls.
+
+    Steps:
+    1. Deploy StackSetExecution role to each account sequentially (required before StackSet)
+    2. Single create_stack_instances call with all accounts
+    3. Wait for the operation to complete
+    """
+    account_ids = event.get('accountIds', [])
+    domain_id = event.get('domainId')
+    domain_account_id = event.get('domainAccountId')
+
+    if not account_ids or not domain_id or not domain_account_id:
+        return {'status': 'ERROR', 'message': 'Missing required: accountIds, domainId, domainAccountId'}
+
+    print(f"🔧 Batch StackSet fix for {len(account_ids)} accounts")
+    org_admin_account_id = sts.get_caller_identity()['Account']
+
+    # Step 1: Deploy StackSetExecution role to each account (sequential — uses OrganizationAccountAccessRole)
+    failed_execution_role = []
+    for account_id in account_ids:
+        try:
+            print(f"   Step 1: StackSetExecution role → {account_id}")
+            deploy_stackset_execution_role(account_id, org_admin_account_id)
+        except Exception as e:
+            print(f"   ⚠️  StackSetExecution role failed for {account_id}: {e}")
+            failed_execution_role.append(account_id)
+
+    # Only proceed with accounts that got the execution role
+    ready_accounts = [a for a in account_ids if a not in failed_execution_role]
+    if not ready_accounts:
+        return {'status': 'ERROR', 'message': 'All accounts failed StackSetExecution role deployment'}
+
+    # Step 2: Wait for any in-progress StackSet operation, then batch create
+    print(f"   Step 2: Waiting for any in-progress StackSet operation...")
+    _wait_for_any_stackset_operation(DOMAIN_ACCESS_STACKSET_NAME, timeout=300)
+
+    print(f"   Step 2: create_stack_instances for {len(ready_accounts)} accounts...")
+    try:
+        response = cloudformation.create_stack_instances(
+            StackSetName=DOMAIN_ACCESS_STACKSET_NAME,
+            Accounts=ready_accounts,
+            Regions=[REGION],
+            OperationPreferences={
+                'FailureToleranceCount': len(ready_accounts),  # tolerate partial failures
+                'MaxConcurrentCount': 5
+            }
+        )
+        operation_id = response['OperationId']
+        print(f"   Operation ID: {operation_id}")
+
+        # Step 3: Wait for the batch operation to complete
+        # Use a longer timeout — batch of N accounts takes N * ~30s
+        timeout = min(300 + len(ready_accounts) * 30, 840)
+        wait_for_stackset_operation(DOMAIN_ACCESS_STACKSET_NAME, operation_id,
+                                    ready_accounts[0], timeout=timeout)
+        print(f"✅ Batch StackSet operation complete for {len(ready_accounts)} accounts")
+
+    except ClientError as e:
+        error_code = e.response.get('Error', {}).get('Code', '')
+        if error_code == 'OperationInProgressException':
+            # Still busy — caller will retry on next recycler wave
+            return {'status': 'ERROR', 'message': f'StackSet still busy: {e}'}
+        raise
+
+    return {
+        'status': 'SUCCESS',
+        'accountIds': ready_accounts,
+        'failedExecutionRole': failed_execution_role,
+        'message': f'StackSet deployed to {len(ready_accounts)} accounts'
+    }
+
+
+def fix_stackset(event: Dict[str, Any]) -> Dict[str, Any]:
+    """Deploy DomainAccess StackSet instance for an existing account.
+
+    Called by the Reconciler when it finds a pool account missing the
+    SMUS-AccountPoolFactory-DomainAccess role. This handles accounts
+    that were created before the StackSet was set up, or where the
+    StackSet instance was never deployed.
+
+    Two-step process:
+    1. Deploy StackSetExecution role via OrganizationAccountAccessRole
+       (needed for SELF_MANAGED StackSets to operate in the target account)
+    2. Deploy DomainAccess StackSet instance
+    """
+    account_id = event.get('accountId')
+    domain_id = event.get('domainId')
+    domain_account_id = event.get('domainAccountId')
+
+    if not all([account_id, domain_id, domain_account_id]):
+        return {
+            'status': 'ERROR',
+            'message': 'Missing required parameters: accountId, domainId, domainAccountId'
+        }
+
+    print(f"🔧 Fixing StackSet for account {account_id}")
+
+    try:
+        # This Lambda runs in Org Admin — get our own account ID
+        org_admin_account_id = sts.get_caller_identity()['Account']
+
+        # Step 1: Ensure StackSetExecution role exists in target account
+        print(f"   Step 1: Deploying StackSetExecution role...")
+        deploy_stackset_execution_role(account_id, org_admin_account_id)
+
+        # Step 2: Deploy DomainAccess StackSet instance
+        print(f"   Step 2: Deploying DomainAccess StackSet instance...")
+        deploy_domain_access_role_stackset(account_id, domain_id, domain_account_id)
+
+        print(f"✅ StackSet instance deployed for {account_id}")
+        return {
+            'status': 'SUCCESS',
+            'accountId': account_id,
+            'message': 'StackSet instance deployed'
+        }
+    except Exception as e:
+        print(f"❌ StackSet fix failed for {account_id}: {e}")
+        return {
+            'status': 'ERROR',
+            'accountId': account_id,
+            'message': str(e)
+        }
+
 
 
 def provision_account(event: Dict[str, Any]) -> Dict[str, Any]:
@@ -76,10 +208,24 @@ def provision_account(event: Dict[str, Any]) -> Dict[str, Any]:
     
     try:
         # Step 1: Create account
-        print(f"📝 Step 1: Creating account via Organizations API...")
+        print("Step 1: Creating account via Organizations API...")
         account_id = create_account(account_name, account_email)
-        print(f"   ✅ Account created: {account_id}")
-        
+        print(f"   Account created: {account_id}")
+
+        # Step 1b: Tag account for reconciliation tracking
+        pool_name = event.get('poolName', 'AccountPoolFactory')
+        try:
+            organizations.tag_resource(
+                ResourceId=account_id,
+                Tags=[
+                    {'Key': 'ManagedBy', 'Value': 'AccountPoolFactory'},
+                    {'Key': 'PoolName', 'Value': pool_name}
+                ]
+            )
+            print(f"   Tagged account {account_id} with ManagedBy=AccountPoolFactory, PoolName={pool_name}")
+        except Exception as tag_error:
+            print(f"   Warning: Failed to tag account {account_id}: {tag_error}")
+
         # Step 2: Move account to target OU
         print(f"📦 Step 2: Moving account to target OU...")
         move_account_to_ou(account_id, ou_id)
@@ -471,22 +617,34 @@ def deploy_domain_access_role_stackset(account_id: str, domain_id: str, domain_a
         
     except ClientError as e:
         error_code = e.response.get('Error', {}).get('Code', '')
-        
-        # If instance already exists, that's fine - it's idempotent
+
         if error_code == 'OperationInProgressException':
-            print(f"   ⏳ Another operation in progress, waiting...")
-            time.sleep(30)
-            # Verify instance exists
-            response = cloudformation.list_stack_instances(
-                StackSetName=DOMAIN_ACCESS_STACKSET_NAME,
-                StackInstanceAccount=account_id,
-                StackInstanceRegion=REGION
-            )
-            if response.get('Summaries'):
-                print(f"   ✅ StackSet instance exists")
-                return
-            else:
-                raise Exception("StackSet instance not found after operation")
+            # Another StackSet operation is running (likely for a different account).
+            # Wait for it to finish, then retry create_stack_instances for THIS account.
+            print(f"   ⏳ StackSet operation in progress, waiting for it to finish...")
+            _wait_for_any_stackset_operation(DOMAIN_ACCESS_STACKSET_NAME, timeout=180)
+
+            # Retry once — the StackSet is now free
+            print(f"   🔄 Retrying create_stack_instances for {account_id}...")
+            try:
+                response = cloudformation.create_stack_instances(
+                    StackSetName=DOMAIN_ACCESS_STACKSET_NAME,
+                    Accounts=[account_id],
+                    Regions=[REGION],
+                    OperationPreferences={
+                        'FailureToleranceCount': 0,
+                        'MaxConcurrentCount': 1
+                    }
+                )
+                operation_id = response['OperationId']
+                wait_for_stackset_operation(DOMAIN_ACCESS_STACKSET_NAME, operation_id, account_id, timeout=180)
+                print(f"   ✅ StackSet instance deployed successfully (after retry)")
+            except ClientError as e2:
+                # If it already exists now (race condition resolved), that's fine
+                if 'already exists' in str(e2).lower():
+                    print(f"   ✅ StackSet instance already exists")
+                else:
+                    raise
         else:
             raise
 
@@ -515,6 +673,29 @@ def wait_for_stack_complete(cf_client, stack_name: str, timeout: int = 300):
                 raise
     
     raise Exception(f"Stack creation timed out after {timeout} seconds")
+
+
+def _wait_for_any_stackset_operation(stackset_name: str, timeout: int = 180):
+    """Wait until no StackSet operation is in progress (any operation, any account).
+    Used to serialize concurrent create_stack_instances calls."""
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        try:
+            response = cloudformation.list_stack_set_operations(
+                StackSetName=stackset_name,
+                MaxResults=5
+            )
+            in_progress = [
+                op for op in response.get('Summaries', [])
+                if op.get('Status') in ('RUNNING', 'STOPPING')
+            ]
+            if not in_progress:
+                return
+            print(f"   ⏳ Waiting for StackSet operation to finish ({len(in_progress)} running)...")
+        except ClientError:
+            return  # If we can't check, proceed anyway
+        time.sleep(15)
+    print(f"   ⚠️  Timed out waiting for StackSet operation, proceeding anyway")
 
 
 def wait_for_stackset_operation(stackset_name: str, operation_id: str, account_id: str, timeout: int = 180):

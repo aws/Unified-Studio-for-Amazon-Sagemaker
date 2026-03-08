@@ -35,6 +35,10 @@ experimental/AccountPoolFactory/
 │   │   └── README.md
 │   ├── account-creator/                         # Account creation trigger
 │   │   └── README.md
+│   ├── account-reconciler/                      # Account reconciliation (discovers untracked accounts)
+│   │   └── lambda_function.py
+│   ├── account-recycler/                        # Account recycling (reclaims ORPHANED/FAILED accounts)
+│   │   └── lambda_function.py
 │   ├── setup-orchestrator/                      # Account setup orchestration
 │   │   └── README.md
 │   └── shared/                                  # Shared utilities
@@ -80,6 +84,8 @@ Four main Lambda functions:
 2. **pool-manager**: Monitors and replenishes the pool
 3. **account-creator**: Triggers Control Tower account creation
 4. **setup-orchestrator**: Deploys CF3 to new accounts
+5. **account-reconciler**: Discovers untracked org accounts, validates pool state, backfills tags
+6. **account-recycler**: Reclaims ORPHANED/FAILED/CLEANING accounts back to AVAILABLE
 
 Plus **shared** utilities for common functionality.
 

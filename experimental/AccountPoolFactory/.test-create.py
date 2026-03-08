@@ -1,4 +1,9 @@
-import json, subprocess, os, time
+import json, subprocess, os, time, yaml
+
+with open('experimental/AccountPoolFactory/config.yaml') as f:
+    config = yaml.safe_load(f)
+
+DOMAIN_ID = config['datazone']['domain_id']
 
 creds = json.load(open('experimental/AccountPoolFactory/.tmp-creds.json'))
 env = os.environ.copy()
@@ -20,7 +25,7 @@ role_configs = json.dumps([
 
 cmd = [
     'aws', 'datazone', 'create-project',
-    '--domain-identifier', 'dzd-5o0lje5xgpeuw9',
+    '--domain-identifier', DOMAIN_ID,
     '--name', f'test-from-pool-{ts}',
     '--description', 'Test from pool account',
     '--project-profile-id', '48ly31ms09wckp',

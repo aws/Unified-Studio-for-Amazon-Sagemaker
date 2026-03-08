@@ -434,5 +434,74 @@ This section describes each account type, the resources deployed in it, and how 
 - Maintains approved infrastructure (no re-deployment needed)
 - Automatic cleanup with dependency-aware deletion
 
+## Account Reconciliation & Recycling
+
+The Account Pool Factory includes two additional Lambda functions for self-healing and account lifecycle management.
+
+### Lambda: AccountReconciler
+
+**Trigger**: Manual invocation or scheduled EventBridge rule
+
+**What it does**:
+1. Assumes `SMUS-AccountPoolFactory-AccountCreation` role in Org Admin account
+2. Lists accounts in the Target OU via `list_accounts_for_parent` (scoped, not full org)
+3. Filters by name prefix, then verifies/backfills `ManagedBy: AccountPoolFactory` + `PoolName` tags
+4. Multi-pool isolation: skips accounts tagged with a different `PoolName`
+5. Reconciles against DynamoDB:
+   - Untracked org accounts → creates ORPHANED records
+   - AVAILABLE accounts → validates `SMUS-AccountPoolFactory-DomainAccess` role exists (STS assume)
+   - ASSIGNED accounts → verifies `projectStackName` attribute
+   - DynamoDB records with no matching org account → SUSPENDED
+6. Backfills tags on legacy accounts identified by name prefix only
+7. Publishes CloudWatch metrics (`ReconciliationCompleted`)
+8. Optionally invokes AccountRecycler (`autoRecycle=true`) for ORPHANED/FAILED accounts
+9. Optionally invokes Pool Manager (`autoReplenish=true`) if AVAILABLE count < MinimumPoolSize
+
+**Key features**:
+- Dry-run mode: compute changes without writing to DynamoDB
+- Conditional DynamoDB writes prevent overwriting concurrent changes
+- Rate-limited tag API calls for large OUs
+- Replaces manual seeding when used with `autoReplenish=true`
+
+**IAM Role**: `SMUS-AccountPoolFactory-AccountReconciler-Role`
+
+### Lambda: AccountRecycler
+
+**Trigger**: Invoked by AccountReconciler (`autoRecycle`) or manual invocation
+
+**What it does**:
+1. Processes accounts based on current state:
+   - **CLEANING**: Invoke DeprovisionAccount → SetupOrchestrator → AVAILABLE
+   - **FAILED**: Classify recoverable vs non-recoverable; retry with limit or transition to DELETING
+   - **ORPHANED**: Check DomainAccess role → SetupOrchestrator (or ProvisionAccount first if role missing)
+   - **AVAILABLE**: No-op (idempotent)
+2. Clears project-specific attributes on AVAILABLE transition
+3. Tracks retry count per account; stops after `MaxRecycleRetries` (default 3)
+4. Batch mode (`recycleAll=true`): processes CLEANING/FAILED/ORPHANED accounts concurrently
+5. Publishes CloudWatch metrics (`RecyclingSucceeded`, `RecyclingFailed`, `BatchRecyclingCompleted`)
+6. Sends SNS notifications on failures
+
+**IAM Role**: `SMUS-AccountPoolFactory-AccountRecycler-Role`
+
+### Reconciliation + Recycling Flow
+
+```
+AccountReconciler (scheduled or manual)
+  │
+  ├─ Discovers untracked org accounts → ORPHANED in DynamoDB
+  ├─ Validates AVAILABLE accounts (role check)
+  ├─ Detects stale records → SUSPENDED
+  ├─ Backfills tags on legacy accounts
+  │
+  ├─ autoRecycle=true?
+  │   └─ Invoke AccountRecycler for ORPHANED/FAILED accounts
+  │       ├─ CLEANING → Deprovision → Setup → AVAILABLE
+  │       ├─ FAILED → Retry or DELETING
+  │       └─ ORPHANED → Setup (or Provision first) → AVAILABLE
+  │
+  └─ autoReplenish=true?
+      └─ AVAILABLE < MinimumPoolSize → Invoke Pool Manager force_replenishment
+```
+
 
 

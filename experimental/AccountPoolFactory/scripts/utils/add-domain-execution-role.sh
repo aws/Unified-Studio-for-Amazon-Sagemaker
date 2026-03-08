@@ -4,9 +4,18 @@ set -e
 echo "🔧 Adding Domain Execution Role to IAM-mode DataZone Domain"
 echo "============================================================"
 
-DOMAIN_ID="dzd-5o0lje5xgpeuw9"
-DOMAIN_ACCOUNT_ID="994753223772"
-REGION="us-east-2"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+cd "$PROJECT_ROOT"
+
+if [ ! -f "config.yaml" ]; then
+    echo "❌ config.yaml not found"
+    exit 1
+fi
+
+DOMAIN_ID=$(grep "domain_id:" config.yaml | awk '{print $2}')
+DOMAIN_ACCOUNT_ID=$(grep "domain_account_id:" config.yaml | awk '{print $2}' | tr -d '"')
+REGION=$(grep "region:" config.yaml | awk '{print $2}')
 ROLE_NAME="AmazonDataZoneDomainExecutionRole"
 
 echo ""

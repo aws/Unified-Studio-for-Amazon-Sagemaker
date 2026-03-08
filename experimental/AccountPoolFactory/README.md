@@ -59,6 +59,8 @@ See [docs/UserGuide.md](docs/UserGuide.md) → "Setup by Persona" section
 
 The Account Pool Factory automatically provisions and manages a pool of AWS accounts that can be instantly assigned to new DataZone projects. It integrates with AWS Control Tower Account Factory for account creation and uses a custom Lambda function to provide accounts to DataZone through the custom account pool handler.
 
+The system also includes self-healing capabilities through account reconciliation and recycling. The AccountReconciler Lambda discovers untracked accounts in the organization, validates pool state, and backfills tags. The AccountRecycler Lambda reclaims ORPHANED, FAILED, and CLEANING accounts back to AVAILABLE state by orchestrating deprovision and re-setup workflows. Together, they enable automatic pool maintenance without manual intervention.
+
 ## Architecture
 
 The solution operates across three types of AWS accounts:

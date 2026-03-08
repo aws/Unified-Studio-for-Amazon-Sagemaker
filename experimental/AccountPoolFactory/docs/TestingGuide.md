@@ -438,6 +438,110 @@ aws cloudformation delete-stack \
 
 For simpler setups, the Org Admin and Domain roles can run in the same AWS account. Project accounts are still dynamically created via Organizations.
 
+## Account Reconciliation & Recycling Testing
+
+### Test AccountReconciler — Dry Run
+
+Invoke the Reconciler in dry-run mode to see what it would do without making changes:
+
+```bash
+aws lambda invoke \
+  --function-name AccountReconciler \
+  --cli-binary-format raw-in-base64-out \
+  --payload '{"source":"manual","dryRun":true}' \
+  --region us-east-2 \
+  /tmp/reconciler-dryrun.json
+
+cat /tmp/reconciler-dryrun.json | python3 -m json.tool
+```
+
+**Expected output**: Summary showing `totalOrgAccounts`, `totalPoolAccounts`, `orphanedCreated`, `staleUpdated`, `unchanged`, `tagsBackfilled` counts. No DynamoDB changes.
+
+### Test AccountReconciler — Live Run
+
+```bash
+aws lambda invoke \
+  --function-name AccountReconciler \
+  --cli-binary-format raw-in-base64-out \
+  --payload '{"source":"manual","dryRun":false}' \
+  --region us-east-2 \
+  /tmp/reconciler-live.json
+
+cat /tmp/reconciler-live.json | python3 -m json.tool
+```
+
+**Verify**: Check DynamoDB for new ORPHANED records and updated states:
+```bash
+aws dynamodb scan \
+  --table-name AccountPoolFactory-AccountState \
+  --filter-expression '#s = :orphaned' \
+  --expression-attribute-names '{"#s":"state"}' \
+  --expression-attribute-values '{":orphaned":{"S":"ORPHANED"}}' \
+  --region us-east-2
+```
+
+### Test AccountReconciler — With Auto-Recycle and Auto-Replenish
+
+```bash
+aws lambda invoke \
+  --function-name AccountReconciler \
+  --cli-binary-format raw-in-base64-out \
+  --payload '{"source":"manual","dryRun":false,"autoRecycle":true,"autoReplenish":true}' \
+  --region us-east-2 \
+  /tmp/reconciler-full.json
+
+cat /tmp/reconciler-full.json | python3 -m json.tool
+```
+
+**Expected**: `recyclingTriggered: true` if ORPHANED/FAILED accounts exist, `replenishmentTriggered: true` if AVAILABLE < MinimumPoolSize.
+
+### Test AccountRecycler — Single Account
+
+Pick a FAILED or ORPHANED account from DynamoDB and recycle it:
+
+```bash
+aws lambda invoke \
+  --function-name AccountRecycler \
+  --cli-binary-format raw-in-base64-out \
+  --payload '{"accountId":"ACCOUNT_ID_HERE"}' \
+  --region us-east-2 \
+  /tmp/recycler-single.json
+
+cat /tmp/recycler-single.json | python3 -m json.tool
+```
+
+**Verify**: Account should transition to AVAILABLE (or FAILED with error details if something went wrong).
+
+### Test AccountRecycler — Batch (Recycle All)
+
+```bash
+aws lambda invoke \
+  --function-name AccountRecycler \
+  --cli-binary-format raw-in-base64-out \
+  --payload '{"recycleAll":true}' \
+  --region us-east-2 \
+  /tmp/recycler-batch.json
+
+cat /tmp/recycler-batch.json | python3 -m json.tool
+```
+
+**Expected**: Summary with `totalProcessed`, `succeeded`, `failed`, `skipped` counts.
+
+### Verify CloudWatch Metrics
+
+After running reconciliation/recycling, check CloudWatch metrics:
+
+```bash
+aws cloudwatch get-metric-statistics \
+  --namespace AccountPoolFactory \
+  --metric-name ReconciliationCompleted \
+  --start-time $(date -u -v-1H +%Y-%m-%dT%H:%M:%S) \
+  --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
+  --period 300 \
+  --statistics Sum \
+  --region us-east-2
+```
+
 **Differences from multi-account:**
 - One account hosts both AWS Organizations management and the DataZone domain
 - All scripts (org-mgmt + domain) run against the same account — no credential switching needed

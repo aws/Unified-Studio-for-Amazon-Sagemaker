@@ -20,8 +20,8 @@ eval $(isengardcli credentials amirbo+3@amazon.com)
 
 ## Key Resource IDs
 
-- DataZone Domain ID: `dzd-5o0lje5xgpeuw9`
-- Root Domain Unit ID: `563ikhcj7fgkrt`
+- DataZone Domain ID: `dzd-4h7jbz76qckoh5`
+- Root Domain Unit ID: `bsmdc8e4dwye5l`
 - Region: `us-east-2`
 - DynamoDB table: `AccountPoolFactory-AccountState` (composite key: accountId + timestamp)
 - AccountProvider Lambda handler: `lambda_function_prod.lambda_handler`
@@ -36,3 +36,4 @@ eval $(isengardcli credentials amirbo+3@amazon.com)
 - macOS ships with bash 3 — don't use `declare -A` (associative arrays), use temp files instead
 - Template 03 (domain-access-stackset.yaml) is a StackSet template body referenced by deploy script 02, not a standalone CF stack
 - Explain your plan before executing
+- if you working on AccountPoolFactory use experimental/AccountPoolFactory/.kiro for your specs and steering files. 

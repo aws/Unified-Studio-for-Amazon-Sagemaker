@@ -46,7 +46,7 @@ Parameters:
     Type: Number
     Default: 3
     Description: Maximum concurrent setups
-  
+
   EmailPrefix:
     Type: String
     Default: accountpool
@@ -73,8 +73,15 @@ Parameters:
     Default: arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
     Description: Managed policy ARN for the project execution role
 
+  ExpectedStackPatterns:
+    Type: String
+    Default: 'DataZone-VPC-{account_id},DataZone-IAM-{account_id},DataZone-EventBridge-{account_id},DataZone-ProjectRole-{account_id},DataZone-Blueprints-{account_id}'
+    Description: Comma-separated stack name patterns deployed by SetupOrchestrator into each project account
+
 Resources:
+  # ============================================================
   # DynamoDB Table
+  # ============================================================
   AccountStateTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -124,7 +131,9 @@ Resources:
         - Key: ManagedBy
           Value: AccountPoolFactory
 
+  # ============================================================
   # SNS Topic
+  # ============================================================
   AlertTopic:
     Type: AWS::SNS::Topic
     Properties:
@@ -134,7 +143,9 @@ Resources:
         - Key: ManagedBy
           Value: AccountPoolFactory
 
-  # EventBridge Central Bus
+  # ============================================================
+  # EventBridge
+  # ============================================================
   CentralEventBus:
     Type: AWS::Events::EventBus
     Properties:
@@ -143,7 +154,6 @@ Resources:
         - Key: ManagedBy
           Value: AccountPoolFactory
 
-  # EventBridge Rule to trigger Pool Manager
   PoolManagerTriggerRule:
     Type: AWS::Events::Rule
     Properties:
@@ -163,7 +173,6 @@ Resources:
         - Arn: !GetAtt PoolManagerFunction.Arn
           Id: PoolManagerLambda
 
-  # Permission for EventBridge to invoke Pool Manager
   PoolManagerInvokePermission:
     Type: AWS::Lambda::Permission
     Properties:
@@ -172,11 +181,15 @@ Resources:
       Principal: events.amazonaws.com
       SourceArn: !GetAtt PoolManagerTriggerRule.Arn
 
-  # IAM Role for Pool Manager Lambda
-  PoolManagerRole:
+  # ============================================================
+  # Unified Lambda Execution Role
+  # All AccountPoolFactory Lambdas in the domain account share this role.
+  # ============================================================
+  LambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: SMUS-AccountPoolFactory-PoolManager-Role
+      RoleName: SMUS-AccountPoolFactory-LambdaExecution-Role
+      Description: Shared execution role for all AccountPoolFactory Lambda functions
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -187,17 +200,11 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
-        - PolicyName: PoolManagerPolicy
+        - PolicyName: AccountPoolFactoryPolicy
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
-              # Invoke ProvisionAccount Lambda in Org Admin account
-              - Effect: Allow
-                Action:
-                  - lambda:InvokeFunction
-                Resource: !Ref ProvisionAccountFunctionArn
-              
-              # DynamoDB operations
+              # DynamoDB
               - Effect: Allow
                 Action:
                   - dynamodb:Query
@@ -208,50 +215,88 @@ Resources:
                 Resource:
                   - !GetAtt AccountStateTable.Arn
                   - !Sub '${AccountStateTable.Arn}/index/*'
-              
-              # Invoke SetupOrchestrator
+
+              # Lambda invocations (self + cross-account ProvisionAccount)
               - Effect: Allow
                 Action:
                   - lambda:InvokeFunction
-                Resource: !GetAtt SetupOrchestratorFunction.Arn
-              
-              # Invoke DeprovisionAccount
+                Resource:
+                  - !Ref ProvisionAccountFunctionArn
+                  - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:PoolManager'
+                  - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:SetupOrchestrator'
+                  - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:DeprovisionAccount'
+                  - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:AccountReconciler'
+                  - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:AccountRecycler'
+
+              # Cross-account assume role (Org Admin + project accounts)
               - Effect: Allow
                 Action:
-                  - lambda:InvokeFunction
-                Resource: !GetAtt DeprovisionAccountFunction.Arn
-              
-              # SNS notifications
+                  - sts:AssumeRole
+                Resource:
+                  - !Sub 'arn:aws:iam::${OrgAdminAccountId}:role/SMUS-AccountPoolFactory-AccountCreation'
+                  - 'arn:aws:iam::*:role/SMUS-AccountPoolFactory-DomainAccess'
+                  - 'arn:aws:iam::*:role/OrganizationAccountAccessRole'
+
+              # SNS
               - Effect: Allow
                 Action:
                   - sns:Publish
                 Resource: !Ref AlertTopic
-              
+
               # CloudWatch metrics
               - Effect: Allow
                 Action:
                   - cloudwatch:PutMetricData
                 Resource: '*'
-              
+
               # SSM parameters
               - Effect: Allow
                 Action:
                   - ssm:GetParameter
                   - ssm:GetParameters
                   - ssm:GetParametersByPath
-                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/AccountPoolFactory/PoolManager/*'
+                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/AccountPoolFactory/*'
+
+              # RAM
+              - Effect: Allow
+                Action:
+                  - ram:CreateResourceShare
+                  - ram:DeleteResourceShare
+                  - ram:AssociateResourceShare
+                  - ram:DisassociateResourceShare
+                  - ram:GetResourceShares
+                  - ram:GetResourceShareAssociations
+                  - ram:ListResources
+                  - ram:TagResource
+                Resource: '*'
+
+              # DataZone
+              - Effect: Allow
+                Action:
+                  - datazone:PutDomainSharingPolicy
+                  - datazone:GetDomain
+                Resource: !Sub 'arn:aws:datazone:${AWS::Region}:${AWS::AccountId}:domain/${DomainId}'
+
+              # KMS (for SSM SecureString)
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: '*'
       Tags:
         - Key: ManagedBy
           Value: AccountPoolFactory
 
-  # Pool Manager Lambda Function
+  # ============================================================
+  # Lambda Functions (all use LambdaExecutionRole)
+  # ============================================================
+
   PoolManagerFunction:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: PoolManager
       Runtime: python3.12
       Handler: lambda_function.lambda_handler
-      Role: !GetAtt PoolManagerRole.Arn
+      Role: !GetAtt LambdaExecutionRole.Arn
       Timeout: 300
       MemorySize: 512
       ReservedConcurrentExecutions: 10
@@ -272,101 +317,13 @@ Resources:
         - Key: ManagedBy
           Value: AccountPoolFactory
 
-  # IAM Role for Setup Orchestrator Lambda
-  SetupOrchestratorRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: SMUS-AccountPoolFactory-SetupOrchestrator-Role
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-      Policies:
-        - PolicyName: SetupOrchestratorPolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              # Cross-account assume role into project accounts
-              - Effect: Allow
-                Action:
-                  - sts:AssumeRole
-                Resource:
-                  - 'arn:aws:iam::*:role/SMUS-AccountPoolFactory-DomainAccess'
-                  - 'arn:aws:iam::*:role/OrganizationAccountAccessRole'
-
-              # RAM - create shares, associate principals/resources, query state
-              - Effect: Allow
-                Action:
-                  - ram:CreateResourceShare
-                  - ram:DeleteResourceShare
-                  - ram:AssociateResourceShare
-                  - ram:DisassociateResourceShare
-                  - ram:GetResourceShares
-                  - ram:GetResourceShareAssociations
-                  - ram:ListResources
-                  - ram:TagResource
-                Resource: '*'
-
-              # DataZone - domain sharing policy (needed for RAM resource association)
-              - Effect: Allow
-                Action:
-                  - datazone:PutDomainSharingPolicy
-                  - datazone:GetDomain
-                Resource: !Sub 'arn:aws:datazone:${AWS::Region}:${AWS::AccountId}:domain/${DomainId}'
-
-              # DynamoDB - account state tracking
-              - Effect: Allow
-                Action:
-                  - dynamodb:Query
-                  - dynamodb:PutItem
-                  - dynamodb:UpdateItem
-                  - dynamodb:GetItem
-                Resource:
-                  - !GetAtt AccountStateTable.Arn
-                  - !Sub '${AccountStateTable.Arn}/index/*'
-
-              # SNS - failure notifications
-              - Effect: Allow
-                Action:
-                  - sns:Publish
-                Resource: !Ref AlertTopic
-
-              # SSM - read configuration parameters
-              - Effect: Allow
-                Action:
-                  - ssm:GetParameter
-                  - ssm:GetParameters
-                  - ssm:GetParametersByPath
-                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/AccountPoolFactory/*'
-
-              # CloudWatch - publish metrics
-              - Effect: Allow
-                Action:
-                  - cloudwatch:PutMetricData
-                Resource: '*'
-
-              # KMS - decrypt SSM SecureString parameters
-              - Effect: Allow
-                Action:
-                  - kms:Decrypt
-                Resource: '*'
-      Tags:
-        - Key: ManagedBy
-          Value: AccountPoolFactory
-
-  # Setup Orchestrator Lambda Function
   SetupOrchestratorFunction:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: SetupOrchestrator
       Runtime: python3.12
       Handler: lambda_function.lambda_handler
-      Role: !GetAtt SetupOrchestratorRole.Arn
+      Role: !GetAtt LambdaExecutionRole.Arn
       Timeout: 900
       MemorySize: 1024
       ReservedConcurrentExecutions: 5
@@ -387,14 +344,13 @@ Resources:
         - Key: ManagedBy
           Value: AccountPoolFactory
 
-  # Deprovision Account Lambda Function (reuses SetupOrchestratorRole)
   DeprovisionAccountFunction:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: DeprovisionAccount
       Runtime: python3.12
       Handler: lambda_function.lambda_handler
-      Role: !GetAtt SetupOrchestratorRole.Arn
+      Role: !GetAtt LambdaExecutionRole.Arn
       Timeout: 900
       MemorySize: 512
       ReservedConcurrentExecutions: 3
@@ -415,10 +371,10 @@ Resources:
           Value: AccountPoolFactory
 
   # ============================================================
-  # Account Provider Lambda (DataZone Account Pool integration)
+  # Account Provider (DataZone Account Pool integration)
   # ============================================================
 
-  # Account Resolution Role - DataZone assumes this role to invoke the Lambda
+  # DataZone assumes this role to invoke the AccountProvider Lambda
   AccountResolutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -442,50 +398,6 @@ Resources:
         - Key: ManagedBy
           Value: AccountPoolFactory
 
-  # Account Provider Lambda Execution Role
-  AccountProviderRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: SMUS-AccountPoolFactory-AccountProvider-Role
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-      Policies:
-        - PolicyName: AccountProviderPolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              # DynamoDB - query available accounts
-              - Effect: Allow
-                Action:
-                  - dynamodb:Query
-                  - dynamodb:GetItem
-                Resource:
-                  - !GetAtt AccountStateTable.Arn
-                  - !Sub '${AccountStateTable.Arn}/index/*'
-              
-              # CloudWatch metrics
-              - Effect: Allow
-                Action:
-                  - cloudwatch:PutMetricData
-                Resource: '*'
-              
-              # SNS - pool depletion alerts
-              - Effect: Allow
-                Action:
-                  - sns:Publish
-                Resource: !Ref AlertTopic
-      Tags:
-        - Key: ManagedBy
-          Value: AccountPoolFactory
-
-  # Account Provider Lambda Function
   AccountProviderFunction:
     Type: AWS::Lambda::Function
     Properties:
@@ -493,7 +405,7 @@ Resources:
       Description: Queries DynamoDB for available accounts and returns them to DataZone
       Runtime: python3.12
       Handler: lambda_function_prod.lambda_handler
-      Role: !GetAtt AccountProviderRole.Arn
+      Role: !GetAtt LambdaExecutionRole.Arn
       Timeout: 60
       MemorySize: 256
       Environment:
@@ -509,14 +421,116 @@ Resources:
         - Key: ManagedBy
           Value: AccountPoolFactory
 
-  # Account Provider CloudWatch Log Group
   AccountProviderLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: /aws/lambda/AccountProvider
       RetentionInDays: 7
 
-  # SSM Parameters - Pool Manager
+  # ============================================================
+  # Account Reconciler & Recycler
+  # ============================================================
+
+  AccountReconcilerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: AccountReconciler
+      Description: Reconciles AWS Organizations accounts with DynamoDB pool state
+      Runtime: python3.12
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 300
+      MemorySize: 512
+      ReservedConcurrentExecutions: 1
+      Environment:
+        Variables:
+          DYNAMODB_TABLE_NAME: !Ref AccountStateTable
+          SNS_TOPIC_ARN: !Ref AlertTopic
+          DOMAIN_ID: !Ref DomainId
+          DOMAIN_ACCOUNT_ID: !Ref DomainAccountId
+          ORG_ADMIN_ACCOUNT_ID: !Ref OrgAdminAccountId
+          ACCOUNT_RECYCLER_FUNCTION_NAME: !Ref AccountRecyclerFunction
+          POOL_MANAGER_FUNCTION_NAME: !Ref PoolManagerFunction
+      Code:
+        ZipFile: |
+          # Placeholder - deploy actual code separately
+          def lambda_handler(event, context):
+              return {'statusCode': 200, 'body': 'Placeholder'}
+      Tags:
+        - Key: ManagedBy
+          Value: AccountPoolFactory
+
+  AccountReconcilerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/AccountReconciler
+      RetentionInDays: 7
+
+  AccountRecyclerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: AccountRecycler
+      Description: Recycles failed/orphaned accounts back to AVAILABLE state
+      Runtime: python3.12
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 900
+      MemorySize: 512
+      ReservedConcurrentExecutions: 10
+      Environment:
+        Variables:
+          DYNAMODB_TABLE_NAME: !Ref AccountStateTable
+          SNS_TOPIC_ARN: !Ref AlertTopic
+          DOMAIN_ID: !Ref DomainId
+          DOMAIN_ACCOUNT_ID: !Ref DomainAccountId
+          ORG_ADMIN_ACCOUNT_ID: !Ref OrgAdminAccountId
+          DEPROVISION_ACCOUNT_FUNCTION_NAME: !Ref DeprovisionAccountFunction
+          SETUP_ORCHESTRATOR_FUNCTION_NAME: !Ref SetupOrchestratorFunction
+          PROVISION_ACCOUNT_FUNCTION_ARN: !Ref ProvisionAccountFunctionArn
+      Code:
+        ZipFile: |
+          # Placeholder - deploy actual code separately
+          def lambda_handler(event, context):
+              return {'statusCode': 200, 'body': 'Placeholder'}
+      Tags:
+        - Key: ManagedBy
+          Value: AccountPoolFactory
+
+  AccountRecyclerLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/AccountRecycler
+      RetentionInDays: 7
+
+  # ============================================================
+  # Self-Healing Schedule — Reconciler runs hourly, triggers Recycler
+  # ============================================================
+
+  ReconcilerScheduleRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: AccountPoolFactory-ReconcilerSchedule
+      Description: Runs AccountReconciler hourly to detect drift and trigger self-healing
+      ScheduleExpression: rate(1 hour)
+      State: ENABLED
+      Targets:
+        - Id: AccountReconcilerTarget
+          Arn: !GetAtt AccountReconcilerFunction.Arn
+          Input: '{"source":"schedule","autoRecycle":true,"autoReplenish":true}'
+
+  ReconcilerSchedulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref AccountReconcilerFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ReconcilerScheduleRule.Arn
+
+  # ============================================================
+  # SSM Parameters
+  # ============================================================
+
+  # Pool Manager
   PoolNameParameter:
     Type: AWS::SSM::Parameter
     Properties:
@@ -589,7 +603,7 @@ Resources:
       Value: DataZone-Pool
       Description: Account name prefix
 
-  # SSM Parameters - Setup Orchestrator
+  # Setup Orchestrator
   DomainIdParameter:
     Type: AWS::SSM::Parameter
     Properties:
@@ -646,6 +660,31 @@ Resources:
       Value: !Ref ProjectRoleManagedPolicyArn
       Description: Managed policy ARN for the project execution role
 
+  ExpectedStackPatternsParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AccountPoolFactory/SetupOrchestrator/ExpectedStackPatterns
+      Type: String
+      Value: !Ref ExpectedStackPatterns
+      Description: Comma-separated stack name patterns deployed by SetupOrchestrator. Used by Reconciler to validate AVAILABLE accounts.
+
+  # Reconciler/Recycler
+  MaxRecycleRetriesParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AccountPoolFactory/PoolManager/MaxRecycleRetries
+      Type: String
+      Value: '3'
+      Description: Maximum number of recycle retry attempts per account
+
+  MaxConcurrentRecyclesParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AccountPoolFactory/PoolManager/MaxConcurrentRecycles
+      Type: String
+      Value: '10'
+      Description: Maximum concurrent account recycles
+
 Outputs:
   DynamoDBTableName:
     Description: DynamoDB table name
@@ -664,6 +703,12 @@ Outputs:
     Value: !GetAtt CentralEventBus.Arn
     Export:
       Name: AccountPoolFactory-CentralEventBusArn
+
+  LambdaExecutionRoleArn:
+    Description: Shared Lambda execution role ARN
+    Value: !GetAtt LambdaExecutionRole.Arn
+    Export:
+      Name: AccountPoolFactory-LambdaExecutionRoleArn
 
   PoolManagerFunctionArn:
     Description: Pool Manager Lambda function ARN
@@ -695,8 +740,14 @@ Outputs:
     Export:
       Name: AccountPoolFactory-AccountResolutionRoleArn
 
-  AccountProviderRoleArn:
-    Description: Account Provider Lambda Execution Role ARN
-    Value: !GetAtt AccountProviderRole.Arn
+  AccountReconcilerFunctionArn:
+    Description: Account Reconciler Lambda function ARN
+    Value: !GetAtt AccountReconcilerFunction.Arn
     Export:
-      Name: AccountPoolFactory-AccountProviderRoleArn
+      Name: AccountPoolFactory-AccountReconcilerArn
+
+  AccountRecyclerFunctionArn:
+    Description: Account Recycler Lambda function ARN
+    Value: !GetAtt AccountRecyclerFunction.Arn
+    Export:
+      Name: AccountPoolFactory-AccountRecyclerArn

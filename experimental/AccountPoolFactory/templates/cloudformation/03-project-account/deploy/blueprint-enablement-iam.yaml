@@ -1,75 +1,647 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: Enable IAM-compatible DataZone blueprints for project account
+Description: Enable DataZone blueprints for project account (IAM domain mode)
 
 Parameters:
   DomainId:
     Description: DataZone Domain ID
     Type: String
-  
+
   ManageAccessRoleArn:
     Type: String
     Description: IAM role ARN to manage access to environments
-  
+
   ProvisioningRoleArn:
     Description: IAM role ARN to provision environments
     Type: String
 
+  VpcId:
+    Type: String
+    Description: VPC ID for SageMaker environments
+
+  SubnetIds:
+    Type: String
+    Description: Comma-separated subnet IDs (3 private subnets)
+
+  S3BucketName:
+    Type: String
+    Description: S3 bucket for blueprint artifacts (s3://bucket-name)
+
+  DomainUnitId:
+    Type: String
+    Description: Root domain unit ID for policy grants (cascade to all child units)
+
 Resources:
-  # IAM Domain compatible blueprints only
-  ToolingLite:
+  Tooling:
     Type: AWS::DataZone::EnvironmentBlueprintConfiguration
     Properties:
       DomainIdentifier: !Ref DomainId
-      EnvironmentBlueprintIdentifier: "ToolingLite"
+      EnvironmentBlueprintIdentifier: "Tooling"
       ManageAccessRoleArn: !Ref ManageAccessRoleArn
       ProvisioningRoleArn: !Ref ProvisioningRoleArn
       RegionalParameters:
         - Region: !Ref 'AWS::Region'
-          Parameters: {}
+          Parameters:
+            VpcId: !Ref VpcId
+            Subnets: !Ref SubnetIds
+            S3Location: !Ref S3BucketName
       EnabledRegions:
         - !Ref 'AWS::Region'
 
-  S3Bucket:
+  DataLake:
     Type: AWS::DataZone::EnvironmentBlueprintConfiguration
-    DependsOn: ToolingLite
+    DependsOn: Tooling
     Properties:
       DomainIdentifier: !Ref DomainId
-      EnvironmentBlueprintIdentifier: "S3Bucket"
+      EnvironmentBlueprintIdentifier: "DataLake"
       ManageAccessRoleArn: !Ref ManageAccessRoleArn
       ProvisioningRoleArn: !Ref ProvisioningRoleArn
       RegionalParameters:
         - Region: !Ref 'AWS::Region'
-          Parameters: {}
+          Parameters:
+            VpcId: !Ref VpcId
+            Subnets: !Ref SubnetIds
+            S3Location: !Ref S3BucketName
       EnabledRegions:
         - !Ref 'AWS::Region'
 
-  S3TableCatalog:
+  LakehouseCatalog:
     Type: AWS::DataZone::EnvironmentBlueprintConfiguration
-    DependsOn: S3Bucket
+    DependsOn: DataLake
     Properties:
       DomainIdentifier: !Ref DomainId
-      EnvironmentBlueprintIdentifier: "S3TableCatalog"
+      EnvironmentBlueprintIdentifier: "LakehouseCatalog"
       ManageAccessRoleArn: !Ref ManageAccessRoleArn
       ProvisioningRoleArn: !Ref ProvisioningRoleArn
       RegionalParameters:
         - Region: !Ref 'AWS::Region'
-          Parameters: {}
+          Parameters:
+            VpcId: !Ref VpcId
+            Subnets: !Ref SubnetIds
+            S3Location: !Ref S3BucketName
       EnabledRegions:
         - !Ref 'AWS::Region'
+
+  Workflows:
+    Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: LakehouseCatalog
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EnvironmentBlueprintIdentifier: "Workflows"
+      ManageAccessRoleArn: !Ref ManageAccessRoleArn
+      ProvisioningRoleArn: !Ref ProvisioningRoleArn
+      RegionalParameters:
+        - Region: !Ref 'AWS::Region'
+          Parameters:
+            VpcId: !Ref VpcId
+            Subnets: !Ref SubnetIds
+            S3Location: !Ref S3BucketName
+      EnabledRegions:
+        - !Ref 'AWS::Region'
+
+  MLExperiments:
+    Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: Workflows
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EnvironmentBlueprintIdentifier: "MLExperiments"
+      ManageAccessRoleArn: !Ref ManageAccessRoleArn
+      ProvisioningRoleArn: !Ref ProvisioningRoleArn
+      RegionalParameters:
+        - Region: !Ref 'AWS::Region'
+          Parameters:
+            VpcId: !Ref VpcId
+            Subnets: !Ref SubnetIds
+            S3Location: !Ref S3BucketName
+      EnabledRegions:
+        - !Ref 'AWS::Region'
+
+  MLflowApp:
+    Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: MLExperiments
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EnvironmentBlueprintIdentifier: "MLflowApp"
+      ManageAccessRoleArn: !Ref ManageAccessRoleArn
+      ProvisioningRoleArn: !Ref ProvisioningRoleArn
+      RegionalParameters:
+        - Region: !Ref 'AWS::Region'
+          Parameters:
+            VpcId: !Ref VpcId
+            Subnets: !Ref SubnetIds
+            S3Location: !Ref S3BucketName
+      EnabledRegions:
+        - !Ref 'AWS::Region'
+
+  EmrOnEc2:
+    Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: MLflowApp
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EnvironmentBlueprintIdentifier: "EmrOnEc2"
+      ManageAccessRoleArn: !Ref ManageAccessRoleArn
+      ProvisioningRoleArn: !Ref ProvisioningRoleArn
+      RegionalParameters:
+        - Region: !Ref 'AWS::Region'
+          Parameters:
+            VpcId: !Ref VpcId
+            Subnets: !Ref SubnetIds
+            S3Location: !Ref S3BucketName
+      EnabledRegions:
+        - !Ref 'AWS::Region'
+
+  RedshiftServerless:
+    Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: EmrOnEc2
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EnvironmentBlueprintIdentifier: "RedshiftServerless"
+      ManageAccessRoleArn: !Ref ManageAccessRoleArn
+      ProvisioningRoleArn: !Ref ProvisioningRoleArn
+      RegionalParameters:
+        - Region: !Ref 'AWS::Region'
+          Parameters:
+            VpcId: !Ref VpcId
+            Subnets: !Ref SubnetIds
+            S3Location: !Ref S3BucketName
+      EnabledRegions:
+        - !Ref 'AWS::Region'
+
+  EmrServerless:
+    Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: RedshiftServerless
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EnvironmentBlueprintIdentifier: "EmrServerless"
+      ManageAccessRoleArn: !Ref ManageAccessRoleArn
+      ProvisioningRoleArn: !Ref ProvisioningRoleArn
+      RegionalParameters:
+        - Region: !Ref 'AWS::Region'
+          Parameters:
+            VpcId: !Ref VpcId
+            Subnets: !Ref SubnetIds
+            S3Location: !Ref S3BucketName
+      EnabledRegions:
+        - !Ref 'AWS::Region'
+
+  AmazonBedrockChatAgent:
+    Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: EmrServerless
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EnvironmentBlueprintIdentifier: "AmazonBedrockChatAgent"
+      ManageAccessRoleArn: !Ref ManageAccessRoleArn
+      ProvisioningRoleArn: !Ref ProvisioningRoleArn
+      RegionalParameters:
+        - Region: !Ref 'AWS::Region'
+          Parameters:
+            VpcId: !Ref VpcId
+            Subnets: !Ref SubnetIds
+            S3Location: !Ref S3BucketName
+      EnabledRegions:
+        - !Ref 'AWS::Region'
+
+  AmazonBedrockKnowledgeBase:
+    Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: AmazonBedrockChatAgent
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EnvironmentBlueprintIdentifier: "AmazonBedrockKnowledgeBase"
+      ManageAccessRoleArn: !Ref ManageAccessRoleArn
+      ProvisioningRoleArn: !Ref ProvisioningRoleArn
+      RegionalParameters:
+        - Region: !Ref 'AWS::Region'
+          Parameters:
+            VpcId: !Ref VpcId
+            Subnets: !Ref SubnetIds
+            S3Location: !Ref S3BucketName
+      EnabledRegions:
+        - !Ref 'AWS::Region'
+
+  AmazonBedrockGuardrail:
+    Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: AmazonBedrockKnowledgeBase
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EnvironmentBlueprintIdentifier: "AmazonBedrockGuardrail"
+      ManageAccessRoleArn: !Ref ManageAccessRoleArn
+      ProvisioningRoleArn: !Ref ProvisioningRoleArn
+      RegionalParameters:
+        - Region: !Ref 'AWS::Region'
+          Parameters:
+            VpcId: !Ref VpcId
+            Subnets: !Ref SubnetIds
+            S3Location: !Ref S3BucketName
+      EnabledRegions:
+        - !Ref 'AWS::Region'
+
+  AmazonBedrockFunction:
+    Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: AmazonBedrockGuardrail
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EnvironmentBlueprintIdentifier: "AmazonBedrockFunction"
+      ManageAccessRoleArn: !Ref ManageAccessRoleArn
+      ProvisioningRoleArn: !Ref ProvisioningRoleArn
+      RegionalParameters:
+        - Region: !Ref 'AWS::Region'
+          Parameters:
+            VpcId: !Ref VpcId
+            Subnets: !Ref SubnetIds
+            S3Location: !Ref S3BucketName
+      EnabledRegions:
+        - !Ref 'AWS::Region'
+
+  AmazonBedrockFlow:
+    Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: AmazonBedrockFunction
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EnvironmentBlueprintIdentifier: "AmazonBedrockFlow"
+      ManageAccessRoleArn: !Ref ManageAccessRoleArn
+      ProvisioningRoleArn: !Ref ProvisioningRoleArn
+      RegionalParameters:
+        - Region: !Ref 'AWS::Region'
+          Parameters:
+            VpcId: !Ref VpcId
+            Subnets: !Ref SubnetIds
+            S3Location: !Ref S3BucketName
+      EnabledRegions:
+        - !Ref 'AWS::Region'
+
+  AmazonBedrockPrompt:
+    Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: AmazonBedrockFlow
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EnvironmentBlueprintIdentifier: "AmazonBedrockPrompt"
+      ManageAccessRoleArn: !Ref ManageAccessRoleArn
+      ProvisioningRoleArn: !Ref ProvisioningRoleArn
+      RegionalParameters:
+        - Region: !Ref 'AWS::Region'
+          Parameters:
+            VpcId: !Ref VpcId
+            Subnets: !Ref SubnetIds
+            S3Location: !Ref S3BucketName
+      EnabledRegions:
+        - !Ref 'AWS::Region'
+
+  AmazonBedrockEvaluation:
+    Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: AmazonBedrockPrompt
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EnvironmentBlueprintIdentifier: "AmazonBedrockEvaluation"
+      ManageAccessRoleArn: !Ref ManageAccessRoleArn
+      ProvisioningRoleArn: !Ref ProvisioningRoleArn
+      RegionalParameters:
+        - Region: !Ref 'AWS::Region'
+          Parameters:
+            VpcId: !Ref VpcId
+            Subnets: !Ref SubnetIds
+            S3Location: !Ref S3BucketName
+      EnabledRegions:
+        - !Ref 'AWS::Region'
+
+  PartnerApps:
+    Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: AmazonBedrockEvaluation
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EnvironmentBlueprintIdentifier: "PartnerApps"
+      ManageAccessRoleArn: !Ref ManageAccessRoleArn
+      ProvisioningRoleArn: !Ref ProvisioningRoleArn
+      RegionalParameters:
+        - Region: !Ref 'AWS::Region'
+          Parameters:
+            VpcId: !Ref VpcId
+            Subnets: !Ref SubnetIds
+            S3Location: !Ref S3BucketName
+      EnabledRegions:
+        - !Ref 'AWS::Region'
+
+  # ── Policy Grants — allow CONTRIBUTOR projects in the domain unit to create
+  # environments from each blueprint configuration in this account.
+  # EntityIdentifier: {this-account-id}:{blueprint-id}  (cascade to child units)
+
+  GrantTooling:
+    Type: AWS::DataZone::PolicyGrant
+    DependsOn: Tooling
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EntityType: ENVIRONMENT_BLUEPRINT_CONFIGURATION
+      EntityIdentifier: !Sub '${AWS::AccountId}:${Tooling.EnvironmentBlueprintId}'
+      PolicyType: CREATE_ENVIRONMENT_FROM_BLUEPRINT
+      Detail:
+        CreateEnvironmentFromBlueprint: {}
+      Principal:
+        Project:
+          ProjectDesignation: CONTRIBUTOR
+          ProjectGrantFilter:
+            DomainUnitFilter:
+              DomainUnit: !Ref DomainUnitId
+              IncludeChildDomainUnits: true
+
+  GrantDataLake:
+    Type: AWS::DataZone::PolicyGrant
+    DependsOn: DataLake
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EntityType: ENVIRONMENT_BLUEPRINT_CONFIGURATION
+      EntityIdentifier: !Sub '${AWS::AccountId}:${DataLake.EnvironmentBlueprintId}'
+      PolicyType: CREATE_ENVIRONMENT_FROM_BLUEPRINT
+      Detail:
+        CreateEnvironmentFromBlueprint: {}
+      Principal:
+        Project:
+          ProjectDesignation: CONTRIBUTOR
+          ProjectGrantFilter:
+            DomainUnitFilter:
+              DomainUnit: !Ref DomainUnitId
+              IncludeChildDomainUnits: true
+
+  GrantLakehouseCatalog:
+    Type: AWS::DataZone::PolicyGrant
+    DependsOn: LakehouseCatalog
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EntityType: ENVIRONMENT_BLUEPRINT_CONFIGURATION
+      EntityIdentifier: !Sub '${AWS::AccountId}:${LakehouseCatalog.EnvironmentBlueprintId}'
+      PolicyType: CREATE_ENVIRONMENT_FROM_BLUEPRINT
+      Detail:
+        CreateEnvironmentFromBlueprint: {}
+      Principal:
+        Project:
+          ProjectDesignation: CONTRIBUTOR
+          ProjectGrantFilter:
+            DomainUnitFilter:
+              DomainUnit: !Ref DomainUnitId
+              IncludeChildDomainUnits: true
+
+  GrantWorkflows:
+    Type: AWS::DataZone::PolicyGrant
+    DependsOn: Workflows
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EntityType: ENVIRONMENT_BLUEPRINT_CONFIGURATION
+      EntityIdentifier: !Sub '${AWS::AccountId}:${Workflows.EnvironmentBlueprintId}'
+      PolicyType: CREATE_ENVIRONMENT_FROM_BLUEPRINT
+      Detail:
+        CreateEnvironmentFromBlueprint: {}
+      Principal:
+        Project:
+          ProjectDesignation: CONTRIBUTOR
+          ProjectGrantFilter:
+            DomainUnitFilter:
+              DomainUnit: !Ref DomainUnitId
+              IncludeChildDomainUnits: true
+
+  GrantMLExperiments:
+    Type: AWS::DataZone::PolicyGrant
+    DependsOn: MLExperiments
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EntityType: ENVIRONMENT_BLUEPRINT_CONFIGURATION
+      EntityIdentifier: !Sub '${AWS::AccountId}:${MLExperiments.EnvironmentBlueprintId}'
+      PolicyType: CREATE_ENVIRONMENT_FROM_BLUEPRINT
+      Detail:
+        CreateEnvironmentFromBlueprint: {}
+      Principal:
+        Project:
+          ProjectDesignation: CONTRIBUTOR
+          ProjectGrantFilter:
+            DomainUnitFilter:
+              DomainUnit: !Ref DomainUnitId
+              IncludeChildDomainUnits: true
+
+  GrantMLflowApp:
+    Type: AWS::DataZone::PolicyGrant
+    DependsOn: MLflowApp
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EntityType: ENVIRONMENT_BLUEPRINT_CONFIGURATION
+      EntityIdentifier: !Sub '${AWS::AccountId}:${MLflowApp.EnvironmentBlueprintId}'
+      PolicyType: CREATE_ENVIRONMENT_FROM_BLUEPRINT
+      Detail:
+        CreateEnvironmentFromBlueprint: {}
+      Principal:
+        Project:
+          ProjectDesignation: CONTRIBUTOR
+          ProjectGrantFilter:
+            DomainUnitFilter:
+              DomainUnit: !Ref DomainUnitId
+              IncludeChildDomainUnits: true
+
+  GrantEmrOnEc2:
+    Type: AWS::DataZone::PolicyGrant
+    DependsOn: EmrOnEc2
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EntityType: ENVIRONMENT_BLUEPRINT_CONFIGURATION
+      EntityIdentifier: !Sub '${AWS::AccountId}:${EmrOnEc2.EnvironmentBlueprintId}'
+      PolicyType: CREATE_ENVIRONMENT_FROM_BLUEPRINT
+      Detail:
+        CreateEnvironmentFromBlueprint: {}
+      Principal:
+        Project:
+          ProjectDesignation: CONTRIBUTOR
+          ProjectGrantFilter:
+            DomainUnitFilter:
+              DomainUnit: !Ref DomainUnitId
+              IncludeChildDomainUnits: true
+
+  GrantRedshiftServerless:
+    Type: AWS::DataZone::PolicyGrant
+    DependsOn: RedshiftServerless
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EntityType: ENVIRONMENT_BLUEPRINT_CONFIGURATION
+      EntityIdentifier: !Sub '${AWS::AccountId}:${RedshiftServerless.EnvironmentBlueprintId}'
+      PolicyType: CREATE_ENVIRONMENT_FROM_BLUEPRINT
+      Detail:
+        CreateEnvironmentFromBlueprint: {}
+      Principal:
+        Project:
+          ProjectDesignation: CONTRIBUTOR
+          ProjectGrantFilter:
+            DomainUnitFilter:
+              DomainUnit: !Ref DomainUnitId
+              IncludeChildDomainUnits: true
+
+  GrantEmrServerless:
+    Type: AWS::DataZone::PolicyGrant
+    DependsOn: EmrServerless
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EntityType: ENVIRONMENT_BLUEPRINT_CONFIGURATION
+      EntityIdentifier: !Sub '${AWS::AccountId}:${EmrServerless.EnvironmentBlueprintId}'
+      PolicyType: CREATE_ENVIRONMENT_FROM_BLUEPRINT
+      Detail:
+        CreateEnvironmentFromBlueprint: {}
+      Principal:
+        Project:
+          ProjectDesignation: CONTRIBUTOR
+          ProjectGrantFilter:
+            DomainUnitFilter:
+              DomainUnit: !Ref DomainUnitId
+              IncludeChildDomainUnits: true
+
+  GrantAmazonBedrockChatAgent:
+    Type: AWS::DataZone::PolicyGrant
+    DependsOn: AmazonBedrockChatAgent
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EntityType: ENVIRONMENT_BLUEPRINT_CONFIGURATION
+      EntityIdentifier: !Sub '${AWS::AccountId}:${AmazonBedrockChatAgent.EnvironmentBlueprintId}'
+      PolicyType: CREATE_ENVIRONMENT_FROM_BLUEPRINT
+      Detail:
+        CreateEnvironmentFromBlueprint: {}
+      Principal:
+        Project:
+          ProjectDesignation: CONTRIBUTOR
+          ProjectGrantFilter:
+            DomainUnitFilter:
+              DomainUnit: !Ref DomainUnitId
+              IncludeChildDomainUnits: true
+
+  GrantAmazonBedrockKnowledgeBase:
+    Type: AWS::DataZone::PolicyGrant
+    DependsOn: AmazonBedrockKnowledgeBase
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EntityType: ENVIRONMENT_BLUEPRINT_CONFIGURATION
+      EntityIdentifier: !Sub '${AWS::AccountId}:${AmazonBedrockKnowledgeBase.EnvironmentBlueprintId}'
+      PolicyType: CREATE_ENVIRONMENT_FROM_BLUEPRINT
+      Detail:
+        CreateEnvironmentFromBlueprint: {}
+      Principal:
+        Project:
+          ProjectDesignation: CONTRIBUTOR
+          ProjectGrantFilter:
+            DomainUnitFilter:
+              DomainUnit: !Ref DomainUnitId
+              IncludeChildDomainUnits: true
+
+  GrantAmazonBedrockGuardrail:
+    Type: AWS::DataZone::PolicyGrant
+    DependsOn: AmazonBedrockGuardrail
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EntityType: ENVIRONMENT_BLUEPRINT_CONFIGURATION
+      EntityIdentifier: !Sub '${AWS::AccountId}:${AmazonBedrockGuardrail.EnvironmentBlueprintId}'
+      PolicyType: CREATE_ENVIRONMENT_FROM_BLUEPRINT
+      Detail:
+        CreateEnvironmentFromBlueprint: {}
+      Principal:
+        Project:
+          ProjectDesignation: CONTRIBUTOR
+          ProjectGrantFilter:
+            DomainUnitFilter:
+              DomainUnit: !Ref DomainUnitId
+              IncludeChildDomainUnits: true
+
+  GrantAmazonBedrockFunction:
+    Type: AWS::DataZone::PolicyGrant
+    DependsOn: AmazonBedrockFunction
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EntityType: ENVIRONMENT_BLUEPRINT_CONFIGURATION
+      EntityIdentifier: !Sub '${AWS::AccountId}:${AmazonBedrockFunction.EnvironmentBlueprintId}'
+      PolicyType: CREATE_ENVIRONMENT_FROM_BLUEPRINT
+      Detail:
+        CreateEnvironmentFromBlueprint: {}
+      Principal:
+        Project:
+          ProjectDesignation: CONTRIBUTOR
+          ProjectGrantFilter:
+            DomainUnitFilter:
+              DomainUnit: !Ref DomainUnitId
+              IncludeChildDomainUnits: true
+
+  GrantAmazonBedrockFlow:
+    Type: AWS::DataZone::PolicyGrant
+    DependsOn: AmazonBedrockFlow
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EntityType: ENVIRONMENT_BLUEPRINT_CONFIGURATION
+      EntityIdentifier: !Sub '${AWS::AccountId}:${AmazonBedrockFlow.EnvironmentBlueprintId}'
+      PolicyType: CREATE_ENVIRONMENT_FROM_BLUEPRINT
+      Detail:
+        CreateEnvironmentFromBlueprint: {}
+      Principal:
+        Project:
+          ProjectDesignation: CONTRIBUTOR
+          ProjectGrantFilter:
+            DomainUnitFilter:
+              DomainUnit: !Ref DomainUnitId
+              IncludeChildDomainUnits: true
+
+  GrantAmazonBedrockPrompt:
+    Type: AWS::DataZone::PolicyGrant
+    DependsOn: AmazonBedrockPrompt
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EntityType: ENVIRONMENT_BLUEPRINT_CONFIGURATION
+      EntityIdentifier: !Sub '${AWS::AccountId}:${AmazonBedrockPrompt.EnvironmentBlueprintId}'
+      PolicyType: CREATE_ENVIRONMENT_FROM_BLUEPRINT
+      Detail:
+        CreateEnvironmentFromBlueprint: {}
+      Principal:
+        Project:
+          ProjectDesignation: CONTRIBUTOR
+          ProjectGrantFilter:
+            DomainUnitFilter:
+              DomainUnit: !Ref DomainUnitId
+              IncludeChildDomainUnits: true
+
+  GrantAmazonBedrockEvaluation:
+    Type: AWS::DataZone::PolicyGrant
+    DependsOn: AmazonBedrockEvaluation
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EntityType: ENVIRONMENT_BLUEPRINT_CONFIGURATION
+      EntityIdentifier: !Sub '${AWS::AccountId}:${AmazonBedrockEvaluation.EnvironmentBlueprintId}'
+      PolicyType: CREATE_ENVIRONMENT_FROM_BLUEPRINT
+      Detail:
+        CreateEnvironmentFromBlueprint: {}
+      Principal:
+        Project:
+          ProjectDesignation: CONTRIBUTOR
+          ProjectGrantFilter:
+            DomainUnitFilter:
+              DomainUnit: !Ref DomainUnitId
+              IncludeChildDomainUnits: true
+
+  GrantPartnerApps:
+    Type: AWS::DataZone::PolicyGrant
+    DependsOn: PartnerApps
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EntityType: ENVIRONMENT_BLUEPRINT_CONFIGURATION
+      EntityIdentifier: !Sub '${AWS::AccountId}:${PartnerApps.EnvironmentBlueprintId}'
+      PolicyType: CREATE_ENVIRONMENT_FROM_BLUEPRINT
+      Detail:
+        CreateEnvironmentFromBlueprint: {}
+      Principal:
+        Project:
+          ProjectDesignation: CONTRIBUTOR
+          ProjectGrantFilter:
+            DomainUnitFilter:
+              DomainUnit: !Ref DomainUnitId
+              IncludeChildDomainUnits: true
 
 Outputs:
-  ToolingLiteBlueprintId:
-    Description: ToolingLite Blueprint ID
-    Value: !GetAtt ToolingLite.EnvironmentBlueprintId
-  
-  S3BucketBlueprintId:
-    Description: S3Bucket Blueprint ID
-    Value: !GetAtt S3Bucket.EnvironmentBlueprintId
-  
-  S3TableCatalogBlueprintId:
-    Description: S3TableCatalog Blueprint ID
-    Value: !GetAtt S3TableCatalog.EnvironmentBlueprintId
-  
+  ToolingBlueprintId:
+    Description: Tooling Blueprint ID
+    Value: !GetAtt Tooling.EnvironmentBlueprintId
+
+  DataLakeBlueprintId:
+    Description: DataLake Blueprint ID
+    Value: !GetAtt DataLake.EnvironmentBlueprintId
+
+  LakehouseCatalogBlueprintId:
+    Description: LakehouseCatalog Blueprint ID
+    Value: !GetAtt LakehouseCatalog.EnvironmentBlueprintId
+
   BlueprintCount:
     Description: Number of blueprints enabled
-    Value: 3
+    Value: 17

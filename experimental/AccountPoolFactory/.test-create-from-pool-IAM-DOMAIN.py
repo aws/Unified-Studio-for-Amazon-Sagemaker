@@ -5,6 +5,13 @@ import subprocess
 import time
 import sys
 import os
+import yaml
+
+# Load config
+with open(os.path.join(os.path.dirname(__file__) or '.', 'config.yaml')) as f:
+    config = yaml.safe_load(f)
+
+DOMAIN_ID = config['datazone']['domain_id']
 
 # Step 1: Get domain account creds
 print("Step 1: Getting domain account creds...")
@@ -32,7 +39,7 @@ result = subprocess.run([
     "aws", "sts", "assume-role",
     "--role-arn", "arn:aws:iam::392423995616:role/SMUS-AccountPoolFactory-DomainAccess",
     "--role-session-name", "test-create-project",
-    "--external-id", "dzd-5o0lje5xgpeuw9",
+    "--external-id", DOMAIN_ID,
     "--output", "json"
 ], capture_output=True, text=True, env=env, timeout=30, check=False)
 
@@ -90,7 +97,7 @@ role_configs = json.dumps([
 
 cmd = [
     "aws", "datazone", "create-project",
-    "--domain-identifier", "dzd-5o0lje5xgpeuw9",
+    "--domain-identifier", DOMAIN_ID,
     "--name", f"test-from-pool-{ts}",
     "--description", "Test create-project from pool account",
     "--project-profile-id", "48ly31ms09wckp",
