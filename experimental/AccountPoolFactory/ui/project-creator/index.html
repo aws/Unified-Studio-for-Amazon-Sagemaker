@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Create Project — SageMaker Unified Studio</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="header-brand">
+        <img src="../logo.svg" alt="Acme Corp" height="32" style="vertical-align:middle">
+        <span>SageMaker Unified Studio</span>
+      </div>
+      <nav>
+        <a href="../pool-console/" class="secondary">Pool Console →</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <div id="view-form" class="view">
+      <hgroup>
+        <h1>Create Project</h1>
+        <p>A dedicated AWS account will be assigned automatically from the pool.</p>
+      </hgroup>
+
+      <form id="create-form" novalidate>
+        <div class="grid">
+          <label>
+            Project Name
+            <input type="text" id="project-name" name="name" placeholder="e.g. customer-analytics-q1-2026"
+                   autocomplete="off" required>
+            <small id="name-hint" class="hint"></small>
+          </label>
+        </div>
+
+        <label>
+          Project Profile
+          <select id="project-profile" name="profileId" required disabled>
+            <option value="">Loading profiles…</option>
+          </select>
+          <small>Only profiles backed by an account pool are shown.</small>
+        </label>
+
+        <label>
+          Region
+          <select id="project-region" name="region" required disabled>
+            <option value="">Select a profile first…</option>
+          </select>
+          <small id="region-hint" class="hint">Regions are determined by the selected profile's pool.</small>
+        </label>
+
+        <label>
+          Project Owner
+          <div class="owner-search-wrap">
+            <input type="text" id="owner-search" placeholder="Search IDC users or groups…"
+                   autocomplete="off" role="combobox" aria-expanded="false" aria-autocomplete="list">
+            <div id="owner-dropdown" class="owner-dropdown" role="listbox" hidden></div>
+          </div>
+          <input type="hidden" id="owner-id" name="ownerId">
+          <input type="hidden" id="owner-type" name="ownerType">
+          <div id="owner-selected" class="owner-chip" hidden></div>
+        </label>
+
+        <div class="form-actions">
+          <button type="submit" id="submit-btn" disabled>
+            Create Project
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <div id="view-progress" class="view" hidden>
+      <hgroup>
+        <h1 id="progress-title">Creating project…</h1>
+        <p id="progress-subtitle">Setting up your dedicated AWS account and environments.</p>
+      </hgroup>
+
+      <article class="progress-card">
+        <div class="steps">
+          <div class="step" id="step-account">
+            <div class="step-icon" data-state="pending">
+              <span class="step-num">1</span>
+            </div>
+            <div class="step-body">
+              <strong>Resolving account</strong>
+              <small id="step-account-detail">Selecting an available account from the pool…</small>
+            </div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step" id="step-project">
+            <div class="step-icon" data-state="pending">
+              <span class="step-num">2</span>
+            </div>
+            <div class="step-body">
+              <strong>Creating project</strong>
+              <small id="step-project-detail">Initialising project in DataZone…</small>
+            </div>
+          </div>
+          <div class="step-connector"></div>
+          <div class="step" id="step-envs">
+            <div class="step-icon" data-state="pending">
+              <span class="step-num">3</span>
+            </div>
+            <div class="step-body">
+              <strong>Deploying environments</strong>
+              <small id="step-envs-detail">Provisioning environments in your account…</small>
+            </div>
+          </div>
+        </div>
+
+        <div id="env-list" class="env-list" hidden></div>
+
+        <div id="progress-error" class="error-box" hidden></div>
+      </article>
+
+      <div id="success-actions" class="success-actions" hidden>
+        <p class="success-msg">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          Project ready
+        </p>
+        <a id="open-smus-btn" href="#" role="button" target="_self">
+          Open in SageMaker Unified Studio →
+        </a>
+        <button class="secondary" id="create-another-btn">Create another project</button>
+      </div>
+    </div>
+  </main>
+
+  <script type="module" src="../auth.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

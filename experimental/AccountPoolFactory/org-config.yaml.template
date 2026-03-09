@@ -6,10 +6,37 @@
 
 region: us-east-2
 
-# Target OU where pool accounts will be placed.
-# Use the human-readable path (e.g. "BusinessUnit/TeamName").
-# The deploy script resolves this to an OU ID automatically.
-target_ou_name: "YourBusinessUnit/YourTeam"
+# Prefix used to derive StackSet names from template filenames.
+# StackSet name = {stackset_prefix}-{TitleCasedTemplateStem}
+# e.g. "SMUS-AccountPoolFactory" + "vpc.yaml" → "SMUS-AccountPoolFactory-VPC"
+# Must match the IAM policy prefix — do not change after initial deploy without
+# updating the CloudFormation stack.
+stackset_prefix: "SMUS-AccountPoolFactory"
 
-# Optional: if you already know the OU ID, uncomment to skip the lookup.
-# target_ou_id: ou-xxxx-xxxxxxxx
+pools:
+  - name: default
+    # Human-readable OU path. The deploy script resolves this to an OU ID.
+    # Example: "BusinessUnit/TeamName"
+    ou_name: "YourBusinessUnit/YourTeam"
+
+    # Optional: set if you already know the OU ID to skip the lookup.
+    # ou_id: ou-xxxx-xxxxxxxx
+
+    # Root email prefix and domain for new accounts in this pool.
+    # New account email: {email_prefix}+{uid}@{email_domain}
+    email_prefix: "accountpool"
+    email_domain: "example.com"
+
+    # Tags applied to each AWS account via Organizations TagResource.
+    # "Pool" tag is always added automatically.
+    account_tags:
+      CostCenter: "your-cost-center"
+      Team: "your-team"
+
+    # StackSets pre-deployed into accounts in this pool by ProvisionAccount Lambda.
+    # Only include templates that can be deployed without runtime values.
+    # VPC, IAM, EventBridge, and Blueprints are deployed by SetupOrchestrator at
+    # account-setup time (they need runtime values like CentralEventBusArn).
+    stacksets:
+      - template: domain-access.yaml
+        wave: 1

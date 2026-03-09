@@ -24,46 +24,16 @@ Parameters:
   
   AccountCreationRoleArn:
     Type: String
-    Description: ARN of the AccountCreation cross-account role in the Org Admin account (output of deploy-org-admin.sh)
+    Description: ARN of the AccountCreation cross-account role in the Org Admin account (output of org deploy step 1)
 
   ExternalId:
     Type: String
-    Description: ExternalId for assuming the AccountCreation role (output of deploy-org-admin.sh)
+    Description: ExternalId for assuming the AccountCreation role
 
-  PoolName:
-    Type: String
-    Default: AccountPoolFactory
-    Description: Name for the account pool
-  
-  TargetOUId:
-    Type: String
-    Default: root
-    Description: OU ID where accounts should be moved
-  
-  MinimumPoolSize:
-    Type: Number
-    Default: 5
-    Description: Minimum pool size
-  
-  TargetPoolSize:
-    Type: Number
-    Default: 10
-    Description: Target pool size
-  
   MaxConcurrentSetups:
     Type: Number
     Default: 3
     Description: Maximum concurrent setups
-
-  EmailPrefix:
-    Type: String
-    Default: accountpool
-    Description: Email prefix for account creation
-  
-  EmailDomain:
-    Type: String
-    Default: example.com
-    Description: Email domain for account creation
 
   ProjectRoleEnabled:
     Type: String
@@ -80,11 +50,6 @@ Parameters:
     Type: String
     Default: arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
     Description: Managed policy ARN for the project execution role
-
-  ExpectedStackPatterns:
-    Type: String
-    Default: 'DataZone-VPC-{account_id},DataZone-IAM-{account_id},DataZone-EventBridge-{account_id},DataZone-ProjectRole-{account_id},DataZone-Blueprints-{account_id}'
-    Description: Comma-separated stack name patterns deployed by SetupOrchestrator into each project account
 
 Resources:
   # ============================================================
@@ -108,6 +73,8 @@ Resources:
           AttributeType: S
         - AttributeName: assignedDate
           AttributeType: S
+        - AttributeName: poolName
+          AttributeType: S
       KeySchema:
         - AttributeName: accountId
           KeyType: HASH
@@ -127,6 +94,14 @@ Resources:
             - AttributeName: projectId
               KeyType: HASH
             - AttributeName: assignedDate
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: PoolIndex
+          KeySchema:
+            - AttributeName: poolName
+              KeyType: HASH
+            - AttributeName: state
               KeyType: RANGE
           Projection:
             ProjectionType: ALL
@@ -326,7 +301,7 @@ Resources:
       Runtime: python3.12
       Handler: lambda_function.lambda_handler
       Role: !GetAtt LambdaExecutionRole.Arn
-      Timeout: 300
+      Timeout: 900
       MemorySize: 512
       ReservedConcurrentExecutions: 10
       Environment:
@@ -505,6 +480,7 @@ Resources:
         Variables:
           TABLE_NAME: !Ref AccountStateTable
           SNS_TOPIC_ARN: !Ref AlertTopic
+          DOMAIN_ID: !Ref DomainId
       Code:
         ZipFile: |
           # Placeholder - deploy actual code separately
@@ -623,79 +599,6 @@ Resources:
   # SSM Parameters
   # ============================================================
 
-  # Pool Manager
-  PoolNameParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: /AccountPoolFactory/PoolManager/PoolName
-      Type: String
-      Value: !Ref PoolName
-      Description: Name for the account pool
-
-  TargetOUIdParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: /AccountPoolFactory/PoolManager/TargetOUId
-      Type: String
-      Value: !Ref TargetOUId
-      Description: OU ID where accounts should be moved
-
-  MinimumPoolSizeParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: /AccountPoolFactory/PoolManager/MinimumPoolSize
-      Type: String
-      Value: !Ref MinimumPoolSize
-      Description: Minimum pool size
-
-  TargetPoolSizeParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: /AccountPoolFactory/PoolManager/TargetPoolSize
-      Type: String
-      Value: !Ref TargetPoolSize
-      Description: Target pool size
-
-  MaxConcurrentSetupsParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: /AccountPoolFactory/PoolManager/MaxConcurrentSetups
-      Type: String
-      Value: !Ref MaxConcurrentSetups
-      Description: Maximum concurrent setups
-
-  ReclaimStrategyParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: /AccountPoolFactory/PoolManager/ReclaimStrategy
-      Type: String
-      Value: DELETE
-      Description: Reclaim strategy (DELETE or REUSE)
-
-  EmailPrefixParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: /AccountPoolFactory/PoolManager/EmailPrefix
-      Type: String
-      Value: !Ref EmailPrefix
-      Description: Email prefix for account creation
-
-  EmailDomainParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: /AccountPoolFactory/PoolManager/EmailDomain
-      Type: String
-      Value: !Ref EmailDomain
-      Description: Email domain for account creation
-
-  NamePrefixParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: /AccountPoolFactory/PoolManager/NamePrefix
-      Type: String
-      Value: DataZone-Pool
-      Description: Account name prefix
-
   # Setup Orchestrator
   DomainIdParameter:
     Type: AWS::SSM::Parameter
@@ -753,14 +656,6 @@ Resources:
       Value: !Ref ProjectRoleManagedPolicyArn
       Description: Managed policy ARN for the project execution role
 
-  ExpectedStackPatternsParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: /AccountPoolFactory/SetupOrchestrator/ExpectedStackPatterns
-      Type: String
-      Value: !Ref ExpectedStackPatterns
-      Description: Comma-separated stack name patterns deployed by SetupOrchestrator. Used by Reconciler to validate AVAILABLE accounts.
-
   # Reconciler/Recycler
   MaxRecycleRetriesParameter:
     Type: AWS::SSM::Parameter
@@ -779,6 +674,15 @@ Resources:
       Description: Maximum concurrent account recycles
 
 Outputs:
+  ProvisionAccountRoleArn:
+    Description: >
+      ARN of the ProvisionAccount Lambda execution role.
+      Pass this to the Org Admin deploy script as ProvisionAccountRoleArn.
+      The AccountCreationRole trust policy will be scoped to this specific role.
+    Value: !GetAtt ProvisionAccountRole.Arn
+    Export:
+      Name: AccountPoolFactory-ProvisionAccountRoleArn
+
   DynamoDBTableName:
     Description: DynamoDB table name
     Value: !Ref AccountStateTable

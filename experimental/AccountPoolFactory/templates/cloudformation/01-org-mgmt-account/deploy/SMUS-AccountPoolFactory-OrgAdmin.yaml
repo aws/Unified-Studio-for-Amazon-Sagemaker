@@ -30,7 +30,7 @@ Parameters:
     Type: String
     Description: >
       Domain account ID (where all AccountPoolFactory Lambdas run).
-      The AccountCreation role will trust this account to assume it.
+      Used for ExternalId and S3 bucket policy.
     AllowedPattern: '^\d{12}$'
 
   DomainId:
@@ -38,9 +38,97 @@ Parameters:
     Description: >
       DataZone / SageMaker Unified Studio Domain ID (e.g. dzd-xxxxxxxx).
       Used as ExternalId when the Domain account assumes the DomainAccess role in project accounts.
-    AllowedPattern: '^dzd-[a-z0-9]+$'
+    AllowedPattern: '^dzd-[a-z0-9]+'
+
+  ProvisionAccountRoleArn:
+    Type: String
+    Description: >
+      ARN of the ProvisionAccount Lambda execution role in the Domain account
+      (output of domain deploy step 1). The AccountCreation role trusts only this
+      specific role — not the entire domain account root.
+    AllowedPattern: '^arn:aws:iam::\d{12}:role/.+'
 
 Resources:
+
+  # ============================================================
+  # S3 Bucket: StackSet template storage
+  # Org admin uploads approved templates here. ProvisionAccount Lambda
+  # passes S3 URLs to StackSet API — never supplies template body directly.
+  # ============================================================
+  TemplateBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'accountpoolfactory-templates-${AWS::AccountId}'
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Project
+          Value: AccountPoolFactory
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  TemplateBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref TemplateBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          # Allow org admin account full access
+          - Sid: AllowOrgAdminAccount
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 's3:*'
+            Resource:
+              - !GetAtt TemplateBucket.Arn
+              - !Sub '${TemplateBucket.Arn}/*'
+          # Allow CloudFormation service to fetch templates when deploying StackSet instances
+          - Sid: AllowCloudFormationService
+            Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: 's3:GetObject'
+            Resource: !Sub '${TemplateBucket.Arn}/stacksets/*'
+          # Deny everything else
+          - Sid: DenyAllOther
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !GetAtt TemplateBucket.Arn
+              - !Sub '${TemplateBucket.Arn}/*'
+            Condition:
+              StringNotEquals:
+                'aws:PrincipalAccount':
+                  - !Ref AWS::AccountId
+              StringNotLike:
+                'aws:PrincipalServiceName': 'cloudformation.amazonaws.com'
+
+  TemplateBucketNameParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AccountPoolFactory/TemplateBucketName
+      Type: String
+      Value: !Ref TemplateBucket
+      Description: S3 bucket holding approved StackSet templates
+
+  StackSetPrefixParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AccountPoolFactory/StackSetPrefix
+      Type: String
+      Value: 'SMUS-AccountPoolFactory'
+      Description: Prefix for all AccountPoolFactory StackSet names
 
   # ============================================================
   # Role 1: StackSetAdmin
@@ -93,9 +181,18 @@ Resources:
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
+          # ProvisionAccount Lambda — full access (create accounts, deploy StackSets)
           - Effect: Allow
             Principal:
-              AWS: !Sub 'arn:aws:iam::${DomainAccountId}:root'
+              AWS: !Ref ProvisionAccountRoleArn
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                'sts:ExternalId': !Sub 'AccountPoolFactory-${DomainAccountId}'
+          # LambdaExecutionRole — read-only org access for Reconciler
+          - Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${DomainAccountId}:role/SMUS-AccountPoolFactory-LambdaExecution-Role'
             Action: sts:AssumeRole
             Condition:
               StringEquals:
@@ -128,6 +225,8 @@ Resources:
 
               # CloudFormation StackSets: manage AccountPoolFactory StackSets only
               # Scoped to SMUS-AccountPoolFactory-* to prevent managing unrelated StackSets
+              # TemplateUrl condition ensures only org-owned S3 templates can be used —
+              # the domain Lambda cannot supply arbitrary template bodies.
               - Sid: StackSetAccess
                 Effect: Allow
                 Action:
@@ -140,6 +239,38 @@ Resources:
                   - cloudformation:DescribeStackInstance
                   - cloudformation:ListStackSetOperations
                 Resource: 'arn:aws:cloudformation:*:*:stackset/SMUS-AccountPoolFactory-*:*'
+
+              # Restrict CreateStackSet/UpdateStackSet to only use templates from the org S3 bucket.
+              # This closes the confused-deputy gap: even with the StackSet name restriction above,
+              # without this condition the Lambda could call UpdateStackSet with an arbitrary
+              # --template-body containing malicious IAM policies.
+              - Sid: EnforceS3TemplateSource
+                Effect: Deny
+                Action:
+                  - cloudformation:CreateStackSet
+                  - cloudformation:UpdateStackSet
+                Resource: 'arn:aws:cloudformation:*:*:stackset/SMUS-AccountPoolFactory-*:*'
+                Condition:
+                  StringNotLike:
+                    'cloudformation:TemplateUrl':
+                      - !Sub 'https://s3.*.amazonaws.com/accountpoolfactory-templates-${AWS::AccountId}/stacksets/*'
+                      - !Sub 'https://accountpoolfactory-templates-${AWS::AccountId}.s3.*.amazonaws.com/stacksets/*'
+
+              # S3: allow CloudFormation service to fetch templates from the org bucket
+              # when deploying StackSet instances into project accounts
+              - Sid: S3TemplateAccess
+                Effect: Allow
+                Action: 's3:GetObject'
+                Resource: !Sub 'arn:aws:s3:::accountpoolfactory-templates-${AWS::AccountId}/stacksets/*'
+
+              # SSM: allow ProvisionAccount Lambda to read pool config from org account
+              - Sid: SSMPoolConfigRead
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:GetParameters
+                  - ssm:GetParametersByPath
+                Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/AccountPoolFactory/*'
 
               # STS: assume OrganizationAccountAccessRole in new accounts to bootstrap
               # the StackSetExecution role via CloudFormation. This is the only cross-account
@@ -163,6 +294,12 @@ Resources:
   # ============================================================
 
 Outputs:
+  TemplateBucketName:
+    Description: S3 bucket holding approved StackSet templates (org admin account)
+    Value: !Ref TemplateBucket
+    Export:
+      Name: AccountPoolFactory-TemplateBucketName
+
   AccountCreationRoleArn:
     Description: >
       ARN of the AccountCreation cross-account role.

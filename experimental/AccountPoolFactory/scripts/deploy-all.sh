@@ -212,7 +212,7 @@ except: print('')
 " 2>/dev/null || echo "")
 
     echo "📦 Deploying consolidated Org Admin governance stack..."
-    ./scripts/01-org-mgmt-account/deploy/deploy-org-admin.sh "$DOMAIN_ACCOUNT_ID_FOR_ORG" "$DOMAIN_ID_FOR_ORG"
+    ./scripts/01-org-mgmt-account/deploy/01-deploy.sh "$DOMAIN_ACCOUNT_ID_FOR_ORG" "$DOMAIN_ID_FOR_ORG"
 
     echo "✅ PHASE 2 COMPLETE"
     echo ""
@@ -224,4 +224,5 @@ echo "============================================="
 echo ""
 echo "Next steps:"
 echo "  1. Deploy project profile: ./scripts/02-domain-account/deploy/02-deploy-project-profile.sh"
-echo "  2. Seed pool accounts: invoke PoolManager with replenish action"
+echo "  2. Verify deployment:      ./scripts/02-domain-account/deploy/03-verify.sh"
+echo "  3. Seed pool accounts:     invoke PoolManager with replenish action"

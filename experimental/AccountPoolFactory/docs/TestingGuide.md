@@ -60,18 +60,17 @@ The org admin must deploy first (the domain account needs the role ARN output). 
 
 ```bash
 eval $(isengardcli credentials amirbo+1@amazon.com)
-# Pass domain account ID and domain ID as arguments (one-time)
-./scripts/01-org-mgmt-account/deploy/deploy-org-admin.sh 994753223772 dzd-4h7jbz76qckoh5
+./scripts/01-org-mgmt-account/deploy/01-deploy.sh 994753223772 dzd-4h7jbz76qckoh5
+./scripts/01-org-mgmt-account/deploy/02-verify.sh
 ```
-
-The script prints the outputs but the domain deploy script reads them automatically from the CF stack — no manual copy needed.
 
 **Phase 2 — Domain account:**
 
 ```bash
 eval $(isengardcli credentials amirbo+3@amazon.com)
-./scripts/02-domain-account/deploy/01-deploy-infrastructure.sh
+./scripts/02-domain-account/deploy/01-deploy.sh
 ./scripts/02-domain-account/deploy/02-deploy-project-profile.sh
+./scripts/02-domain-account/deploy/03-verify.sh
 ```
 
 ---

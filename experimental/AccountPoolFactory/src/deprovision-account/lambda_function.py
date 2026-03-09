@@ -157,13 +157,17 @@ def cleanup_account(account_id: str, domain_id: str) -> Dict[str, Any]:
         print(f"📋 Listing all stacks...")
         all_stacks = list_all_stacks(cf_client)
         print(f"   Found {len(all_stacks)} total stacks")
-        
+
+        # Load per-account approved StackSets from DynamoDB
+        deployed_stacksets = _get_deployed_stacksets(account_id)
+        print(f"   deployedStackSets: {deployed_stacksets or '(none — using fallback patterns)'}")
+
         # Categorize stacks
         approved_stacks = []
         project_stacks = []
-        
+
         for stack in all_stacks:
-            if is_approved_stack(stack):
+            if is_approved_stack(stack, deployed_stacksets):
                 approved_stacks.append(stack)
             else:
                 project_stacks.append(stack)
@@ -274,24 +278,56 @@ def list_all_stacks(cf_client) -> List[Dict]:
     return stacks
 
 
-def is_approved_stack(stack: Dict) -> bool:
-    """Check if stack is part of approved infrastructure"""
-    
+def _get_deployed_stacksets(account_id: str) -> Set[str]:
+    """Read deployedStackSets from the account's DynamoDB record.
+    Returns a set of StackSet names (e.g. 'SMUS-AccountPoolFactory-DomainAccess').
+    Falls back to empty set if not found.
+    """
+    try:
+        resp = dynamodb.query(
+            TableName=DYNAMODB_TABLE_NAME,
+            KeyConditionExpression='accountId = :a',
+            ExpressionAttributeValues={':a': {'S': account_id}},
+            ScanIndexForward=False,
+            Limit=1
+        )
+        items = resp.get('Items', [])
+        if items:
+            ss_list = items[0].get('deployedStackSets', {}).get('L', [])
+            return {s.get('S', '') for s in ss_list if s.get('S')}
+    except Exception as e:
+        print(f'Warning: could not read deployedStackSets for {account_id}: {e}')
+    return set()
+
+
+def is_approved_stack(stack: Dict, deployed_stacksets: Set[str] = None) -> bool:
+    """Check if stack is part of approved infrastructure.
+
+    Prefers per-account deployedStackSets from DynamoDB.
+    Falls back to hardcoded patterns for backward compat.
+    """
     stack_name = stack['StackName']
-    
-    # Check exact name match
+
+    # StackSet-deployed stacks: name starts with StackSet-{StackSetName}-
+    if deployed_stacksets:
+        for ss_name in deployed_stacksets:
+            if stack_name.startswith(f'StackSet-{ss_name}-'):
+                return True
+        # Also protect the StackSetExecution role stack
+        if stack_name == 'SMUS-AccountPoolFactory-StackSetExecutionRole':
+            return True
+        # If we have a per-account list, don't fall through to hardcoded patterns
+        # (only protect what's explicitly listed + the execution role)
+        return False
+
+    # Fallback: hardcoded patterns (backward compat for accounts without deployedStackSets)
     if stack_name in APPROVED_STACK_NAMES:
         return True
-    
-    # Check pattern match
     for pattern in APPROVED_STACK_PATTERNS:
         if stack_name.startswith(pattern):
             return True
-    
-    # Check if created by StackSet
     if 'ParentId' in stack and stack['ParentId'].startswith('arn:aws:cloudformation'):
         return True
-    
     return False
 
 

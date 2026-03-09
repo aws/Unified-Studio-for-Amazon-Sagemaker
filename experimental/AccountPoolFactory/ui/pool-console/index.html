@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pool Console — Account Pool Factory</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="header-brand">
+        <img src="../logo.svg" alt="Acme Corp" height="32" style="vertical-align:middle">
+        <span>Pool Console</span>
+      </div>
+      <nav>
+        <a href="../project-creator/" class="secondary">Create Project →</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="layout">
+    <!-- Sidebar nav -->
+    <aside class="sidebar">
+      <nav>
+        <ul>
+          <li><a href="#" class="nav-link active" data-view="dashboard">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            Dashboard
+          </a></li>
+          <li><a href="#" class="nav-link" data-view="accounts">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+            Accounts
+          </a></li>
+          <li><a href="#" class="nav-link" data-view="config">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            Configuration
+          </a></li>
+        </ul>
+      </nav>
+      <div class="sidebar-footer">
+        <div id="ops-log-toggle" class="ops-toggle">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Operations log
+          <span id="ops-count" class="ops-count" hidden>0</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main content -->
+    <main class="main-content">
+
+      <!-- Dashboard view -->
+      <div id="view-dashboard" class="view">
+        <div class="view-header">
+          <div>
+            <h2>Dashboard</h2>
+            <small class="muted">Account Pool</small>
+          </div>
+          <div class="header-actions">
+            <small id="last-reconciled" class="muted"></small>
+            <small id="dashboard-refreshed" class="muted"></small>
+            <button class="outline secondary small" id="btn-reconcile-dry">Dry-run reconcile</button>
+            <button class="outline small" id="btn-replenish">Force replenish</button>
+            <button class="outline small" id="btn-refresh-dashboard" title="Refresh now">↻</button>
+            <label class="auto-refresh-label">
+              <input type="checkbox" id="auto-refresh-toggle" role="switch">
+              Auto <select id="auto-refresh-interval" class="small-select">
+                <option value="10">10s</option>
+                <option value="30" selected>30s</option>
+                <option value="60">60s</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <div id="pool-cards" class="pool-cards"></div>
+      </div>
+
+      <!-- Accounts view -->
+      <div id="view-accounts" class="view" hidden>
+        <div class="view-header">
+          <h2>Accounts</h2>
+          <div class="header-actions">
+            <small id="accounts-refreshed" class="muted"></small>
+            <button class="outline small" id="btn-refresh-accounts" title="Refresh now">↻</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table id="accounts-table">
+            <thead>
+              <tr>
+                <th>
+                  Account ID / Name
+                  <input class="col-filter" id="filter-account" placeholder="Search…" type="search" autocomplete="off">
+                </th>
+                <th>
+                  Pool
+                  <select class="col-filter small-select" id="filter-pool">
+                    <option value="">All</option>
+                  </select>
+                </th>
+                <th>
+                  State
+                  <select class="col-filter small-select" id="filter-state">
+                    <option value="">All</option>
+                    <option value="AVAILABLE">Available</option>
+                    <option value="ASSIGNED">Assigned</option>
+                    <option value="SETTING_UP">Setting up</option>
+                    <option value="CLEANING">Cleaning</option>
+                    <option value="FAILED">Failed</option>
+                    <option value="ORPHANED">Orphaned</option>
+                  </select>
+                </th>
+                <th>
+                  Project
+                  <input class="col-filter" id="filter-project" placeholder="ID or name…" type="search" autocomplete="off">
+                </th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody id="accounts-tbody"></tbody>
+          </table>
+          <div id="accounts-empty" class="empty-state" hidden>No accounts match the current filters.</div>
+        </div>
+      </div>
+
+      <!-- Configuration view -->
+      <div id="view-config" class="view" hidden>
+        <div class="view-header">
+          <h2>Pool Configuration</h2>
+          <small class="muted">Changes are saved to SSM Parameter Store immediately.</small>
+        </div>
+        <div id="config-panels"></div>
+      </div>
+
+    </main>
+
+    <!-- Account detail panel -->
+    <aside id="detail-panel" class="detail-panel" hidden>
+      <div class="panel-resize-handle" id="panel-resize"></div>
+      <div class="panel-header">
+        <h3 id="panel-title">Account Detail</h3>
+        <button class="icon-btn" id="panel-close" aria-label="Close">×</button>
+      </div>
+      <div id="panel-body" class="panel-body"></div>
+      <div id="panel-actions" class="panel-actions"></div>
+    </aside>
+  </div>
+
+  <!-- Operations log drawer -->
+  <div id="ops-drawer" class="ops-drawer" hidden>
+    <div class="ops-header">
+      <strong>Operations Log</strong>
+      <button class="icon-btn" id="ops-close">×</button>
+    </div>
+    <div id="ops-entries" class="ops-entries"></div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast" hidden></div>
+
+  <!-- Confirm dialog -->
+  <dialog id="confirm-dialog">
+    <article>
+      <h3 id="confirm-title">Confirm</h3>
+      <p id="confirm-msg"></p>
+      <footer>
+        <button class="secondary" id="confirm-cancel">Cancel</button>
+        <button id="confirm-ok">Confirm</button>
+      </footer>
+    </article>
+  </dialog>
+
+  <script type="module" src="../auth.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

@@ -411,6 +411,18 @@ def recycle_account(account_id, max_retries, force=False):
         return {'accountId': account_id, 'previousState': 'AVAILABLE',
                 'result': 'SKIPPED', 'newState': 'AVAILABLE'}
 
+    if current_state == 'ASSIGNED':
+        if force:
+            print(f"  [{account_id}] Force recycling ASSIGNED account (no real project)")
+            update_state_simple(account_id, item, 'CLEANING', 'Force recycle from ASSIGNED')
+            item = get_latest_record(account_id)
+            if item:
+                return handle_cleaning(account_id, item, max_retries)
+            return {'accountId': account_id, 'previousState': 'ASSIGNED',
+                    'result': 'FAILED', 'error': 'Record lost after state update'}
+        return {'accountId': account_id, 'previousState': 'ASSIGNED',
+                'result': 'SKIPPED', 'error': 'Cannot recycle ASSIGNED account without force=true'}
+
     if current_state == 'CLEANING':
         return handle_cleaning(account_id, item, max_retries)
     elif current_state == 'FAILED':
@@ -607,8 +619,6 @@ def check_domain_access_role(account_id):
 def ensure_stackset(account_id):
     """Ensure DomainAccess StackSet is deployed to the account.
     If the role is already assumable, this is a no-op.
-    For single-account use (CLEANING, ORPHANED paths).
-    For batches of NEEDS_STACKSET accounts, use ensure_stackset_batch instead.
     """
     if check_domain_access_role(account_id):
         print(f"  [{account_id}] DomainAccess role OK")
@@ -618,20 +628,24 @@ def ensure_stackset(account_id):
     if not PROVISION_FUNCTION_ARN:
         raise Exception('PROVISION_ACCOUNT_FUNCTION_ARN not set, cannot fix StackSet')
 
+    # Read poolName from DynamoDB record so ProvisionAccount uses the right pool config
+    item = get_latest_record(account_id)
+    pool_name = item.get('poolName', {}).get('S', 'default') if item else 'default'
+
     result = invoke_lambda_sync(
         PROVISION_FUNCTION_ARN,
         {
             'action': 'fixStackSet',
             'accountId': account_id,
             'domainId': DOMAIN_ID,
-            'domainAccountId': DOMAIN_ACCOUNT_ID
+            'domainAccountId': DOMAIN_ACCOUNT_ID,
+            'poolName': pool_name,
         }
     )
     status = result.get('status')
     if status != 'SUCCESS':
         raise Exception(f"StackSet fix failed: {result.get('message', 'unknown')}")
 
-    # Wait for IAM propagation, then verify
     print(f"  [{account_id}] StackSet deployed, waiting for IAM propagation...")
     time.sleep(15)
 

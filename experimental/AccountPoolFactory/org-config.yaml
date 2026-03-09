@@ -4,10 +4,19 @@
 
 region: us-east-2
 
-# Target OU where pool accounts will be placed.
-# Provide the human-readable path (e.g. "RetailBanking/CustomerAnalytics").
-# The deploy script resolves this to an OU ID automatically.
-target_ou_name: "RetailBanking/CustomerAnalytics"
+stackset_prefix: "SMUS-AccountPoolFactory"
 
-# Optional: if you already know the OU ID, set it here to skip the lookup.
-# target_ou_id: ou-n5om-otvkrtx2
+pools:
+  - name: default
+    ou_name: "RetailBanking/CustomerAnalytics"
+    # ou_id: ou-n5om-otvkrtx2
+
+    email_prefix: "amirbo+pool-test"
+    email_domain: "amazon.com"
+
+    account_tags:
+      Pool: "default"
+
+    stacksets:
+      - template: domain-access.yaml
+        wave: 1

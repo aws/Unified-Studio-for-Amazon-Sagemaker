@@ -13,27 +13,28 @@ domain_name: "your-domain-name"
 # Optional: if you already know the domain ID, uncomment to skip the lookup.
 # domain_id: dzd-xxxxxxxxxx
 
-# SSO username to add as PROJECT_OWNER on projects created by test scripts.
-default_project_owner: "your-sso-username"
-
-# Project profile name for the account pool (created by 02-deploy-project-profile.sh).
-project_profile_name: "All Capabilities - Account Pool"
-
-# Account email settings for new pool accounts.
-email_prefix: "accountpool"
-email_domain: "example.com"
-
-# Setup stacks deployed into each project account.
-# The reconciler uses this list to validate AVAILABLE accounts.
-setup_stacks:
-  - "DataZone-VPC-{account_id}"
-  - "DataZone-IAM-{account_id}"
-  - "DataZone-EventBridge-{account_id}"
-  - "DataZone-ProjectRole-{account_id}"
-  - "DataZone-Blueprints-{account_id}"
-
 # Project execution role deployed into pool accounts.
 project_role:
   enabled: true
   role_name: AmazonSageMakerProjectRole
   managed_policy_arn: arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+
+pools:
+  - name: default
+    # Must match a pool name defined in org-config.yaml.
+    # The org admin controls which OU and StackSets this pool uses.
+
+    min_size: 2
+    target_size: 5
+
+    # REUSE: deprovision DataZone stacks and return account to pool.
+    # DELETE: close the account after project deletion (not yet implemented).
+    reclaim_strategy: REUSE
+
+    # SSO username added as PROJECT_OWNER on projects created by test scripts.
+    default_project_owner: "your-sso-username"
+
+    # DataZone project profile name for this pool.
+    # Created by 02-deploy-project-profile.sh.
+    # AccountProvider uses this to match incoming requests to the correct pool.
+    project_profile_name: "All Capabilities - Account Pool"

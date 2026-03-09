@@ -41,6 +41,7 @@ Then follow the [Org Admin Guide](docs/OrgAdminGuide.md) and [Domain Admin Guide
 | [Architecture.md](docs/Architecture.md) | How the system works, component details |
 | [SecurityGuide.md](docs/SecurityGuide.md) | IAM roles, ExternalId, policy grants |
 | [ProjectStructure.md](docs/ProjectStructure.md) | Directory layout, scripts reference |
+| [scripts/README.md](scripts/README.md) | All scripts with usage and deploy order |
 
 ## Architecture (3 accounts)
 

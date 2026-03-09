@@ -37,67 +37,84 @@ _config_cache = None
 
 
 def load_config() -> Dict[str, Any]:
-    """Load configuration from SSM Parameter Store on every invocation"""
+    """Load configuration from SSM Parameter Store on every invocation.
+
+    Returns a config dict with:
+    - Legacy single-pool keys (PoolName, MinimumPoolSize, etc.) for backward compat
+    - 'pools': dict of pool_name -> {MinimumPoolSize, TargetPoolSize, ReclaimStrategy,
+                                      ProjectProfileName, EmailPrefix, EmailDomain}
+    """
     try:
         config = {}
+        pools: Dict[str, Any] = {}
+
+        # Load legacy /PoolManager/ params
         next_token = None
         total_params = 0
-        
-        # Handle pagination to fetch all parameters
         while True:
             params = {
                 'Path': '/AccountPoolFactory/PoolManager/',
                 'Recursive': True,
                 'WithDecryption': False,
-                'MaxResults': 10  # Explicit max results per page
+                'MaxResults': 10
             }
-            
             if next_token:
                 params['NextToken'] = next_token
-            
             response = ssm.get_parameters_by_path(**params)
-            
-            # Process parameters from this page
             for param in response['Parameters']:
                 key = param['Name'].split('/')[-1]
                 config[key] = param['Value']
                 total_params += 1
-            
-            # Check if there are more pages
             next_token = response.get('NextToken')
             if not next_token:
                 break
-        
-        print(f"📋 Loaded {total_params} parameters from SSM (with pagination)")
-        print(f"   Parameter names: {sorted(config.keys())}")
-        
-        # Apply defaults for missing parameters
-        config.setdefault('PoolName', 'AccountPoolFactory')
-        config.setdefault('TargetOUId', 'root')
-        config.setdefault('MinimumPoolSize', '5')
-        config.setdefault('TargetPoolSize', '10')
+
+        # Load per-pool params from /AccountPoolFactory/Pools/{name}/
+        try:
+            pool_params_resp = ssm.get_parameters_by_path(
+                Path='/AccountPoolFactory/Pools/',
+                Recursive=True,
+                WithDecryption=False
+            )
+            for param in pool_params_resp['Parameters']:
+                # /AccountPoolFactory/Pools/{pool_name}/{key}
+                parts = param['Name'].split('/')
+                # parts: ['', 'AccountPoolFactory', 'Pools', pool_name, key]
+                if len(parts) >= 5:
+                    pool_name = parts[3]
+                    key = parts[4]
+                    if pool_name and key:
+                        pools.setdefault(pool_name, {})[key] = param['Value']
+        except Exception as e:
+            print(f'⚠️ Could not load per-pool SSM params: {e}')
+
+        config['pools'] = pools
+        print(f'📋 Loaded {total_params} PoolManager params, {len(pools)} pools: {list(pools.keys())}')
+
+        # Apply defaults for legacy single-pool keys
+        config.setdefault('PoolName', list(pools.keys())[0] if pools else 'default')
+        config.setdefault('MinimumPoolSize', '2')
+        config.setdefault('TargetPoolSize', '5')
         config.setdefault('MaxConcurrentSetups', '3')
-        config.setdefault('ReclaimStrategy', 'DELETE')
+        config.setdefault('ReclaimStrategy', 'REUSE')
         config.setdefault('EmailPrefix', 'accountpool')
         config.setdefault('EmailDomain', 'example.com')
         config.setdefault('NamePrefix', 'DataZone-Pool')
-        
-        print(f"✅ Configuration loaded successfully")
+
         return config
-        
+
     except Exception as e:
-        print(f"⚠️ Failed to load SSM parameters: {e}")
-        print("Using default configuration")
+        print(f'⚠️ Failed to load SSM parameters: {e}')
         return {
-            'PoolName': 'AccountPoolFactory',
-            'TargetOUId': 'root',
-            'MinimumPoolSize': '5',
-            'TargetPoolSize': '10',
+            'PoolName': 'default',
+            'MinimumPoolSize': '2',
+            'TargetPoolSize': '5',
             'MaxConcurrentSetups': '3',
-            'ReclaimStrategy': 'DELETE',
+            'ReclaimStrategy': 'REUSE',
             'EmailPrefix': 'accountpool',
             'EmailDomain': 'example.com',
-            'NamePrefix': 'DataZone-Pool'
+            'NamePrefix': 'DataZone-Pool',
+            'pools': {},
         }
 
 
@@ -129,6 +146,9 @@ def lambda_handler(event, context):
     if 'action' in event:
         action = event['action']
         if action == 'force_replenishment':
+            # Pass optional poolName from event into config so handler can filter
+            if 'poolName' in event:
+                config['poolName'] = event['poolName']
             return handle_force_replenishment(config)
         elif action == 'delete_failed_account':
             return handle_delete_failed_account(event['accountId'], config)
@@ -250,74 +270,106 @@ def handle_assignment_event(account_id: str, stack_name: str, config: Dict[str, 
         return {'statusCode': 500, 'body': str(e)}
 
 
-def check_pool_size_and_replenish(config: Dict[str, Any]):
-    """Check available account count and trigger replenishment if below minimum"""
-    print("📊 Checking pool size...")
-    
-    # Query available accounts
-    available_count = count_accounts_by_state('AVAILABLE')
-    setting_up_count = count_accounts_by_state('SETTING_UP')
-    failed_count = count_accounts_by_state('FAILED')
-    
-    print(f"📈 Pool status: {available_count} available, {setting_up_count} setting up, {failed_count} failed")
-    
-    # Publish metrics
-    publish_metric('AvailableAccountCount', available_count)
-    publish_metric('SettingUpAccountCount', setting_up_count)
-    publish_metric('FailedAccountCount', failed_count)
-    
-    minimum_pool_size = int(config['MinimumPoolSize'])
-    
-    if available_count >= minimum_pool_size:
-        print(f"✅ Pool size ({available_count}) is above minimum ({minimum_pool_size})")
-        return
-    
-    # Check for failed accounts - block replenishment if any exist
-    if failed_count > 0:
-        print(f"🚫 Replenishment BLOCKED: {failed_count} failed accounts exist")
-        publish_metric('ReplenishmentBlocked', 1, [{'Name': 'FailedAccountCount', 'Value': str(failed_count)}])
-        
-        # Send SNS notification
-        send_replenishment_blocked_notification(failed_count)
-        return
-    
-    # Calculate replenishment quantity
-    target_pool_size = int(config['TargetPoolSize'])
-    max_concurrent_setups = int(config['MaxConcurrentSetups'])
-    
-    replenishment_quantity = target_pool_size - available_count
-    max_new_accounts = max_concurrent_setups - setting_up_count
-    
-    if max_new_accounts <= 0:
-        print(f"⏸️ Max concurrent setups ({max_concurrent_setups}) reached, waiting...")
-        return
-    
-    accounts_to_create = min(replenishment_quantity, max_new_accounts)
-    
-    print(f"🚀 Triggering replenishment: creating {accounts_to_create} accounts")
-    publish_metric('ReplenishmentTriggered', 1, [
-        {'Name': 'AvailableCount', 'Value': str(available_count)},
-        {'Name': 'RequestedCount', 'Value': str(accounts_to_create)}
-    ])
-    
-    # Create accounts in parallel
-    create_accounts_parallel(accounts_to_create, config)
+def check_pool_size_and_replenish(config: Dict[str, Any], target_pool: str = None):
+    """Check available account count per pool and trigger replenishment if below minimum.
+
+    If target_pool is given, only replenishes that pool. Otherwise iterates all pools.
+    Falls back to single-pool legacy behavior if no pools are configured.
+    """
+    pools = config.get('pools', {})
+
+    # Determine which pools to process
+    if target_pool:
+        pool_names = [target_pool] if target_pool in pools else []
+        if not pool_names:
+            # Fall back to legacy single-pool
+            pool_names = [None]
+    elif pools:
+        pool_names = list(pools.keys())
+    else:
+        pool_names = [None]  # legacy single-pool mode
+
+    max_concurrent = int(config.get('MaxConcurrentSetups', '3'))
+
+    for pool_name in pool_names:
+        pool_cfg = pools.get(pool_name, {}) if pool_name else {}
+        min_size = int(pool_cfg.get('MinimumPoolSize', config.get('MinimumPoolSize', '2')))
+        target_size = int(pool_cfg.get('TargetPoolSize', config.get('TargetPoolSize', '5')))
+
+        available = count_accounts_by_state('AVAILABLE', pool_name)
+        setting_up = count_accounts_by_state('SETTING_UP', pool_name)
+        failed = count_accounts_by_state('FAILED', pool_name)
+
+        label = f'pool={pool_name}' if pool_name else 'all'
+        print(f'📊 [{label}] available={available} setting_up={setting_up} failed={failed} min={min_size}')
+
+        publish_metric('AvailableAccountCount', available,
+                       [{'Name': 'Pool', 'Value': pool_name or 'default'}])
+        publish_metric('SettingUpAccountCount', setting_up,
+                       [{'Name': 'Pool', 'Value': pool_name or 'default'}])
+
+        if available >= min_size:
+            print(f'✅ [{label}] Pool size OK ({available} >= {min_size})')
+            continue
+
+        if failed > 0:
+            print(f'🚫 [{label}] Replenishment BLOCKED: {failed} failed accounts')
+            publish_metric('ReplenishmentBlocked', 1,
+                           [{'Name': 'Pool', 'Value': pool_name or 'default'}])
+            send_replenishment_blocked_notification(failed)
+            continue
+
+        replenishment_qty = target_size - available
+        max_new = max_concurrent - setting_up
+        if max_new <= 0:
+            print(f'⏸️ [{label}] Max concurrent setups reached, waiting...')
+            continue
+
+        to_create = min(replenishment_qty, max_new)
+        print(f'🚀 [{label}] Creating {to_create} accounts')
+        publish_metric('ReplenishmentTriggered', to_create,
+                       [{'Name': 'Pool', 'Value': pool_name or 'default'}])
+
+        # Build per-pool config for create_accounts_parallel
+        pool_create_config = dict(config)
+        if pool_name:
+            pool_create_config['PoolName'] = pool_name
+            pool_create_config['EmailPrefix'] = pool_cfg.get('EmailPrefix', config.get('EmailPrefix', 'accountpool'))
+            pool_create_config['EmailDomain'] = pool_cfg.get('EmailDomain', config.get('EmailDomain', 'example.com'))
+
+        create_accounts_parallel(to_create, pool_create_config)
 
 
-def count_accounts_by_state(state: str) -> int:
-    """Count accounts in a specific state using GSI"""
+def count_accounts_by_state(state: str, pool_name: str = None) -> int:
+    """Count accounts in a specific state, optionally filtered by pool.
+
+    Uses PoolIndex GSI when pool_name is provided, StateIndex otherwise.
+    """
     try:
-        response = dynamodb.query(
-            TableName=DYNAMODB_TABLE_NAME,
-            IndexName='StateIndex',
-            KeyConditionExpression='#state = :state',
-            ExpressionAttributeNames={'#state': 'state'},
-            ExpressionAttributeValues={':state': {'S': state}},
-            Select='COUNT'
-        )
+        if pool_name:
+            response = dynamodb.query(
+                TableName=DYNAMODB_TABLE_NAME,
+                IndexName='PoolIndex',
+                KeyConditionExpression='poolName = :pool AND #state = :state',
+                ExpressionAttributeNames={'#state': 'state'},
+                ExpressionAttributeValues={
+                    ':pool': {'S': pool_name},
+                    ':state': {'S': state},
+                },
+                Select='COUNT'
+            )
+        else:
+            response = dynamodb.query(
+                TableName=DYNAMODB_TABLE_NAME,
+                IndexName='StateIndex',
+                KeyConditionExpression='#state = :state',
+                ExpressionAttributeNames={'#state': 'state'},
+                ExpressionAttributeValues={':state': {'S': state}},
+                Select='COUNT'
+            )
         return response.get('Count', 0)
     except Exception as e:
-        print(f"❌ Error counting accounts in state {state}: {e}")
+        print(f'❌ Error counting accounts in state {state} (pool={pool_name}): {e}')
         return 0
 
 
@@ -367,10 +419,9 @@ def create_accounts_parallel(count: int, config: Dict[str, Any]):
                 'action': 'provision',
                 'accountName': name,
                 'accountEmail': email,
-                'ouId': config.get('TargetOUId', 'root'),
                 'domainId': os.environ.get('DOMAIN_ID'),
                 'domainAccountId': DOMAIN_ACCOUNT_ID,
-                'poolName': config.get('PoolName', 'AccountPoolFactory')
+                'poolName': config.get('PoolName', 'default'),
             }
             
             print(f"   Invoking ProvisionAccount with payload: {json.dumps(payload, indent=2)}")
@@ -387,10 +438,13 @@ def create_accounts_parallel(count: int, config: Dict[str, Any]):
             
             if response_payload.get('status') == 'SUCCESS':
                 account_id = response_payload['accountId']
+                returned_pool = response_payload.get('poolName', config.get('PoolName', 'default'))
+                deployed_stacksets = response_payload.get('deployedStackSets', [])
                 print(f"✅ Account provisioned and ready: {account_id}")
                 
-                # Create DynamoDB record
-                create_account_record(account_id, f"provision-{timestamp}-{i}", name, email)
+                # Create DynamoDB record with poolName and deployedStackSets
+                create_account_record(account_id, f"provision-{timestamp}-{i}", name, email,
+                                      pool_name=returned_pool, deployed_stacksets=deployed_stacksets)
                 
                 # Invoke Setup Orchestrator asynchronously
                 invoke_setup_orchestrator(account_id, f"provision-{timestamp}-{i}")
@@ -432,27 +486,29 @@ def create_accounts_parallel(count: int, config: Dict[str, Any]):
         print(f"   Account IDs: {', '.join(successful_accounts)}")
 
 
-def create_account_record(account_id: str, request_id: str, name: str, email: str):
+def create_account_record(account_id: str, request_id: str, name: str, email: str,
+                          pool_name: str = 'default', deployed_stacksets: list = None):
     """Create DynamoDB record for new account"""
     timestamp = int(time.time())
-    
+    item = {
+        'accountId': {'S': account_id},
+        'timestamp': {'N': str(timestamp)},
+        'state': {'S': 'SETTING_UP'},
+        'createdDate': {'S': datetime.now(timezone.utc).isoformat()},
+        'accountName': {'S': name},
+        'accountEmail': {'S': email},
+        'createRequestId': {'S': request_id},
+        'setupStartDate': {'S': datetime.now(timezone.utc).isoformat()},
+        'completedSteps': {'L': []},
+        'retryCount': {'N': '0'},
+        'poolName': {'S': pool_name},
+    }
+    if deployed_stacksets:
+        item['deployedStackSets'] = {'L': [{'S': s} for s in deployed_stacksets]}
+
     try:
-        dynamodb.put_item(
-            TableName=DYNAMODB_TABLE_NAME,
-            Item={
-                'accountId': {'S': account_id},
-                'timestamp': {'N': str(timestamp)},
-                'state': {'S': 'SETTING_UP'},
-                'createdDate': {'S': datetime.now(timezone.utc).isoformat()},
-                'accountName': {'S': name},
-                'accountEmail': {'S': email},
-                'createRequestId': {'S': request_id},
-                'setupStartDate': {'S': datetime.now(timezone.utc).isoformat()},
-                'completedSteps': {'L': []},
-                'retryCount': {'N': '0'}
-            }
-        )
-        print(f"✅ Created DynamoDB record for account {account_id}")
+        dynamodb.put_item(TableName=DYNAMODB_TABLE_NAME, Item=item)
+        print(f"✅ Created DynamoDB record for account {account_id} (pool={pool_name})")
     except Exception as e:
         print(f"❌ Error creating DynamoDB record: {e}")
 
@@ -814,7 +870,10 @@ def handle_datazone_deletion(account_id: str, project_id: str, domain_id: str, c
             return {'statusCode': 200, 'body': 'Not in pool'}
 
         item = response['Items'][0]
-        reclaim_strategy = config.get('ReclaimStrategy', 'DELETE')
+        # Read ReclaimStrategy from the account's pool config, fall back to global
+        acct_pool = item.get('poolName', {}).get('S', '')
+        pool_cfg = config.get('pools', {}).get(acct_pool, {})
+        reclaim_strategy = pool_cfg.get('ReclaimStrategy') or config.get('ReclaimStrategy', 'REUSE')
 
         if reclaim_strategy == 'REUSE':
             return reclaim_account_reuse(account_id, item)
@@ -827,10 +886,11 @@ def handle_datazone_deletion(account_id: str, project_id: str, domain_id: str, c
 
 
 def handle_force_replenishment(config: Dict[str, Any]) -> Dict[str, Any]:
-    """Handle manual replenishment trigger"""
-    print("🔄 Force replenishment triggered")
-    check_pool_size_and_replenish(config)
-    return {'statusCode': 200, 'body': 'Replenishment triggered'}
+    """Handle manual replenishment trigger. Accepts optional poolName in config."""
+    pool_name = config.get('poolName')  # set by lambda_handler from event payload
+    print(f"🔄 Force replenishment triggered (pool={pool_name or 'all'})")
+    check_pool_size_and_replenish(config, target_pool=pool_name)
+    return {'statusCode': 200, 'body': f'Replenishment triggered (pool={pool_name or "all"})'}
 
 
 def handle_delete_failed_account(account_id: str, config: Dict[str, Any]) -> Dict[str, Any]:

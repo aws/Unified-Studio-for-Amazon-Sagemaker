@@ -76,20 +76,39 @@ A user opens SageMaker Unified Studio and clicks "Create Project". Behind the sc
 
 1. **User Action**: Click "Create Project" in SMUS UI
 
-2. **SMUS → DataZone**: `list-accounts-in-account-pool` API call
+2. **Client → AccountProvider Lambda**: `listAuthorizedAccountsRequest` — get list of AVAILABLE pool accounts
 
-3. **Account Provider Lambda returns available account** (queries DynamoDB, returns first AVAILABLE account)
+3. **Client picks one account** from the returned list
 
-4. **SMUS → DataZone**: `CreateProject` API call with the account ID
+4. **Client → DataZone**: `get_project_profile` — get the list of environment configuration names declared in the profile
 
-5. **DataZone deploys project** CloudFormation stacks to the specified account
+5. **Client → DataZone**: `CreateProject` with **`userParameters`** — each environment config name explicitly mapped to the chosen account ID + `sourceAccountPoolId`
+   > ⚠️ **This step is mandatory.** Without `userParameters`, DataZone returns `FAILED_VALIDATION: EnvironmentConfigurations require a resolved account on input`. DataZone does NOT auto-resolve the account — the caller must pass it.
 
-6. **SMUS UI**: Shows project as ready
+6. **DataZone → AccountProvider Lambda**: `validateAccountAuthorizationRequest` — confirms the account is valid and marks it ASSIGNED
+
+7. **DataZone deploys project** CloudFormation stacks to the specified account
+
+8. **`overallDeploymentStatus`** transitions: `IN_PROGRESS` → `SUCCESSFUL`
+
+**Example `userParameters` structure** (required for each env config in the profile):
+```python
+user_params = [
+    {
+        'environmentConfigurationName': 'Tooling',   # one entry per env config
+        'environmentResolvedAccount': {
+            'awsAccountId': '123456789012',           # from AccountProvider
+            'regionName': 'us-east-2',
+            'sourceAccountPoolId': 'c5r1rtjwi2qhbd'  # from list_account_pools
+        }
+    },
+    # ... repeat for every env config name in the profile
+]
+```
 
 **Lambda Activated**: Account Provider Lambda (Domain Account)
-- Queries DynamoDB for AVAILABLE accounts
-- Returns one account ID to DataZone
-- Sends alert if pool is empty
+- `listAuthorizedAccountsRequest`: queries DynamoDB PoolIndex GSI for AVAILABLE accounts in the matching pool, returns list
+- `validateAccountAuthorizationRequest`: confirms account is AVAILABLE/ASSIGNED, marks ASSIGNED, triggers PoolManager replenishment
 
 **Result**: User gets instant project creation (< 5 seconds) because account is already configured
 
@@ -150,6 +169,10 @@ FAILURE HANDLING:
 - `ASSIGNED`: In use by a project
 - `CLEANING`: Being cleaned by DeprovisionAccount (10-15 minutes)
 - `FAILED`: Setup or cleanup failed, requires manual intervention
+
+**Force recycling**: The AccountRecycler supports `force=true` to recycle accounts that are stuck:
+- `AVAILABLE + force`: Re-runs full deprovision → setup cycle (useful for incomplete setup)
+- `ASSIGNED + force`: Transitions to CLEANING and runs deprovision → setup (use when account is ASSIGNED but has no real backing project — e.g. from manual testing or edge cases)
 
 ## Key Design Decisions
 
@@ -534,6 +557,8 @@ This means policy grants are automatically applied when SetupOrchestrator deploy
 DataZone account pools only support `MANUAL` resolution strategy. Environment configurations with `ON_CREATE` deployment mode do not work — the Lambda is never invoked during project creation for ON_CREATE environments.
 
 **Impact**: All environment configurations in pool-backed project profiles must use `ON_DEMAND` deployment mode. Users create environments manually after project creation.
+
+**Consequence for project creation**: The client (script or UI) must explicitly resolve the account before calling `CreateProject`. It must call `listAuthorizedAccountsRequest` first, pick an account, then pass it in `userParameters` for every environment config. See the call sequence in Step 1 above.
 
 ### StackSet Operations Are Serialized
 

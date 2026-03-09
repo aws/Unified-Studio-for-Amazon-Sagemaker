@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 32" fill="none">
+  <!-- Hexagon mark -->
+  <polygon points="14,2 26,9 26,23 14,30 2,23 2,9" fill="#0066CC"/>
+  <polygon points="14,7 21,11 21,21 14,25 7,21 7,11" fill="#0099FF"/>
+  <text x="14" y="20" font-family="Arial,sans-serif" font-size="10" font-weight="700"
+        fill="white" text-anchor="middle">A</text>
+  <!-- Company name -->
+  <text x="34" y="13" font-family="Arial,sans-serif" font-size="11" font-weight="700"
+        fill="#0066CC" letter-spacing="1">ACME</text>
+  <text x="34" y="26" font-family="Arial,sans-serif" font-size="8" font-weight="400"
+        fill="#555" letter-spacing="2">CORP</text>
+</svg>

@@ -1,6 +1,7 @@
 """
 Account Provider Lambda - Production Version
-Queries DynamoDB for available accounts and returns them to DataZone
+Queries DynamoDB for available accounts and returns them to DataZone.
+Pool-aware: maps project profile name → pool name via SSM, then filters by pool.
 """
 
 import json
@@ -12,15 +13,97 @@ from datetime import datetime
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# Initialize AWS clients
 dynamodb = boto3.client('dynamodb')
+ssm = boto3.client('ssm')
 cloudwatch = boto3.client('cloudwatch')
 sns = boto3.client('sns')
 
-# Configuration from environment variables
 TABLE_NAME = os.environ.get('TABLE_NAME', 'AccountPoolFactory-AccountState')
 REGION = os.environ.get('AWS_REGION', 'us-east-2')
 SNS_TOPIC_ARN = os.environ.get('SNS_TOPIC_ARN')
+
+# Cache: profile_name → pool_name (populated on first call)
+_profile_to_pool_cache = None
+
+
+def _load_profile_pool_mapping():
+    """Build a mapping of project_profile_name → pool_name from SSM.
+    Reads /AccountPoolFactory/Pools/{name}/ProjectProfileName for each pool.
+    """
+    global _profile_to_pool_cache
+    if _profile_to_pool_cache is not None:
+        return _profile_to_pool_cache
+
+    mapping = {}
+    try:
+        resp = ssm.get_parameters_by_path(
+            Path='/AccountPoolFactory/Pools/',
+            Recursive=True,
+            WithDecryption=False
+        )
+        for param in resp.get('Parameters', []):
+            parts = param['Name'].split('/')
+            # /AccountPoolFactory/Pools/{pool_name}/ProjectProfileName
+            if len(parts) >= 5 and parts[4] == 'ProjectProfileName':
+                pool_name = parts[3]
+                profile_name = param['Value']
+                mapping[profile_name] = pool_name
+                logger.info(f"  Profile '{profile_name}' → pool '{pool_name}'")
+    except Exception as e:
+        logger.warning(f"Could not load profile→pool mapping from SSM: {e}")
+
+    _profile_to_pool_cache = mapping
+    logger.info(f"Profile→pool mapping: {mapping}")
+    return mapping
+
+
+def _extract_pool_name_from_event(event):
+    """Extract pool name from the DataZone event context.
+
+    DataZone passes context in the listAuthorizedAccountsRequest that may include
+    projectProfileId or projectProfileName. We map that to a pool name via SSM.
+    Returns pool_name or None (fall back to all pools).
+    """
+    op = event.get('operationRequest', {})
+    req = op.get('listAuthorizedAccountsRequest') or {}
+    if not isinstance(req, dict):
+        req = {}
+
+    # DataZone may pass context with projectProfileId or projectProfileName
+    context = req.get('context', {}) or {}
+    profile_name = context.get('projectProfileName') or context.get('projectProfile')
+    profile_id = context.get('projectProfileId')
+
+    if not profile_name and not profile_id:
+        # Also check top-level event fields
+        profile_name = event.get('projectProfileName')
+        profile_id = event.get('projectProfileId')
+
+    if not profile_name and not profile_id:
+        return None
+
+    mapping = _load_profile_pool_mapping()
+
+    if profile_name and profile_name in mapping:
+        return mapping[profile_name]
+
+    # If we have a profile ID but not name, try to resolve via DataZone API
+    if profile_id:
+        try:
+            dz = boto3.client('datazone', region_name=REGION)
+            domain_id = os.environ.get('DOMAIN_ID', '')
+            if domain_id:
+                resp = dz.get_project_profile(
+                    domainIdentifier=domain_id,
+                    identifier=profile_id
+                )
+                resolved_name = resp.get('name', '')
+                if resolved_name in mapping:
+                    return mapping[resolved_name]
+        except Exception as e:
+            logger.warning(f"Could not resolve profile ID {profile_id}: {e}")
+
+    return None  # Fall back to all pools
 
 def lambda_handler(event, context):
     """
@@ -49,11 +132,12 @@ def lambda_handler(event, context):
             response = validate_account_authorization(operation_request['validateAccountAuthorizationRequest'])
         elif operation_request.get('listAuthorizedAccountsRequest') is not None:
             logger.info("📋 ListAuthorizedAccountsRequest received")
-            response = list_authorized_accounts()
+            pool_name = _extract_pool_name_from_event(event)
+            response = list_authorized_accounts(pool_name=pool_name)
         elif 'listAuthorizedAccountsRequest' in operation_request:
-            # listAuthorizedAccountsRequest is null but key exists — treat as list request
             logger.info("📋 ListAuthorizedAccountsRequest received (null payload)")
-            response = list_authorized_accounts()
+            pool_name = _extract_pool_name_from_event(event)
+            response = list_authorized_accounts(pool_name=pool_name)
         else:
             error_msg = f"❌ Unsupported operation: {operation_request}"
             logger.error(error_msg)
@@ -85,24 +169,43 @@ def lambda_handler(event, context):
         
         raise
 
-def list_authorized_accounts():
-    """Query DynamoDB for available accounts and return them"""
-    logger.info("🔍 Querying DynamoDB for AVAILABLE accounts...")
-    
+def list_authorized_accounts(pool_name=None):
+    """Query DynamoDB for available accounts, optionally filtered by pool.
+
+    If pool_name is given, uses PoolIndex GSI for efficient per-pool query.
+    Falls back to StateIndex (all pools) if no pool_name or PoolIndex unavailable.
+    """
+    logger.info(f"🔍 Querying DynamoDB for AVAILABLE accounts (pool={pool_name or 'all'})...")
+
     try:
-        # Query StateIndex GSI for AVAILABLE accounts
-        response = dynamodb.query(
-            TableName=TABLE_NAME,
-            IndexName='StateIndex',
-            KeyConditionExpression='#state = :state',
-            ExpressionAttributeNames={
-                '#state': 'state'
-            },
-            ExpressionAttributeValues={
-                ':state': {'S': 'AVAILABLE'}
-            },
-            Limit=100  # Return up to 100 available accounts
-        )
+        if pool_name:
+            # Use PoolIndex GSI: poolName PK, state SK
+            try:
+                response = dynamodb.query(
+                    TableName=TABLE_NAME,
+                    IndexName='PoolIndex',
+                    KeyConditionExpression='poolName = :pool AND #state = :state',
+                    ExpressionAttributeNames={'#state': 'state'},
+                    ExpressionAttributeValues={
+                        ':pool': {'S': pool_name},
+                        ':state': {'S': 'AVAILABLE'},
+                    },
+                    Limit=100
+                )
+                logger.info(f"  Used PoolIndex GSI for pool={pool_name}")
+            except Exception as e:
+                logger.warning(f"PoolIndex query failed ({e}), falling back to StateIndex")
+                pool_name = None  # fall through to StateIndex below
+
+        if not pool_name:
+            response = dynamodb.query(
+                TableName=TABLE_NAME,
+                IndexName='StateIndex',
+                KeyConditionExpression='#state = :state',
+                ExpressionAttributeNames={'#state': 'state'},
+                ExpressionAttributeValues={':state': {'S': 'AVAILABLE'}},
+                Limit=100
+            )
         
         items = response.get('Items', [])
         logger.info(f"📊 Found {len(items)} AVAILABLE accounts")
@@ -218,44 +321,58 @@ def _mark_assigned(account_id: str, item: dict):
 
 
 def validate_account_authorization(request):
-    """Validate if account/region pair is authorized"""
+    """Validate if account/region pair is authorized.
+
+    Also verifies the account's poolName matches the requesting project profile's pool.
+    """
     account_id = request.get('awsAccountId')
     region = request.get('regionName')
-    
+    context = request.get('context', {}) or {}
+
     logger.info(f"🔍 Validating account: {account_id}, region: {region}")
-    
+
+    # Determine expected pool from context (if provided)
+    expected_pool = None
+    profile_name = context.get('projectProfileName') or context.get('projectProfile')
+    if profile_name:
+        mapping = _load_profile_pool_mapping()
+        expected_pool = mapping.get(profile_name)
+        logger.info(f"  Expected pool for profile '{profile_name}': {expected_pool}")
+
     try:
-        # Query DynamoDB for this specific account
         response = dynamodb.query(
             TableName=TABLE_NAME,
             KeyConditionExpression='accountId = :accountId',
-            ExpressionAttributeValues={
-                ':accountId': {'S': account_id}
-            },
-            ScanIndexForward=False,  # Get most recent record
+            ExpressionAttributeValues={':accountId': {'S': account_id}},
+            ScanIndexForward=False,
             Limit=1
         )
-        
+
         items = response.get('Items', [])
-        
-        if len(items) == 0:
+
+        if not items:
             logger.warning(f"⚠️  Account {account_id} not found in pool")
             auth_result = 'DENY'
         else:
             item = items[0]
             state = item.get('state', {}).get('S')
-            
-            # Account must be AVAILABLE or ASSIGNED (already being assigned to this project)
-            if state in ('AVAILABLE', 'ASSIGNED') and region == REGION:
+            acct_pool = item.get('poolName', {}).get('S', '')
+
+            # Pool check: if we know the expected pool, verify it matches
+            pool_ok = True
+            if expected_pool and acct_pool and acct_pool != expected_pool:
+                logger.warning(f"  Pool mismatch: account pool={acct_pool}, expected={expected_pool}")
+                pool_ok = False
+
+            if state in ('AVAILABLE', 'ASSIGNED') and region == REGION and pool_ok:
                 auth_result = 'GRANT'
-                logger.info(f"✅ Authorization GRANTED for {account_id} in {region} (state: {state})")
-                # Mark ASSIGNED on first AVAILABLE grant
+                logger.info(f"✅ Authorization GRANTED for {account_id} in {region} (state={state}, pool={acct_pool})")
                 if state == 'AVAILABLE':
                     _mark_assigned(account_id, item)
             else:
                 auth_result = 'DENY'
-                logger.info(f"❌ Authorization DENIED for {account_id} in {region} (state: {state})")
-        
+                logger.info(f"❌ Authorization DENIED for {account_id} in {region} (state={state}, pool={acct_pool}, pool_ok={pool_ok})")
+
         return {
             'operationResponse': {
                 'validateAccountAuthorizationResponse': {
@@ -263,10 +380,9 @@ def validate_account_authorization(request):
                 }
             }
         }
-        
+
     except Exception as e:
         logger.error(f"❌ Error validating account: {e}")
-        # Default to DENY on error
         return {
             'operationResponse': {
                 'validateAccountAuthorizationResponse': {

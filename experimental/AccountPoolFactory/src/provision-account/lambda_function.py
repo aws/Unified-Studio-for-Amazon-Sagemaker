@@ -7,15 +7,17 @@ then uses those temporary credentials for all Organizations and StackSet API cal
 
 Responsibilities:
 1. Assume AccountCreation role in Org Admin account (via STS)
-2. Create account via Organizations API (using assumed role)
-3. Move account to target OU
-4. Deploy StackSet execution role to new account (via OrganizationAccountAccessRole)
-5. Deploy TrustPolicy StackSet (creates SMUS-AccountPoolFactory-DomainAccess role)
-6. Wait for StackSet completion
-7. Return ready-to-use account ID
+2. Read pool config from org SSM (OU ID, email, account tags, StackSet list)
+3. Create account via Organizations API (using assumed role)
+4. Move account to target OU
+5. Apply account tags via Organizations TagResource
+6. Deploy StackSet execution role to new account (via OrganizationAccountAccessRole)
+7. Deploy pool StackSets in wave order (wave 1 first, then wave 2+, etc.)
+8. Return ready-to-use account ID + deployedStackSets list + poolName
 
 Security:
 - AccountCreation role is protected by ExternalId
+- TemplateUrl condition on AccountCreationRole prevents arbitrary template injection
 - OrganizationAccountAccessRole assumption is done from the assumed AccountCreation session
 - No Organizations/StackSet API calls are made with the Lambda's own credentials
 """
@@ -24,12 +26,13 @@ import json
 import os
 import time
 from datetime import datetime, timezone
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import boto3
 from botocore.exceptions import ClientError
 
 # STS client — uses Lambda's own role, only for the initial assume_role call
 sts = boto3.client('sts')
+ssm = boto3.client('ssm', region_name=os.environ.get('AWS_REGION_NAME', 'us-east-2'))
 
 # Constants
 REGION = os.environ.get('AWS_REGION_NAME', 'us-east-2')
@@ -38,8 +41,7 @@ DOMAIN_ACCESS_STACKSET_NAME = 'SMUS-AccountPoolFactory-DomainAccess'
 # Environment variables (set by CloudFormation)
 ACCOUNT_CREATION_ROLE_ARN = os.environ.get('ACCOUNT_CREATION_ROLE_ARN', '')
 EXTERNAL_ID = os.environ.get('EXTERNAL_ID', '')
-
-
+ORG_ADMIN_ACCOUNT_ID = os.environ.get('ORG_ADMIN_ACCOUNT_ID', '')
 def _get_org_clients():
     """Assume the AccountCreation role in Org Admin and return (organizations, cloudformation, sts) clients.
 
@@ -222,87 +224,225 @@ def fix_stackset(event: Dict[str, Any], organizations, cloudformation, assumed_s
 
 
 
+def load_pool_config_from_ssm(pool_name: str, org_ssm) -> Dict[str, Any]:
+    """Read pool config from org SSM via the assumed AccountCreation role.
+
+    Returns dict with: ou_id, email_prefix, email_domain, account_tags (dict),
+    stacksets (list of {template, stacksetName, wave, s3Url})
+    """
+    base = f'/AccountPoolFactory/Pools/{pool_name}'
+    keys = ['OUId', 'EmailPrefix', 'EmailDomain', 'AccountTags', 'StackSets']
+    result = {}
+    for key in keys:
+        try:
+            resp = org_ssm.get_parameter(Name=f'{base}/{key}')
+            result[key] = resp['Parameter']['Value']
+        except Exception as e:
+            print(f'   Warning: could not read SSM {base}/{key}: {e}')
+            result[key] = None
+
+    config = {
+        'ou_id': result.get('OUId', ''),
+        'email_prefix': result.get('EmailPrefix', ''),
+        'email_domain': result.get('EmailDomain', ''),
+        'account_tags': {},
+        'stacksets': [],
+    }
+    if result.get('AccountTags'):
+        try:
+            config['account_tags'] = json.loads(result['AccountTags'])
+        except Exception:
+            pass
+    if result.get('StackSets'):
+        try:
+            config['stacksets'] = json.loads(result['StackSets'])
+        except Exception:
+            pass
+    return config
+
+
+def deploy_stacksets_in_waves(account_id: str, stacksets: List[Dict], cloudformation) -> List[str]:
+    """Deploy StackSet instances in wave order. Same-wave StackSets deploy in parallel.
+
+    Returns list of deployed StackSet names.
+    """
+    if not stacksets:
+        return []
+
+    # Group by wave
+    waves: Dict[int, List[Dict]] = {}
+    for entry in stacksets:
+        wave = int(entry.get('wave', 1))
+        waves.setdefault(wave, []).append(entry)
+
+    deployed = []
+    for wave_num in sorted(waves.keys()):
+        entries = waves[wave_num]
+        print(f'   Wave {wave_num}: deploying {[e["stacksetName"] for e in entries]} in parallel')
+
+        operation_ids = []
+        for entry in entries:
+            stackset_name = entry['stacksetName']
+            try:
+                # Check if instance already exists and is current
+                resp = cloudformation.list_stack_instances(
+                    StackSetName=stackset_name,
+                    StackInstanceAccount=account_id,
+                    StackInstanceRegion=REGION
+                )
+                if resp.get('Summaries'):
+                    status = resp['Summaries'][0].get('Status')
+                    if status == 'CURRENT':
+                        print(f'   ✅ {stackset_name}: already CURRENT')
+                        deployed.append(stackset_name)
+                        continue
+            except ClientError:
+                pass  # Instance doesn't exist yet
+
+            # Create instance
+            try:
+                resp = cloudformation.create_stack_instances(
+                    StackSetName=stackset_name,
+                    Accounts=[account_id],
+                    Regions=[REGION],
+                    OperationPreferences={'FailureToleranceCount': 0, 'MaxConcurrentCount': 1}
+                )
+                operation_ids.append((stackset_name, resp['OperationId']))
+                print(f'   ⏳ {stackset_name}: create_stack_instances started (op={resp["OperationId"]})')
+            except ClientError as e:
+                code = e.response.get('Error', {}).get('Code', '')
+                if code == 'OperationInProgressException':
+                    print(f'   ⏳ {stackset_name}: operation in progress, waiting...')
+                    _wait_for_any_stackset_operation(stackset_name, cloudformation, timeout=180)
+                    resp = cloudformation.create_stack_instances(
+                        StackSetName=stackset_name,
+                        Accounts=[account_id],
+                        Regions=[REGION],
+                        OperationPreferences={'FailureToleranceCount': 0, 'MaxConcurrentCount': 1}
+                    )
+                    operation_ids.append((stackset_name, resp['OperationId']))
+                else:
+                    raise
+
+        # Wait for all operations in this wave
+        for stackset_name, op_id in operation_ids:
+            wait_for_stackset_operation(stackset_name, op_id, account_id, cloudformation, timeout=300)
+            print(f'   ✅ {stackset_name}: deployed')
+            deployed.append(stackset_name)
+
+    return deployed
+
+
 def provision_account(event: Dict[str, Any], organizations, cloudformation, assumed_sts) -> Dict[str, Any]:
-    """Provision a new account with proper role setup"""
-    
-    # Extract parameters
+    """Provision a new account with proper role setup.
+
+    Reads pool config (OU ID, email, account tags, StackSets) from org SSM.
+    Returns accountId, poolName, and deployedStackSets for the pool manager to store.
+    """
     account_name = event.get('accountName')
     account_email = event.get('accountEmail')
-    ou_id = event.get('ouId')
+    pool_name = event.get('poolName', 'default')
     domain_id = event.get('domainId')
     domain_account_id = event.get('domainAccountId')
 
-    # org_admin_account_id comes from the assumed AccountCreation role session
     org_admin_account_id = assumed_sts.get_caller_identity()['Account']
 
-    # Validate required parameters
-    if not all([account_name, account_email, ou_id, domain_id, domain_account_id]):
-        return {
-            'status': 'ERROR',
-            'message': 'Missing required parameters'
-        }
-    
-    print(f"🚀 Provisioning account: {account_name}")
-    print(f"   Email: {account_email}")
-    print(f"   Target OU: {ou_id}")
-    print(f"   Domain ID: {domain_id}")
-    print(f"   Domain Account: {domain_account_id}")
-    
+    # Load pool config from org SSM via assumed role
+    print(f'   Loading pool config from org SSM for pool: {pool_name}')
+    org_ssm = boto3.client('ssm', region_name=REGION, **_creds_from_sts(assumed_sts))
+    pool_config = load_pool_config_from_ssm(pool_name, org_ssm)
+
+    ou_id = event.get('ouId') or pool_config['ou_id']
+    if not ou_id:
+        return {'status': 'ERROR', 'message': f'No OU ID found for pool {pool_name}'}
+
+    if not account_email:
+        import uuid
+        uid = uuid.uuid4().hex[:8]
+        account_email = f"{pool_config['email_prefix']}+{uid}@{pool_config['email_domain']}"
+
+    if not all([account_name, account_email, domain_id, domain_account_id]):
+        return {'status': 'ERROR', 'message': 'Missing required parameters: accountName, domainId, domainAccountId'}
+
+    print(f'🚀 Provisioning account: {account_name}')
+    print(f'   Email: {account_email}  Pool: {pool_name}  OU: {ou_id}')
+    print(f'   StackSets: {[s["stacksetName"] for s in pool_config["stacksets"]]}')
+
+    account_id = None
     try:
         # Step 1: Create account
-        print("Step 1: Creating account via Organizations API...")
+        print('Step 1: Creating account via Organizations API...')
         account_id = create_account(account_name, account_email, organizations)
-        print(f"   Account created: {account_id}")
+        print(f'   Account created: {account_id}')
 
-        # Step 1b: Tag account for reconciliation tracking
-        pool_name = event.get('poolName', 'AccountPoolFactory')
+        # Step 2: Apply account tags
+        tags = [{'Key': 'ManagedBy', 'Value': 'AccountPoolFactory'},
+                {'Key': 'PoolName', 'Value': pool_name}]
+        for k, v in pool_config['account_tags'].items():
+            if k not in ('ManagedBy', 'PoolName'):
+                tags.append({'Key': k, 'Value': str(v)})
         try:
-            organizations.tag_resource(
-                ResourceId=account_id,
-                Tags=[
-                    {'Key': 'ManagedBy', 'Value': 'AccountPoolFactory'},
-                    {'Key': 'PoolName', 'Value': pool_name}
-                ]
-            )
-            print(f"   Tagged account {account_id} with ManagedBy=AccountPoolFactory, PoolName={pool_name}")
-        except Exception as tag_error:
-            print(f"   Warning: Failed to tag account {account_id}: {tag_error}")
+            organizations.tag_resource(ResourceId=account_id, Tags=tags)
+            print(f'   Tagged account with {len(tags)} tags')
+        except Exception as e:
+            print(f'   Warning: tagging failed: {e}')
 
-        # Step 2: Move account to target OU
-        print(f"📦 Step 2: Moving account to target OU...")
+        # Step 3: Move account to target OU
+        print(f'Step 3: Moving account to OU {ou_id}...')
         move_account_to_ou(account_id, ou_id, organizations)
-        print(f"   ✅ Account moved to OU: {ou_id}")
+        print('   ✅ Moved to OU')
 
-        # Step 3: Deploy StackSet execution role
-        print(f"🔧 Step 3: Deploying StackSet execution role...")
+        # Step 4: Deploy StackSet execution role
+        print('Step 4: Deploying StackSet execution role...')
         deploy_stackset_execution_role(account_id, org_admin_account_id, assumed_sts, cloudformation)
-        print(f"   ✅ StackSet execution role deployed")
+        print('   ✅ StackSet execution role deployed')
 
-        # Step 4: Deploy SMUS-AccountPoolFactory-DomainAccess role via StackSet
-        print(f"🔐 Step 4: Deploying SMUS-AccountPoolFactory-DomainAccess role...")
-        deploy_domain_access_role_stackset(account_id, domain_id, domain_account_id, cloudformation)
-        print(f"   ✅ SMUS-AccountPoolFactory-DomainAccess role deployed")
-        
-        # Step 5: Wait for IAM role propagation
-        print(f"⏳ Step 5: Waiting for IAM role propagation...")
+        # Step 5: Deploy pool StackSets in wave order
+        print('Step 5: Deploying pool StackSets in wave order...')
+        deployed_stacksets = deploy_stacksets_in_waves(account_id, pool_config['stacksets'], cloudformation)
+        print(f'   ✅ Deployed {len(deployed_stacksets)} StackSets: {deployed_stacksets}')
+
+        # Step 6: Wait for IAM propagation
+        print('Step 6: Waiting for IAM role propagation...')
         time.sleep(10)
-        print(f"   ✅ IAM roles ready")
-        
-        print(f"✅ Account provisioning complete: {account_id}")
-        
+
+        print(f'✅ Account provisioning complete: {account_id}')
         return {
             'status': 'SUCCESS',
             'accountId': account_id,
-            'message': 'Account provisioned and ready for configuration'
+            'poolName': pool_name,
+            'deployedStackSets': deployed_stacksets,
+            'message': 'Account provisioned and ready for configuration',
         }
-        
+
     except Exception as e:
-        print(f"❌ Account provisioning failed: {e}")
+        print(f'❌ Account provisioning failed: {e}')
         return {
             'status': 'ERROR',
             'message': str(e),
-            'accountId': account_id if 'account_id' in locals() else None
+            'accountId': account_id,
+            'poolName': pool_name,
         }
+
+
+def _creds_from_sts(sts_client) -> Dict[str, str]:
+    """Extract boto3 credential kwargs from an assumed-role STS client.
+
+    We re-assume the role to get fresh credentials as a dict, since extracting
+    them from an existing client's internal state is fragile across boto3 versions.
+    """
+    assumed = sts.assume_role(
+        RoleArn=ACCOUNT_CREATION_ROLE_ARN,
+        RoleSessionName='ProvisionAccountSSM',
+        ExternalId=EXTERNAL_ID,
+        DurationSeconds=3600
+    )
+    creds = assumed['Credentials']
+    return {
+        'aws_access_key_id': creds['AccessKeyId'],
+        'aws_secret_access_key': creds['SecretAccessKey'],
+        'aws_session_token': creds['SessionToken'],
+    }
 
 
 def create_account(account_name: str, account_email: str, organizations) -> str:

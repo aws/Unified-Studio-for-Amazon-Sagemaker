@@ -132,7 +132,40 @@ def load_config():
         config.setdefault('TargetOUId', '')
         config.setdefault('MinimumPoolSize', '5')
         config.setdefault('MaxRecycleRetries', '3')
-        print(f"Loaded {len(config)} SSM parameters")
+
+        # Load per-pool OU IDs from org SSM (written by org deploy script)
+        # These are in the org account — read via AccountCreation role
+        pools = {}
+        try:
+            org_client = get_org_client()
+            # Use the org SSM via assumed role
+            import boto3 as _boto3
+            assumed = sts.assume_role(
+                RoleArn=f"arn:aws:iam::{ORG_ADMIN_ACCOUNT_ID}:role/SMUS-AccountPoolFactory-AccountCreation",
+                RoleSessionName='ReconcilerSSM',
+                ExternalId=f'AccountPoolFactory-{DOMAIN_ACCOUNT_ID}'
+            )
+            creds = assumed['Credentials']
+            org_ssm = _boto3.client('ssm', region_name=REGION,
+                aws_access_key_id=creds['AccessKeyId'],
+                aws_secret_access_key=creds['SecretAccessKey'],
+                aws_session_token=creds['SessionToken'])
+            resp = org_ssm.get_parameters_by_path(
+                Path='/AccountPoolFactory/Pools/',
+                Recursive=True,
+                WithDecryption=False
+            )
+            for param in resp['Parameters']:
+                parts = param['Name'].split('/')
+                if len(parts) >= 5:
+                    pool_name = parts[3]
+                    key = parts[4]
+                    pools.setdefault(pool_name, {})[key] = param['Value']
+        except Exception as e:
+            print(f'Warning: could not load pool OU IDs from org SSM: {e}')
+
+        config['pools'] = pools
+        print(f"Loaded {len(config)} SSM parameters, {len(pools)} pools: {list(pools.keys())}")
         return config
     except Exception as e:
         print(f"Warning: Failed to load SSM parameters: {e}")
@@ -141,7 +174,8 @@ def load_config():
             'NamePrefix': 'DataZone-Pool',
             'TargetOUId': '',
             'MinimumPoolSize': '5',
-            'MaxRecycleRetries': '3'
+            'MaxRecycleRetries': '3',
+            'pools': {},
         }
 
 
@@ -190,29 +224,48 @@ def lambda_handler(event, context):
     name_prefix = config['NamePrefix']
     target_ou_id = config.get('TargetOUId', '')
 
+    # Build list of (pool_name, ou_id) pairs to scan
+    pools = config.get('pools', {})
+    if pools:
+        pool_ou_pairs = [(pn, pc.get('OUId', '')) for pn, pc in pools.items() if pc.get('OUId')]
+        if not pool_ou_pairs:
+            pool_ou_pairs = [(pool_name, target_ou_id)]
+    else:
+        pool_ou_pairs = [(pool_name, target_ou_id)]
+
     try:
         org_client = get_org_client()
     except Exception as e:
         print(f"Failed to assume Org Admin role: {e}")
         return {'status': 'ERROR', 'message': str(e)}
 
-    # Step 1: List org accounts
-    org_accounts = list_org_accounts(org_client, target_ou_id)
-    print(f"Found {len(org_accounts)} accounts in org/OU")
+    # Scan all pool OUs and merge results
+    all_org_accounts = []
+    all_pool_accounts = []
+    seen_ids = set()
 
-    # Step 2: Identify pool accounts
-    pool_accounts = identify_pool_accounts(
-        org_client, org_accounts, pool_name, name_prefix,
-        account_ids_filter, dry_run
-    )
-    print(f"Identified {len(pool_accounts)} pool accounts")
+    for scan_pool_name, scan_ou_id in pool_ou_pairs:
+        ou_accounts = list_org_accounts(org_client, scan_ou_id)
+        for a in ou_accounts:
+            if a['Id'] not in seen_ids:
+                all_org_accounts.append(a)
+                seen_ids.add(a['Id'])
+
+        pool_accts = identify_pool_accounts(
+            org_client, ou_accounts, scan_pool_name, name_prefix,
+            account_ids_filter, dry_run
+        )
+        all_pool_accounts.extend(pool_accts)
+
+    print(f"Found {len(all_org_accounts)} accounts across {len(pool_ou_pairs)} OUs")
+    print(f"Identified {len(all_pool_accounts)} pool accounts")
 
     # Step 3: Reconcile with DynamoDB (includes parallel validation)
-    summary = reconcile_with_dynamodb(pool_accounts, org_accounts, dry_run)
+    summary = reconcile_with_dynamodb(all_pool_accounts, all_org_accounts, dry_run)
 
     # Step 4: Detect stale DynamoDB records
     stale_count = detect_stale_records(
-        {a['Id'] for a in org_accounts}, dry_run
+        {a['Id'] for a in all_org_accounts}, dry_run
     )
     summary['staleUpdated'] = stale_count
 
@@ -242,8 +295,8 @@ def lambda_handler(event, context):
         'status': 'SUCCESS',
         'dryRun': dry_run,
         'summary': {
-            'totalOrgAccounts': len(org_accounts),
-            'totalPoolAccounts': len(pool_accounts),
+            'totalOrgAccounts': len(all_org_accounts),
+            'totalPoolAccounts': len(all_pool_accounts),
             'orphanedCreated': summary.get('orphanedCreated', 0),
             'staleUpdated': stale_count,
             'unchanged': summary.get('unchanged', 0),
@@ -317,14 +370,16 @@ def identify_pool_accounts(org_client, org_accounts, pool_name,
                 'accountId': acct_id,
                 'accountName': acct_name,
                 'status': acct_status,
-                'identifiedBy': 'tag'
+                'identifiedBy': 'tag',
+                'poolName': tag_pool_name or pool_name,
             })
         elif name_matches:
             pool_accounts.append({
                 'accountId': acct_id,
                 'accountName': acct_name,
                 'status': acct_status,
-                'identifiedBy': 'namePrefix'
+                'identifiedBy': 'namePrefix',
+                'poolName': pool_name,
             })
             if not dry_run:
                 try:
@@ -378,9 +433,13 @@ def validate_domain_access_role(account_id):
         return False, None
 
 
-def validate_setup_stacks(account_id, creds):
+def validate_setup_stacks(account_id, creds, item=None):
     """Check all expected setup stacks exist and are healthy.
-    Returns (ok, missing_list, unhealthy_list)."""
+
+    Prefers per-account deployedStackSets from DynamoDB record (item).
+    Falls back to global ExpectedStackPatterns SSM if not available.
+    Returns (ok, missing_list, unhealthy_list).
+    """
     try:
         cf_client = boto3.client(
             'cloudformation',
@@ -390,24 +449,60 @@ def validate_setup_stacks(account_id, creds):
             aws_session_token=creds['SessionToken']
         )
 
+        # Build list of stack names to check
+        stack_names = []
+
+        # Prefer per-account deployedStackSets (StackSet-deployed stacks)
+        if item:
+            deployed = item.get('deployedStackSets', {}).get('L', [])
+            if deployed:
+                # These are StackSet names — the actual CF stack in the account
+                # is named StackSet-{StackSetName}-{uuid}, so we check by prefix
+                for entry in deployed:
+                    ss_name = entry.get('S', '')
+                    if ss_name:
+                        stack_names.append(('stackset_prefix', ss_name))
+
+        # Also check SetupOrchestrator-deployed stacks via global patterns
+        for pattern in get_expected_setup_stacks():
+            stack_names.append(('pattern', pattern.format(account_id=account_id)))
+
+        if not stack_names:
+            return True, [], []  # Nothing to validate
+
         missing = []
         unhealthy = []
         healthy_statuses = {'CREATE_COMPLETE', 'UPDATE_COMPLETE', 'UPDATE_ROLLBACK_COMPLETE'}
 
-        for pattern in get_expected_setup_stacks():
-            stack_name = pattern.format(account_id=account_id)
-            try:
-                resp = retry_with_backoff(
-                    lambda sn=stack_name: cf_client.describe_stacks(StackName=sn)
-                )
-                status = resp['Stacks'][0]['StackStatus']
-                if status not in healthy_statuses:
-                    unhealthy.append(f'{stack_name}={status}')
-            except ClientError as e:
-                if 'does not exist' in str(e):
-                    missing.append(stack_name)
-                else:
-                    missing.append(f'{stack_name} (error: {e})')
+        for check_type, name in stack_names:
+            if check_type == 'stackset_prefix':
+                # Find stacks with this StackSet name prefix
+                try:
+                    resp = cf_client.list_stacks(
+                        StackStatusFilter=list(healthy_statuses) + ['CREATE_IN_PROGRESS']
+                    )
+                    prefix = f'StackSet-{name}-'
+                    found = [s for s in resp.get('StackSummaries', [])
+                             if s['StackName'].startswith(prefix)]
+                    if not found:
+                        missing.append(f'StackSet:{name}')
+                    elif not any(s['StackStatus'] in healthy_statuses for s in found):
+                        unhealthy.append(f'StackSet:{name}={found[0]["StackStatus"]}')
+                except Exception as e:
+                    missing.append(f'StackSet:{name} (error: {e})')
+            else:
+                try:
+                    resp = retry_with_backoff(
+                        lambda sn=name: cf_client.describe_stacks(StackName=sn)
+                    )
+                    status = resp['Stacks'][0]['StackStatus']
+                    if status not in healthy_statuses:
+                        unhealthy.append(f'{name}={status}')
+                except ClientError as e:
+                    if 'does not exist' in str(e):
+                        missing.append(name)
+                    else:
+                        missing.append(f'{name} (error: {e})')
 
         return (not missing and not unhealthy), missing, unhealthy
 
@@ -415,7 +510,7 @@ def validate_setup_stacks(account_id, creds):
         return False, [f'Stack validation error: {e}'], []
 
 
-def validate_available_account(account_id):
+def validate_available_account(account_id, item=None):
     """Full health check for AVAILABLE accounts (detect-only).
 
     Validates:
@@ -431,7 +526,7 @@ def validate_available_account(account_id):
         return False, 'NEEDS_STACKSET: DomainAccess role not assumable'
 
     # Check 2: All expected stacks exist
-    stacks_ok, missing, unhealthy = validate_setup_stacks(account_id, creds)
+    stacks_ok, missing, unhealthy = validate_setup_stacks(account_id, creds, item=item)
     if not stacks_ok:
         reasons = []
         if missing:
@@ -471,13 +566,24 @@ def reconcile_with_dynamodb(pool_accounts, org_accounts, dry_run):
 
         if not item:
             # No DynamoDB record — create ORPHANED
+            # Read PoolName tag from org account to assign correct pool
+            pool_from_tag = ''
+            try:
+                tags = get_account_tags(org_client, acct_id)
+                pool_from_tag = tags.get('PoolName', '')
+            except Exception:
+                pass
+            # Fall back to the pool name from the OU scan context
+            pool_for_record = pool_from_tag or acct.get('poolName', '')
+
             summary['orphanedCreated'] += 1
             summary['recyclableAccountIds'].append(acct_id)
             summary['details'].append({
-                'accountId': acct_id, 'action': 'CREATED_ORPHANED', 'newState': 'ORPHANED'
+                'accountId': acct_id, 'action': 'CREATED_ORPHANED',
+                'newState': 'ORPHANED', 'poolName': pool_for_record
             })
             if not dry_run:
-                create_orphaned_record(acct_id, acct.get('accountName', ''))
+                create_orphaned_record(acct_id, acct.get('accountName', ''), pool_for_record)
         else:
             current_state = item.get('state', {}).get('S', '')
 
@@ -545,7 +651,7 @@ def reconcile_with_dynamodb(pool_accounts, org_accounts, dry_run):
 def _validate_one(acct, item, dry_run):
     """Validate a single AVAILABLE account. Returns (detail_dict, is_healthy)."""
     acct_id = acct['accountId']
-    ok, failure_reason = validate_available_account(acct_id)
+    ok, failure_reason = validate_available_account(acct_id, item=item)
     if ok:
         return {'accountId': acct_id, 'action': 'UNCHANGED'}, True
     else:
@@ -584,25 +690,25 @@ def get_latest_record(account_id):
         return None
 
 
-def create_orphaned_record(account_id, account_name):
+def create_orphaned_record(account_id, account_name, pool_name=''):
     """Create a new ORPHANED record in DynamoDB"""
     now = datetime.now(timezone.utc).isoformat()
     timestamp = int(time.time())
+    item = {
+        'accountId': {'S': account_id},
+        'timestamp': {'N': str(timestamp)},
+        'state': {'S': 'ORPHANED'},
+        'accountName': {'S': account_name},
+        'createdDate': {'S': now},
+        'reconciliationNote': {'S': 'Discovered by AccountReconciler'},
+        'lastReconciled': {'S': now},
+        'retryCount': {'N': '0'}
+    }
+    if pool_name:
+        item['poolName'] = {'S': pool_name}
     try:
-        dynamodb.put_item(
-            TableName=DYNAMODB_TABLE_NAME,
-            Item={
-                'accountId': {'S': account_id},
-                'timestamp': {'N': str(timestamp)},
-                'state': {'S': 'ORPHANED'},
-                'accountName': {'S': account_name},
-                'createdDate': {'S': now},
-                'reconciliationNote': {'S': 'Discovered by AccountReconciler'},
-                'lastReconciled': {'S': now},
-                'retryCount': {'N': '0'}
-            }
-        )
-        print(f"Created ORPHANED record for {account_id}")
+        dynamodb.put_item(TableName=DYNAMODB_TABLE_NAME, Item=item)
+        print(f"Created ORPHANED record for {account_id} (pool={pool_name or 'unknown'})")
     except Exception as e:
         print(f"Error creating ORPHANED record for {account_id}: {e}")
 

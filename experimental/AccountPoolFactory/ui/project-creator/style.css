@@ -1,0 +1,238 @@
+:root {
+  --aws-orange: #FF9900;
+  --aws-dark: #232F3E;
+  --success: #1d8348;
+  --success-bg: #eafaf1;
+  --error: #c0392b;
+  --error-bg: #fdedec;
+  --warning: #d68910;
+  --step-pending: #bdc3c7;
+  --step-active: var(--aws-orange);
+  --step-done: var(--success);
+  --step-error: var(--error);
+}
+
+/* ── Header ── */
+.app-header {
+  background: var(--aws-dark);
+  color: white;
+  padding: 0.75rem 0;
+  margin-bottom: 2rem;
+}
+.header-inner {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-weight: 600;
+  font-size: 1rem;
+  color: white;
+}
+.app-header nav a {
+  color: #aab7c4;
+  font-size: 0.875rem;
+  text-decoration: none;
+}
+.app-header nav a:hover { color: white; }
+
+/* ── Layout ── */
+.container { max-width: 640px; }
+.view { animation: fadein 0.2s ease; }
+@keyframes fadein { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* ── Form ── */
+.hint { display: block; margin-top: 0.25rem; font-size: 0.8rem; color: var(--pico-muted-color); }
+.hint.error { color: var(--error); }
+.form-actions { margin-top: 1.5rem; }
+.form-actions button { width: 100%; }
+
+/* ── Owner search ── */
+.owner-search-wrap { position: relative; }
+.owner-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0; right: 0;
+  background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-form-element-border-color);
+  border-radius: var(--pico-border-radius);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  z-index: 100;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.owner-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  cursor: pointer;
+  outline: none;
+}
+.owner-option:hover, .owner-option:focus { background: var(--pico-secondary-background); }
+.owner-name { font-weight: 500; flex: 1; }
+.owner-email { font-size: 0.8rem; color: var(--pico-muted-color); }
+
+.owner-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.owner-badge.user { background: #dbeafe; color: #1e40af; }
+.owner-badge.group { background: #fef3c7; color: #92400e; }
+
+.owner-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+  padding: 0.3rem 0.6rem;
+  background: var(--pico-secondary-background);
+  border-radius: 20px;
+  font-size: 0.875rem;
+}
+.chip-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 0.2rem;
+  font-size: 1rem;
+  line-height: 1;
+  color: var(--pico-muted-color);
+  margin: 0;
+  width: auto;
+}
+.chip-remove:hover { color: var(--error); }
+
+/* ── Progress card ── */
+.progress-card {
+  padding: 1.5rem 2rem;
+  margin-bottom: 1.5rem;
+}
+
+.steps { display: flex; flex-direction: column; gap: 0; }
+.step {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 0.75rem 0;
+}
+.step-connector {
+  width: 2px;
+  height: 1.5rem;
+  background: var(--pico-form-element-border-color);
+  margin-left: 1.1rem;
+}
+.step-icon {
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  transition: background 0.3s, border-color 0.3s;
+}
+.step-icon[data-state=pending] {
+  background: var(--pico-card-background-color);
+  border: 2px solid var(--step-pending);
+  color: var(--step-pending);
+}
+.step-icon[data-state=active] {
+  background: var(--aws-orange);
+  border: 2px solid var(--aws-orange);
+  color: white;
+  animation: pulse 1.2s infinite;
+}
+.step-icon[data-state=done] {
+  background: var(--step-done);
+  border: 2px solid var(--step-done);
+  color: white;
+}
+.step-icon[data-state=done] .step-num::before { content: "✓"; }
+.step-icon[data-state=done] .step-num { display: none; }
+.step-icon[data-state=error] {
+  background: var(--step-error);
+  border: 2px solid var(--step-error);
+  color: white;
+}
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255,153,0,0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(255,153,0,0); }
+}
+.step-body { padding-top: 0.3rem; }
+.step-body strong { display: block; }
+.step-body small { color: var(--pico-muted-color); font-size: 0.8rem; }
+
+/* ── Env list ── */
+.env-list {
+  margin-top: 1.25rem;
+  border-top: 1px solid var(--pico-form-element-border-color);
+  padding-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.env-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.875rem;
+}
+.env-name { color: var(--pico-color); }
+
+/* ── Status badges ── */
+.status-badge {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.status-active, .status-completed { background: #d5f5e3; color: #1d8348; }
+.status-deploying, .status-in_progress { background: #fef9e7; color: #d68910; }
+.status-pending { background: #f2f3f4; color: #7f8c8d; }
+.status-failed, .status-failed_deployment { background: #fdedec; color: #c0392b; }
+
+/* ── Error box ── */
+.error-box {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--error-bg);
+  color: var(--error);
+  border-radius: var(--pico-border-radius);
+  font-size: 0.875rem;
+}
+
+/* ── Success ── */
+.success-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  text-align: center;
+}
+.success-msg {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--success);
+  font-weight: 600;
+  font-size: 1.1rem;
+  margin: 0;
+}
+.success-msg svg { stroke: var(--success); }
+.success-actions a[role=button] { width: 100%; max-width: 360px; }
+.success-actions .secondary { width: 100%; max-width: 360px; }
