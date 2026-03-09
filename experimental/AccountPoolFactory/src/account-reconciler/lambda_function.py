@@ -231,6 +231,13 @@ def lambda_handler(event, context):
     if auto_replenish and not dry_run:
         replenishment_triggered = check_and_replenish(config)
 
+    # Step 8: Check if blueprint template version needs updating across the fleet.
+    # Compares one sample AVAILABLE account's DataZone-Blueprints-* stack TemplateVersion
+    # output against the current version. If outdated, triggers recycler updateBlueprints.
+    blueprints_update_triggered = False
+    if not dry_run and source == 'schedule':
+        blueprints_update_triggered = check_and_trigger_blueprint_update()
+
     result = {
         'status': 'SUCCESS',
         'dryRun': dry_run,
@@ -245,7 +252,8 @@ def lambda_handler(event, context):
         },
         'details': summary.get('details', []),
         'recyclingTriggered': recycling_triggered,
-        'replenishmentTriggered': replenishment_triggered
+        'replenishmentTriggered': replenishment_triggered,
+        'blueprintsUpdateTriggered': blueprints_update_triggered
     }
     print(f"Reconciliation complete: {json.dumps(result['summary'])}")
     return result
@@ -758,4 +766,77 @@ def check_and_replenish(config):
         return False
     except Exception as e:
         print(f"Error checking pool size: {e}")
+        return False
+
+
+def check_and_trigger_blueprint_update():
+    """Check if any AVAILABLE account has an outdated blueprint stack version.
+
+    Samples one AVAILABLE account and checks its DataZone-Blueprints-* stack
+    TemplateVersion output. If it doesn't match CURRENT_BLUEPRINT_VERSION,
+    triggers AccountRecycler with updateBlueprints=true to update the fleet.
+
+    This runs on every scheduled reconciler invocation, so template updates
+    are automatically pushed to all accounts within one reconciler cycle.
+    """
+    # Must match the TemplateVersion output in blueprint-enablement-iam.yaml
+    CURRENT_BLUEPRINT_VERSION = "2"
+    ACCOUNT_RECYCLER = os.environ.get('ACCOUNT_RECYCLER_FUNCTION_NAME', 'AccountRecycler')
+
+    try:
+        # Sample one AVAILABLE account
+        resp = dynamodb.query(
+            TableName=DYNAMODB_TABLE_NAME,
+            IndexName='StateIndex',
+            KeyConditionExpression='#s = :s',
+            ExpressionAttributeNames={'#s': 'state'},
+            ExpressionAttributeValues={':s': {'S': 'AVAILABLE'}},
+            Limit=1
+        )
+        items = resp.get('Items', [])
+        if not items:
+            return False
+
+        sample_account_id = items[0]['accountId']['S']
+
+        # Assume DomainAccess role in the sample account
+        domain_id = DOMAIN_ID
+        role_arn = f"arn:aws:iam::{sample_account_id}:role/SMUS-AccountPoolFactory-DomainAccess"
+        assumed = sts.assume_role(
+            RoleArn=role_arn,
+            RoleSessionName='reconciler-blueprint-check',
+            ExternalId=domain_id,
+            DurationSeconds=900
+        )
+        creds = assumed['Credentials']
+        cf = boto3.client(
+            'cloudformation',
+            region_name=REGION,
+            aws_access_key_id=creds['AccessKeyId'],
+            aws_secret_access_key=creds['SecretAccessKey'],
+            aws_session_token=creds['SessionToken']
+        )
+
+        stack_name = f"DataZone-Blueprints-{sample_account_id}"
+        resp = cf.describe_stacks(StackName=stack_name)
+        outputs = resp['Stacks'][0].get('Outputs', [])
+        deployed_version = next(
+            (o['OutputValue'] for o in outputs if o['OutputKey'] == 'TemplateVersion'),
+            None
+        )
+
+        if deployed_version == CURRENT_BLUEPRINT_VERSION:
+            print(f"Blueprint template version up to date (v{deployed_version}), no update needed")
+            return False
+
+        print(f"Blueprint template version outdated (deployed={deployed_version}, current={CURRENT_BLUEPRINT_VERSION}) — triggering fleet update")
+        lambda_client.invoke(
+            FunctionName=ACCOUNT_RECYCLER,
+            InvocationType='Event',
+            Payload=json.dumps({'updateBlueprints': True})
+        )
+        return True
+
+    except Exception as e:
+        print(f"Warning: Blueprint version check failed: {e}")
         return False

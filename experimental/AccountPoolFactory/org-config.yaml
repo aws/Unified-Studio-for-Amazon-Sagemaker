@@ -1,0 +1,13 @@
+# Org Admin Account Configuration
+# Run in account: 495869084367 (amirbo+1)
+# Only the minimum needed — IDs are resolved automatically by scripts.
+
+region: us-east-2
+
+# Target OU where pool accounts will be placed.
+# Provide the human-readable path (e.g. "RetailBanking/CustomerAnalytics").
+# The deploy script resolves this to an OU ID automatically.
+target_ou_name: "RetailBanking/CustomerAnalytics"
+
+# Optional: if you already know the OU ID, set it here to skip the lookup.
+# target_ou_id: ou-n5om-otvkrtx2

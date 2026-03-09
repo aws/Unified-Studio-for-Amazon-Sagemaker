@@ -1,59 +1,99 @@
 """
 ProvisionAccount Lambda Function
 
-Runs in Organization Management Account (495869084367)
-Handles secure account provisioning with proper role setup.
+Runs in Domain Account (994753223772) — moved from Org Admin account.
+On entry, assumes the AccountCreation cross-account role in the Org Admin account,
+then uses those temporary credentials for all Organizations and StackSet API calls.
 
 Responsibilities:
-1. Create account via Organizations API
-2. Move account to target OU
-3. Deploy StackSet execution role to new account
-4. Deploy TrustPolicy StackSet (creates SMUS-AccountPoolFactory-DomainAccess role)
-5. Wait for StackSet completion
-6. Return ready-to-use account ID
+1. Assume AccountCreation role in Org Admin account (via STS)
+2. Create account via Organizations API (using assumed role)
+3. Move account to target OU
+4. Deploy StackSet execution role to new account (via OrganizationAccountAccessRole)
+5. Deploy TrustPolicy StackSet (creates SMUS-AccountPoolFactory-DomainAccess role)
+6. Wait for StackSet completion
+7. Return ready-to-use account ID
 
 Security:
-- Only Lambda that touches OrganizationAccountAccessRole
-- Invoked cross-account by PoolManager (Domain account)
-- Creates SMUS-AccountPoolFactory-DomainAccess with ExternalId protection
+- AccountCreation role is protected by ExternalId
+- OrganizationAccountAccessRole assumption is done from the assumed AccountCreation session
+- No Organizations/StackSet API calls are made with the Lambda's own credentials
 """
 
 import json
+import os
 import time
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
 import boto3
 from botocore.exceptions import ClientError
 
-# Initialize AWS clients
-organizations = boto3.client('organizations')
-cloudformation = boto3.client('cloudformation')
+# STS client — uses Lambda's own role, only for the initial assume_role call
 sts = boto3.client('sts')
 
 # Constants
-REGION = 'us-east-2'
+REGION = os.environ.get('AWS_REGION_NAME', 'us-east-2')
 DOMAIN_ACCESS_STACKSET_NAME = 'SMUS-AccountPoolFactory-DomainAccess'
+
+# Environment variables (set by CloudFormation)
+ACCOUNT_CREATION_ROLE_ARN = os.environ.get('ACCOUNT_CREATION_ROLE_ARN', '')
+EXTERNAL_ID = os.environ.get('EXTERNAL_ID', '')
+
+
+def _get_org_clients():
+    """Assume the AccountCreation role in Org Admin and return (organizations, cloudformation, sts) clients.
+
+    Called at the start of every handler path that needs to touch Organizations or StackSets.
+    Returns fresh temporary credentials each invocation to avoid expiry issues.
+    """
+    if not ACCOUNT_CREATION_ROLE_ARN or not EXTERNAL_ID:
+        raise Exception(
+            'ACCOUNT_CREATION_ROLE_ARN and EXTERNAL_ID environment variables must be set'
+        )
+
+    assumed = sts.assume_role(
+        RoleArn=ACCOUNT_CREATION_ROLE_ARN,
+        RoleSessionName='ProvisionAccount',
+        ExternalId=EXTERNAL_ID,
+        DurationSeconds=3600
+    )
+    creds = assumed['Credentials']
+    kwargs = dict(
+        aws_access_key_id=creds['AccessKeyId'],
+        aws_secret_access_key=creds['SecretAccessKey'],
+        aws_session_token=creds['SessionToken']
+    )
+    org_client = boto3.client('organizations', **kwargs)
+    cf_client = boto3.client('cloudformation', region_name=REGION, **kwargs)
+    sts_client = boto3.client('sts', **kwargs)
+    return org_client, cf_client, sts_client
 
 
 def lambda_handler(event, context):
     """Main Lambda handler for ProvisionAccount"""
     print(f"📥 Received event: {json.dumps(event, indent=2)}")
-    
+
     action = event.get('action')
-    
+
+    # Assume AccountCreation role once per invocation — all downstream functions use these clients
+    try:
+        organizations, cloudformation, assumed_sts = _get_org_clients()
+    except Exception as e:
+        return {'status': 'ERROR', 'message': f'Failed to assume AccountCreation role: {e}'}
+
     if action == 'provision':
-        return provision_account(event)
+        return provision_account(event, organizations, cloudformation, assumed_sts)
     elif action == 'fixStackSet':
-        return fix_stackset(event)
+        return fix_stackset(event, organizations, cloudformation, assumed_sts)
     elif action == 'fixStackSetBatch':
-        return fix_stackset_batch(event)
+        return fix_stackset_batch(event, organizations, cloudformation, assumed_sts)
     else:
         return {
             'status': 'ERROR',
             'message': f'Unknown action: {action}'
         }
 
-def fix_stackset_batch(event: Dict[str, Any]) -> Dict[str, Any]:
+def fix_stackset_batch(event: Dict[str, Any], organizations, cloudformation, assumed_sts) -> Dict[str, Any]:
     """Deploy DomainAccess StackSet instances for multiple accounts in one operation.
 
     Uses a single create_stack_instances call with all account IDs to avoid
@@ -72,14 +112,14 @@ def fix_stackset_batch(event: Dict[str, Any]) -> Dict[str, Any]:
         return {'status': 'ERROR', 'message': 'Missing required: accountIds, domainId, domainAccountId'}
 
     print(f"🔧 Batch StackSet fix for {len(account_ids)} accounts")
-    org_admin_account_id = sts.get_caller_identity()['Account']
+    org_admin_account_id = assumed_sts.get_caller_identity()['Account']
 
     # Step 1: Deploy StackSetExecution role to each account (sequential — uses OrganizationAccountAccessRole)
     failed_execution_role = []
     for account_id in account_ids:
         try:
             print(f"   Step 1: StackSetExecution role → {account_id}")
-            deploy_stackset_execution_role(account_id, org_admin_account_id)
+            deploy_stackset_execution_role(account_id, org_admin_account_id, assumed_sts, cloudformation)
         except Exception as e:
             print(f"   ⚠️  StackSetExecution role failed for {account_id}: {e}")
             failed_execution_role.append(account_id)
@@ -91,7 +131,7 @@ def fix_stackset_batch(event: Dict[str, Any]) -> Dict[str, Any]:
 
     # Step 2: Wait for any in-progress StackSet operation, then batch create
     print(f"   Step 2: Waiting for any in-progress StackSet operation...")
-    _wait_for_any_stackset_operation(DOMAIN_ACCESS_STACKSET_NAME, timeout=300)
+    _wait_for_any_stackset_operation(DOMAIN_ACCESS_STACKSET_NAME, cloudformation, timeout=300)
 
     print(f"   Step 2: create_stack_instances for {len(ready_accounts)} accounts...")
     try:
@@ -111,7 +151,7 @@ def fix_stackset_batch(event: Dict[str, Any]) -> Dict[str, Any]:
         # Use a longer timeout — batch of N accounts takes N * ~30s
         timeout = min(300 + len(ready_accounts) * 30, 840)
         wait_for_stackset_operation(DOMAIN_ACCESS_STACKSET_NAME, operation_id,
-                                    ready_accounts[0], timeout=timeout)
+                                    ready_accounts[0], cloudformation, timeout=timeout)
         print(f"✅ Batch StackSet operation complete for {len(ready_accounts)} accounts")
 
     except ClientError as e:
@@ -129,7 +169,7 @@ def fix_stackset_batch(event: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def fix_stackset(event: Dict[str, Any]) -> Dict[str, Any]:
+def fix_stackset(event: Dict[str, Any], organizations, cloudformation, assumed_sts) -> Dict[str, Any]:
     """Deploy DomainAccess StackSet instance for an existing account.
 
     Called by the Reconciler when it finds a pool account missing the
@@ -155,16 +195,16 @@ def fix_stackset(event: Dict[str, Any]) -> Dict[str, Any]:
     print(f"🔧 Fixing StackSet for account {account_id}")
 
     try:
-        # This Lambda runs in Org Admin — get our own account ID
-        org_admin_account_id = sts.get_caller_identity()['Account']
+        # Get the Org Admin account ID from the assumed role session
+        org_admin_account_id = assumed_sts.get_caller_identity()['Account']
 
         # Step 1: Ensure StackSetExecution role exists in target account
         print(f"   Step 1: Deploying StackSetExecution role...")
-        deploy_stackset_execution_role(account_id, org_admin_account_id)
+        deploy_stackset_execution_role(account_id, org_admin_account_id, assumed_sts, cloudformation)
 
         # Step 2: Deploy DomainAccess StackSet instance
         print(f"   Step 2: Deploying DomainAccess StackSet instance...")
-        deploy_domain_access_role_stackset(account_id, domain_id, domain_account_id)
+        deploy_domain_access_role_stackset(account_id, domain_id, domain_account_id, cloudformation)
 
         print(f"✅ StackSet instance deployed for {account_id}")
         return {
@@ -182,7 +222,7 @@ def fix_stackset(event: Dict[str, Any]) -> Dict[str, Any]:
 
 
 
-def provision_account(event: Dict[str, Any]) -> Dict[str, Any]:
+def provision_account(event: Dict[str, Any], organizations, cloudformation, assumed_sts) -> Dict[str, Any]:
     """Provision a new account with proper role setup"""
     
     # Extract parameters
@@ -191,10 +231,12 @@ def provision_account(event: Dict[str, Any]) -> Dict[str, Any]:
     ou_id = event.get('ouId')
     domain_id = event.get('domainId')
     domain_account_id = event.get('domainAccountId')
-    org_admin_account_id = event.get('orgAdminAccountId')
-    
+
+    # org_admin_account_id comes from the assumed AccountCreation role session
+    org_admin_account_id = assumed_sts.get_caller_identity()['Account']
+
     # Validate required parameters
-    if not all([account_name, account_email, ou_id, domain_id, domain_account_id, org_admin_account_id]):
+    if not all([account_name, account_email, ou_id, domain_id, domain_account_id]):
         return {
             'status': 'ERROR',
             'message': 'Missing required parameters'
@@ -209,7 +251,7 @@ def provision_account(event: Dict[str, Any]) -> Dict[str, Any]:
     try:
         # Step 1: Create account
         print("Step 1: Creating account via Organizations API...")
-        account_id = create_account(account_name, account_email)
+        account_id = create_account(account_name, account_email, organizations)
         print(f"   Account created: {account_id}")
 
         # Step 1b: Tag account for reconciliation tracking
@@ -228,17 +270,17 @@ def provision_account(event: Dict[str, Any]) -> Dict[str, Any]:
 
         # Step 2: Move account to target OU
         print(f"📦 Step 2: Moving account to target OU...")
-        move_account_to_ou(account_id, ou_id)
+        move_account_to_ou(account_id, ou_id, organizations)
         print(f"   ✅ Account moved to OU: {ou_id}")
-        
+
         # Step 3: Deploy StackSet execution role
         print(f"🔧 Step 3: Deploying StackSet execution role...")
-        deploy_stackset_execution_role(account_id, org_admin_account_id)
+        deploy_stackset_execution_role(account_id, org_admin_account_id, assumed_sts, cloudformation)
         print(f"   ✅ StackSet execution role deployed")
-        
+
         # Step 4: Deploy SMUS-AccountPoolFactory-DomainAccess role via StackSet
         print(f"🔐 Step 4: Deploying SMUS-AccountPoolFactory-DomainAccess role...")
-        deploy_domain_access_role_stackset(account_id, domain_id, domain_account_id)
+        deploy_domain_access_role_stackset(account_id, domain_id, domain_account_id, cloudformation)
         print(f"   ✅ SMUS-AccountPoolFactory-DomainAccess role deployed")
         
         # Step 5: Wait for IAM role propagation
@@ -263,7 +305,7 @@ def provision_account(event: Dict[str, Any]) -> Dict[str, Any]:
         }
 
 
-def create_account(account_name: str, account_email: str) -> str:
+def create_account(account_name: str, account_email: str, organizations) -> str:
     """Create account via Organizations API and wait for completion
     
     Handles EMAIL_ALREADY_EXISTS by finding the existing account with that email.
@@ -367,7 +409,7 @@ def create_account(account_name: str, account_email: str) -> str:
             raise
 
 
-def move_account_to_ou(account_id: str, target_ou_id: str):
+def move_account_to_ou(account_id: str, target_ou_id: str, organizations):
     """Move account from root to target OU (idempotent)"""
     
     # Get current parent
@@ -400,7 +442,7 @@ def move_account_to_ou(account_id: str, target_ou_id: str):
             raise
 
 
-def wait_for_role_availability(account_id: str, max_wait: int = 120):
+def wait_for_role_availability(account_id: str, assumed_sts, max_wait: int = 120):
     """Wait for OrganizationAccountAccessRole to become available in new account
     
     New AWS accounts need 30-60 seconds after creation before IAM roles can be assumed.
@@ -420,8 +462,8 @@ def wait_for_role_availability(account_id: str, max_wait: int = 120):
         elapsed = int(time.time() - start_time)
         
         try:
-            # Try to assume the role
-            sts.assume_role(
+            # Try to assume the role using the AccountCreation session
+            assumed_sts.assume_role(
                 RoleArn=role_arn,
                 RoleSessionName='ProvisionAccount-RoleCheck',
                 DurationSeconds=900
@@ -447,7 +489,7 @@ def wait_for_role_availability(account_id: str, max_wait: int = 120):
     raise Exception(f"Role did not become available after {max_wait} seconds")
 
 
-def deploy_stackset_execution_role(account_id: str, org_admin_account_id: str):
+def deploy_stackset_execution_role(account_id: str, org_admin_account_id: str, assumed_sts, cloudformation):
     """Deploy StackSet execution role directly to new account using CloudFormation"""
     
     stack_name = 'SMUS-AccountPoolFactory-StackSetExecutionRole'
@@ -479,7 +521,7 @@ Outputs:
 """
     
     # Wait for OrganizationAccountAccessRole to become available
-    wait_for_role_availability(account_id, max_wait=120)
+    wait_for_role_availability(account_id, assumed_sts, max_wait=120)
     
     # Retry loop for CloudFormation stack creation
     # New accounts sometimes need extra time for CloudFormation service to recognize credentials
@@ -490,10 +532,10 @@ Outputs:
         try:
             print(f"   🔐 Assuming OrganizationAccountAccessRole in account {account_id} (attempt {attempt}/{max_retries})")
             
-            # Assume OrganizationAccountAccessRole in new account
+            # Assume OrganizationAccountAccessRole in new account using the AccountCreation session
             role_arn = f"arn:aws:iam::{account_id}:role/OrganizationAccountAccessRole"
             
-            assumed_role = sts.assume_role(
+            assumed_role = assumed_sts.assume_role(
                 RoleArn=role_arn,
                 RoleSessionName='ProvisionAccount-StackSetRole'
             )
@@ -562,7 +604,7 @@ Outputs:
     raise Exception(f"Failed to create stack after {max_retries} attempts")
 
 
-def deploy_domain_access_role_stackset(account_id: str, domain_id: str, domain_account_id: str):
+def deploy_domain_access_role_stackset(account_id: str, domain_id: str, domain_account_id: str, cloudformation):
     """Deploy StackSet to create SMUS-AccountPoolFactory-DomainAccess role with ExternalId protection"""
     
     print(f"   📦 Checking StackSet instance for account {account_id}")
@@ -611,7 +653,7 @@ def deploy_domain_access_role_stackset(account_id: str, domain_id: str, domain_a
         print(f"   Operation ID: {operation_id}")
         
         # Wait for StackSet instance creation to complete
-        wait_for_stackset_operation(DOMAIN_ACCESS_STACKSET_NAME, operation_id, account_id, timeout=180)
+        wait_for_stackset_operation(DOMAIN_ACCESS_STACKSET_NAME, operation_id, account_id, cloudformation, timeout=180)
         
         print(f"   ✅ StackSet instance deployed successfully")
         
@@ -622,7 +664,7 @@ def deploy_domain_access_role_stackset(account_id: str, domain_id: str, domain_a
             # Another StackSet operation is running (likely for a different account).
             # Wait for it to finish, then retry create_stack_instances for THIS account.
             print(f"   ⏳ StackSet operation in progress, waiting for it to finish...")
-            _wait_for_any_stackset_operation(DOMAIN_ACCESS_STACKSET_NAME, timeout=180)
+            _wait_for_any_stackset_operation(DOMAIN_ACCESS_STACKSET_NAME, cloudformation, timeout=180)
 
             # Retry once — the StackSet is now free
             print(f"   🔄 Retrying create_stack_instances for {account_id}...")
@@ -637,7 +679,7 @@ def deploy_domain_access_role_stackset(account_id: str, domain_id: str, domain_a
                     }
                 )
                 operation_id = response['OperationId']
-                wait_for_stackset_operation(DOMAIN_ACCESS_STACKSET_NAME, operation_id, account_id, timeout=180)
+                wait_for_stackset_operation(DOMAIN_ACCESS_STACKSET_NAME, operation_id, account_id, cloudformation, timeout=180)
                 print(f"   ✅ StackSet instance deployed successfully (after retry)")
             except ClientError as e2:
                 # If it already exists now (race condition resolved), that's fine
@@ -675,7 +717,7 @@ def wait_for_stack_complete(cf_client, stack_name: str, timeout: int = 300):
     raise Exception(f"Stack creation timed out after {timeout} seconds")
 
 
-def _wait_for_any_stackset_operation(stackset_name: str, timeout: int = 180):
+def _wait_for_any_stackset_operation(stackset_name: str, cloudformation, timeout: int = 180):
     """Wait until no StackSet operation is in progress (any operation, any account).
     Used to serialize concurrent create_stack_instances calls."""
     start_time = time.time()
@@ -698,7 +740,7 @@ def _wait_for_any_stackset_operation(stackset_name: str, timeout: int = 180):
     print(f"   ⚠️  Timed out waiting for StackSet operation, proceeding anyway")
 
 
-def wait_for_stackset_operation(stackset_name: str, operation_id: str, account_id: str, timeout: int = 180):
+def wait_for_stackset_operation(stackset_name: str, operation_id: str, account_id: str, cloudformation, timeout: int = 180):
     """Wait for StackSet operation to complete"""
     start_time = time.time()
     

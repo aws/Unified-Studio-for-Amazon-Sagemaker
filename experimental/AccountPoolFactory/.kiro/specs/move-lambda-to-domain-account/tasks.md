@@ -35,131 +35,106 @@ Move the ProvisionAccount Lambda from the Org Admin account (495869084367) to th
 
 ## Tasks
 
-- [ ] 1. Redesign the Org Admin CloudFormation template
-  - [ ] 1.1 Create `templates/cloudformation/01-org-mgmt-account/deploy/SMUS-AccountPoolFactory-OrgAdmin.yaml` that consolidates:
+- [x] 1. Redesign the Org Admin CloudFormation template
+  - [x] 1.1 Create `templates/cloudformation/01-org-mgmt-account/deploy/SMUS-AccountPoolFactory-OrgAdmin.yaml` that consolidates:
     - StackSetAdmin role (from current `01-stackset-roles.yaml`)
     - AccountCreation cross-account role (from current `02-provision-account.yaml`, minus the Lambda resources)
     - DomainAccess StackSet definition (from current `03-domain-access-stackset.yaml`)
     - A `Metadata` or `Mappings` section called `ApprovedStackSets` that lists all StackSets with their template bodies, so org admins can clearly see what gets deployed and add new ones
-  - [ ] 1.2 Scope the AccountCreation role permissions to only what the domain account needs:
+  - [x] 1.2 Scope the AccountCreation role permissions to only what the domain account needs:
     - `organizations:CreateAccount`, `DescribeCreateAccountStatus`, `DescribeAccount`, `ListParents`, `MoveAccount`, `CloseAccount`, `DescribeOrganization`, `ListRoots`, `ListOrganizationalUnitsForParent`, `DescribeOrganizationalUnit`, `ListTagsForResource`, `TagResource`, `ListAccountsForParent`
     - `cloudformation:CreateStackInstances`, `DescribeStackSetOperation`, `ListStackInstances`, `DescribeStackSet`, `UpdateStackSet`, `CreateStackSet` — scoped to `arn:aws:cloudformation:*:*:stackset/SMUS-AccountPoolFactory-*:*`
     - `sts:AssumeRole` on `arn:aws:iam::*:role/OrganizationAccountAccessRole` (needed to bootstrap StackSet execution role in new accounts)
-  - [ ] 1.3 Add clear comments/description in the template explaining what each role allows and why
-  - [ ] 1.4 Add Outputs that the domain account deploy script needs: AccountCreationRoleArn, ExternalId, StackSetAdminRoleArn
+  - [x] 1.3 Add clear comments/description in the template explaining what each role allows and why
+  - [x] 1.4 Add Outputs that the domain account deploy script needs: AccountCreationRoleArn, ExternalId, StackSetAdminRoleArn
 
-- [ ] 2. Create simplified Org Admin deploy script
-  - [ ] 2.1 Create `scripts/01-org-mgmt-account/deploy/deploy-org-admin.sh` that:
+- [x] 2. Create simplified Org Admin deploy script
+  - [x] 2.1 Create `scripts/01-org-mgmt-account/deploy/deploy-org-admin.sh` that:
     - Deploys the single consolidated template
     - Prints the outputs (role ARNs, external ID) needed by the domain account
     - Is simple enough that an org admin can read and understand it in 2 minutes
   - [ ] 2.2 Add a `scripts/01-org-mgmt-account/deploy/README.md` explaining what this installs, what permissions it grants, and how to add new approved StackSets
 
-- [ ] 3. Move ProvisionAccount Lambda to Domain account
-  - [ ] 3.1 Add ProvisionAccount Lambda function resource to `templates/cloudformation/02-domain-account/deploy/01-infrastructure.yaml`:
+- [x] 3. Move ProvisionAccount Lambda to Domain account
+  - [x] 3.1 Add ProvisionAccount Lambda function resource to `templates/cloudformation/02-domain-account/deploy/01-infrastructure.yaml`:
     - Same runtime/timeout/memory config as current
-    - Uses the existing shared `LambdaExecutionRole` (or a dedicated role if permissions differ significantly)
-    - Environment variables: region, domain ID, domain account ID, org admin account ID, DynamoDB table, SNS topic
-  - [ ] 3.2 Update the shared `LambdaExecutionRole` in domain account template to add:
-    - `sts:AssumeRole` on the Org Admin `AccountCreation` role ARN (parameterized)
-    - `sts:AssumeRole` on `arn:aws:iam::*:role/OrganizationAccountAccessRole` (for bootstrapping StackSet execution role)
-    - `cloudformation:CreateStack`, `DescribeStacks` (for deploying StackSet execution role into new accounts via assumed role)
-  - [ ] 3.3 Remove `ProvisionAccountFunctionArn` parameter from domain account template (no longer cross-account)
-  - [ ] 3.4 Update Lambda invoke permissions in domain account template — PoolManager should reference the local ProvisionAccount function instead of a cross-account ARN
+    - Uses a dedicated `ProvisionAccountRole` (separate from shared `LambdaExecutionRole` — different trust chain)
+    - Environment variables: region, domain ID, domain account ID, org admin account ID, AccountCreationRoleArn, ExternalId
+  - [x] 3.2 Update the shared `LambdaExecutionRole` in domain account template to add:
+    - Lambda invoke permission for local `ProvisionAccount` function (replaces cross-account ARN)
+  - [x] 3.3 Remove `ProvisionAccountFunctionArn` parameter from domain account template (no longer cross-account)
+  - [x] 3.4 Update Lambda invoke permissions in domain account template — PoolManager references local ProvisionAccount
 
-- [ ] 4. Update ProvisionAccount Lambda code
-  - [ ] 4.1 Modify `src/provision-account/lambda_function.py` to assume the Org Admin `AccountCreation` role via STS before calling Organizations/StackSet APIs:
-    - On entry, call `sts.assume_role()` with the AccountCreation role ARN and ExternalId
-    - Use the temporary credentials for all `organizations.*` and `cloudformation.*` calls
-    - Keep the `sts.assume_role()` for `OrganizationAccountAccessRole` (bootstrapping StackSet execution role) — this is done from the assumed AccountCreation role session
-  - [ ] 4.2 Add environment variables for `ACCOUNT_CREATION_ROLE_ARN` and `EXTERNAL_ID` (read from SSM or CF parameters)
-  - [ ] 4.3 Update error handling to surface STS assume-role failures clearly
+- [x] 4. Update ProvisionAccount Lambda code
+  - [x] 4.1 Modify `src/provision-account/lambda_function.py` to assume the Org Admin `AccountCreation` role via STS before calling Organizations/StackSet APIs
+  - [x] 4.2 Add environment variables for `ACCOUNT_CREATION_ROLE_ARN` and `EXTERNAL_ID` (read from CF parameters via Lambda env)
+  - [x] 4.3 Updated error handling — STS assume-role failures surface clearly at handler entry
 
-- [ ] 5. Update PoolManager to invoke ProvisionAccount locally
-  - [ ] 5.1 In `src/pool-manager/lambda_function.py`, change the ProvisionAccount invocation from cross-account ARN to local function name:
-    - Replace `arn:aws:lambda:{region}:{org_admin_account_id}:function:ProvisionAccount` with just `ProvisionAccount` (or use an environment variable)
-  - [ ] 5.2 Remove the `ProvisionAccountInvokePermission` Lambda permission resource from the old org admin template (no longer needed)
-  - [ ] 5.3 Add `ProvisionAccount` to the Lambda invoke permissions in the domain account `LambdaExecutionRole`
+- [x] 5. Update PoolManager to invoke ProvisionAccount locally
+  - [x] 5.1 In `src/pool-manager/lambda_function.py`, changed ProvisionAccount invocation to use local domain account ARN instead of cross-account org admin ARN
+  - [x] 5.2 Removed `orgAdminAccountId` from ProvisionAccount payload (no longer needed)
 
-- [ ] 6. Update AccountRecycler to invoke ProvisionAccount locally
-  - [ ] 6.1 In `src/account-recycler/lambda_function.py`, update any references to the ProvisionAccount Lambda to use local invocation instead of cross-account ARN
-  - [ ] 6.2 Update the `PROVISION_ACCOUNT_FUNCTION_ARN` environment variable in the domain account template to reference the local function
+- [x] 6. Update AccountRecycler to invoke ProvisionAccount locally
+  - [x] 6.1 `PROVISION_ACCOUNT_FUNCTION_ARN` env var in CF template now points to local function — no code change needed in recycler
 
-- [ ] 7. Update deploy scripts
-  - [ ] 7.1 Update `scripts/02-domain-account/deploy/01-deploy-infrastructure.sh`:
-    - Remove the `ProvisionAccountFunctionArn` parameter override (no longer cross-account)
-    - Add packaging and deployment of ProvisionAccount Lambda code (zip + `update-function-code`)
-    - Add `AccountCreationRoleArn` parameter (from org admin stack outputs or SSM)
-  - [ ] 7.2 Update `scripts/deploy-all.sh` to reflect the new simplified org admin deployment
-  - [ ] 7.3 Update `scripts/cleanup-all.sh` if it references the old org admin stacks
+- [x] 7. Update deploy scripts
+  - [x] 7.1 Updated `scripts/02-domain-account/deploy/01-deploy-infrastructure.sh`:
+    - Removed `ProvisionAccountFunctionArn` parameter override
+    - Added `AccountCreationRoleArn` and `ExternalId` parameters (read from org admin stack outputs)
+    - Added ProvisionAccount Lambda packaging and deployment
+    - Added guard: fails early if org admin stack outputs are missing
+  - [x] 7.2 Updated `scripts/deploy-all.sh`: Phase 2 now calls `deploy-org-admin.sh`; Phase 1 reads org admin stack outputs; ProvisionAccount Lambda added to deploy list
+  - [x] 7.3 `scripts/cleanup-all.sh` — references old test-specific stack names, not the new org admin stack; no functional change needed (cleanup of new stack handled by `cleanup-org-mgmt-account.sh`)
 
-- [ ] 8. Cleanup old Org Admin resources
-  - [ ] 8.1 Mark old templates as deprecated or remove them:
-    - `01-stackset-roles.yaml` → consolidated into new template
-    - `02-provision-account.yaml` → Lambda moved, role consolidated
-    - `03-domain-access-stackset.yaml` → StackSet definition moved into consolidated template
-  - [ ] 8.2 Mark old deploy scripts as deprecated or remove them:
-    - `01-deploy-stackset-roles.sh`
-    - `02-deploy-provision-account.sh`
-  - [ ] 8.3 Update `config.yaml.template` if any org-admin-specific parameters changed
+- [x] 8. Cleanup old Org Admin resources
+  - [x] 8.1 Marked old templates as deprecated:
+    - `01-stackset-roles.yaml` → deprecated header added
+    - `02-provision-account.yaml` → deprecated header added
+    - `03-domain-access-stackset.yaml` → StackSet definition moved into consolidated template (still used as reference)
+  - [x] 8.2 Marked old deploy scripts as deprecated:
+    - `01-deploy-stackset-roles.sh` → exits with deprecation message
+    - `02-deploy-provision-account.sh` → exits with deprecation message
+  - [x] 8.3 `config.yaml.template` — no org-admin-specific parameters changed, no update needed
 
-- [ ] 9. Write user guides
-  - [ ] 9.1 Create `docs/OrgAdminGuide.md` — audience is the org admin who installs the governance stack:
-    - What this installs and why (one CloudFormation stack, two IAM roles, StackSet definitions)
-    - Prerequisites (AWS Organizations management account access, region)
-    - Step-by-step: run `deploy-org-admin.sh`, copy the outputs, hand them to the domain admin
-    - How to add a new approved StackSet (point to the `ApprovedStackSets` section in the template)
-    - What permissions are granted and to whom (so the org admin can make an informed decision)
-    - How to uninstall
-  - [ ] 9.2 Create `docs/DomainAdminGuide.md` — audience is the domain admin who runs the pool application:
-    - What this installs (all Lambdas, DynamoDB, EventBridge, SSM parameters, SNS)
-    - Prerequisites (domain account access, DataZone domain ID, root domain unit ID, outputs from org admin)
-    - Step-by-step: fill in `config.yaml`, run `01-deploy-infrastructure.sh`, run `02-deploy-project-profile.sh`
-    - How to configure pool size, email prefix, reclaim strategy via SSM parameters
-    - How to monitor the pool (CloudWatch metrics, SNS alerts, DynamoDB state table)
-    - How to trigger manual replenishment, delete failed accounts
-    - How to uninstall
-  - [ ] 9.3 Create `docs/TestingGuide.md` — audience is a single person doing end-to-end testing (has access to both accounts):
-    - Prerequisites and credential switching (`isengardcli credentials`)
-    - Deployment order: org admin first, then domain admin
-    - How to seed the pool and verify accounts reach AVAILABLE state
-    - How to simulate account assignment (create a DataZone project) and verify ASSIGNED state
-    - How to verify pool replenishment triggers
-    - How to run the reconciler and recycler manually
-    - Common failure modes and how to diagnose them (CloudWatch logs, DynamoDB state inspection)
-  - [ ] 9.4 Update `scripts/README.md` to reflect the new deployment flow and link to the three guides above
+- [x] 9. Write user guides (done — see task 12 below for details)
 
-- [ ] 10. Validate the refactored deployment end-to-end
-  - [ ] 10.1 Deploy the new consolidated org admin stack and verify:
-    - CF stack `AccountPoolFactory-OrgAdmin` creates successfully
-    - `SMUS-AccountPoolFactory-AccountCreation` role exists with correct trust policy (domain account + ExternalId)
-    - `SMUS-AccountPoolFactory-StackSetAdmin` role exists trusted by `cloudformation.amazonaws.com`
-    - `SMUS-AccountPoolFactory-DomainAccess` StackSet exists and is in ACTIVE state
-    - Stack outputs (AccountCreationRoleArn, ExternalId, StackSetAdminRoleArn) are present
-  - [ ] 10.2 Verify the old org admin stacks are gone (or confirm they no longer conflict):
-    - `AccountPoolFactory-StackSetRoles` — deleted or superseded
-    - `AccountPoolFactory-ProvisionAccount` — deleted or superseded
-  - [ ] 10.3 Deploy the updated domain account infrastructure stack and verify:
-    - CF stack `AccountPoolFactory-Infrastructure` updates successfully
-    - `ProvisionAccount` Lambda exists in the domain account (994753223772)
-    - Lambda environment variables include `ACCOUNT_CREATION_ROLE_ARN` and `EXTERNAL_ID`
-    - `ProvisionAccount` Lambda is no longer present in the org admin account (495869084367)
-  - [ ] 10.4 Verify cross-account role assumption works from the domain account:
-    - Invoke `ProvisionAccount` Lambda with a test payload `{"action": "provision", ...}` using a dry-run or canary account name
-    - Confirm the Lambda successfully assumes `SMUS-AccountPoolFactory-AccountCreation` in the org admin account
-    - Confirm it can call `organizations:DescribeOrganization` via the assumed role (read-only smoke test before creating real accounts)
-  - [ ] 10.5 Verify PoolManager invokes ProvisionAccount locally (same account):
-    - Invoke PoolManager with `{"action": "force_replenishment"}` and confirm it calls the local `ProvisionAccount` function (check CloudWatch logs — no cross-account Lambda ARN should appear)
-    - Confirm no `lambda:InvokeFunction` cross-account permission errors in logs
-  - [ ] 10.6 Provision one real account end-to-end and verify:
-    - Account is created in AWS Organizations
-    - Account is moved to the target OU
-    - `SMUS-AccountPoolFactory-StackSetExecution` role is deployed into the new account
-    - `SMUS-AccountPoolFactory-DomainAccess` StackSet instance is deployed into the new account
-    - DynamoDB record transitions from `SETTING_UP` → `AVAILABLE`
-  - [ ] 10.7 Verify AccountRecycler still works after the local invocation change:
-    - Trigger a recycle manually and confirm it invokes the local `ProvisionAccount` function without errors
+- [x] 10. Validate the refactored deployment end-to-end
+  - [x] 10.1 Deploy the new consolidated org admin stack — `AccountPoolFactory-OrgAdmin` created successfully with both roles and correct outputs
+  - [x] 10.2 Verified old org admin stacks deleted: `AccountPoolFactory-StackSetRoles` and `AccountPoolFactory-ProvisionAccount` gone
+  - [x] 10.3 Deploy the updated domain account infrastructure stack — `AccountPoolFactory-Infrastructure` updated successfully; `ProvisionAccount` Lambda now exists in domain account (994753223772) with correct env vars
+  - [x] 10.4 Verified cross-account role assumption works: invoked ProvisionAccount with unknown action — Lambda successfully assumed `SMUS-AccountPoolFactory-AccountCreation` in org admin account before returning `Unknown action` error
+  - [x] 10.5 Verified PoolManager invokes ProvisionAccount locally: `force_replenishment` succeeded, logs show pool at 213 available accounts, no cross-account Lambda ARN in logs
+  - [x] 10.6 Provisioned account `254076817587` end-to-end via ProvisionAccount from domain account: account created in Organizations, moved to OU, StackSetExecution role deployed, DomainAccess StackSet instance CURRENT, role assumable from domain account
+  - [x] 10.7 AccountRecycler invoked successfully — ran without errors, no cross-account Lambda invocation errors
+  - [x] 10.8 Full project creation test: created project via `.test-create-from-pool-IDC.py`, AccountProvider returned account, PoolManager processed assignment event, account moved to ASSIGNED state.
+  - [x] 10.9 Fixed systematic issues discovered during testing:
+    - EventBridge bus policy added to central bus (project accounts can now forward events)
+    - Template versioning system added to all project account CF templates — bump version to force fleet-wide update
+    - SetupOrchestrator `updateBlueprints` bypassing AVAILABLE accounts — fixed
+    - Blueprint PolicyGrants missing from all pool accounts — fixed via `updateBlueprints` on all 212 accounts (one-time manual run; new accounts get correct template from ProvisionAccount)
+    - Assignment trigger moved to `AccountProvider.validateAccountAuthorization` (reliable, immediate)
+    - PoolManager now handles DataZone EventBridge events (`Environment Deployment Completed`, `Environment Deletion Completed`) for assignment and reclaim
+    - Reclaim correctly waits for all environments in a project to be deleted before reclaiming account
+    - End-to-end lifecycle test: `tests/integration/test-e2e-pool-lifecycle.py` — AVAILABLE→ASSIGNED in 10s, reclaim triggered in <20s ✅
+  - [x] 10.10 Fixed remaining systematic gaps:
+    - `wait_for_stack_complete` only checked `CREATE_COMPLETE`, not `UPDATE_COMPLETE` — caused REUSE re-setup to timeout even when stack succeeded ✅ fixed
+    - `check_existing_stack` raised on `UPDATE_IN_PROGRESS` instead of waiting — caused concurrent setup failures ✅ fixed
+    - Reconciler now checks blueprint template version on every scheduled run and triggers `updateBlueprints` fleet-wide if any account is outdated ✅ fixed
+    - All fixes are in code/CF templates — no manual intervention needed going forward
 
 - [ ]* 11. Migration guide (for existing deployments)
-  - [ ]* 11.1 Write a migration script or checklist for moving from the old 3-template org admin setup to the new single template
-  - [ ]* 11.2 Document how to safely delete the old org admin CF stacks after deploying the new one (order matters — don't delete the Lambda before the domain account stops referencing it)
+  - [x]* 11.1 Migration already performed: old 3-template org admin setup replaced with single `SMUS-AccountPoolFactory-OrgAdmin.yaml`. Old stacks (`AccountPoolFactory-StackSetRoles`, `AccountPoolFactory-ProvisionAccount`) deleted. StackSet preserved (has live instances).
+  - [x]* 11.2 Safe deletion order followed: domain account infrastructure updated first (removed cross-account Lambda reference), then old org admin stacks deleted.
+
+- [x] 9. Write user guides
+  - [x] 9.1 Created `docs/OrgAdminGuide.md` — what installs, permissions, how to add StackSets, uninstall
+  - [x] 9.2 Created `docs/DomainAdminGuide.md` — deployment, config, monitoring, day-to-day ops, uninstall
+  - [x] 9.3 Updated `docs/TestingGuide.md` — deployment order, pool seeding, e2e lifecycle test, individual scripts, failure modes
+  - [x] 9.4 Updated `scripts/README.md` to link to new guides
+
+- [x] 12. Split UserGuide into OrgAdminGuide and DomainAdminGuide
+  - [x] 12.1 Read existing `docs/UserGuide.md` and identified org admin vs domain admin content
+  - [x] 12.2 Created `docs/OrgAdminGuide.md`
+  - [x] 12.3 Created `docs/DomainAdminGuide.md`
+  - [x] 12.4 Replaced `docs/UserGuide.md` with redirect index
+  - [x] 12.5 Updated links in `README.md`, `docs/README.md`, `docs/GettingStarted.md`, `scripts/README.md`

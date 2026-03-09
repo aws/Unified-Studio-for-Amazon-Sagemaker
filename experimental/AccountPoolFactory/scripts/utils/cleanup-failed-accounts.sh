@@ -8,13 +8,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$PROJECT_ROOT"
 
-# Load configuration
-if [ ! -f "config.yaml" ]; then
-    echo "❌ config.yaml not found"
-    exit 1
-fi
+source scripts/utils/resolve-config.sh domain
 
-REGION=$(grep "region:" config.yaml | awk '{print $2}')
 TABLE_NAME="AccountPoolFactory-AccountState"
 
 echo "🧹 Cleaning up failed accounts"
@@ -61,16 +56,16 @@ FAILED=0
 echo "$FAILED_ACCOUNTS" | jq -c '.Items[]' | while read -r item; do
     ACCOUNT_ID=$(echo "$item" | jq -r '.accountId.S')
     TIMESTAMP=$(echo "$item" | jq -r '.timestamp.N // .timestamp.S')
-    
+
     echo "  Deleting account $ACCOUNT_ID (timestamp: $TIMESTAMP)..."
-    
+
     # Determine timestamp type
     if echo "$item" | jq -e '.timestamp.N' > /dev/null 2>&1; then
         TIMESTAMP_TYPE="N"
     else
         TIMESTAMP_TYPE="S"
     fi
-    
+
     if aws dynamodb delete-item \
         --table-name "$TABLE_NAME" \
         --key "{\"accountId\":{\"S\":\"$ACCOUNT_ID\"},\"timestamp\":{\"$TIMESTAMP_TYPE\":\"$TIMESTAMP\"}}" \
@@ -91,4 +86,3 @@ echo "   Failed: $FAILED"
 echo ""
 echo "You can now trigger pool replenishment:"
 echo "  ./seed-initial-pool.sh"
-

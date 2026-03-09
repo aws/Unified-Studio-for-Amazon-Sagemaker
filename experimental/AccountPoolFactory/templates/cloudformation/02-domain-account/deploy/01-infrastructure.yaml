@@ -17,11 +17,19 @@ Parameters:
   OrgAdminAccountId:
     Type: String
     Description: Organization admin account ID
-  
-  ProvisionAccountFunctionArn:
+
+  OrganizationId:
     Type: String
-    Description: ARN of ProvisionAccount Lambda in Org Admin account
+    Description: AWS Organizations ID (e.g. o-xxxxxxxxxx) — used to scope the central event bus policy to org accounts only
   
+  AccountCreationRoleArn:
+    Type: String
+    Description: ARN of the AccountCreation cross-account role in the Org Admin account (output of deploy-org-admin.sh)
+
+  ExternalId:
+    Type: String
+    Description: ExternalId for assuming the AccountCreation role (output of deploy-org-admin.sh)
+
   PoolName:
     Type: String
     Default: AccountPoolFactory
@@ -154,20 +162,38 @@ Resources:
         - Key: ManagedBy
           Value: AccountPoolFactory
 
-  PoolManagerTriggerRule:
+  # Resource policy allowing project accounts to put events onto the central bus.
+  # Each project account's EventBridgeForwarderRole assumes events.amazonaws.com
+  # and calls PutEvents — this policy grants that cross-account access.
+  CentralEventBusPolicy:
+    Type: AWS::Events::EventBusPolicy
+    Properties:
+      EventBusName: !Ref CentralEventBus
+      StatementId: AllowProjectAccountsToForwardEvents
+      Action: events:PutEvents
+      Principal: '*'
+      Condition:
+        Type: StringEquals
+        Key: aws:PrincipalOrgID
+        Value: !Ref OrganizationId
+
+  # PoolManager is triggered by DataZone events on the default event bus.
+  # DataZone emits events (source: aws.datazone) directly to EventBridge when
+  # projects are created/deleted and environments are deployed/deleted.
+  # This is the reliable trigger for assignment and reclaim detection.
+  PoolManagerDataZoneTriggerRule:
     Type: AWS::Events::Rule
     Properties:
-      Name: AccountPoolFactory-PoolManager-Trigger
-      Description: Trigger Pool Manager on CloudFormation events
-      EventBusName: !Ref CentralEventBus
+      Name: AccountPoolFactory-PoolManager-DataZone-Trigger
+      Description: Trigger PoolManager on DataZone project and environment lifecycle events
       EventPattern:
         source:
-          - aws.cloudformation
+          - aws.datazone
         detail-type:
-          - CloudFormation Stack Status Change
-        detail:
-          stack-name:
-            - prefix: DataZone-
+          - Project Creation Succeeded
+          - Environment Deployment Completed
+          - Environment Deletion Completed
+          - Environment Deletion Failed
       State: ENABLED
       Targets:
         - Arn: !GetAtt PoolManagerFunction.Arn
@@ -179,7 +205,7 @@ Resources:
       FunctionName: !Ref PoolManagerFunction
       Action: lambda:InvokeFunction
       Principal: events.amazonaws.com
-      SourceArn: !GetAtt PoolManagerTriggerRule.Arn
+      SourceArn: !GetAtt PoolManagerDataZoneTriggerRule.Arn
 
   # ============================================================
   # Unified Lambda Execution Role
@@ -216,12 +242,12 @@ Resources:
                   - !GetAtt AccountStateTable.Arn
                   - !Sub '${AccountStateTable.Arn}/index/*'
 
-              # Lambda invocations (self + cross-account ProvisionAccount)
+              # Lambda invocations (local functions only — ProvisionAccount now runs in this account)
               - Effect: Allow
                 Action:
                   - lambda:InvokeFunction
                 Resource:
-                  - !Ref ProvisionAccountFunctionArn
+                  - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:ProvisionAccount'
                   - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:PoolManager'
                   - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:SetupOrchestrator'
                   - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:DeprovisionAccount'
@@ -275,6 +301,9 @@ Resources:
                 Action:
                   - datazone:PutDomainSharingPolicy
                   - datazone:GetDomain
+                  - datazone:ListEnvironments
+                  - datazone:GetEnvironment
+                  - datazone:GetProject
                 Resource: !Sub 'arn:aws:datazone:${AWS::Region}:${AWS::AccountId}:domain/${DomainId}'
 
               # KMS (for SSM SecureString)
@@ -364,6 +393,70 @@ Resources:
       Code:
         ZipFile: |
           # Placeholder - deploy actual code separately
+          def lambda_handler(event, context):
+              return {'statusCode': 200, 'body': 'Placeholder'}
+      Tags:
+        - Key: ManagedBy
+          Value: AccountPoolFactory
+
+  # ============================================================
+  # ProvisionAccount Lambda (moved from Org Admin account)
+  # Assumes AccountCreation role in Org Admin to call Organizations + StackSet APIs.
+  # Invoked locally by PoolManager and AccountRecycler (same account).
+  # ============================================================
+
+  ProvisionAccountRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: SMUS-AccountPoolFactory-ProvisionAccount-Role
+      Description: Execution role for ProvisionAccount Lambda - assumes Org Admin AccountCreation role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: ProvisionAccountPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Assume the AccountCreation role in Org Admin to call Organizations + StackSet APIs
+              - Effect: Allow
+                Action: sts:AssumeRole
+                Resource: !Ref AccountCreationRoleArn
+              # Assume OrganizationAccountAccessRole in new accounts to bootstrap StackSetExecution role
+              - Effect: Allow
+                Action: sts:AssumeRole
+                Resource: 'arn:aws:iam::*:role/OrganizationAccountAccessRole'
+      Tags:
+        - Key: ManagedBy
+          Value: AccountPoolFactory
+
+  ProvisionAccountFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: ProvisionAccount
+      Runtime: python3.12
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt ProvisionAccountRole.Arn
+      Timeout: 600
+      MemorySize: 512
+      ReservedConcurrentExecutions: 5
+      Environment:
+        Variables:
+          ACCOUNT_CREATION_ROLE_ARN: !Ref AccountCreationRoleArn
+          EXTERNAL_ID: !Ref ExternalId
+          AWS_REGION_NAME: !Ref AWS::Region
+          DOMAIN_ID: !Ref DomainId
+          DOMAIN_ACCOUNT_ID: !Ref DomainAccountId
+          ORG_ADMIN_ACCOUNT_ID: !Ref OrgAdminAccountId
+      Code:
+        ZipFile: |
+          # Placeholder - deploy actual code via deploy script
           def lambda_handler(event, context):
               return {'statusCode': 200, 'body': 'Placeholder'}
       Tags:
@@ -486,7 +579,7 @@ Resources:
           ORG_ADMIN_ACCOUNT_ID: !Ref OrgAdminAccountId
           DEPROVISION_ACCOUNT_FUNCTION_NAME: !Ref DeprovisionAccountFunction
           SETUP_ORCHESTRATOR_FUNCTION_NAME: !Ref SetupOrchestratorFunction
-          PROVISION_ACCOUNT_FUNCTION_ARN: !Ref ProvisionAccountFunctionArn
+          PROVISION_ACCOUNT_FUNCTION_ARN: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:ProvisionAccount'
       Code:
         ZipFile: |
           # Placeholder - deploy actual code separately
@@ -751,3 +844,9 @@ Outputs:
     Value: !GetAtt AccountRecyclerFunction.Arn
     Export:
       Name: AccountPoolFactory-AccountRecyclerArn
+
+  ProvisionAccountFunctionArn:
+    Description: ProvisionAccount Lambda function ARN
+    Value: !GetAtt ProvisionAccountFunction.Arn
+    Export:
+      Name: AccountPoolFactory-ProvisionAccountArn

@@ -26,23 +26,41 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 cd "$PROJECT_ROOT"
 
-if [ ! -f "config.yaml" ]; then
-    echo "❌ config.yaml not found"
-    exit 1
-fi
+source scripts/utils/resolve-config.sh org
 
-REGION=$(grep "region:" config.yaml | awk '{print $2}')
-ORG_ADMIN_ACCOUNT_ID=$(grep "account_id:" config.yaml | head -1 | awk '{print $2}' | tr -d '"')
-DOMAIN_ACCOUNT_ID=$(grep "domain_account_id:" config.yaml | awk '{print $2}' | tr -d '"')
-DOMAIN_ID=$(grep "domain_id:" config.yaml | awk '{print $2}')
+ORG_ADMIN_ACCOUNT_ID="$CURRENT_ACCOUNT"
 STACKSET_NAME="SMUS-AccountPoolFactory-DomainAccess"
 
-# Verify correct account
-CURRENT_ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
-if [ "$CURRENT_ACCOUNT" != "$ORG_ADMIN_ACCOUNT_ID" ]; then
-    echo "❌ Must run in Org Admin account ($ORG_ADMIN_ACCOUNT_ID), currently in $CURRENT_ACCOUNT"
-    exit 1
-fi
+# Read domain info from the AccountPoolFactory-OrgAdmin stack outputs
+DOMAIN_ACCOUNT_ID=$(aws cloudformation describe-stacks \
+    --stack-name AccountPoolFactory-OrgAdmin \
+    --region "$REGION" \
+    --query 'Stacks[0].Outputs[?OutputKey==`DomainAccountId`].OutputValue' \
+    --output text 2>/dev/null || echo "")
+
+DOMAIN_ID=$(aws cloudformation describe-stacks \
+    --stack-name AccountPoolFactory-OrgAdmin \
+    --region "$REGION" \
+    --query 'Stacks[0].Outputs[?OutputKey==`DomainId`].OutputValue' \
+    --output text 2>/dev/null || echo "")
+
+PROJECT_ROLE_ENABLED=$(aws cloudformation describe-stacks \
+    --stack-name AccountPoolFactory-OrgAdmin \
+    --region "$REGION" \
+    --query 'Stacks[0].Parameters[?ParameterKey==`ProjectRoleEnabled`].ParameterValue' \
+    --output text 2>/dev/null || echo "true")
+
+PROJECT_ROLE_NAME=$(aws cloudformation describe-stacks \
+    --stack-name AccountPoolFactory-OrgAdmin \
+    --region "$REGION" \
+    --query 'Stacks[0].Parameters[?ParameterKey==`ProjectRoleName`].ParameterValue' \
+    --output text 2>/dev/null || echo "AmazonSageMakerProjectRole")
+
+PROJECT_ROLE_POLICY=$(aws cloudformation describe-stacks \
+    --stack-name AccountPoolFactory-OrgAdmin \
+    --region "$REGION" \
+    --query 'Stacks[0].Parameters[?ParameterKey==`ProjectRoleManagedPolicyArn`].ParameterValue' \
+    --output text 2>/dev/null || echo "arn:aws:iam::aws:policy/AmazonSageMakerFullAccess")
 
 echo "🔧 Fix Existing Pool Accounts (SMUS Rename Migration)"
 echo "======================================================"
@@ -57,14 +75,30 @@ if [ $# -gt 0 ]; then
     ACCOUNTS=("$@")
 else
     echo "📋 No accounts specified, querying DynamoDB..."
-    ACCOUNTS_JSON=$(aws dynamodb scan \
-        --table-name AccountPoolFactory-AccountState \
-        --region "$REGION" \
-        --projection-expression "accountId,#s" \
-        --expression-attribute-names '{"#s":"state"}' \
-        --output json)
+    # DynamoDB is in the domain account — assume role to query it
+    DOMAIN_CREDS=$(aws sts assume-role \
+        --role-arn "arn:aws:iam::${DOMAIN_ACCOUNT_ID}:role/SMUS-AccountPoolFactory-AccountCreation" \
+        --role-session-name "fix-pool-accounts-query" \
+        --external-id "AccountPoolFactory-${DOMAIN_ACCOUNT_ID}" \
+        --output json 2>/dev/null || echo "")
 
-    # Use temp file instead of associative array (bash 3 compat)
+    if [ -n "$DOMAIN_CREDS" ]; then
+        AK=$(echo "$DOMAIN_CREDS" | python3 -c "import json,sys; print(json.load(sys.stdin)['Credentials']['AccessKeyId'])")
+        SK=$(echo "$DOMAIN_CREDS" | python3 -c "import json,sys; print(json.load(sys.stdin)['Credentials']['SecretAccessKey'])")
+        ST=$(echo "$DOMAIN_CREDS" | python3 -c "import json,sys; print(json.load(sys.stdin)['Credentials']['SessionToken'])")
+
+        ACCOUNTS_JSON=$(AWS_ACCESS_KEY_ID="$AK" AWS_SECRET_ACCESS_KEY="$SK" AWS_SESSION_TOKEN="$ST" \
+            aws dynamodb scan \
+                --table-name AccountPoolFactory-AccountState \
+                --region "$REGION" \
+                --projection-expression "accountId,#s" \
+                --expression-attribute-names '{"#s":"state"}' \
+                --output json)
+    else
+        echo "⚠️  Cannot assume role into domain account — specify accounts manually"
+        exit 1
+    fi
+
     ACCOUNTS=()
     while IFS= read -r line; do
         ACCOUNTS+=("$line")
@@ -88,7 +122,6 @@ echo "Target accounts: ${ACCOUNTS[*]}"
 echo ""
 
 # Helper: run a command in a pool account via OrganizationAccountAccessRole
-# Uses a credentials file to avoid polluting the parent shell environment
 run_in_account() {
     local TARGET_ACCOUNT="$1"
     shift
@@ -122,7 +155,6 @@ for ACCOUNT_ID in "${ACCOUNTS[@]}"; do
     echo "🔐 Account: $ACCOUNT_ID"
     echo "   Assuming OrganizationAccountAccessRole..."
 
-    # Check if stack already exists (in subshell to avoid credential leak)
     STACK_EXISTS=$(run_in_account "$ACCOUNT_ID" \
         aws cloudformation describe-stacks \
             --stack-name "$EXEC_STACK_NAME" \
@@ -230,7 +262,6 @@ for ACCOUNT_ID in "${ACCOUNTS[@]}"; do
     echo ""
     echo "📦 Account: $ACCOUNT_ID"
 
-    # Check if instance already exists and is CURRENT
     INSTANCE_STATUS=$(aws cloudformation list-stack-instances \
         --stack-set-name "$STACKSET_NAME" \
         --stack-instance-account "$ACCOUNT_ID" \
@@ -270,13 +301,6 @@ for ACCOUNT_ID in "${ACCOUNTS[@]}"; do
             break
         elif [ "$OP_STATUS" = "FAILED" ] || [ "$OP_STATUS" = "STOPPED" ]; then
             echo "   ❌ Deployment $OP_STATUS"
-            # Show failure reason
-            aws cloudformation list-stack-instance-resource-drifts \
-                --stack-set-name "$STACKSET_NAME" \
-                --stack-instance-account "$ACCOUNT_ID" \
-                --stack-instance-region "$REGION" \
-                --operation-id "$OPERATION_ID" \
-                --region "$REGION" 2>/dev/null || true
             break
         fi
         echo "   ⏳ Status: $OP_STATUS (attempt $i/30)"
@@ -295,13 +319,9 @@ echo "════════════════════════�
 echo "Step 4: Deploy Project Role (via OrganizationAccountAccessRole)"
 echo "═══════════════════════════════════════════════════════"
 
-PROJECT_ROLE_ENABLED=$(python3 -c "import yaml; c=yaml.safe_load(open('config.yaml')); print(str(c.get('project_role',{}).get('enabled', True)).lower())" 2>/dev/null || echo "true")
-
 if [ "$PROJECT_ROLE_ENABLED" != "true" ]; then
-    echo "⏭️  Project role disabled in config — skipping"
+    echo "⏭️  Project role disabled — skipping"
 else
-    PROJECT_ROLE_NAME=$(python3 -c "import yaml; c=yaml.safe_load(open('config.yaml')); print(c.get('project_role',{}).get('role_name', 'AmazonSageMakerProjectRole'))" 2>/dev/null)
-    PROJECT_ROLE_POLICY=$(python3 -c "import yaml; c=yaml.safe_load(open('config.yaml')); print(c.get('project_role',{}).get('managed_policy_arn', 'arn:aws:iam::aws:policy/AmazonSageMakerFullAccess'))" 2>/dev/null)
     PROJECT_ROLE_TEMPLATE="templates/cloudformation/03-project-account/deploy/04-project-role.yaml"
     PROJECT_ROLE_STACK="DataZone-ProjectRole"
 

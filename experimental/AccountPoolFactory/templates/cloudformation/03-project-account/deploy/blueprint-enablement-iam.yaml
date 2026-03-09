@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: Enable DataZone blueprints for project account (IAM domain mode)
+Description: Enable DataZone blueprints for project account (IAM domain mode) v2
 
 Parameters:
   DomainId:
@@ -630,6 +630,10 @@ Resources:
               IncludeChildDomainUnits: true
 
 Outputs:
+  TemplateVersion:
+    Description: Template version — bump this string whenever the template changes to force SetupOrchestrator to update all deployed stacks
+    Value: "2"
+
   ToolingBlueprintId:
     Description: Tooling Blueprint ID
     Value: !GetAtt Tooling.EnvironmentBlueprintId

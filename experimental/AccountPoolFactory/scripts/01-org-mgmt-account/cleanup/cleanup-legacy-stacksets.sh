@@ -15,25 +15,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 cd "$PROJECT_ROOT"
 
-if [ ! -f "config.yaml" ]; then
-    echo "❌ config.yaml not found"
-    exit 1
-fi
-
-REGION=$(grep "region:" config.yaml | awk '{print $2}')
-ORG_ADMIN_ACCOUNT_ID=$(grep "account_id:" config.yaml | head -1 | awk '{print $2}' | tr -d '"')
+source scripts/utils/resolve-config.sh org
 
 echo "🧹 Legacy StackSet Cleanup"
 echo "=========================="
 echo "Region: $REGION"
-echo "Org Admin: $ORG_ADMIN_ACCOUNT_ID"
+echo "Org Admin: $CURRENT_ACCOUNT"
 echo ""
-
-CURRENT_ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
-if [ "$CURRENT_ACCOUNT" != "$ORG_ADMIN_ACCOUNT_ID" ]; then
-    echo "❌ Must run in Org Admin account ($ORG_ADMIN_ACCOUNT_ID), currently in $CURRENT_ACCOUNT"
-    exit 1
-fi
 
 LEGACY_STACKSETS=(
     "AccountPoolFactory-DomainAccess"
@@ -105,7 +93,7 @@ for ACCT in $UNIQUE_ACCOUNTS; do
     echo ""
     echo "--- Account $ACCT ($STACK_COUNT stacks) ---"
 
-    if [ "$ACCT" = "$ORG_ADMIN_ACCOUNT_ID" ]; then
+    if [ "$ACCT" = "$CURRENT_ACCOUNT" ]; then
         echo "   Skipping (org admin account)"
         SKIP_COUNT=$((SKIP_COUNT + 1))
         continue

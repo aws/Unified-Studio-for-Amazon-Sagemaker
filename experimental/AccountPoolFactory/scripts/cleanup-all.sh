@@ -6,7 +6,8 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_FILE="$SCRIPT_DIR/config.yaml"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR" && pwd)"
+cd "$PROJECT_ROOT"
 
 # Colors for output
 RED='\033[0;31m'
@@ -15,7 +16,8 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Load configuration
+source scripts/utils/resolve-config.sh org
+
 REGION="us-east-2"
 ORG_ADMIN_ACCOUNT="495869084367"
 DOMAIN_ACCOUNT="994753223772"

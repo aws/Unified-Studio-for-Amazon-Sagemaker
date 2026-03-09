@@ -117,9 +117,9 @@ def lambda_handler(event, context):
         print(f"❌ Account {account_id} does not exist")
         return {'statusCode': 404, 'body': 'Account not found'}
     
-    # Check for idempotency
+    # Check for idempotency — skip for updateBlueprints which must run on AVAILABLE accounts
     account_state = get_account_state(account_id)
-    if account_state:
+    if account_state and mode != 'updateBlueprints':
         state = account_state.get('state', {}).get('S')
         if state == 'AVAILABLE':
             print(f"✅ Account {account_id} already in AVAILABLE state, skipping")
@@ -387,6 +387,33 @@ def update_trust_policy(account_id: str, config: Dict[str, Any]) -> Dict[str, An
         raise Exception(f"Trust policy update failed: {e}")
 
 
+def _needs_template_update(outputs: list, expected_version: str) -> bool:
+    """Return True if the deployed stack's TemplateVersion output differs from expected_version.
+    Stacks without a TemplateVersion output (old deployments) always need updating."""
+    deployed = next((o['OutputValue'] for o in outputs if o['OutputKey'] == 'TemplateVersion'), None)
+    return deployed != expected_version
+
+
+def _update_stack(cf_client, stack_name: str, template_path: str, parameters: list, timeout: int = 600):
+    """Update an existing CF stack with a new template. Silently skips if no changes."""
+    with open(template_path, 'r') as f:
+        template_body = f.read()
+    try:
+        cf_client.update_stack(
+            StackName=stack_name,
+            TemplateBody=template_body,
+            Parameters=parameters,
+            Capabilities=['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM', 'CAPABILITY_AUTO_EXPAND'],
+        )
+        wait_for_stack_complete(cf_client, stack_name, timeout=timeout)
+        print(f"   ✅ Stack updated: {stack_name}")
+    except Exception as e:
+        if 'No updates are to be performed' in str(e):
+            print(f"   ✅ Stack already up to date: {stack_name}")
+        else:
+            raise
+
+
 def deploy_vpc(account_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
     """Deploy VPC CloudFormation stack"""
     print(f"🌐 Deploying VPC for account {account_id}")
@@ -400,7 +427,13 @@ def deploy_vpc(account_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
         # Check if stack already exists (handles bad states too)
         status, outputs = check_existing_stack(cf_client, stack_name)
         if status == 'healthy':
-            print(f"✅ VPC stack already exists, reading outputs")
+            if _needs_template_update(outputs, "1"):
+                print(f"   VPC stack outdated — updating...")
+                _update_stack(cf_client, stack_name, template_path, [], timeout=600)
+                response = cf_client.describe_stacks(StackName=stack_name)
+                outputs = response['Stacks'][0].get('Outputs', [])
+            else:
+                print(f"✅ VPC stack up to date, reading outputs")
             result = {
                 'vpcId': get_output_value(outputs, 'VpcId'),
                 'subnetIds': [
@@ -462,7 +495,16 @@ def deploy_iam_roles(account_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
         # Check if stack already exists (handles bad states too)
         status, outputs = check_existing_stack(cf_client, stack_name)
         if status == 'healthy':
-            print(f"✅ IAM stack already exists, reading outputs")
+            if _needs_template_update(outputs, "1"):
+                print(f"   IAM stack outdated — updating...")
+                _update_stack(cf_client, stack_name, template_path, [
+                    {'ParameterKey': 'DomainAccountId', 'ParameterValue': config['DomainAccountId']},
+                    {'ParameterKey': 'DomainId', 'ParameterValue': config['DomainId']}
+                ])
+                response = cf_client.describe_stacks(StackName=stack_name)
+                outputs = response['Stacks'][0].get('Outputs', [])
+            else:
+                print(f"✅ IAM stack up to date, reading outputs")
             result = {
                 'manageAccessRoleArn': get_output_value(outputs, 'ManageAccessRoleArn'),
                 'provisioningRoleArn': get_output_value(outputs, 'ProvisioningRoleArn')
@@ -519,7 +561,14 @@ def deploy_eventbridge_rules(account_id: str, config: Dict[str, Any]) -> Dict[st
         # Check if stack already exists (handles bad states too)
         status, outputs = check_existing_stack(cf_client, stack_name)
         if status == 'healthy':
-            print(f"✅ EventBridge stack already exists, skipping")
+            central_bus_arn = f"arn:aws:events:{config['Region']}:{config['DomainAccountId']}:event-bus/AccountPoolFactory-CentralBus"
+            if _needs_template_update(outputs, "1"):
+                print(f"   EventBridge stack outdated — updating...")
+                _update_stack(cf_client, stack_name, template_path, [
+                    {'ParameterKey': 'CentralEventBusArn', 'ParameterValue': central_bus_arn}
+                ])
+            else:
+                print(f"✅ EventBridge stack up to date, skipping")
             return {'eventBridgeRulesDeployed': True}
 
         with open(template_path, 'r') as f:
@@ -573,7 +622,16 @@ def deploy_project_role(account_id: str, config: Dict[str, Any]) -> Dict[str, An
         # Check if stack already exists (handles bad states too)
         status, outputs = check_existing_stack(cf_client, stack_name)
         if status == 'healthy':
-            print(f"✅ ProjectRole stack already exists, reading outputs")
+            if _needs_template_update(outputs, "1"):
+                print(f"   ProjectRole stack outdated — updating...")
+                _update_stack(cf_client, stack_name, template_path, [
+                    {'ParameterKey': 'RoleName', 'ParameterValue': role_name},
+                    {'ParameterKey': 'ManagedPolicyArn', 'ParameterValue': policy_arn}
+                ])
+                response = cf_client.describe_stacks(StackName=stack_name)
+                outputs = response['Stacks'][0].get('Outputs', [])
+            else:
+                print(f"✅ ProjectRole stack up to date, reading outputs")
             return {
                 'projectRoleArn': get_output_value(outputs, 'ProjectRoleArn')
             }
@@ -946,9 +1004,16 @@ def enable_blueprints(account_id: str, config: Dict[str, Any], iam_result: Dict[
         # Check if stack already exists (handles bad states too — same as other deploy_* functions)
         status, outputs = check_existing_stack(cf_client, stack_name)
         if status == 'healthy':
-            # Stack exists — update it if we now have VPC/S3 params (idempotent update)
-            if vpc_id and subnet_ids and s3_location:
-                print(f"   Blueprints stack exists — updating with VPC/S3 regional params...")
+            needs_update = _needs_template_update(outputs, "2")
+
+            if vpc_id and subnet_ids and s3_location and needs_update:
+                print(f"   Blueprints stack outdated — updating to add PolicyGrants...")
+            elif vpc_id and subnet_ids and s3_location:
+                print(f"   Blueprints stack up to date, skipping")
+            else:
+                print(f"✅ Blueprints stack already exists, skipping (no VPC/S3 params available)")
+
+            if vpc_id and subnet_ids and s3_location and needs_update:
                 with open(template_path, 'r') as f:
                     template_body = f.read()
                 try:
@@ -967,14 +1032,12 @@ def enable_blueprints(account_id: str, config: Dict[str, Any], iam_result: Dict[
                         Capabilities=['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM', 'CAPABILITY_AUTO_EXPAND'],
                     )
                     wait_for_stack_complete(cf_client, stack_name, timeout=3600)
-                    print(f"✅ Blueprints stack updated with regional params")
+                    print(f"✅ Blueprints stack updated")
                 except cf_client.exceptions.ClientError as e:
                     if 'No updates are to be performed' in str(e):
                         print(f"✅ Blueprints stack already up to date")
                     else:
                         raise
-            else:
-                print(f"✅ Blueprints stack already exists, skipping (no VPC/S3 params available)")
 
             response = cf_client.describe_stacks(StackName=stack_name)
             outputs = response['Stacks'][0].get('Outputs', [])
@@ -1244,9 +1307,27 @@ def check_existing_stack(cf_client, stack_name):
             print(f"  Stack {stack_name} deleted, will recreate")
             return 'cleaned', None
 
-        # Stack is in a transient state (IN_PROGRESS, etc.) — don't touch it
-        print(f"  Stack {stack_name} in transient state ({stack_status}), skipping")
-        raise Exception(f"Stack {stack_name} in transient state: {stack_status}")
+        # Stack is in a transient state — wait for it to complete, then re-check
+        IN_PROGRESS = {'CREATE_IN_PROGRESS', 'UPDATE_IN_PROGRESS', 'UPDATE_COMPLETE_CLEANUP_IN_PROGRESS',
+                       'DELETE_IN_PROGRESS', 'ROLLBACK_IN_PROGRESS', 'UPDATE_ROLLBACK_IN_PROGRESS',
+                       'UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS'}
+        if stack_status in IN_PROGRESS:
+            print(f"  Stack {stack_name} in transient state ({stack_status}), waiting for completion...")
+            wait_for_stack_complete(cf_client, stack_name, timeout=600)
+            # Re-check after waiting
+            response = cf_client.describe_stacks(StackName=stack_name)
+            stack = response['Stacks'][0]
+            stack_status = stack['StackStatus']
+            if stack_status in HEALTHY:
+                return 'healthy', stack.get('Outputs', [])
+            if stack_status in DELETABLE:
+                print(f"  Stack {stack_name} in bad state ({stack_status}) after wait, deleting...")
+                cf_client.delete_stack(StackName=stack_name)
+                wait_for_stack_delete(cf_client, stack_name, timeout=300)
+                return 'cleaned', None
+
+        print(f"  Stack {stack_name} in unexpected state ({stack_status}), skipping")
+        raise Exception(f"Stack {stack_name} in unexpected state: {stack_status}")
 
     except ClientError as e:
         if 'does not exist' in str(e):
@@ -1284,7 +1365,7 @@ def get_cross_account_client(service: str, account_id: str, config: Dict[str, An
 
 
 def wait_for_stack_complete(cf_client, stack_name: str, timeout: int = 1800):
-    """Wait for CloudFormation stack to complete"""
+    """Wait for CloudFormation stack to complete (create or update)"""
     start_time = time.time()
     
     while time.time() - start_time < timeout:
@@ -1292,10 +1373,11 @@ def wait_for_stack_complete(cf_client, stack_name: str, timeout: int = 1800):
             response = cf_client.describe_stacks(StackName=stack_name)
             status = response['Stacks'][0]['StackStatus']
             
-            if status == 'CREATE_COMPLETE':
+            if status in ('CREATE_COMPLETE', 'UPDATE_COMPLETE'):
                 return
-            elif status in ['CREATE_FAILED', 'ROLLBACK_COMPLETE', 'ROLLBACK_FAILED']:
-                raise Exception(f"Stack creation failed with status: {status}")
+            elif status in ('CREATE_FAILED', 'ROLLBACK_COMPLETE', 'ROLLBACK_FAILED',
+                            'UPDATE_ROLLBACK_COMPLETE', 'UPDATE_FAILED', 'UPDATE_ROLLBACK_FAILED'):
+                raise Exception(f"Stack operation failed with status: {status}")
             
             print(f"  ⏳ Stack status: {status}")
             time.sleep(30)

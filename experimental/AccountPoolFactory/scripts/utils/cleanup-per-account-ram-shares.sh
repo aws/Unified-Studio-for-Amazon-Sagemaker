@@ -18,12 +18,8 @@ if [ "${1}" = "--dry-run" ]; then
     DRY_RUN=true
 fi
 
-if [ ! -f "config.yaml" ]; then
-    echo "config.yaml not found"
-    exit 1
-fi
+source scripts/utils/resolve-config.sh domain
 
-REGION=$(grep "region:" config.yaml | awk '{print $2}')
 ORG_SHARE_NAME="DataZone-Domain-Share-OrgWide"
 
 echo "Cleanup per-account RAM shares"

@@ -5,7 +5,10 @@ This directory contains all project documentation organized by audience.
 ## Start Here
 
 ### 👥 For Real Deployment (Production/Existing Infrastructure)
-**[User Guide](UserGuide.md)** - Deploy to existing AWS Organization and DataZone domain:
+
+**[Org Admin Guide](OrgAdminGuide.md)** - Deploy governance stack in the Org Admin account
+
+**[Domain Admin Guide](DomainAdminGuide.md)** - Deploy infrastructure and manage the pool in the Domain account
 - Prerequisites (existing org, domain, OUs)
 - Deployment by persona (Org Admin, Domain Admin, Project Creator)
 - Common tasks and troubleshooting
@@ -50,7 +53,7 @@ This directory contains all project documentation organized by audience.
 ## Quick Navigation
 
 ### I want to...
-- **Deploy to existing infrastructure**: → [User Guide](UserGuide.md)
+- **Deploy to existing infrastructure**: → [Org Admin Guide](OrgAdminGuide.md) then [Domain Admin Guide](DomainAdminGuide.md)
 - **Set up test environment first**: → [Test Setup Guide](TestSetupGuide.md)
 - **Understand what works**: → [Development Progress](DevelopmentProgress.md) → Completed Milestones
 - **Run detailed tests**: → [Testing Guide](TestingGuide.md)

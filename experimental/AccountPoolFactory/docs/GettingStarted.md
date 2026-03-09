@@ -1,6 +1,8 @@
 # Getting Started with Account Pool Factory
 
-👉 **[User Guide](UserGuide.md)** — start here. Covers setup, deployment, and day-to-day operations.
+👉 **[Org Admin Guide](OrgAdminGuide.md)** — deploy the governance stack in the Org Admin account.
+
+👉 **[Domain Admin Guide](DomainAdminGuide.md)** — deploy infrastructure and manage the pool in the Domain account.
 
 ## Other Documentation
 

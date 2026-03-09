@@ -1,6 +1,7 @@
 #!/bin/bash
-# Test script to verify OrganizationAccountAccessRole availability timing
-# Run this in Org Admin Account (495869084367)
+# Test script to verify OrganizationAccountAccessRole availability timing in new accounts.
+# Run this in the Org Admin Account (495869084367) — it tests direct role assumption
+# which mirrors what ProvisionAccount Lambda does via the AccountCreation role chain.
 
 set -e
 
@@ -12,13 +13,8 @@ echo "🧪 Testing OrganizationAccountAccessRole Availability"
 echo "====================================================="
 echo ""
 
-# Load configuration
-if [ ! -f "config.yaml" ]; then
-    echo "❌ config.yaml not found"
-    exit 1
-fi
+source scripts/utils/resolve-config.sh org
 
-REGION=$(grep "region:" config.yaml | awk '{print $2}')
 ORG_ADMIN_ACCOUNT_ID="495869084367"
 
 # Verify we're in the correct account

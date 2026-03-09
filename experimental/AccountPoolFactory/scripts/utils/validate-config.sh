@@ -1,63 +1,103 @@
 #!/bin/bash
 set -e
 
-# Validate config.yaml exists and has required fields
+# Validate org-config.yaml and domain-config.yaml exist and have required fields
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$PROJECT_ROOT"
 
-echo "🔍 Validating config.yaml..."
+echo "🔍 Validating configuration files..."
 echo ""
 
-# Check if config.yaml exists
-if [ ! -f "config.yaml" ]; then
-    echo "❌ config.yaml not found"
-    echo ""
-    echo "Please create config.yaml from one of the examples:"
-    echo "   cp examples/config-new-accounts.yaml config.yaml      # For testing"
-    echo "   cp examples/config-existing-accounts.yaml config.yaml # For production"
-    echo ""
-    echo "Then update the values with your account information."
-    exit 1
-fi
+ERRORS=0
 
-echo "✅ config.yaml exists"
+# ── org-config.yaml ──────────────────────────────────────────────────────────
+echo "── org-config.yaml ──"
 
-# Required fields
-REQUIRED_FIELDS=(
-    "region"
-    "org_admin_account_id"
-    "domain_account_id"
-    "domain_id"
-    "root_domain_unit_id"
-)
+if [ ! -f "org-config.yaml" ]; then
+    echo "❌ org-config.yaml not found"
+    echo "   Create it with at minimum: region, target_ou_name (or target_ou_id)"
+    ERRORS=$((ERRORS + 1))
+else
+    echo "✅ org-config.yaml exists"
 
-MISSING_FIELDS=()
-
-for field in "${REQUIRED_FIELDS[@]}"; do
-    value=$(grep "$field:" config.yaml | awk '{print $2}' | tr -d '"' | head -1)
-    
-    if [ -z "$value" ] || [ "$value" == "REPLACE_WITH_"* ]; then
-        MISSING_FIELDS+=("$field")
-        echo "❌ Missing or placeholder value for: $field"
-    else
-        echo "✅ $field: $value"
-    fi
-done
-
-echo ""
-
-if [ ${#MISSING_FIELDS[@]} -gt 0 ]; then
-    echo "❌ Validation failed: ${#MISSING_FIELDS[@]} required field(s) missing or have placeholder values"
-    echo ""
-    echo "Please update config.yaml with actual values for:"
-    for field in "${MISSING_FIELDS[@]}"; do
-        echo "   - $field"
+    ORG_REQUIRED_FIELDS=("region")
+    for field in "${ORG_REQUIRED_FIELDS[@]}"; do
+        value=$(python3 -c "import yaml; c=yaml.safe_load(open('org-config.yaml')); print(c.get('$field',''))" 2>/dev/null || echo "")
+        if [ -z "$value" ]; then
+            echo "❌ Missing required field: $field"
+            ERRORS=$((ERRORS + 1))
+        else
+            echo "✅ $field: $value"
+        fi
     done
-    exit 1
+
+    # At least one of target_ou_id or target_ou_name must be set
+    OU_ID=$(python3 -c "import yaml; c=yaml.safe_load(open('org-config.yaml')); print(c.get('target_ou_id',''))" 2>/dev/null || echo "")
+    OU_NAME=$(python3 -c "import yaml; c=yaml.safe_load(open('org-config.yaml')); print(c.get('target_ou_name',''))" 2>/dev/null || echo "")
+    if [ -z "$OU_ID" ] && [ -z "$OU_NAME" ]; then
+        echo "❌ Must set target_ou_id or target_ou_name"
+        ERRORS=$((ERRORS + 1))
+    else
+        [ -n "$OU_ID" ]   && echo "✅ target_ou_id: $OU_ID"
+        [ -n "$OU_NAME" ] && echo "✅ target_ou_name: $OU_NAME"
+    fi
 fi
 
-echo "✅ All required fields present"
 echo ""
-echo "Configuration validated successfully!"
+
+# ── domain-config.yaml ───────────────────────────────────────────────────────
+echo "── domain-config.yaml ──"
+
+if [ ! -f "domain-config.yaml" ]; then
+    echo "❌ domain-config.yaml not found"
+    echo "   Create it with at minimum: region, domain_name (or domain_id), email_prefix, email_domain"
+    ERRORS=$((ERRORS + 1))
+else
+    echo "✅ domain-config.yaml exists"
+
+    DOMAIN_REQUIRED_FIELDS=("region" "email_prefix" "email_domain")
+    for field in "${DOMAIN_REQUIRED_FIELDS[@]}"; do
+        value=$(python3 -c "import yaml; c=yaml.safe_load(open('domain-config.yaml')); print(c.get('$field',''))" 2>/dev/null || echo "")
+        if [ -z "$value" ]; then
+            echo "❌ Missing required field: $field"
+            ERRORS=$((ERRORS + 1))
+        else
+            echo "✅ $field: $value"
+        fi
+    done
+
+    # At least one of domain_id or domain_name must be set
+    DOMAIN_ID=$(python3 -c "import yaml; c=yaml.safe_load(open('domain-config.yaml')); print(c.get('domain_id',''))" 2>/dev/null || echo "")
+    DOMAIN_NAME=$(python3 -c "import yaml; c=yaml.safe_load(open('domain-config.yaml')); print(c.get('domain_name',''))" 2>/dev/null || echo "")
+    if [ -z "$DOMAIN_ID" ] && [ -z "$DOMAIN_NAME" ]; then
+        echo "❌ Must set domain_id or domain_name"
+        ERRORS=$((ERRORS + 1))
+    else
+        [ -n "$DOMAIN_ID" ]   && echo "✅ domain_id: $DOMAIN_ID"
+        [ -n "$DOMAIN_NAME" ] && echo "✅ domain_name: $DOMAIN_NAME"
+    fi
+
+    # Optional but recommended fields
+    for field in "project_profile_name" "default_project_owner"; do
+        value=$(python3 -c "import yaml; c=yaml.safe_load(open('domain-config.yaml')); print(c.get('$field',''))" 2>/dev/null || echo "")
+        if [ -z "$value" ]; then
+            echo "⚠️  Optional field not set: $field"
+        else
+            echo "✅ $field: $value"
+        fi
+    done
+fi
+
+echo ""
+
+# ── Summary ──────────────────────────────────────────────────────────────────
+if [ "$ERRORS" -eq 0 ]; then
+    echo "✅ Configuration validated successfully!"
+else
+    echo "❌ Validation failed: $ERRORS error(s)"
+    echo ""
+    echo "See examples/ for reference configurations."
+    exit 1
+fi

@@ -1,0 +1,15 @@
+# Org Admin Account Configuration Template
+# Copy to org-config.yaml and fill in your values.
+# Run scripts in this account: the AWS Organizations management account.
+#
+# IDs are resolved automatically — you only need human-readable names.
+
+region: us-east-2
+
+# Target OU where pool accounts will be placed.
+# Use the human-readable path (e.g. "BusinessUnit/TeamName").
+# The deploy script resolves this to an OU ID automatically.
+target_ou_name: "YourBusinessUnit/YourTeam"
+
+# Optional: if you already know the OU ID, uncomment to skip the lookup.
+# target_ou_id: ou-xxxx-xxxxxxxx

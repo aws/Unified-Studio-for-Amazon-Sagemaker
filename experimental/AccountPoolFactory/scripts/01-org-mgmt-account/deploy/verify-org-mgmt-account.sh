@@ -8,24 +8,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 cd "$PROJECT_ROOT"
 
-if [ ! -f "config.yaml" ]; then
-    echo "❌ config.yaml not found"
-    exit 1
-fi
+source scripts/utils/resolve-config.sh org
 
-REGION=$(grep "region:" config.yaml | awk '{print $2}')
-ORG_ADMIN_ACCOUNT_ID=$(grep "account_id:" config.yaml | head -1 | awk '{print $2}' | tr -d '"')
-
-echo "🔍 Verifying Org Admin Account ($ORG_ADMIN_ACCOUNT_ID)"
+echo "🔍 Verifying Org Admin Account ($CURRENT_ACCOUNT)"
 echo "======================================================="
 echo "Region: $REGION"
 echo ""
-
-CURRENT_ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
-if [ "$CURRENT_ACCOUNT" != "$ORG_ADMIN_ACCOUNT_ID" ]; then
-    echo "❌ Must run in Org Admin account ($ORG_ADMIN_ACCOUNT_ID), currently in $CURRENT_ACCOUNT"
-    exit 1
-fi
 
 PASS=0
 FAIL=0
@@ -61,23 +49,15 @@ check_exists() {
 echo "📦 CloudFormation Stacks"
 
 STATUS=$(aws cloudformation describe-stacks \
-    --stack-name AccountPoolFactory-StackSetRoles \
+    --stack-name AccountPoolFactory-OrgAdmin \
     --region "$REGION" \
     --query 'Stacks[0].StackStatus' \
     --output text 2>/dev/null || echo "NOT_FOUND")
-check "AccountPoolFactory-StackSetRoles" "$STATUS" "CREATE_COMPLETE"
-
-STATUS=$(aws cloudformation describe-stacks \
-    --stack-name AccountPoolFactory-ProvisionAccount \
-    --region "$REGION" \
-    --query 'Stacks[0].StackStatus' \
-    --output text 2>/dev/null || echo "NOT_FOUND")
-# Accept CREATE_COMPLETE or UPDATE_COMPLETE
 if [ "$STATUS" = "CREATE_COMPLETE" ] || [ "$STATUS" = "UPDATE_COMPLETE" ]; then
-    echo "  ✅ AccountPoolFactory-ProvisionAccount: $STATUS"
+    echo "  ✅ AccountPoolFactory-OrgAdmin: $STATUS"
     PASS=$((PASS + 1))
 else
-    echo "  ❌ AccountPoolFactory-ProvisionAccount: expected CREATE_COMPLETE or UPDATE_COMPLETE, got $STATUS"
+    echo "  ❌ AccountPoolFactory-OrgAdmin: expected CREATE_COMPLETE or UPDATE_COMPLETE, got $STATUS"
     FAIL=$((FAIL + 1))
 fi
 
@@ -100,8 +80,7 @@ echo "🔐 IAM Roles"
 
 for ROLE_NAME in \
     "SMUS-AccountPoolFactory-StackSetAdmin" \
-    "SMUS-AccountPoolFactory-AccountCreation" \
-    "SMUS-AccountPoolFactory-ProvisionAccount-Role"; do
+    "SMUS-AccountPoolFactory-AccountCreation"; do
 
     ROLE_ARN=$(aws iam get-role \
         --role-name "$ROLE_NAME" \
@@ -112,23 +91,10 @@ done
 
 echo ""
 
-# --- Lambda ---
-echo "⚡ Lambda Functions"
-
-LAMBDA_STATE=$(aws lambda get-function \
-    --function-name ProvisionAccount \
-    --region "$REGION" \
-    --query 'Configuration.State' \
-    --output text 2>/dev/null || echo "NOT_FOUND")
-check "ProvisionAccount" "$LAMBDA_STATE" "Active"
-
-echo ""
-
 # --- Organization Structure ---
 echo "🏢 Organization Structure"
 
-TARGET_OU_ID=$(grep "target_ou_id:" "$PROJECT_ROOT/config.yaml" | awk '{print $2}')
-if [ -n "$TARGET_OU_ID" ] && [ "$TARGET_OU_ID" != "null" ]; then
+if [ -n "$TARGET_OU_ID" ] && [ "$TARGET_OU_ID" != "root" ]; then
     OU_EXISTS=$(aws organizations describe-organizational-unit \
         --organizational-unit-id "$TARGET_OU_ID" \
         --query 'OrganizationalUnit.Name' \
@@ -141,7 +107,7 @@ if [ -n "$TARGET_OU_ID" ] && [ "$TARGET_OU_ID" != "null" ]; then
         FAIL=$((FAIL + 1))
     fi
 else
-    echo "  ⚠️  No target_ou_id in config.yaml — set organization.target_ou_id"
+    echo "  ⚠️  No target_ou_id resolved — set target_ou_id or target_ou_name in org-config.yaml"
 fi
 
 echo ""

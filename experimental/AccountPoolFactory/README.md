@@ -15,21 +15,30 @@ When a user creates a project in SageMaker Unified Studio, that project needs a 
 
 ## Quick Start
 
+Two minimal config files — one per account. IDs are resolved automatically from names.
+
 ```bash
 cd experimental/AccountPoolFactory
-cp config.yaml.template config.yaml
-# Edit config.yaml with your account IDs, domain ID, region, default_project_owner
+
+# Org Admin account config (only needs OU name)
+cp org-config.yaml org-config.yaml.bak  # or edit directly
+# Set: region, target_ou_name
+
+# Domain account config (only needs domain name + email settings)
+cp domain-config.yaml domain-config.yaml.bak  # or edit directly
+# Set: region, domain_name, email_prefix, email_domain, default_project_owner
 ```
 
-Then follow the [User Guide](docs/UserGuide.md).
+Then follow the [Org Admin Guide](docs/OrgAdminGuide.md) and [Domain Admin Guide](docs/DomainAdminGuide.md).
 
 ## Documentation
 
 | Doc | What it covers |
 |-----|---------------|
-| [UserGuide.md](docs/UserGuide.md) | Setup, deployment, day-to-day operations |
+| [OrgAdminGuide.md](docs/OrgAdminGuide.md) | Org Admin: governance stack, IAM roles, StackSets |
+| [DomainAdminGuide.md](docs/DomainAdminGuide.md) | Domain Admin: deployment, pool config, monitoring, operations |
+| [TestingGuide.md](docs/TestingGuide.md) | End-to-end testing, lifecycle test, troubleshooting |
 | [Architecture.md](docs/Architecture.md) | How the system works, component details |
-| [TestingGuide.md](docs/TestingGuide.md) | End-to-end testing procedures |
 | [SecurityGuide.md](docs/SecurityGuide.md) | IAM roles, ExternalId, policy grants |
 | [ProjectStructure.md](docs/ProjectStructure.md) | Directory layout, scripts reference |
 

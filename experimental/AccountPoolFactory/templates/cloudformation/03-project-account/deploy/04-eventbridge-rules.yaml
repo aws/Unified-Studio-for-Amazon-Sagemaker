@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'EventBridge rules to forward CloudFormation events to central event bus'
+Description: 'EventBridge rules to forward CloudFormation events to central event bus v1'
 
 Parameters:
   CentralEventBusArn:
@@ -50,6 +50,10 @@ Resources:
           Id: CentralEventBus
 
 Outputs:
+  TemplateVersion:
+    Description: Template version - bump to force SetupOrchestrator to update all deployed stacks
+    Value: "1"
+
   RuleArn:
     Description: ARN of the EventBridge rule
     Value: !GetAtt DataZoneStackEventsForwarder.Arn

@@ -16,8 +16,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$PROJECT_ROOT"
 
-REGION=$(grep "region:" config.yaml | awk '{print $2}')
-DOMAIN_ACCOUNT_ID=$(grep "domain_account_id:" config.yaml | awk '{print $2}' | tr -d '"')
+source scripts/utils/resolve-config.sh domain
 
 # Parse arguments
 DRY_RUN=false
@@ -40,7 +39,6 @@ for arg in "$@"; do
 done
 
 # Verify account
-CURRENT_ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
 if [ "$CURRENT_ACCOUNT" != "$DOMAIN_ACCOUNT_ID" ]; then
     echo "❌ Must run in Domain account ($DOMAIN_ACCOUNT_ID), currently in $CURRENT_ACCOUNT"
     exit 1

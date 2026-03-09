@@ -23,22 +23,50 @@ import yaml
 
 # ── Config ────────────────────────────────────────────────────────────────────
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-with open(os.path.join(SCRIPT_DIR, 'config.yaml')) as f:
+
+# Load domain-config.yaml (preferred) or fall back to legacy config.yaml
+_cfg_file = os.path.join(SCRIPT_DIR, 'domain-config.yaml')
+if not os.path.exists(_cfg_file):
+    _cfg_file = os.path.join(SCRIPT_DIR, 'config.yaml')
+with open(_cfg_file) as f:
     config = yaml.safe_load(f)
 
-DOMAIN_ID        = config['datazone']['domain_id']
-REGION           = config['aws']['region']
+def _cfg(key, legacy_path=None, default=''):
+    if key in config:
+        return config[key]
+    if legacy_path:
+        try:
+            v = config
+            for k in legacy_path:
+                v = v[k]
+            return v
+        except (KeyError, TypeError):
+            pass
+    return default
+
+REGION    = _cfg('region', ['aws', 'region'], 'us-east-2')
+DOMAIN_ID = _cfg('domain_id', ['datazone', 'domain_id'], '')
+
+# Resolve domain ID from name if not set
+if not DOMAIN_ID:
+    _dz = boto3.client('datazone', region_name=REGION)
+    _name = _cfg('domain_name', ['datazone', 'domain_name'], '')
+    if _name:
+        for _d in _dz.list_domains().get('items', []):
+            if _d.get('name') == _name:
+                DOMAIN_ID = _d['id']
+                break
 ACCOUNT_POOL_ID  = 'c5r1rtjwi2qhbd'
 PROFILE_ID       = '5riu03k7l71zc9'   # All Capabilities - Account Pool
 PROVIDER_FN      = 'AccountProvider'
-OWNER_USERNAME   = config['datazone'].get('default_project_owner', '')
+OWNER_USERNAME   = _cfg('default_project_owner', ['datazone', 'default_project_owner'], '')
 
 # ── Step 1: Verify we're in the domain account ────────────────────────────────
 print("Step 1: Verifying domain account credentials...")
 sts = boto3.client('sts', region_name=REGION)
 identity = sts.get_caller_identity()
 current_account = identity['Account']
-domain_account  = config['aws']['domain_account_id']
+domain_account  = _cfg('domain_account_id', ['aws', 'domain_account_id'], '')
 
 if current_account != domain_account:
     print(f"  ERROR: Must run in domain account ({domain_account}), currently in {current_account}")
@@ -150,6 +178,8 @@ if owner_user_id:
             member={'userIdentifier': owner_user_id}
         )
         print(f"  ✅ Owner added")
+    except dz.exceptions.ConflictException:
+        print(f"  ✅ Owner already a member")
     except Exception as e:
         print(f"  ⚠️  Could not add owner: {e}")
 
@@ -186,4 +216,5 @@ if failures:
 else:
     print(f"  No deployment failures ✅")
 
-print(f"\n  Portal: {config['datazone']['portal_url']}/projects/{project_id}")
+_portal = _cfg('portal_url', ['datazone', 'portal_url'], f'https://{DOMAIN_ID}.sagemaker.{REGION}.on.aws')
+print(f"\n  Portal: {_portal}/projects/{project_id}")

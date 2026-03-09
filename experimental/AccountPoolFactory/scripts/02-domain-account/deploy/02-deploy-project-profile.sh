@@ -11,42 +11,22 @@ set -e
 # Arguments:
 #   source-profile-name  Name of existing profile to clone (default: "Default Project Profile")
 #
-# The new profile name is read from config.yaml (account_pool.project_profile_name)
+# The new profile name is read from domain-config.yaml (project_profile_name)
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 cd "$PROJECT_ROOT"
 
-# Load configuration
-if [ ! -f "config.yaml" ]; then
-    echo "❌ config.yaml not found"
-    exit 1
-fi
-
-REGION=$(grep "region:" config.yaml | awk '{print $2}')
-DOMAIN_ACCOUNT_ID=$(grep "domain_account_id:" config.yaml | awk '{print $2}' | tr -d '"')
-DOMAIN_ID=$(grep "domain_id:" config.yaml | awk '{print $2}')
-ROOT_DOMAIN_UNIT_ID=$(grep "root_domain_unit_id:" config.yaml | awk '{print $2}')
-TARGET_PROFILE_NAME=$(python3 -c "import yaml; print(yaml.safe_load(open('config.yaml'))['account_pool']['project_profile_name'])")
+source scripts/utils/resolve-config.sh domain
 
 SOURCE_PROFILE_NAME="${1:-Default Project Profile}"
+TARGET_PROFILE_NAME="$PROJECT_PROFILE_NAME"
 
 echo "🚀 Deploying Project Profile with Account Pool"
 echo "================================================"
-echo "Region: $REGION"
-echo "Domain Account: $DOMAIN_ACCOUNT_ID"
-echo "Domain ID: $DOMAIN_ID"
+echo "Region: $REGION  |  Domain: $DOMAIN_ID"
 echo "Source Profile: $SOURCE_PROFILE_NAME"
 echo "Target Profile: $TARGET_PROFILE_NAME"
-echo ""
-
-# Verify we're in the correct account
-CURRENT_ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
-if [ "$CURRENT_ACCOUNT" != "$DOMAIN_ACCOUNT_ID" ]; then
-    echo "❌ Must run in Domain account ($DOMAIN_ACCOUNT_ID), currently in $CURRENT_ACCOUNT"
-    exit 1
-fi
-echo "✅ Running in correct account"
 echo ""
 
 # Get Account Pool ID

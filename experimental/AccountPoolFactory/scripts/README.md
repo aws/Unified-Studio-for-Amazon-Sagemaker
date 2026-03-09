@@ -48,11 +48,11 @@ Removes:
 # Ensure you're authenticated to the Organization Management account
 aws sts get-caller-identity
 
-# Manually delete stacks
-aws cloudformation delete-stack --stack-name AccountPoolFactory-StackSetRoles --region us-east-2
+# Delete the consolidated org admin stack
+aws cloudformation delete-stack --stack-name AccountPoolFactory-OrgAdmin --region us-east-2
 
-# Delete StackSet (requires removing all instances first)
-aws cloudformation delete-stack-set --stack-set-name AccountPoolFactory-TrustPolicy --region us-east-2
+# Delete StackSet instances first, then the StackSet
+# See scripts/01-org-mgmt-account/cleanup/cleanup-org-mgmt-account.sh
 ```
 
 ## Utility Cleanup Scripts
@@ -158,4 +158,5 @@ If you accidentally delete resources:
 ## Related Documentation
 
 - [Deployment Scripts](../deploy/README.md)
-- [User Guide](../../docs/UserGuide.md)
+- [Org Admin Guide](../../docs/OrgAdminGuide.md)
+- [Domain Admin Guide](../../docs/DomainAdminGuide.md)

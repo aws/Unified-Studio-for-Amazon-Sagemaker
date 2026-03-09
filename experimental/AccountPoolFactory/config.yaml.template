@@ -1,114 +1,41 @@
-# Account Pool Factory Configuration Template
-# Copy this to config.yaml and customize for your environment:
-#   cp config.yaml.template config.yaml
+# Account Pool Factory — Configuration
+#
+# This file is kept for backward compatibility.
+# New deployments should use the split config files:
+#   org-config.yaml    — for the Org Admin account
+#   domain-config.yaml — for the Domain account
+#
+# See org-config.yaml.template and domain-config.yaml.template for examples.
+#
+# Minimum required fields are shown below.
+# IDs (domain_id, root_domain_unit_id, organization_id, target_ou_id, etc.)
+# are resolved automatically by scripts — you don't need to set them.
 
-# AWS Configuration
 aws:
   region: us-east-2
-  account_id: "123456789012"  # Replace with your AWS account ID
 
-# DataZone Domain Configuration
 datazone:
-  domain_id: dzd-xxxxxxxxxxxxx  # Replace with your DataZone domain ID
-  domain_name: YourDomainName
-  domain_arn: arn:aws:datazone:REGION:ACCOUNT:domain/DOMAIN_ID
-  root_domain_unit_id: your-root-unit-id
-  portal_url: https://dzd-xxxxxxxxxxxxx.sagemaker.REGION.on.aws
-  service_role_arn: arn:aws:iam::ACCOUNT:role/service-role/AmazonSageMakerAdminIAMExecutionRole
+  domain_name: "your-domain-name"          # human-readable name, ID resolved automatically
+  default_project_owner: "your-sso-username"
 
-# Account Pool Configuration
 account_pool:
-  name: AccountPoolFactory-Test
-  resolution_strategy: MANUAL
-  minimum_pool_size: 3
-  maximum_pool_size: 10
-  replenishment_threshold: 5
+  project_profile_name: "All Capabilities - Account Pool"
 
-# Account Creation Strategy Configuration
-account_creation:
-  # Strategy options: control_tower, organizations_api, manual_pool, byoa
-  # Phase 1 supports: control_tower, organizations_api
-  strategy: organizations_api
-  
-  # Control Tower Strategy Configuration (Strategy 1)
-  control_tower:
-    enabled: false
-    product_id: ''  # Service Catalog Product ID for Control Tower Account Factory
-    artifact_id: ''  # Optional, uses latest if not specified
-    sso_user_email: datazone-projects@example.com
-    sso_user_first_name: DataZone
-    sso_user_last_name: Project
-  
-  # Organizations API Strategy Configuration (Strategy 2)
-  organizations_api:
-    enabled: true
-    iam_user_access_to_billing: ALLOW  # or DENY
-    role_name: OrganizationAccountAccessRole
-    # Account will be created in root OU first, then moved to target OU
-  
-  # Manual Pool Strategy Configuration (Strategy 3 - Future)
-  manual_pool:
-    enabled: false
-    account_registration_method: api  # or console
-  
-  # Bring Your Own Account Strategy (Strategy 4 - Future)
-  byoa:
-    enabled: false
-    validation_required: true
-    minimum_requirements:
-      - cloudtrail_enabled
-      - config_enabled
-      - iam_role_exists
-
-# AWS Organization Configuration
 organization:
-  organization_id: o-xxxxxxxxxx  # Replace with your AWS Organization ID
-  target_ou_id: ou-xxxx-xxxxxxxx  # Target OU for new accounts
-  target_ou_name: CustomerAnalytics  # Name of target OU
+  target_ou_name: "YourOU/SubOU"           # human-readable path, ID resolved automatically
 
-# CloudFormation Stack Names
-stacks:
-  organization: AccountPoolFactory-Organization-Test
-  control_tower: AccountPoolFactory-ControlTower-Test
-  domain_sharing: AccountPoolFactory-DomainSharing-Test
-  dynamodb: AccountPoolFactory-DynamoDB-Test
-  lambda: AccountPoolFactory-Lambda-Test
-
-# Testing Configuration
-testing:
-  mode: single_account
-  simulate_accounts: true
-  mock_control_tower: true
-  
-# Account Naming Configuration
 accounts:
-  name_prefix: project-
-  email_domain: aws-test@example.com
-  supported_regions:
-    - us-east-2
-    - us-east-1
+  email_prefix: "accountpool"
+  email_domain: "example.com"
 
-# Lambda Configuration
-lambda:
-  runtime: python3.12
-  timeout: 300
-  memory_size: 512
-  log_retention_days: 7
+setup_stacks:
+  - 'DataZone-VPC-{account_id}'
+  - 'DataZone-IAM-{account_id}'
+  - 'DataZone-EventBridge-{account_id}'
+  - 'DataZone-ProjectRole-{account_id}'
+  - 'DataZone-Blueprints-{account_id}'
 
-# DynamoDB Configuration
-dynamodb:
-  billing_mode: PAY_PER_REQUEST
-  point_in_time_recovery: true
-
-# Monitoring Configuration
-monitoring:
-  alert_email: your-email@example.com
-  enable_detailed_monitoring: true
-  dashboard_name: AccountPoolFactory-Test
-
-# Tags
-tags:
-  Project: AccountPoolFactory
-  Environment: Test
-  ManagedBy: CloudFormation
-  Owner: YourName
+project_role:
+  enabled: true
+  role_name: AmazonSageMakerProjectRole
+  managed_policy_arn: arn:aws:iam::aws:policy/AmazonSageMakerFullAccess

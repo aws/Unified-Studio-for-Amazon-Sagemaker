@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Project execution role for SageMaker/DataZone ToolingLite blueprint'
+Description: 'Project execution role for SageMaker/DataZone ToolingLite blueprint v1'
 
 Parameters:
   RoleName:
@@ -50,6 +50,10 @@ Resources:
           Value: AccountPoolFactory
 
 Outputs:
+  TemplateVersion:
+    Description: Template version - bump to force SetupOrchestrator to update all deployed stacks
+    Value: "1"
+
   ProjectRoleArn:
     Description: ARN of the project execution role
     Value: !GetAtt ProjectExecutionRole.Arn

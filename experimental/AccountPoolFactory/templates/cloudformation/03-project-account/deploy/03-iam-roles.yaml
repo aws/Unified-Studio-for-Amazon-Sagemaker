@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'IAM roles for DataZone (ManageAccessRole and ProvisioningRole)'
+Description: 'IAM roles for DataZone (ManageAccessRole and ProvisioningRole) v1'
 
 Parameters:
   DomainAccountId:
@@ -70,6 +70,10 @@ Resources:
           Value: AccountPoolFactory
 
 Outputs:
+  TemplateVersion:
+    Description: Template version - bump to force SetupOrchestrator to update all deployed stacks
+    Value: "1"
+
   ManageAccessRoleArn:
     Description: ARN of DataZoneManageAccessRole
     Value: !GetAtt DataZoneManageAccessRole.Arn

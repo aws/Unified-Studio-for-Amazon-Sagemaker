@@ -8,14 +8,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$PROJECT_ROOT"
 
-if [ ! -f "config.yaml" ]; then
-    echo "❌ config.yaml not found"
-    exit 1
-fi
+source scripts/utils/resolve-config.sh domain
 
-DOMAIN_ID=$(grep "domain_id:" config.yaml | awk '{print $2}')
-DOMAIN_ACCOUNT_ID=$(grep "domain_account_id:" config.yaml | awk '{print $2}' | tr -d '"')
-REGION=$(grep "region:" config.yaml | awk '{print $2}')
 ROLE_NAME="AmazonDataZoneDomainExecutionRole"
 
 echo ""
@@ -68,7 +62,7 @@ else
     --assume-role-policy-document file:///tmp/domain-execution-trust-policy.json \
     --description "Domain execution role for DataZone domain ${DOMAIN_ID}" \
     --output text
-  
+
   echo "  ✅ Role created: ${ROLE_NAME}"
 fi
 

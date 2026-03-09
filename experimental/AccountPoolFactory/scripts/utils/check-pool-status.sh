@@ -7,12 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$PROJECT_ROOT"
 
-if [ ! -f "config.yaml" ]; then
-    echo "❌ config.yaml not found"
-    exit 1
-fi
-
-REGION=$(grep "region:" config.yaml | awk '{print $2}')
+source scripts/utils/resolve-config.sh domain
 
 echo "📊 Account Pool Status"
 echo "======================"

@@ -134,23 +134,61 @@ def lambda_handler(event, context):
             return handle_delete_failed_account(event['accountId'], config)
         else:
             return {'statusCode': 400, 'body': f'Unknown action: {action}'}
-    
-    # Handle CloudFormation events
-    if 'source' in event and event['source'] == 'aws.cloudformation':
+
+    # Handle DataZone events (source: aws.datazone)
+    # These fire on the domain account default bus for project/environment lifecycle changes.
+    if event.get('source') == 'aws.datazone':
+        detail_type = event.get('detail-type', '')
         detail = event.get('detail', {})
-        status = detail.get('status-details', {}).get('status')
-        stack_name = detail.get('stack-name', '')
-        account_id = event.get('account')
-        
-        if not stack_name.startswith('DataZone-'):
-            print(f"⏭️ Ignoring non-DataZone stack: {stack_name}")
+        data = detail.get('data', {})
+        project_id = data.get('projectId')
+        # Deployment events include environmentAccount; deletion events do not — look it up
+        account_id = data.get('environmentAccount')
+        environment_id = data.get('environmentId')
+        domain_id = os.environ.get('DOMAIN_ID', '')
+
+        if not project_id:
+            print(f"⏭️ DataZone event missing projectId, skipping")
             return {'statusCode': 200, 'body': 'Ignored'}
-        
-        if status == 'CREATE_IN_PROGRESS':
-            return handle_assignment_event(account_id, stack_name, config)
-        elif status == 'DELETE_COMPLETE':
-            return handle_deletion_event(account_id, stack_name, config)
-    
+
+        # For deletion events, look up the account from DynamoDB by projectId
+        if not account_id and project_id:
+            try:
+                resp = dynamodb.query(
+                    TableName=DYNAMODB_TABLE_NAME,
+                    IndexName='ProjectIndex',
+                    KeyConditionExpression='projectId = :p',
+                    ExpressionAttributeValues={':p': {'S': project_id}},
+                    Limit=1
+                )
+                items = resp.get('Items', [])
+                if items:
+                    account_id = items[0].get('accountId', {}).get('S')
+            except Exception as e:
+                print(f"⚠️ Could not look up account for project {project_id}: {e}")
+
+        # Fallback: try environment lookup (may fail if already deleted)
+        if not account_id and environment_id:
+            try:
+                dz_client = boto3.client('datazone', region_name=os.environ.get('AWS_REGION', 'us-east-2'))
+                env = dz_client.get_environment(domainIdentifier=domain_id, identifier=environment_id)
+                account_id = env.get('awsAccountId')
+            except Exception as e:
+                print(f"⚠️ Could not look up environment {environment_id}: {e}")
+
+        if not account_id:
+            print(f"⏭️ DataZone event missing environmentAccount and could not look up, skipping")
+            return {'statusCode': 200, 'body': 'Ignored'}
+
+        if detail_type == 'Environment Deployment Completed':
+            return handle_datazone_assignment(account_id, project_id, config)
+
+        elif detail_type in ('Environment Deletion Completed', 'Environment Deletion Failed'):
+            return handle_datazone_deletion(account_id, project_id, domain_id, config)
+
+        print(f"⏭️ Unhandled DataZone event: {detail_type}")
+        return {'statusCode': 200, 'body': 'Ignored'}
+
     print("⚠️ Unhandled event type")
     return {'statusCode': 200, 'body': 'No action taken'}
 
@@ -291,12 +329,11 @@ def create_accounts_parallel(count: int, config: Dict[str, Any]):
     """
     import uuid
     
-    # Get ProvisionAccount Lambda ARN from environment or config
-    org_admin_account_id = config.get('OrgAdminAccountId', os.environ.get('ORG_ADMIN_ACCOUNT_ID'))
+    # Invoke ProvisionAccount Lambda locally (same account)
     region = os.environ.get('AWS_REGION', 'us-east-2')
-    provision_account_arn = f"arn:aws:lambda:{region}:{org_admin_account_id}:function:ProvisionAccount"
-    
-    print(f"📞 Using ProvisionAccount Lambda: {provision_account_arn}")
+    provision_account_arn = f"arn:aws:lambda:{region}:{DOMAIN_ACCOUNT_ID}:function:ProvisionAccount"
+
+    print(f"📞 Using ProvisionAccount Lambda (local): {provision_account_arn}")
     print(f"⚠️  Creating accounts sequentially to avoid AWS Organizations rate limits")
     
     timestamp = int(time.time())
@@ -333,7 +370,6 @@ def create_accounts_parallel(count: int, config: Dict[str, Any]):
                 'ouId': config.get('TargetOUId', 'root'),
                 'domainId': os.environ.get('DOMAIN_ID'),
                 'domainAccountId': DOMAIN_ACCOUNT_ID,
-                'orgAdminAccountId': org_admin_account_id,
                 'poolName': config.get('PoolName', 'AccountPoolFactory')
             }
             
@@ -627,6 +663,17 @@ def reclaim_account_reuse(account_id: str, item: Dict) -> Dict[str, Any]:
         )
         
         print(f"✅ Deprovision initiated for account {account_id}")
+
+        # Trigger recycler to process CLEANING state after deprovision completes
+        try:
+            lambda_client.invoke(
+                FunctionName='AccountRecycler',
+                InvocationType='Event',
+                Payload=json.dumps({'accountId': account_id})
+            )
+            print(f"✅ AccountRecycler triggered for {account_id}")
+        except Exception as e:
+            print(f"⚠️ Could not trigger recycler: {e}")
         
         return {'statusCode': 200, 'body': 'Deprovision initiated'}
         
@@ -650,6 +697,132 @@ def reclaim_account_reuse(account_id: str, item: Dict) -> Dict[str, Any]:
         
         send_failure_notification(account_id, 'account_deprovision', str(e))
         
+        return {'statusCode': 500, 'body': str(e)}
+
+
+def handle_datazone_assignment(account_id: str, project_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
+    """Handle Environment Deployment Completed — mark account ASSIGNED if not already."""
+    print(f"🎯 DataZone environment deployed in account {account_id} for project {project_id}")
+    try:
+        response = dynamodb.query(
+            TableName=DYNAMODB_TABLE_NAME,
+            KeyConditionExpression='accountId = :a',
+            ExpressionAttributeValues={':a': {'S': account_id}},
+            ScanIndexForward=False, Limit=1
+        )
+        if not response.get('Items'):
+            print(f"⏭️ Account {account_id} not in pool, ignoring")
+            return {'statusCode': 200, 'body': 'Not in pool'}
+
+        item = response['Items'][0]
+        state = item.get('state', {}).get('S')
+
+        if state == 'ASSIGNED':
+            # Update projectId if not already set (may have been assigned via AccountProvider.validate)
+            existing_project = item.get('projectId', {}).get('S', '')
+            if not existing_project and project_id:
+                try:
+                    dynamodb.update_item(
+                        TableName=DYNAMODB_TABLE_NAME,
+                        Key={'accountId': {'S': account_id}, 'timestamp': item['timestamp']},
+                        UpdateExpression='SET projectId = :p',
+                        ExpressionAttributeValues={':p': {'S': project_id}}
+                    )
+                    print(f"✅ Updated projectId for already-ASSIGNED account {account_id}")
+                except Exception as e:
+                    print(f"⚠️ Could not update projectId: {e}")
+            else:
+                print(f"✅ Account {account_id} already ASSIGNED")
+            return {'statusCode': 200, 'body': 'Already assigned'}
+
+        if state != 'AVAILABLE':
+            print(f"⏭️ Account {account_id} in state {state}, ignoring")
+            return {'statusCode': 200, 'body': f'State {state}'}
+
+        dynamodb.update_item(
+            TableName=DYNAMODB_TABLE_NAME,
+            Key={'accountId': {'S': account_id}, 'timestamp': item['timestamp']},
+            UpdateExpression='SET #s = :s, assignedDate = :d, projectId = :p',
+            ConditionExpression='#s = :avail',
+            ExpressionAttributeNames={'#s': 'state'},
+            ExpressionAttributeValues={
+                ':s': {'S': 'ASSIGNED'},
+                ':avail': {'S': 'AVAILABLE'},
+                ':d': {'S': datetime.now(timezone.utc).isoformat()},
+                ':p': {'S': project_id}
+            }
+        )
+        print(f"✅ Account {account_id} marked ASSIGNED for project {project_id}")
+        publish_metric('AccountAssigned', 1, [{'Name': 'AccountId', 'Value': account_id}])
+        check_pool_size_and_replenish(config)
+        return {'statusCode': 200, 'body': 'Assigned'}
+
+    except dynamodb.exceptions.ConditionalCheckFailedException:
+        print(f"ℹ️ Account {account_id} already assigned (concurrent)")
+        return {'statusCode': 200, 'body': 'Already assigned'}
+    except Exception as e:
+        print(f"❌ Error handling assignment: {e}")
+        return {'statusCode': 500, 'body': str(e)}
+
+
+def handle_datazone_deletion(account_id: str, project_id: str, domain_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
+    """Handle Environment Deletion Completed — reclaim account only when ALL environments
+    in this project on this account are gone."""
+    print(f"🗑️ DataZone environment deleted in account {account_id} for project {project_id}")
+    try:
+        # Check if any active environments remain for this project in this account
+        # Use DataZone API — if project is deleted, all environments are gone
+        dz = boto3.client('datazone', region_name=os.environ.get('AWS_REGION', 'us-east-2'))
+        domain = os.environ.get('DOMAIN_ID', domain_id or '')
+
+        remaining = []
+        try:
+            # Check if project still exists — if not, all environments are gone
+            dz.get_project(domainIdentifier=domain, identifier=project_id)
+            # Project exists — check environments
+            try:
+                resp = dz.list_environments(domainIdentifier=domain, projectIdentifier=project_id)
+                for env in resp.get('items', []):
+                    env_account = env.get('awsAccountId', '')
+                    env_status = env.get('status', '')
+                    if env_account == account_id and env_status not in ('DELETED', 'DELETE_FAILED'):
+                        remaining.append(env.get('id'))
+            except Exception as e:
+                print(f"⚠️ Could not list environments: {e} — deferring reclaim to reconciler")
+                return {'statusCode': 200, 'body': 'Deferred'}
+        except dz.exceptions.ResourceNotFoundException:
+            # Project deleted — all environments are gone, safe to reclaim
+            print(f"  Project {project_id} deleted — all environments gone, reclaiming")
+        except Exception as e:
+            print(f"⚠️ Could not check project {project_id}: {e} — deferring reclaim to reconciler")
+            return {'statusCode': 200, 'body': 'Deferred'}
+
+        if remaining:
+            print(f"⏳ {len(remaining)} environment(s) still active in {account_id}, not reclaiming yet")
+            return {'statusCode': 200, 'body': f'{len(remaining)} envs remaining'}
+
+        # All environments gone — reclaim the account
+        print(f"♻️ All environments deleted from {account_id}, reclaiming...")
+        response = dynamodb.query(
+            TableName=DYNAMODB_TABLE_NAME,
+            KeyConditionExpression='accountId = :a',
+            ExpressionAttributeValues={':a': {'S': account_id}},
+            ScanIndexForward=False, Limit=1
+        )
+        if not response.get('Items'):
+            print(f"⏭️ Account {account_id} not in pool")
+            return {'statusCode': 200, 'body': 'Not in pool'}
+
+        item = response['Items'][0]
+        reclaim_strategy = config.get('ReclaimStrategy', 'DELETE')
+
+        if reclaim_strategy == 'REUSE':
+            return reclaim_account_reuse(account_id, item)
+        else:
+            return reclaim_account_delete(account_id, item, config)
+
+    except Exception as e:
+        print(f"❌ Error handling deletion: {e}")
         return {'statusCode': 500, 'body': str(e)}
 
 

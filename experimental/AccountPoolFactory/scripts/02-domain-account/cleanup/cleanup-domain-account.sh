@@ -5,15 +5,10 @@ set -e
 # This script removes all infrastructure components
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+cd "$PROJECT_ROOT"
 
-# Load configuration
-if [ ! -f "config.yaml" ]; then
-    echo "❌ config.yaml not found"
-    exit 1
-fi
-
-REGION=$(grep "region:" config.yaml | awk '{print $2}')
+source scripts/utils/resolve-config.sh domain
 
 echo "🧹 Cleaning up Account Pool Factory Infrastructure"
 echo "=================================================="

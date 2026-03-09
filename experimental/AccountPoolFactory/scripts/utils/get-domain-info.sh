@@ -1,12 +1,15 @@
 #!/bin/bash
 
 # Get Domain Information Script
-# This script retrieves DataZone domain details for configuration
+# Retrieves DataZone domain details using the resolver
 
 set -e
 
-REGION="us-east-2"
-DOMAIN_ACCOUNT="994753223772"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+cd "$PROJECT_ROOT"
+
+source scripts/utils/resolve-config.sh domain
 
 echo "🔍 Retrieving DataZone domain information..."
 echo ""
@@ -14,74 +17,29 @@ echo ""
 # List all domains
 echo "📋 Available domains:"
 aws datazone list-domains \
-  --region $REGION \
+  --region "$REGION" \
   --query 'items[*].[id,name,status]' \
   --output table
 
 echo ""
-echo "Enter the Domain ID you want to use:"
-read DOMAIN_ID
-
-echo ""
-echo "🔍 Getting detailed domain information for: $DOMAIN_ID"
-echo ""
-
-# Get domain details
-DOMAIN_INFO=$(aws datazone get-domain \
-  --identifier $DOMAIN_ID \
-  --region $REGION)
-
-# Extract values
-DOMAIN_NAME=$(echo $DOMAIN_INFO | jq -r '.name')
-DOMAIN_ARN=$(echo $DOMAIN_INFO | jq -r '.arn')
-PORTAL_URL=$(echo $DOMAIN_INFO | jq -r '.portalUrl')
-
-echo "✅ Domain Information Retrieved:"
-echo "  Domain ID: $DOMAIN_ID"
-echo "  Domain Name: $DOMAIN_NAME"
-echo "  Domain ARN: $DOMAIN_ARN"
-echo "  Portal URL: $PORTAL_URL"
-echo ""
-
-# Get root domain unit
-echo "🔍 Getting root domain unit..."
-ROOT_UNIT_INFO=$(aws datazone list-domain-units-for-parent \
-  --domain-identifier $DOMAIN_ID \
-  --region $REGION \
-  --query 'items[0]' 2>/dev/null || echo "{}")
-
-if [ "$ROOT_UNIT_INFO" != "{}" ]; then
-  ROOT_UNIT_ID=$(echo $ROOT_UNIT_INFO | jq -r '.id')
-  echo "  Root Domain Unit ID: $ROOT_UNIT_ID"
-else
-  echo "  ⚠️  No domain units found - using domain ID as root unit"
-  ROOT_UNIT_ID=$DOMAIN_ID
-fi
-
-echo ""
-echo "📝 Update config.yaml with these values:"
-echo ""
-echo "datazone:"
-echo "  domain_id: $DOMAIN_ID"
-echo "  domain_name: $DOMAIN_NAME"
-echo "  domain_arn: $DOMAIN_ARN"
-echo "  root_domain_unit_id: $ROOT_UNIT_ID"
-echo "  portal_url: $PORTAL_URL"
+echo "✅ Resolved Domain Information:"
+echo "  Domain ID:           $DOMAIN_ID"
+echo "  Domain Name:         $DOMAIN_NAME"
+echo "  Root Domain Unit ID: $ROOT_DOMAIN_UNIT_ID"
+echo "  Portal URL:          $PORTAL_URL"
+echo "  Region:              $REGION"
+echo "  Domain Account:      $DOMAIN_ACCOUNT_ID"
 echo ""
 
 # Save to temporary file for easy copying
-cat > domain-info-temp.yaml <<EOF
-datazone:
-  domain_id: $DOMAIN_ID
-  domain_name: $DOMAIN_NAME
-  domain_arn: $DOMAIN_ARN
-  root_domain_unit_id: $ROOT_UNIT_ID
-  portal_url: $PORTAL_URL
+cat > /tmp/domain-info-temp.yaml <<EOF
+domain_id: $DOMAIN_ID
+domain_name: $DOMAIN_NAME
+root_domain_unit_id: $ROOT_DOMAIN_UNIT_ID
+portal_url: $PORTAL_URL
 EOF
 
-echo "✅ Domain information saved to: domain-info-temp.yaml"
+echo "✅ Domain information saved to: /tmp/domain-info-temp.yaml"
 echo ""
-echo "Next steps:"
-echo "1. Update config.yaml with the values above"
-echo "2. Update TESTING_PROGRESS.md Phase 1.1 status"
-echo "3. Proceed to Phase 2: Organization Admin Deployment"
+echo "These values are resolved from domain-config.yaml via the resolver."
+echo "Update domain-config.yaml if any values need to change."

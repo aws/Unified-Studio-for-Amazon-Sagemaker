@@ -8,24 +8,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 cd "$PROJECT_ROOT"
 
-if [ ! -f "config.yaml" ]; then
-    echo "❌ config.yaml not found"
-    exit 1
-fi
+source scripts/utils/resolve-config.sh org
 
-REGION=$(grep "region:" config.yaml | awk '{print $2}')
-ORG_ADMIN_ACCOUNT_ID=$(grep "account_id:" config.yaml | head -1 | awk '{print $2}' | tr -d '"')
-
-echo "🧹 Cleaning up Org Admin Account ($ORG_ADMIN_ACCOUNT_ID)"
+echo "🧹 Cleaning up Org Admin Account ($CURRENT_ACCOUNT)"
 echo "========================================================="
 echo "Region: $REGION"
 echo ""
-
-CURRENT_ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
-if [ "$CURRENT_ACCOUNT" != "$ORG_ADMIN_ACCOUNT_ID" ]; then
-    echo "❌ Must run in Org Admin account ($ORG_ADMIN_ACCOUNT_ID), currently in $CURRENT_ACCOUNT"
-    exit 1
-fi
 
 echo "⚠️  This will delete ALL AccountPoolFactory resources in this account."
 read -p "Continue? (yes/no): " CONFIRM
@@ -56,7 +44,6 @@ delete_stackset() {
         UNIQUE_ACCOUNTS=$(echo "$ACCOUNTS" | tr '\t' '\n' | sort -u | tr '\n' ' ')
         echo "   Deleting instances in $(echo "$UNIQUE_ACCOUNTS" | wc -w | tr -d ' ') account(s)..."
 
-        # Try --no-retain-stacks first (clean delete)
         OPERATION_ID=$(aws cloudformation delete-stack-instances \
             --stack-set-name "$STACKSET_NAME" \
             --accounts $UNIQUE_ACCOUNTS \
@@ -85,7 +72,7 @@ delete_stackset() {
             done
         fi
 
-        # If instances remain (e.g. execution role gone), retry with --retain-stacks
+        # If instances remain, retry with --retain-stacks
         REMAINING_ACCOUNTS=$(aws cloudformation list-stack-instances \
             --stack-set-name "$STACKSET_NAME" \
             --region "$REGION" \
@@ -162,8 +149,9 @@ delete_stackset "AccountPoolFactory-ControlTower-Test-IAMRoles"
 delete_stackset "AccountPoolFactory-ControlTower-Test-VPCSetup"
 echo ""
 
-# Step 2: Delete CF stacks (order matters — ProvisionAccount first since it has Lambda)
+# Step 2: Delete CF stacks
 echo "=== Step 2: CloudFormation Stacks ==="
+delete_stack "AccountPoolFactory-OrgAdmin"
 delete_stack "AccountPoolFactory-ProvisionAccount"
 delete_stack "AccountPoolFactory-AccountCreationRole"
 delete_stack "AccountPoolFactory-StackSetRoles"

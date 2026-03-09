@@ -16,11 +16,7 @@ if [ -z "$ACCOUNT_ID" ]; then
     exit 1
 fi
 
-REGION=$(grep "region:" config.yaml | awk '{print $2}')
-DOMAIN_ACCOUNT_ID=$(grep "domain_account_id:" config.yaml | awk '{print $2}' | tr -d '"')
-ORG_ADMIN_ACCOUNT_ID=$(grep "account_id:" config.yaml | head -1 | awk '{print $2}' | tr -d '"')
-
-CURRENT_ACCOUNT=$(aws sts get-caller-identity --query Account --output text 2>/dev/null)
+source scripts/utils/resolve-config.sh domain
 
 echo "🔍 Account: $ACCOUNT_ID"
 echo "================================"

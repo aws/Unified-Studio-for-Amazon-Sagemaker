@@ -8,14 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 cd "$PROJECT_ROOT"
 
-if [ ! -f "config.yaml" ]; then
-    echo "❌ config.yaml not found"
-    exit 1
-fi
-
-REGION=$(grep "region:" config.yaml | awk '{print $2}')
-DOMAIN_ACCOUNT_ID=$(grep "domain_account_id:" config.yaml | awk '{print $2}' | tr -d '"')
-DOMAIN_ID=$(grep "domain_id:" config.yaml | awk '{print $2}')
+source scripts/utils/resolve-config.sh domain
 
 echo "🔍 Verifying Domain Account ($DOMAIN_ACCOUNT_ID)"
 echo "=================================================="
@@ -87,7 +80,7 @@ echo ""
 # --- Lambda Functions ---
 echo "⚡ Lambda Functions"
 
-for FUNC in PoolManager SetupOrchestrator DeprovisionAccount AccountProvider; do
+for FUNC in PoolManager ProvisionAccount SetupOrchestrator DeprovisionAccount AccountProvider AccountReconciler AccountRecycler; do
     STATE=$(aws lambda get-function \
         --function-name "$FUNC" \
         --region "$REGION" \
@@ -102,9 +95,8 @@ echo ""
 echo "🔐 IAM Roles"
 
 for ROLE_NAME in \
-    "SMUS-AccountPoolFactory-PoolManager-Role" \
-    "SMUS-AccountPoolFactory-SetupOrchestrator-Role" \
-    "SMUS-AccountPoolFactory-AccountProvider-Role" \
+    "SMUS-AccountPoolFactory-LambdaExecution-Role" \
+    "SMUS-AccountPoolFactory-ProvisionAccount-Role" \
     "SMUS-AccountPoolFactory-AccountResolution-Role"; do
 
     ROLE_ARN=$(aws iam get-role \
@@ -167,21 +159,20 @@ echo ""
 # --- Project Profile ---
 echo "📋 Project Profile"
 
-EXPECTED_PROFILE_NAME=$(python3 -c "import yaml; print(yaml.safe_load(open('config.yaml'))['account_pool']['project_profile_name'])" 2>/dev/null || echo "")
 PROFILE_ID=$(aws datazone list-project-profiles \
     --domain-identifier "$DOMAIN_ID" \
     --region "$REGION" \
-    --query "items[?name=='$EXPECTED_PROFILE_NAME'].{id:id,status:status}" \
+    --query "items[?name=='$PROJECT_PROFILE_NAME'].{id:id,status:status}" \
     --output json 2>/dev/null || echo "[]")
 
 PROFILE_FOUND=$(echo "$PROFILE_ID" | python3 -c "import json,sys; items=json.loads(sys.stdin.read()); print(items[0]['id'] if items else '')")
 PROFILE_STATUS=$(echo "$PROFILE_ID" | python3 -c "import json,sys; items=json.loads(sys.stdin.read()); print(items[0]['status'] if items else '')")
 
 if [ -n "$PROFILE_FOUND" ]; then
-    echo "  ✅ Project profile found: $EXPECTED_PROFILE_NAME ($PROFILE_STATUS)"
+    echo "  ✅ Project profile found: $PROJECT_PROFILE_NAME ($PROFILE_STATUS)"
     PASS=$((PASS + 1))
 else
-    echo "  ❌ Project profile '$EXPECTED_PROFILE_NAME' not found — run: ./scripts/02-domain-account/deploy/02-deploy-project-profile.sh"
+    echo "  ❌ Project profile '$PROJECT_PROFILE_NAME' not found — run: ./scripts/02-domain-account/deploy/02-deploy-project-profile.sh"
     FAIL=$((FAIL + 1))
 fi
 
@@ -190,8 +181,6 @@ echo ""
 # --- Policy Grants (check ON_CREATE blueprints) ---
 echo "🔐 Policy Grants (ON_CREATE blueprints)"
 
-# The ON_CREATE blueprints in the profile are: Tooling, DataLake, RedshiftServerless
-# Check if policy grants exist for the root domain unit
 GRANTS=$(aws datazone search-policy-grants \
     --domain-identifier "$DOMAIN_ID" \
     --managed-policy-type "CREATE_ENVIRONMENT_FROM_BLUEPRINT" \
@@ -200,7 +189,6 @@ GRANTS=$(aws datazone search-policy-grants \
     --output text 2>/dev/null || echo "UNSUPPORTED")
 
 if [ "$GRANTS" = "UNSUPPORTED" ]; then
-    # API may not be available — fall back to checking the CF stack
     GRANT_STACKS=$(aws cloudformation list-stacks \
         --region "$REGION" \
         --query 'StackSummaries[?contains(StackName, `PolicyGrants`) && StackStatus != `DELETE_COMPLETE`].StackName' \

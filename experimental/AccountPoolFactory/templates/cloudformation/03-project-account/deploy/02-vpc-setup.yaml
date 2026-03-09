@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'VPC with 3 private subnets across 3 availability zones for DataZone environments'
+Description: 'VPC with 3 private subnets across 3 availability zones for DataZone environments v1'
 
 Resources:
   VPC:
@@ -79,6 +79,10 @@ Resources:
       RouteTableId: !Ref PrivateRouteTable
 
 Outputs:
+  TemplateVersion:
+    Description: Template version - bump to force SetupOrchestrator to update all deployed stacks
+    Value: "1"
+
   VpcId:
     Description: VPC ID
     Value: !Ref VPC

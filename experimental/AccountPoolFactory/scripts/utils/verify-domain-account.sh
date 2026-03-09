@@ -12,15 +12,7 @@ echo "🔍 Domain Account Verification"
 echo "==============================="
 echo ""
 
-# Load configuration
-if [ ! -f "config.yaml" ]; then
-    echo "❌ config.yaml not found"
-    exit 1
-fi
-
-REGION=$(grep "region:" config.yaml | awk '{print $2}')
-ORG_ADMIN_ACCOUNT_ID="495869084367"
-DOMAIN_ACCOUNT_ID="994753223772"
+source scripts/utils/resolve-config.sh domain
 
 echo "Configuration:"
 echo "  Region: $REGION"
@@ -195,7 +187,6 @@ for ROLE in "${ROLES[@]}"; do
 done
 
 # Check AccountProvider role (has domain ID in name)
-DOMAIN_ID=$(grep "domain_id:" config.yaml | awk '{print $2}')
 ACCOUNT_PROVIDER_ROLE="AccountProviderLambdaRole-${DOMAIN_ID}"
 ROLE_ARN=$(aws iam get-role \
     --role-name "$ACCOUNT_PROVIDER_ROLE" \

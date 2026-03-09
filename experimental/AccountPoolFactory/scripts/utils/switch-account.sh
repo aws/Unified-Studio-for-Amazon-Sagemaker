@@ -2,19 +2,6 @@
 
 # Helper script to display account switching instructions
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-cd "$PROJECT_ROOT"
-
-# Load configuration
-if [ ! -f "config.yaml" ]; then
-    echo "❌ config.yaml not found"
-    exit 1
-fi
-
-ORG_MGMT_ACCOUNT_ID=$(grep "org_admin_account_id:" config.yaml | awk '{print $2}' | tr -d '"')
-DOMAIN_ACCOUNT_ID=$(grep "domain_account_id:" config.yaml | awk '{print $2}' | tr -d '"')
-
 ACCOUNT_TYPE=$1
 
 if [ -z "$ACCOUNT_TYPE" ]; then
@@ -28,22 +15,14 @@ fi
 
 case "$ACCOUNT_TYPE" in
     org-mgmt)
-        echo "🔄 Switch to Organization Management account"
+        echo "🔄 Switch to Organization Management account (amirbo+1)"
         echo ""
-        echo "Account ID: $ORG_MGMT_ACCOUNT_ID"
-        echo ""
-        echo "Use your organization's method to assume credentials for this account."
-        echo "For example, using AWS CLI profiles:"
-        echo "   export AWS_PROFILE=org-mgmt-account"
+        echo "  eval \$(isengardcli credentials amirbo+1@amazon.com)"
         ;;
     domain)
-        echo "🔄 Switch to Domain account"
+        echo "🔄 Switch to Domain account (amirbo+3)"
         echo ""
-        echo "Account ID: $DOMAIN_ACCOUNT_ID"
-        echo ""
-        echo "Use your organization's method to assume credentials for this account."
-        echo "For example, using AWS CLI profiles:"
-        echo "   export AWS_PROFILE=domain-account"
+        echo "  eval \$(isengardcli credentials amirbo+3@amazon.com)"
         ;;
     *)
         echo "❌ Unknown account type: $ACCOUNT_TYPE"

@@ -1,0 +1,39 @@
+# Domain Account Configuration Template
+# Copy to domain-config.yaml and fill in your values.
+# Run scripts in this account: the DataZone / SageMaker Unified Studio domain account.
+#
+# IDs are resolved automatically — you only need human-readable names.
+
+region: us-east-2
+
+# DataZone / SageMaker Unified Studio domain name.
+# The deploy script resolves this to a domain ID automatically.
+domain_name: "your-domain-name"
+
+# Optional: if you already know the domain ID, uncomment to skip the lookup.
+# domain_id: dzd-xxxxxxxxxx
+
+# SSO username to add as PROJECT_OWNER on projects created by test scripts.
+default_project_owner: "your-sso-username"
+
+# Project profile name for the account pool (created by 02-deploy-project-profile.sh).
+project_profile_name: "All Capabilities - Account Pool"
+
+# Account email settings for new pool accounts.
+email_prefix: "accountpool"
+email_domain: "example.com"
+
+# Setup stacks deployed into each project account.
+# The reconciler uses this list to validate AVAILABLE accounts.
+setup_stacks:
+  - "DataZone-VPC-{account_id}"
+  - "DataZone-IAM-{account_id}"
+  - "DataZone-EventBridge-{account_id}"
+  - "DataZone-ProjectRole-{account_id}"
+  - "DataZone-Blueprints-{account_id}"
+
+# Project execution role deployed into pool accounts.
+project_role:
+  enabled: true
+  role_name: AmazonSageMakerProjectRole
+  managed_policy_arn: arn:aws:iam::aws:policy/AmazonSageMakerFullAccess

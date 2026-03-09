@@ -1,0 +1,186 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  SMUS Account Pool Factory - Org Admin Governance Stack.
+  Deploys two IAM roles and defines the DomainAccess StackSet.
+  This is the ONLY stack that needs to run in the AWS Organizations management account.
+  No application code lives here — all Lambdas run in the Domain account.
+
+# ============================================================
+# ApprovedStackSets — what gets deployed into each project account
+#
+# Each entry here becomes a CloudFormation StackSet managed from this account.
+# To add a new approved StackSet:
+#   1. Add a new entry under ApprovedStackSets below (documentation only)
+#   2. Add the StackSet resource in the Resources section
+#   3. Add the StackSet name to AccountCreationRole cloudformation permissions
+# ============================================================
+Metadata:
+  ApprovedStackSets:
+    DomainAccess:
+      StackSetName: SMUS-AccountPoolFactory-DomainAccess
+      Purpose: >
+        Creates the SMUS-AccountPoolFactory-DomainAccess IAM role in each project account.
+        This role is assumed by the Domain account's SetupOrchestrator Lambda (with ExternalId
+        protection) to configure the account for use with SageMaker Unified Studio / DataZone.
+      TrustedBy: Domain account (via ExternalId = DataZone Domain ID)
+      Permissions: AdministratorAccess (scoped to setup tasks only)
+
+Parameters:
+  DomainAccountId:
+    Type: String
+    Description: >
+      Domain account ID (where all AccountPoolFactory Lambdas run).
+      The AccountCreation role will trust this account to assume it.
+    AllowedPattern: '^\d{12}$'
+
+  DomainId:
+    Type: String
+    Description: >
+      DataZone / SageMaker Unified Studio Domain ID (e.g. dzd-xxxxxxxx).
+      Used as ExternalId when the Domain account assumes the DomainAccess role in project accounts.
+    AllowedPattern: '^dzd-[a-z0-9]+$'
+
+Resources:
+
+  # ============================================================
+  # Role 1: StackSetAdmin
+  # Assumed by the CloudFormation SERVICE to deploy StackSet instances
+  # into project accounts. Never assumed by humans or application code.
+  # ============================================================
+  StackSetAdministrationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: SMUS-AccountPoolFactory-StackSetAdmin
+      Description: >
+        Assumed by CloudFormation service to manage AccountPoolFactory StackSet instances
+        across project accounts. Trusts cloudformation.amazonaws.com only.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AssumeStackSetExecutionRole
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Can only assume the AccountPoolFactory execution role in project accounts.
+              # This is the minimum needed for SELF_MANAGED StackSets.
+              - Effect: Allow
+                Action: sts:AssumeRole
+                Resource: 'arn:aws:iam::*:role/SMUS-AccountPoolFactory-StackSetExecution'
+      Tags:
+        - Key: Project
+          Value: AccountPoolFactory
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # ============================================================
+  # Role 2: AccountCreation
+  # Assumed by the ProvisionAccount Lambda running in the Domain account.
+  # Scoped to exactly the Organizations + StackSet APIs needed to provision accounts.
+  # ExternalId = AccountPoolFactory-{DomainAccountId} prevents confused-deputy attacks.
+  # ============================================================
+  AccountCreationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: SMUS-AccountPoolFactory-AccountCreation
+      Description: >
+        Assumed by the ProvisionAccount Lambda in the Domain account to create and configure
+        AWS accounts via Organizations and StackSets. Protected by ExternalId.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${DomainAccountId}:root'
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                'sts:ExternalId': !Sub 'AccountPoolFactory-${DomainAccountId}'
+      Policies:
+        - PolicyName: AccountPoolFactoryProvisioningAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+
+              # Organizations: create and manage accounts
+              - Sid: OrganizationsAccess
+                Effect: Allow
+                Action:
+                  - organizations:CreateAccount
+                  - organizations:DescribeCreateAccountStatus
+                  - organizations:DescribeAccount
+                  - organizations:ListParents
+                  - organizations:MoveAccount
+                  - organizations:CloseAccount
+                  - organizations:DescribeOrganization
+                  - organizations:ListRoots
+                  - organizations:ListOrganizationalUnitsForParent
+                  - organizations:DescribeOrganizationalUnit
+                  - organizations:ListTagsForResource
+                  - organizations:TagResource
+                  - organizations:ListAccountsForParent
+                  - organizations:ListAccounts
+                Resource: '*'
+
+              # CloudFormation StackSets: manage AccountPoolFactory StackSets only
+              # Scoped to SMUS-AccountPoolFactory-* to prevent managing unrelated StackSets
+              - Sid: StackSetAccess
+                Effect: Allow
+                Action:
+                  - cloudformation:CreateStackSet
+                  - cloudformation:UpdateStackSet
+                  - cloudformation:CreateStackInstances
+                  - cloudformation:DescribeStackSet
+                  - cloudformation:DescribeStackSetOperation
+                  - cloudformation:ListStackInstances
+                  - cloudformation:DescribeStackInstance
+                  - cloudformation:ListStackSetOperations
+                Resource: 'arn:aws:cloudformation:*:*:stackset/SMUS-AccountPoolFactory-*:*'
+
+              # STS: assume OrganizationAccountAccessRole in new accounts to bootstrap
+              # the StackSetExecution role via CloudFormation. This is the only cross-account
+              # role assumption this role performs.
+              - Sid: AssumeBootstrapRole
+                Effect: Allow
+                Action: sts:AssumeRole
+                Resource: 'arn:aws:iam::*:role/OrganizationAccountAccessRole'
+      Tags:
+        - Key: Project
+          Value: AccountPoolFactory
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # ============================================================
+  # StackSet: DomainAccess
+  # The SMUS-AccountPoolFactory-DomainAccess StackSet is created/updated
+  # by deploy-org-admin.sh via CLI, not managed as a CF resource.
+  # This avoids conflicts with existing StackSet instances in project accounts.
+  # See deploy-org-admin.sh for the StackSet template body and parameters.
+  # ============================================================
+
+Outputs:
+  AccountCreationRoleArn:
+    Description: >
+      ARN of the AccountCreation cross-account role.
+      Pass this to the Domain account deploy script as AccountCreationRoleArn.
+    Value: !GetAtt AccountCreationRole.Arn
+    Export:
+      Name: AccountPoolFactory-AccountCreationRoleArn
+
+  ExternalId:
+    Description: >
+      ExternalId required when assuming the AccountCreation role.
+      Pass this to the Domain account deploy script as ExternalId.
+    Value: !Sub 'AccountPoolFactory-${DomainAccountId}'
+    Export:
+      Name: AccountPoolFactory-ExternalId
+
+  StackSetAdminRoleArn:
+    Description: ARN of the StackSet Administration role (used by CloudFormation service).
+    Value: !GetAtt StackSetAdministrationRole.Arn
+    Export:
+      Name: SMUS-AccountPoolFactory-StackSetAdminRoleArn

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Clear all items from AccountPoolFactory-AccountState DynamoDB table
-# Run this in the Domain Account (994753223772)
+# Run this in the Domain Account
 
 set -e
 
@@ -8,20 +8,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$PROJECT_ROOT"
 
+source scripts/utils/resolve-config.sh domain
+
+TABLE_NAME="AccountPoolFactory-AccountState"
+
 echo "🗑️  Clear DynamoDB Table"
 echo "========================"
 echo ""
-
-# Load configuration
-if [ ! -f "config.yaml" ]; then
-    echo "❌ config.yaml not found"
-    exit 1
-fi
-
-REGION=$(grep "region:" config.yaml | awk '{print $2}')
-DOMAIN_ACCOUNT_ID="994753223772"
-TABLE_NAME="AccountPoolFactory-AccountState"
-
 echo "Configuration:"
 echo "  Region: $REGION"
 echo "  Domain Account: $DOMAIN_ACCOUNT_ID"
@@ -29,17 +22,10 @@ echo "  Table: $TABLE_NAME"
 echo ""
 
 # Verify we're in the correct account
-CURRENT_ACCOUNT=$(aws sts get-caller-identity --query Account --output text 2>/dev/null || echo "ERROR")
-if [ "$CURRENT_ACCOUNT" = "ERROR" ]; then
-    echo "❌ Cannot get current account identity"
-    echo "   Please ensure AWS credentials are configured"
-    exit 1
-fi
-
-echo "Current Account: $CURRENT_ACCOUNT"
 if [ "$CURRENT_ACCOUNT" != "$DOMAIN_ACCOUNT_ID" ]; then
     echo "⚠️  WARNING: Not in Domain Account"
     echo "   Expected: $DOMAIN_ACCOUNT_ID"
+    echo "   Current:  $CURRENT_ACCOUNT"
     echo "   Switch using: eval \$(isengardcli credentials amirbo+3@amazon.com)"
     exit 1
 fi
@@ -114,7 +100,7 @@ else
                 --table-name "$TABLE_NAME" \
                 --key "{\"accountId\":{\"S\":\"$ACCOUNT_ID\"},\"timestamp\":{\"N\":\"$TIMESTAMP\"}}" \
                 --region "$REGION" 2>/dev/null
-            
+
             DELETED_COUNT=$((DELETED_COUNT + 1))
             echo "  ✓ Deleted: $ACCOUNT_ID (timestamp: $TIMESTAMP)"
         fi

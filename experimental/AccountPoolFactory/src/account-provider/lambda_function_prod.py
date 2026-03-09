@@ -177,6 +177,46 @@ def list_authorized_accounts():
         logger.error(f"❌ Error querying DynamoDB: {e}")
         raise
 
+def _mark_assigned(account_id: str, item: dict):
+    """Mark account as ASSIGNED in DynamoDB and trigger pool replenishment check."""
+    import time
+    from datetime import timezone
+    try:
+        dynamodb.update_item(
+            TableName=TABLE_NAME,
+            Key={
+                'accountId': {'S': account_id},
+                'timestamp': item['timestamp']
+            },
+            UpdateExpression='SET #state = :state, assignedDate = :date',
+            ConditionExpression='#state = :available',  # idempotent — only update if still AVAILABLE
+            ExpressionAttributeNames={'#state': 'state'},
+            ExpressionAttributeValues={
+                ':state': {'S': 'ASSIGNED'},
+                ':available': {'S': 'AVAILABLE'},
+                ':date': {'S': datetime.now(timezone.utc).isoformat()}
+            }
+        )
+        logger.info(f"✅ Account {account_id} marked as ASSIGNED")
+
+        # Trigger PoolManager to check pool size and replenish if needed
+        try:
+            lambda_client = boto3.client('lambda', region_name=REGION)
+            lambda_client.invoke(
+                FunctionName='PoolManager',
+                InvocationType='Event',
+                Payload=json.dumps({'action': 'force_replenishment'}).encode()
+            )
+            logger.info("✅ PoolManager replenishment triggered")
+        except Exception as e:
+            logger.warning(f"⚠️  Could not trigger PoolManager: {e}")
+
+    except dynamodb.exceptions.ConditionalCheckFailedException:
+        logger.info(f"ℹ️  Account {account_id} already assigned (concurrent request)")
+    except Exception as e:
+        logger.error(f"❌ Failed to mark account {account_id} as ASSIGNED: {e}")
+
+
 def validate_account_authorization(request):
     """Validate if account/region pair is authorized"""
     account_id = request.get('awsAccountId')
@@ -205,10 +245,13 @@ def validate_account_authorization(request):
             item = items[0]
             state = item.get('state', {}).get('S')
             
-            # Account must be AVAILABLE to be authorized
-            if state == 'AVAILABLE' and region == REGION:
+            # Account must be AVAILABLE or ASSIGNED (already being assigned to this project)
+            if state in ('AVAILABLE', 'ASSIGNED') and region == REGION:
                 auth_result = 'GRANT'
-                logger.info(f"✅ Authorization GRANTED for {account_id} in {region}")
+                logger.info(f"✅ Authorization GRANTED for {account_id} in {region} (state: {state})")
+                # Mark ASSIGNED on first AVAILABLE grant
+                if state == 'AVAILABLE':
+                    _mark_assigned(account_id, item)
             else:
                 auth_result = 'DENY'
                 logger.info(f"❌ Authorization DENIED for {account_id} in {region} (state: {state})")
