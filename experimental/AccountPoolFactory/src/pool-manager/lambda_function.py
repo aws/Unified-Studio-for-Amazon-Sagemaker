@@ -514,23 +514,30 @@ def create_account_record(account_id: str, request_id: str, name: str, email: st
 
 
 def invoke_setup_orchestrator(account_id: str, request_id: str):
-    """Invoke Setup Orchestrator Lambda asynchronously"""
+    """Enqueue account for SetupOrchestrator via SQS (preferred) or async Lambda invoke (fallback)."""
+    payload = {
+        'accountId': account_id,
+        'requestId': request_id,
+        'mode': 'setup'
+    }
+    setup_queue_url = os.environ.get('SETUP_QUEUE_URL', '')
     try:
-        payload = {
-            'accountId': account_id,
-            'requestId': request_id,
-            'mode': 'setup'
-        }
-        
-        lambda_client.invoke(
-            FunctionName=SETUP_ORCHESTRATOR_FUNCTION_NAME,
-            InvocationType='Event',  # Asynchronous
-            Payload=json.dumps(payload)
-        )
-        
-        print(f"✅ Invoked Setup Orchestrator for account {account_id}")
+        if setup_queue_url:
+            import boto3 as _boto3
+            _boto3.client('sqs').send_message(
+                QueueUrl=setup_queue_url,
+                MessageBody=json.dumps(payload)
+            )
+            print(f"✅ Enqueued setup job for account {account_id} in SQS")
+        else:
+            lambda_client.invoke(
+                FunctionName=SETUP_ORCHESTRATOR_FUNCTION_NAME,
+                InvocationType='Event',
+                Payload=json.dumps(payload)
+            )
+            print(f"✅ Invoked Setup Orchestrator async for account {account_id}")
     except Exception as e:
-        print(f"❌ Error invoking Setup Orchestrator: {e}")
+        print(f"❌ Error enqueuing setup for {account_id}: {e}")
 
 
 def handle_deletion_event(account_id: str, stack_name: str, config: Dict[str, Any]) -> Dict[str, Any]:

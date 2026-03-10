@@ -44,12 +44,26 @@ def handle(method, path, body, config):
     table = config.get("dynamoTable", _table)
     identity_store_id = config.get("identityStoreId", "")
 
-    ddb = boto3.client("dynamodb", region_name=region)
-    ssm_client = boto3.client("ssm", region_name=region)
-    lam = boto3.client("lambda", region_name=region)
-    dz  = boto3.client("datazone", region_name=region)
+    import botocore.config as _bc
+    _cfg = _bc.Config(connect_timeout=5, read_timeout=10, retries={"max_attempts": 1})
 
-    # ── Project profiles ──────────────────────────────────────────────────────
+    ddb = boto3.client("dynamodb", region_name=region, config=_cfg)
+    ssm_client = boto3.client("ssm", region_name=region, config=_cfg)
+    lam = boto3.client("lambda", region_name=region, config=_cfg)
+    dz  = boto3.client("datazone", region_name=region, config=_cfg)
+
+    # ── Health check ──────────────────────────────────────────────────────────
+    if method == "GET" and path == "/api/health":
+        try:
+            import botocore.config
+            sts = boto3.client("sts", region_name=region,
+                               config=botocore.config.Config(connect_timeout=3, read_timeout=3))
+            identity = sts.get_caller_identity()
+            return 200, {"ok": True, "account": identity["Account"]}
+        except Exception as e:
+            err = str(e)
+            expired = "ExpiredToken" in err or "InvalidClientTokenId" in err or "AuthFailure" in err
+            return 200, {"ok": False, "expired": expired, "error": err}
     if method == "GET" and path == "/api/projects/profiles":
         if not domain_id:
             return 400, {"error": "domainId not configured"}
@@ -133,21 +147,31 @@ def handle(method, path, body, config):
             return 400, {"error": "domainId not configured"}
         data = body or {}
         try:
-            # Get account pool
+            lam_client = boto3.client("lambda", region_name=region, config=_cfg)
+
+            # Step 1: Get account pool ID
             pools_resp = dz.list_account_pools(domainIdentifier=domain_id)
             pool_id = pools_resp.get("items", [{}])[0].get("id", "")
             if not pool_id:
                 return 400, {"error": "No account pool found"}
 
-            # Resolve account
-            accts = dz.list_accounts_in_account_pool(
-                domainIdentifier=domain_id, identifier=pool_id
+            # Step 2: Call AccountProvider Lambda to get available account
+            ap_resp = lam_client.invoke(
+                FunctionName="AccountProvider",
+                InvocationType="RequestResponse",
+                Payload=json.dumps({"operationRequest": {"listAuthorizedAccountsRequest": {
+                    "context": {"projectProfileName": data.get("profileName", "")}
+                }}}).encode()
             )
-            account_id = accts.get("items", [{}])[0].get("awsAccountId", "")
-            if not account_id:
-                return 400, {"error": "No available accounts in pool"}
+            ap_result = json.loads(ap_resp["Payload"].read())
+            available = (ap_result.get("operationResponse", {})
+                                  .get("listAuthorizedAccountsResponse", {})
+                                  .get("items", []))
+            if not available:
+                return 400, {"error": "No available accounts in pool — trigger replenishment first"}
+            account_id = available[0]["awsAccountId"]
 
-            # Get profile env configs
+            # Step 3: Get env configs from profile
             profile_detail = dz.get_project_profile(
                 domainIdentifier=domain_id, identifier=data["profileId"]
             )
@@ -164,23 +188,61 @@ def handle(method, path, body, config):
                 for cfg in env_configs
             ]
 
-            create_kwargs = dict(
+            # Step 4: Create project
+            proj = dz.create_project(
                 domainIdentifier=domain_id,
                 name=data["name"],
                 projectProfileId=data["profileId"],
                 userParameters=user_params,
             )
-            if data.get("ownerId"):
-                create_kwargs["ownerIdentifier"] = data["ownerId"]
+            project_id = proj["id"]
 
-            proj = dz.create_project(**create_kwargs)
+            # Step 5: Add owner via create_project_membership (search by SSO username)
+            if data.get("ownerId"):
+                owner_type = data.get("ownerType", "USER")
+                try:
+                    if owner_type == "USER":
+                        # Search DataZone user profiles to get the DataZone user ID
+                        owner_name = data.get("ownerName", "")
+                        dz_user_id = None
+                        if owner_name:
+                            search_resp = dz.search_user_profiles(
+                                domainIdentifier=domain_id,
+                                userType="SSO_USER",
+                                searchText=owner_name
+                            )
+                            for item in search_resp.get("items", []):
+                                sso = item.get("details", {}).get("sso", {})
+                                if sso.get("username") == owner_name or owner_name in sso.get("username", ""):
+                                    dz_user_id = item["id"]
+                                    break
+                        if dz_user_id:
+                            dz.create_project_membership(
+                                domainIdentifier=domain_id,
+                                projectIdentifier=project_id,
+                                designation="PROJECT_OWNER",
+                                member={"userIdentifier": dz_user_id}
+                            )
+                        else:
+                            print(f"  ⚠️ Could not find DataZone user for '{owner_name}'")
+                    else:
+                        dz.create_project_membership(
+                            domainIdentifier=domain_id,
+                            projectIdentifier=project_id,
+                            designation="PROJECT_OWNER",
+                            member={"groupIdentifier": data["ownerId"]}
+                        )
+                except Exception as e:
+                    print(f"  ⚠️ Could not add owner: {e}")
+
             portal_url = config.get("portalUrl", "")
             return 200, {
-                "projectId": proj["id"],
+                "projectId": project_id,
                 "resolvedAccountId": account_id,
                 "portalUrl": portal_url
             }
         except Exception as e:
+            import traceback; traceback.print_exc()
             return 500, {"error": str(e)}
 
     # ── Project status ────────────────────────────────────────────────────────
@@ -205,31 +267,33 @@ def handle(method, path, body, config):
             return 500, {"error": str(e)}
     if method == "GET" and path == "/api/pool/summary":
         states = ["AVAILABLE", "ASSIGNED", "SETTING_UP", "CLEANING", "FAILED", "ORPHANED"]
-        all_items = []
-        last_key = None
-        while True:
-            kwargs = {"TableName": table, "ProjectionExpression": "#s, poolName",
-                      "ExpressionAttributeNames": {"#s": "state"}}
-            if last_key:
-                kwargs["ExclusiveStartKey"] = last_key
-            resp = ddb.scan(**kwargs)
-            all_items.extend(resp.get("Items", []))
-            last_key = resp.get("LastEvaluatedKey")
-            if not last_key:
-                break
+        try:
+            all_items = []
+            last_key = None
+            while True:
+                kwargs = {"TableName": table, "ProjectionExpression": "#s, poolName",
+                          "ExpressionAttributeNames": {"#s": "state"}}
+                if last_key:
+                    kwargs["ExclusiveStartKey"] = last_key
+                resp = ddb.scan(**kwargs)
+                all_items.extend(resp.get("Items", []))
+                last_key = resp.get("LastEvaluatedKey")
+                if not last_key:
+                    break
 
-        summary = {}
-        for item in all_items:
-            pool = item.get("poolName", {}).get("S", "")
-            if not pool:
-                continue  # skip accounts with no pool name in summary
-            state = item.get("state", {}).get("S", "UNKNOWN")
-            if pool not in summary:
-                summary[pool] = {s: 0 for s in states}
-            summary[pool][state] = summary[pool].get(state, 0) + 1
+            summary = {}
+            for item in all_items:
+                pool = item.get("poolName", {}).get("S", "") or "default"
+                state = item.get("state", {}).get("S", "UNKNOWN")
+                if pool not in summary:
+                    summary[pool] = {s: 0 for s in states}
+                summary[pool][state] = summary[pool].get(state, 0) + 1
 
-        pools = [{"poolName": k, "counts": v} for k, v in summary.items()]
-        return 200, {"pools": pools, "lastReconciled": None}
+            pools = [{"poolName": k, "counts": v} for k, v in summary.items()]
+            return 200, {"pools": pools, "lastReconciled": None}
+        except Exception as e:
+            import traceback; traceback.print_exc()
+            return 500, {"error": str(e)}
 
     # ── Accounts list ─────────────────────────────────────────────────────────
     if method == "GET" and (path == "/api/pool/accounts" or path.startswith("/api/pool/accounts?")):

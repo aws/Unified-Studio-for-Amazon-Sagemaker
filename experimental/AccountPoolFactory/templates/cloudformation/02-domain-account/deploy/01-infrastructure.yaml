@@ -48,7 +48,7 @@ Parameters:
 
   ProjectRoleManagedPolicyArn:
     Type: String
-    Default: arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+    Default: arn:aws:iam::aws:policy/SageMakerStudioAdminIAMPermissiveExecutionPolicy
     Description: Managed policy ARN for the project execution role
 
 Resources:
@@ -281,6 +281,20 @@ Resources:
                   - datazone:GetProject
                 Resource: !Sub 'arn:aws:datazone:${AWS::Region}:${AWS::AccountId}:domain/${DomainId}'
 
+              # SQS — send setup jobs to SetupQueue (Recycler/PoolManager)
+              # and receive/delete for SetupOrchestrator event source mapping
+              - Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueUrl
+                  - sqs:GetQueueAttributes
+                  - sqs:ChangeMessageVisibility
+                Resource:
+                  - !GetAtt SetupQueue.Arn
+                  - !GetAtt SetupQueueDLQ.Arn
+
               # KMS (for SSM SecureString)
               - Effect: Allow
                 Action:
@@ -310,6 +324,7 @@ Resources:
           SNS_TOPIC_ARN: !Ref AlertTopic
           SETUP_ORCHESTRATOR_FUNCTION_NAME: !Ref SetupOrchestratorFunction
           DEPROVISION_ACCOUNT_FUNCTION_NAME: !Ref DeprovisionAccountFunction
+          SETUP_QUEUE_URL: !Ref SetupQueue
           DOMAIN_ACCOUNT_ID: !Ref DomainAccountId
           DOMAIN_ID: !Ref DomainId
       Code:
@@ -330,7 +345,7 @@ Resources:
       Role: !GetAtt LambdaExecutionRole.Arn
       Timeout: 900
       MemorySize: 1024
-      ReservedConcurrentExecutions: 5
+      # No ReservedConcurrentExecutions — controlled by SQS event source mapping MaxConcurrency
       Environment:
         Variables:
           DYNAMODB_TABLE_NAME: !Ref AccountStateTable
@@ -375,41 +390,11 @@ Resources:
           Value: AccountPoolFactory
 
   # ============================================================
-  # ProvisionAccount Lambda (moved from Org Admin account)
+  # ProvisionAccount Lambda
   # Assumes AccountCreation role in Org Admin to call Organizations + StackSet APIs.
   # Invoked locally by PoolManager and AccountRecycler (same account).
+  # Uses the shared LambdaExecutionRole which already has sts:AssumeRole on AccountCreationRole.
   # ============================================================
-
-  ProvisionAccountRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: SMUS-AccountPoolFactory-ProvisionAccount-Role
-      Description: Execution role for ProvisionAccount Lambda - assumes Org Admin AccountCreation role
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-      Policies:
-        - PolicyName: ProvisionAccountPolicy
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              # Assume the AccountCreation role in Org Admin to call Organizations + StackSet APIs
-              - Effect: Allow
-                Action: sts:AssumeRole
-                Resource: !Ref AccountCreationRoleArn
-              # Assume OrganizationAccountAccessRole in new accounts to bootstrap StackSetExecution role
-              - Effect: Allow
-                Action: sts:AssumeRole
-                Resource: 'arn:aws:iam::*:role/OrganizationAccountAccessRole'
-      Tags:
-        - Key: ManagedBy
-          Value: AccountPoolFactory
 
   ProvisionAccountFunction:
     Type: AWS::Lambda::Function
@@ -417,7 +402,7 @@ Resources:
       FunctionName: ProvisionAccount
       Runtime: python3.12
       Handler: lambda_function.lambda_handler
-      Role: !GetAtt ProvisionAccountRole.Arn
+      Role: !GetAtt LambdaExecutionRole.Arn
       Timeout: 600
       MemorySize: 512
       ReservedConcurrentExecutions: 5
@@ -555,6 +540,7 @@ Resources:
           ORG_ADMIN_ACCOUNT_ID: !Ref OrgAdminAccountId
           DEPROVISION_ACCOUNT_FUNCTION_NAME: !Ref DeprovisionAccountFunction
           SETUP_ORCHESTRATOR_FUNCTION_NAME: !Ref SetupOrchestratorFunction
+          SETUP_QUEUE_URL: !Ref SetupQueue
           PROVISION_ACCOUNT_FUNCTION_ARN: !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:ProvisionAccount'
       Code:
         ZipFile: |
@@ -572,8 +558,45 @@ Resources:
       RetentionInDays: 7
 
   # ============================================================
-  # Self-Healing Schedule — Reconciler runs hourly, triggers Recycler
+  # SQS Queue for SetupOrchestrator
+  # Controls parallelism via event source mapping MaxConcurrency.
+  # Replaces direct Lambda invocations from Recycler and PoolManager.
   # ============================================================
+
+  SetupQueueDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: AccountPoolFactory-SetupQueue-DLQ
+      MessageRetentionPeriod: 1209600  # 14 days
+      Tags:
+        - Key: ManagedBy
+          Value: AccountPoolFactory
+
+  SetupQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: AccountPoolFactory-SetupQueue
+      VisibilityTimeout: 900          # Must be >= SetupOrchestrator timeout
+      MessageRetentionPeriod: 86400   # 24 hours
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt SetupQueueDLQ.Arn
+        maxReceiveCount: 3
+      Tags:
+        - Key: ManagedBy
+          Value: AccountPoolFactory
+
+  SetupOrchestratorSQSTrigger:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      EventSourceArn: !GetAtt SetupQueue.Arn
+      FunctionName: !GetAtt SetupOrchestratorFunction.Arn
+      BatchSize: 1
+      FunctionResponseTypes:
+        - ReportBatchItemFailures
+      ScalingConfig:
+        MaximumConcurrency: 10        # Knob: how many SetupOrchestrators run in parallel
+
+
 
   ReconcilerScheduleRule:
     Type: AWS::Events::Rule
@@ -673,13 +696,21 @@ Resources:
       Value: '10'
       Description: Maximum concurrent account recycles
 
+  SetupQueueMaxConcurrencyParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: /AccountPoolFactory/PoolManager/SetupQueueMaxConcurrency
+      Type: String
+      Value: '10'
+      Description: Max concurrent SetupOrchestrator invocations via SQS (controls SQS event source mapping)
+
 Outputs:
   ProvisionAccountRoleArn:
     Description: >
-      ARN of the ProvisionAccount Lambda execution role.
+      ARN of the shared Lambda execution role.
       Pass this to the Org Admin deploy script as ProvisionAccountRoleArn.
-      The AccountCreationRole trust policy will be scoped to this specific role.
-    Value: !GetAtt ProvisionAccountRole.Arn
+      The AccountCreationRole trust policy will be scoped to this role.
+    Value: !GetAtt LambdaExecutionRole.Arn
     Export:
       Name: AccountPoolFactory-ProvisionAccountRoleArn
 
@@ -748,6 +779,18 @@ Outputs:
     Value: !GetAtt AccountRecyclerFunction.Arn
     Export:
       Name: AccountPoolFactory-AccountRecyclerArn
+
+  SetupQueueUrl:
+    Description: SQS queue URL for SetupOrchestrator jobs
+    Value: !Ref SetupQueue
+    Export:
+      Name: AccountPoolFactory-SetupQueueUrl
+
+  SetupQueueArn:
+    Description: SQS queue ARN for SetupOrchestrator jobs
+    Value: !GetAtt SetupQueue.Arn
+    Export:
+      Name: AccountPoolFactory-SetupQueueArn
 
   ProvisionAccountFunctionArn:
     Description: ProvisionAccount Lambda function ARN

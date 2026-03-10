@@ -13,6 +13,25 @@
   --c-orphaned:  #7f8c8d;   --bg-orphaned:  #f2f3f4;
 }
 
+/* ── Credential banner ── */
+.cred-banner {
+  background: #c0392b;
+  color: white;
+  padding: 0.6rem 1.5rem;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.cred-banner code {
+  background: rgba(0,0,0,0.25);
+  padding: 0.2rem 0.5rem;
+  border-radius: 3px;
+  font-size: 0.8rem;
+  color: #ffd;
+}
+
 /* ── Header ── */
 .app-header {
   background: var(--aws-dark);
@@ -426,4 +445,6 @@ thead .col-filter {
   min-width: 2rem;
 }
 .account-name-sub { font-size: 0.75rem; color: var(--pico-muted-color); }
+.smus-link { font-size: 0.8rem; color: var(--aws-orange); text-decoration: none; margin-left: 0.3rem; }
+.smus-link:hover { text-decoration: underline; }
 .pool-label { font-weight: 400; color: var(--pico-muted-color); font-size: 0.8rem; }

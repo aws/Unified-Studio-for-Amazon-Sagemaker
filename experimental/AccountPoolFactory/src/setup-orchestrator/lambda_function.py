@@ -95,10 +95,23 @@ def get_config() -> Dict[str, Any]:
 
 
 def lambda_handler(event, context):
-    """Main Lambda handler for Setup Orchestrator"""
+    """Main Lambda handler for Setup Orchestrator.
+
+    Supports two invocation paths:
+    1. Direct invoke: event contains accountId, mode, etc. directly
+    2. SQS trigger: event contains Records[0].body with the JSON payload
+    """
     global _config_cache
     _config_cache = None  # Clear cache at start
-    
+
+    # Unwrap SQS record if triggered via event source mapping
+    if event.get('Records'):
+        try:
+            event = json.loads(event['Records'][0]['body'])
+        except Exception as e:
+            print(f"❌ Failed to parse SQS record body: {e}")
+            return {'statusCode': 400, 'body': f'Invalid SQS message: {e}'}
+
     print(f"📥 Received event: {json.dumps(event, indent=2)}")
     
     account_id = event.get('accountId')
@@ -609,12 +622,12 @@ def deploy_project_role(account_id: str, config: Dict[str, Any]) -> Dict[str, An
         return {}
 
     role_name = config.get('ProjectRoleName', 'AmazonSageMakerProjectRole')
-    policy_arn = config.get('ProjectRoleManagedPolicyArn', 'arn:aws:iam::aws:policy/AmazonSageMakerFullAccess')
+    policy_arn = config.get('ProjectRoleManagedPolicyArn', 'arn:aws:iam::aws:policy/SageMakerStudioAdminIAMPermissiveExecutionPolicy')
 
     print(f"👤 Deploying project execution role '{role_name}' for account {account_id}")
 
     stack_name = f"DataZone-ProjectRole-{account_id}"
-    template_path = '04-project-role.yaml'
+    template_path = '05-project-role.yaml'
 
     try:
         cf_client = get_cross_account_client('cloudformation', account_id)

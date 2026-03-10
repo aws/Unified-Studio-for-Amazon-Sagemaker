@@ -275,7 +275,7 @@ export ORG_ID
 # Project role config
 PROJECT_ROLE_ENABLED=$(_yaml_get "$CONFIG_FILE" "project_role.enabled" "true")
 PROJECT_ROLE_NAME=$(_yaml_get "$CONFIG_FILE" "project_role.role_name" "AmazonSageMakerProjectRole")
-PROJECT_ROLE_POLICY=$(_yaml_get "$CONFIG_FILE" "project_role.managed_policy_arn" "arn:aws:iam::aws:policy/AmazonSageMakerFullAccess")
+PROJECT_ROLE_POLICY=$(_yaml_get "$CONFIG_FILE" "project_role.managed_policy_arn" "arn:aws:iam::aws:policy/SageMakerStudioAdminIAMPermissiveExecutionPolicy")
 export PROJECT_ROLE_ENABLED PROJECT_ROLE_NAME PROJECT_ROLE_POLICY
 
 # Iterate pools

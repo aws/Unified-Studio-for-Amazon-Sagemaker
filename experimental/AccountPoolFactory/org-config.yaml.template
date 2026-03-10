@@ -1,42 +1,43 @@
 # Org Admin Account Configuration Template
 # Copy to org-config.yaml and fill in your values.
 # Run scripts in this account: the AWS Organizations management account.
-#
-# IDs are resolved automatically — you only need human-readable names.
 
-region: us-east-2
+region: us-east-2   # Must match the domain account's region.
 
-# Prefix used to derive StackSet names from template filenames.
-# StackSet name = {stackset_prefix}-{TitleCasedTemplateStem}
-# e.g. "SMUS-AccountPoolFactory" + "vpc.yaml" → "SMUS-AccountPoolFactory-VPC"
-# Must match the IAM policy prefix — do not change after initial deploy without
-# updating the CloudFormation stack.
+# Prefix for StackSet names derived from template filenames.
+# Do not change after initial deploy without updating the CF stack.
 stackset_prefix: "SMUS-AccountPoolFactory"
 
 pools:
-  - name: default
-    # Human-readable OU path. The deploy script resolves this to an OU ID.
-    # Example: "BusinessUnit/TeamName"
-    ou_name: "YourBusinessUnit/YourTeam"
+  - name: my-pool                    # logical name — referenced by domain-config.yaml
+    ou_name: "BusinessUnit/TeamName" # human-readable OU path, resolved to ID automatically
+    # ou_id: ou-xxxx-xxxxxxxx        # uncomment to skip OU name lookup
 
-    # Optional: set if you already know the OU ID to skip the lookup.
-    # ou_id: ou-xxxx-xxxxxxxx
-
-    # Root email prefix and domain for new accounts in this pool.
-    # New account email: {email_prefix}+{uid}@{email_domain}
-    email_prefix: "accountpool"
+    email_prefix: "accountpool"      # root email: accountpool+{uid}@example.com
     email_domain: "example.com"
 
-    # Tags applied to each AWS account via Organizations TagResource.
-    # "Pool" tag is always added automatically.
-    account_tags:
+    account_tags:                    # applied to AWS accounts via Organizations TagResource
+      Pool: "my-pool"
       CostCenter: "your-cost-center"
-      Team: "your-team"
 
-    # StackSets pre-deployed into accounts in this pool by ProvisionAccount Lambda.
-    # Only include templates that can be deployed without runtime values.
-    # VPC, IAM, EventBridge, and Blueprints are deployed by SetupOrchestrator at
-    # account-setup time (they need runtime values like CentralEventBusArn).
+    # Approved StackSets in wave order. Templates must exist in
+    # templates/cloudformation/03-project-account/deploy/
+    # and will be uploaded to S3 by the org admin deploy script.
     stacksets:
-      - template: domain-access.yaml
+      - template: domain-access.yaml          # REQUIRED first — always wave 1
         wave: 1
+
+      - template: 01-domain-access.yaml
+        wave: 1
+
+      - template: 02-vpc-setup.yaml
+        wave: 2
+      - template: 03-iam-roles.yaml
+        wave: 2
+      - template: 04-eventbridge-rules.yaml
+        wave: 2
+      - template: 05-project-role.yaml        # optional — remove if not needed
+        wave: 2
+
+      - template: 06-blueprint-enablement.yaml  # MUST be after IAM roles
+        wave: 3

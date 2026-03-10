@@ -34,13 +34,13 @@ from botocore.exceptions import ClientError
 # Initialize AWS clients
 dynamodb = boto3.client('dynamodb')
 lambda_client = boto3.client('lambda')
-# Lambda client with extended timeout for synchronous invocations
-# SetupOrchestrator can take up to 900s, DeprovisionAccount up to 900s
+# Lambda client with extended timeout for synchronous invocations of DeprovisionAccount
 lambda_client_sync = boto3.client('lambda', config=botocore.config.Config(
     read_timeout=900,
     connect_timeout=10,
     retries={'max_attempts': 0}  # we handle retries ourselves
 ))
+sqs = boto3.client('sqs')
 sns = boto3.client('sns')
 cloudwatch = boto3.client('cloudwatch')
 ssm = boto3.client('ssm')
@@ -54,6 +54,7 @@ DOMAIN_ACCOUNT_ID = os.environ.get('DOMAIN_ACCOUNT_ID', '')
 ORG_ADMIN_ACCOUNT_ID = os.environ.get('ORG_ADMIN_ACCOUNT_ID', '')
 DEPROVISION_FUNCTION = os.environ.get('DEPROVISION_ACCOUNT_FUNCTION_NAME', 'DeprovisionAccount')
 SETUP_FUNCTION = os.environ.get('SETUP_ORCHESTRATOR_FUNCTION_NAME', 'SetupOrchestrator')
+SETUP_QUEUE_URL = os.environ.get('SETUP_QUEUE_URL', '')
 PROVISION_FUNCTION_ARN = os.environ.get('PROVISION_ACCOUNT_FUNCTION_ARN', '')
 
 # Non-recoverable error patterns
@@ -453,28 +454,23 @@ def handle_cleaning(account_id, item, max_retries):
         # Step 2: Ensure StackSet is deployed (may be missing on legacy accounts)
         ensure_stackset(account_id)
 
-        # Step 3: Setup
-        print(f"  [{account_id}] Invoking SetupOrchestrator...")
-        setup_result = invoke_lambda_sync(
-            SETUP_FUNCTION,
-            {
-                'accountId': account_id,
-                'requestId': f"recycle-setup-{int(time.time())}",
-                'mode': 'setup'
-            }
-        )
-        if setup_result.get('status') == 'ERROR':
-            raise Exception(f"Setup failed: {setup_result.get('message')}")
+        # Step 3: Enqueue setup via SQS — SetupOrchestrator marks AVAILABLE when done
+        print(f"  [{account_id}] Enqueuing SetupOrchestrator via SQS...")
+        update_state_simple(account_id, item, 'SETTING_UP', 'Deprovision complete, setup enqueued')
+        run_setup(account_id)
 
-        transition_to_available(account_id, item)
         publish_metric('RecyclingSucceeded', 1,
                        [{'Name': 'AccountId', 'Value': account_id}])
         return {'accountId': account_id, 'previousState': 'CLEANING',
-                'result': 'RECYCLED', 'newState': 'AVAILABLE'}
+                'result': 'ENQUEUED', 'newState': 'SETTING_UP'}
 
     except Exception as e:
         error_msg = str(e)
         print(f"  [{account_id}] Recycling failed: {error_msg}")
+        if 'TooManyRequestsException' in error_msg or 'Rate Exceeded' in error_msg or 'Throttling' in error_msg:
+            print(f"  [{account_id}] Throttle error — leaving in CLEANING, will retry next cycle")
+            return {'accountId': account_id, 'previousState': 'CLEANING',
+                    'result': 'THROTTLED', 'error': error_msg}
         mark_failed(account_id, item, error_msg, 'deprovision_or_setup')
         publish_metric('RecyclingFailed', 1, [
             {'Name': 'AccountId', 'Value': account_id},
@@ -528,12 +524,14 @@ def handle_failed(account_id, item, max_retries, retry_count, force=False):
             # Missing DomainAccess role — deploy StackSet first, then setup
             print(f"  [{account_id}] Fixing missing StackSet...")
             ensure_stackset(account_id)
-            print(f"  [{account_id}] Running SetupOrchestrator...")
+            print(f"  [{account_id}] Enqueuing SetupOrchestrator...")
+            update_state_simple(account_id, item, 'SETTING_UP', 'StackSet fixed, setup enqueued')
             run_setup(account_id)
 
         elif 'NEEDS_SETUP' in failure_reason:
             # Role exists but stacks missing/broken — setup handles it
-            print(f"  [{account_id}] Running SetupOrchestrator (stacks missing/broken)...")
+            print(f"  [{account_id}] Enqueuing SetupOrchestrator (stacks missing/broken)...")
+            update_state_simple(account_id, item, 'SETTING_UP', 'Setup enqueued via SQS')
             run_setup(account_id)
 
         else:
@@ -546,15 +544,29 @@ def handle_failed(account_id, item, max_retries, retry_count, force=False):
             return {'accountId': account_id, 'previousState': 'FAILED',
                     'result': 'FAILED', 'error': 'Record lost after state update'}
 
-        transition_to_available(account_id, item)
         publish_metric('RecyclingSucceeded', 1,
                        [{'Name': 'AccountId', 'Value': account_id}])
         return {'accountId': account_id, 'previousState': 'FAILED',
-                'result': 'RECYCLED', 'newState': 'AVAILABLE'}
+                'result': 'ENQUEUED', 'newState': 'SETTING_UP'}
 
     except Exception as e:
         error_msg = str(e)
         print(f"  [{account_id}] Fix failed: {error_msg}")
+        # Throttling errors are transient infrastructure issues — don't count against the account.
+        # Reset retry count so the next reconciler run tries again cleanly.
+        if 'TooManyRequestsException' in error_msg or 'Rate Exceeded' in error_msg or 'Throttling' in error_msg:
+            print(f"  [{account_id}] Throttle error — resetting retryCount, will retry next cycle")
+            dynamodb.update_item(
+                TableName=DYNAMODB_TABLE_NAME,
+                Key={'accountId': {'S': account_id}, 'timestamp': item['timestamp']},
+                UpdateExpression='SET retryCount = :zero, errorMessage = :msg',
+                ExpressionAttributeValues={
+                    ':zero': {'N': '0'},
+                    ':msg': {'S': f'Throttled (will retry): {error_msg}'}
+                }
+            )
+            return {'accountId': account_id, 'previousState': 'FAILED',
+                    'result': 'THROTTLED', 'error': error_msg}
         mark_failed(account_id, item, error_msg, 'targeted_fix')
         publish_metric('RecyclingFailed', 1, [
             {'Name': 'AccountId', 'Value': account_id},
@@ -708,17 +720,37 @@ def ensure_stackset_batch(account_ids):
 
 
 def run_setup(account_id):
-    """Invoke SetupOrchestrator and check for errors."""
-    result = invoke_lambda_sync(
-        SETUP_FUNCTION,
-        {
-            'accountId': account_id,
-            'requestId': f"recycle-setup-{int(time.time())}",
-            'mode': 'setup'
-        }
-    )
-    if result.get('status') == 'ERROR':
-        raise Exception(f"SetupOrchestrator failed: {result.get('message')}")
+    """Enqueue account for SetupOrchestrator via SQS.
+
+    Fire-and-forget: SQS delivers the message to SetupOrchestrator at the
+    configured concurrency level. SetupOrchestrator marks the account AVAILABLE
+    when done — no need to wait here.
+
+    Falls back to direct async Lambda invoke if SETUP_QUEUE_URL is not set.
+    """
+    payload = {
+        'accountId': account_id,
+        'requestId': f"recycle-setup-{int(time.time())}",
+        'mode': 'setup'
+    }
+    if SETUP_QUEUE_URL:
+        sqs.send_message(
+            QueueUrl=SETUP_QUEUE_URL,
+            MessageBody=json.dumps(payload),
+            MessageGroupId=account_id if SETUP_QUEUE_URL.endswith('.fifo') else None
+        ) if SETUP_QUEUE_URL.endswith('.fifo') else sqs.send_message(
+            QueueUrl=SETUP_QUEUE_URL,
+            MessageBody=json.dumps(payload)
+        )
+        print(f"  [{account_id}] Enqueued setup job in SQS")
+    else:
+        # Fallback: async Lambda invoke
+        lambda_client.invoke(
+            FunctionName=SETUP_FUNCTION,
+            InvocationType='Event',
+            Payload=json.dumps(payload)
+        )
+        print(f"  [{account_id}] Invoked SetupOrchestrator async (no queue configured)")
 
 
 

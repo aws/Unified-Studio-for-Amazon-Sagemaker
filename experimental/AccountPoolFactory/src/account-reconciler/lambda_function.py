@@ -106,7 +106,17 @@ def get_expected_setup_stacks():
 
 
 def load_config():
-    """Load configuration from SSM Parameter Store"""
+    """Load configuration from SSM Parameter Store.
+
+    Reads two SSM paths:
+    - /AccountPoolFactory/PoolManager/  — legacy single-pool keys (backward compat)
+    - /AccountPoolFactory/Pools/{name}/ — per-pool config written by both deploy scripts:
+        domain side: MinimumPoolSize, TargetPoolSize, ReclaimStrategy, ProjectProfileName
+        org side:    OUId, EmailPrefix, EmailDomain, AccountTags, StackSets
+
+    The org-side keys are written to the org account SSM and must be read via the
+    AccountCreation cross-account role. Domain-side keys are local to this account.
+    """
     try:
         config = {}
         next_token = None
@@ -127,26 +137,41 @@ def load_config():
             if not next_token:
                 break
 
-        config.setdefault('PoolName', 'AccountPoolFactory')
         config.setdefault('NamePrefix', 'DataZone-Pool')
         config.setdefault('TargetOUId', '')
         config.setdefault('MinimumPoolSize', '5')
         config.setdefault('MaxRecycleRetries', '3')
 
-        # Load per-pool OU IDs from org SSM (written by org deploy script)
-        # These are in the org account — read via AccountCreation role
+        # Step 1: Load domain-side per-pool params from local SSM
+        # Written by scripts/02-domain-account/deploy/01-deploy.sh
         pools = {}
         try:
-            org_client = get_org_client()
-            # Use the org SSM via assumed role
-            import boto3 as _boto3
+            resp = ssm.get_parameters_by_path(
+                Path='/AccountPoolFactory/Pools/',
+                Recursive=True,
+                WithDecryption=False
+            )
+            for param in resp['Parameters']:
+                parts = param['Name'].split('/')
+                # /AccountPoolFactory/Pools/{pool_name}/{key}
+                if len(parts) >= 5:
+                    pn = parts[3]
+                    key = parts[4]
+                    pools.setdefault(pn, {})[key] = param['Value']
+            print(f'Loaded domain-side pool params: {list(pools.keys())}')
+        except Exception as e:
+            print(f'Warning: could not load domain-side pool params: {e}')
+
+        # Step 2: Load org-side per-pool params (OUId, EmailPrefix, etc.) via cross-account role
+        # Written by scripts/01-org-mgmt-account/deploy/01-deploy.sh
+        try:
             assumed = sts.assume_role(
                 RoleArn=f"arn:aws:iam::{ORG_ADMIN_ACCOUNT_ID}:role/SMUS-AccountPoolFactory-AccountCreation",
                 RoleSessionName='ReconcilerSSM',
                 ExternalId=f'AccountPoolFactory-{DOMAIN_ACCOUNT_ID}'
             )
             creds = assumed['Credentials']
-            org_ssm = _boto3.client('ssm', region_name=REGION,
+            org_ssm = boto3.client('ssm', region_name=REGION,
                 aws_access_key_id=creds['AccessKeyId'],
                 aws_secret_access_key=creds['SecretAccessKey'],
                 aws_session_token=creds['SessionToken'])
@@ -158,19 +183,28 @@ def load_config():
             for param in resp['Parameters']:
                 parts = param['Name'].split('/')
                 if len(parts) >= 5:
-                    pool_name = parts[3]
+                    pn = parts[3]
                     key = parts[4]
-                    pools.setdefault(pool_name, {})[key] = param['Value']
+                    # Merge into existing pool entry (domain-side keys take precedence
+                    # for domain params; org-side keys like OUId are additive)
+                    pools.setdefault(pn, {})[key] = param['Value']
+            print(f'Merged org-side pool params: {list(pools.keys())}')
         except Exception as e:
-            print(f'Warning: could not load pool OU IDs from org SSM: {e}')
+            print(f'Warning: could not load org-side pool params from org SSM: {e}')
 
         config['pools'] = pools
-        print(f"Loaded {len(config)} SSM parameters, {len(pools)} pools: {list(pools.keys())}")
+
+        # Derive PoolName from pools dict if not set by legacy PoolManager param
+        if pools and 'PoolName' not in config:
+            config['PoolName'] = list(pools.keys())[0]
+        config.setdefault('PoolName', 'default')
+
+        print(f"Loaded config: {len(config)} keys, {len(pools)} pools: {list(pools.keys())}")
         return config
     except Exception as e:
         print(f"Warning: Failed to load SSM parameters: {e}")
         return {
-            'PoolName': 'AccountPoolFactory',
+            'PoolName': 'default',
             'NamePrefix': 'DataZone-Pool',
             'TargetOUId': '',
             'MinimumPoolSize': '5',
@@ -229,7 +263,12 @@ def lambda_handler(event, context):
     if pools:
         pool_ou_pairs = [(pn, pc.get('OUId', '')) for pn, pc in pools.items() if pc.get('OUId')]
         if not pool_ou_pairs:
-            pool_ou_pairs = [(pool_name, target_ou_id)]
+            # Pools are configured but OUId is missing — org SSM read likely failed.
+            # Fall back to scanning all pools without OU filtering (list_org_accounts
+            # handles empty ou_id by listing from root).
+            print(f"Warning: pools configured {list(pools.keys())} but no OUId found — "
+                  f"org SSM read may have failed. Scanning without OU filter.")
+            pool_ou_pairs = [(pn, '') for pn in pools.keys()]
     else:
         pool_ou_pairs = [(pool_name, target_ou_id)]
 
@@ -261,7 +300,7 @@ def lambda_handler(event, context):
     print(f"Identified {len(all_pool_accounts)} pool accounts")
 
     # Step 3: Reconcile with DynamoDB (includes parallel validation)
-    summary = reconcile_with_dynamodb(all_pool_accounts, all_org_accounts, dry_run)
+    summary = reconcile_with_dynamodb(all_pool_accounts, all_org_accounts, dry_run, org_client=org_client)
 
     # Step 4: Detect stale DynamoDB records
     stale_count = detect_stale_records(
@@ -543,11 +582,13 @@ def validate_available_account(account_id, item=None):
 # DynamoDB reconciliation (with parallel validation)
 # ============================================================
 
-def reconcile_with_dynamodb(pool_accounts, org_accounts, dry_run):
+def reconcile_with_dynamodb(pool_accounts, org_accounts, dry_run, org_client=None):
     """Reconcile pool accounts with DynamoDB records.
 
     Accounts that need validation (AVAILABLE state) are checked in parallel
     using a thread pool for speed.
+    org_client is the cross-account Organizations client, used to read PoolName tags
+    when creating ORPHANED records for untracked accounts.
     """
     summary = {
         'orphanedCreated': 0,
@@ -568,11 +609,12 @@ def reconcile_with_dynamodb(pool_accounts, org_accounts, dry_run):
             # No DynamoDB record — create ORPHANED
             # Read PoolName tag from org account to assign correct pool
             pool_from_tag = ''
-            try:
-                tags = get_account_tags(org_client, acct_id)
-                pool_from_tag = tags.get('PoolName', '')
-            except Exception:
-                pass
+            if org_client is not None:
+                try:
+                    tags = get_account_tags(org_client, acct_id)
+                    pool_from_tag = tags.get('PoolName', '')
+                except Exception:
+                    pass
             # Fall back to the pool name from the OU scan context
             pool_for_record = pool_from_tag or acct.get('poolName', '')
 

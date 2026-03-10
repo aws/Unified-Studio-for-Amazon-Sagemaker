@@ -2,15 +2,24 @@ import { CONFIG } from '../config.js';
 import { Auth } from '../auth.js';
 
 // ── API helper ────────────────────────────────────────────────────────────────
-const api = (path, opts = {}) =>
-  fetch(CONFIG.API_URL + path, {
+const api = (path, opts = {}) => {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  return fetch(CONFIG.API_URL + path, {
     ...opts,
+    signal: controller.signal,
     headers: { 'Content-Type': 'application/json', ...opts.headers },
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   }).then(r => {
+    clearTimeout(timeout);
     if (!r.ok) throw new Error(`HTTP ${r.status} ${r.statusText}`);
     return r.json();
+  }).catch(err => {
+    clearTimeout(timeout);
+    if (err.name === 'AbortError') throw new Error('Request timed out — credentials may be expired');
+    throw err;
   });
+};
 
 // ── DOM refs ──────────────────────────────────────────────────────────────────
 const navLinks      = document.querySelectorAll('.nav-link');
@@ -144,9 +153,8 @@ window.switchToAccounts = (poolName) => {
 };
 
 window.drillToState = (state) => {
-  switchView('accounts');
   if (filterState) filterState.value = state;
-  loadAccounts();
+  switchView('accounts');
 };
 
 btnReplenish.addEventListener('click', () => replenishPool(''));
@@ -196,14 +204,19 @@ function renderAccountsTable(accounts) {
     return;
   }
   accountsEmpty.hidden = true;
-  accountsTbody.innerHTML = accounts.map(a => `
+  accountsTbody.innerHTML = accounts.map(a => {
+    const smusLink = (a.state === 'ASSIGNED' && a.projectId && CONFIG.portalUrl)
+      ? `<a href="${CONFIG.portalUrl}/projects/${a.projectId}" target="_blank" class="smus-link" title="Open in SMUS">↗</a>`
+      : '';
+    return `
     <tr class="account-row" data-id="${a.accountId}" tabindex="0">
       <td><code>${a.accountId}</code><br><span class="account-name-sub">${a.accountName}</span></td>
       <td>${a.poolName}</td>
       <td><span class="state-badge state-${a.state.toLowerCase()}">${a.state.replace('_', ' ')}</span></td>
-      <td>${a.projectId ? `<code class="project-id">${a.projectId}</code>` : '<span class="muted">—</span>'}</td>
+      <td>${a.projectId ? `<code class="project-id">${a.projectId}</code> ${smusLink}` : '<span class="muted">—</span>'}</td>
       <td class="muted">${fmtDate(a.createdDate)}</td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 
   accountsTbody.querySelectorAll('.account-row').forEach(row => {
     row.addEventListener('click', () => openPanel(row.dataset.id));
@@ -527,6 +540,18 @@ autoRefreshToggle?.addEventListener('change', () => {
 autoRefreshInterval?.addEventListener('change', () => {
   if (autoRefreshToggle?.checked) startAutoRefresh();
 });
+
+// ── Credential health check ───────────────────────────────────────────────────
+const credBanner = document.getElementById('cred-banner');
+function checkCredentials() {
+  if (CONFIG.MOCK) return;
+  fetch(CONFIG.API_URL + '/health')
+    .then(r => r.json())
+    .then(h => { credBanner.hidden = h.ok; })
+    .catch(() => { /* network error — don't show banner, server may be restarting */ });
+}
+setTimeout(checkCredentials, 2000); // delay so page loads first
+setInterval(checkCredentials, 60000);
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 loadDashboard();

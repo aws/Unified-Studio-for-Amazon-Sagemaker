@@ -9,7 +9,7 @@ Parameters:
 
   ManagedPolicyArn:
     Type: String
-    Default: arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+    Default: arn:aws:iam::aws:policy/SageMakerStudioAdminIAMPermissiveExecutionPolicy
     Description: Managed policy ARN to attach to the role
 
 Resources:

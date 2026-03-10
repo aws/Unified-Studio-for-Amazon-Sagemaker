@@ -10,7 +10,7 @@ domain_name: "domain-03-06-2026-164120"
 project_role:
   enabled: true
   role_name: AmazonSageMakerProjectRole
-  managed_policy_arn: arn:aws:iam::aws:policy/AmazonSageMakerFullAccess
+  managed_policy_arn: arn:aws:iam::aws:policy/SageMakerStudioAdminIAMPermissiveExecutionPolicy
 
 pools:
   - name: default

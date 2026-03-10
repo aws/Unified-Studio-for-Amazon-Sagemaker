@@ -1,28 +1,12 @@
 # Account Pool Factory - Domain Admin Guide
 
-Audience: the person who manages the DataZone / SageMaker Unified Studio domain and runs the account pool.
-
-**Deployment order**: Deploy domain infrastructure first, then hand `ProvisionAccountRoleArn` to the org admin.
+[← Back to README](../README.md) | [Org Admin Guide](OrgAdminGuide.md) | [Architecture](Architecture.md) | [Security Guide](SecurityGuide.md) | [Testing Guide](TestingGuide.md)
 
 ---
 
-## What This Installs
+Audience: the person who manages the DataZone / SageMaker Unified Studio domain and runs the account pool.
 
-One CloudFormation stack (`AccountPoolFactory-Infrastructure`) in the domain account:
-
-| Resource | Purpose |
-|----------|---------|
-| ProvisionAccount Lambda | Creates AWS accounts via cross-account role in Org Admin. Reads pool config (OU, email, StackSets) from org SSM at runtime. |
-| PoolManager Lambda | Monitors pool size per pool, triggers replenishment, handles assignment/reclaim via DataZone events |
-| SetupOrchestrator Lambda | Configures new accounts (VPC, IAM, blueprints, EventBridge) |
-| DeprovisionAccount Lambda | Cleans accounts for REUSE strategy. Uses per-account `deployedStackSets` to protect infrastructure. |
-| AccountProvider Lambda | Handles DataZone account pool requests. Routes by project profile → pool via SSM mapping. |
-| AccountReconciler Lambda | Hourly health check — scans all pool OUs, validates per-account stack lists, triggers recycler |
-| AccountRecycler Lambda | Fixes FAILED/ORPHANED/CLEANING/ASSIGNED(force) accounts |
-| DynamoDB table | Tracks account states. Has `PoolIndex` GSI (poolName + state) for efficient per-pool queries. |
-| EventBridge central bus | Receives events from project accounts |
-| SNS topic | Alerts for failures and pool depletion |
-| SSM parameters | Per-pool config under `/AccountPoolFactory/Pools/{name}/` |
+**Deployment order**: Deploy Account Pool Factory infrastructure for the domain account first, then hand `ProvisionAccountRoleArn` to the org admin.
 
 ---
 
@@ -53,9 +37,9 @@ pools:
 
 ## Deployment
 
-**Step 1 — Deploy domain infrastructure first:**
+**Step 1 — Deploy Account Pool Factory infrastructure (domain account):**
 ```bash
-eval $(isengardcli credentials amirbo+3@amazon.com)
+# Switch to Domain account credentials
 ./scripts/02-domain-account/deploy/01-deploy.sh
 ```
 
@@ -73,9 +57,129 @@ This prints `ProvisionAccountRoleArn` — hand this to the org admin.
 ./scripts/02-domain-account/deploy/03-verify.sh
 ```
 
-To update Lambda code only (no CF stack change):
+**Step 5 — Seed the pool:**
 ```bash
-./scripts/02-domain-account/deploy/01-deploy.sh --lambdas-only
+./scripts/02-domain-account/deploy/04-seed-pool.sh
+```
+
+Each account takes ~6-8 minutes. Monitor progress:
+```bash
+python3 scripts/utils/monitor-pool.py 30
+```
+
+---
+
+## Uninstall
+
+```bash
+# Switch to Domain account credentials
+./scripts/02-domain-account/cleanup/cleanup.sh
+```
+
+---
+
+## Web UI
+
+Two browser apps for monitoring and operations:
+
+- Pool Console — pool health, account states, replenishment, reconciliation
+- Project Creator — create projects from the pool interactively
+
+**Mock mode** (no AWS needed, fake data):
+```bash
+./scripts/02-domain-account/deploy/05-start-ui.sh
+```
+
+**Live mode** (real AWS, domain account credentials required):
+```bash
+eval $(isengardcli credentials amirbo+3@amazon.com)
+./scripts/02-domain-account/deploy/05-start-ui.sh --live
+```
+
+Then open:
+- http://localhost:8080/pool-console/
+- http://localhost:8080/project-creator/
+
+The server hot-reloads on file changes. Press Ctrl+C to stop.
+
+---
+
+## Creating a Test Project
+
+The correct way to create a project from the pool (see Architecture.md Step 1 for why `userParameters` is required):
+
+```bash
+# Domain account credentials required
+python3 scripts/03-project-account/deploy/01-create-test-project.py           # create, keep
+python3 scripts/03-project-account/deploy/01-create-test-project.py --delete  # create + delete
+```
+
+---
+
+## Monitoring
+
+```bash
+# Pool status
+python3 scripts/utils/monitor-pool.py
+
+# Check pool status by state
+./scripts/utils/check-pool-status.sh
+
+# CloudWatch logs
+aws logs tail /aws/lambda/PoolManager --follow --region us-east-2
+aws logs tail /aws/lambda/SetupOrchestrator --follow --region us-east-2
+aws logs tail /aws/lambda/AccountReconciler --follow --region us-east-2
+
+# Subscribe to alerts
+aws sns subscribe \
+  --topic-arn arn:aws:sns:us-east-2:<domain-account-id>:AccountPoolFactory-Alerts \
+  --protocol email \
+  --notification-endpoint your-email@example.com \
+  --region us-east-2
+```
+
+---
+
+## Day-to-Day Operations
+
+### Trigger manual replenishment
+```bash
+aws lambda invoke --function-name PoolManager \
+  --payload '{"action":"force_replenishment"}' \
+  --cli-binary-format raw-in-base64-out --region us-east-2 /tmp/r.json
+```
+
+### Handle failed accounts
+```bash
+# Recycler fixes FAILED/ORPHANED automatically
+aws lambda invoke --function-name AccountRecycler \
+  --payload '{"recycleAll":true}' \
+  --cli-binary-format raw-in-base64-out --region us-east-2 /tmp/r.json
+
+# Force-recycle a specific account (works on AVAILABLE, ASSIGNED, CLEANING, FAILED, ORPHANED)
+aws lambda invoke --function-name AccountRecycler \
+  --payload '{"accountId":"<account-id>","force":true}' \
+  --cli-binary-format raw-in-base64-out --region us-east-2 /tmp/r.json
+```
+
+### Run reconciler manually
+```bash
+# Dry run
+aws lambda invoke --function-name AccountReconciler \
+  --payload '{"source":"manual","dryRun":true}' \
+  --cli-binary-format raw-in-base64-out --region us-east-2 /tmp/r.json
+
+# Full self-healing
+aws lambda invoke --function-name AccountReconciler \
+  --payload '{"source":"manual","dryRun":false,"autoRecycle":true,"autoReplenish":true}' \
+  --cli-binary-format raw-in-base64-out --region us-east-2 /tmp/r.json
+```
+
+### Update blueprints fleet-wide
+```bash
+aws lambda invoke --function-name AccountRecycler \
+  --payload '{"updateBlueprints":true}' \
+  --cli-binary-format raw-in-base64-out --region us-east-2 /tmp/r.json
 ```
 
 ---
@@ -106,112 +210,6 @@ aws ssm put-parameter --name /AccountPoolFactory/Pools/default/ReclaimStrategy \
 
 ---
 
-## Seeding the Pool
-
-```bash
-aws lambda invoke \
-  --function-name PoolManager \
-  --payload '{"action":"force_replenishment"}' \
-  --cli-binary-format raw-in-base64-out \
-  --region us-east-2 /tmp/response.json
-
-# Monitor
-python3 scripts/utils/monitor-pool.py 30
-```
-
-Each account takes ~6-8 minutes. The pool fills to `TargetPoolSize` automatically.
-
-To seed a specific pool only:
-```bash
-aws lambda invoke \
-  --function-name PoolManager \
-  --payload '{"action":"force_replenishment","poolName":"default"}' \
-  --cli-binary-format raw-in-base64-out \
-  --region us-east-2 /tmp/response.json
-```
-
----
-
-## Creating a Test Project
-
-The correct way to create a project from the pool (see Architecture.md Step 1 for why `userParameters` is required):
-
-```bash
-eval $(isengardcli credentials amirbo+3@amazon.com)
-python3 scripts/03-project-account/deploy/01-create-test-project.py           # create, keep
-python3 scripts/03-project-account/deploy/01-create-test-project.py --delete  # create + delete
-```
-
----
-
-## Monitoring
-
-```bash
-# Pool status
-python3 scripts/utils/monitor-pool.py
-
-# Check pool status by state
-./scripts/utils/check-pool-status.sh
-
-# CloudWatch logs
-aws logs tail /aws/lambda/PoolManager --follow --region us-east-2
-aws logs tail /aws/lambda/SetupOrchestrator --follow --region us-east-2
-aws logs tail /aws/lambda/AccountReconciler --follow --region us-east-2
-
-# Subscribe to alerts
-aws sns subscribe \
-  --topic-arn arn:aws:sns:us-east-2:994753223772:AccountPoolFactory-Alerts \
-  --protocol email \
-  --notification-endpoint your-email@example.com \
-  --region us-east-2
-```
-
----
-
-## Day-to-Day Operations
-
-### Trigger manual replenishment
-```bash
-aws lambda invoke --function-name PoolManager \
-  --payload '{"action":"force_replenishment"}' \
-  --cli-binary-format raw-in-base64-out --region us-east-2 /tmp/r.json
-```
-
-### Handle failed accounts
-```bash
-# Recycler fixes FAILED/ORPHANED automatically
-aws lambda invoke --function-name AccountRecycler \
-  --payload '{"recycleAll":true}' \
-  --cli-binary-format raw-in-base64-out --region us-east-2 /tmp/r.json
-
-# Force-recycle a specific account (works on AVAILABLE, ASSIGNED, CLEANING, FAILED, ORPHANED)
-aws lambda invoke --function-name AccountRecycler \
-  --payload '{"accountId":"123456789012","force":true}' \
-  --cli-binary-format raw-in-base64-out --region us-east-2 /tmp/r.json
-```
-
-### Run reconciler manually
-```bash
-# Dry run
-aws lambda invoke --function-name AccountReconciler \
-  --payload '{"source":"manual","dryRun":true}' \
-  --cli-binary-format raw-in-base64-out --region us-east-2 /tmp/r.json
-
-# Full self-healing
-aws lambda invoke --function-name AccountReconciler \
-  --payload '{"source":"manual","dryRun":false,"autoRecycle":true,"autoReplenish":true}' \
-  --cli-binary-format raw-in-base64-out --region us-east-2 /tmp/r.json
-```
-
-### Update blueprints fleet-wide
-```bash
-aws lambda invoke --function-name AccountRecycler \
-  --payload '{"updateBlueprints":true}' \
-  --cli-binary-format raw-in-base64-out --region us-east-2 /tmp/r.json
-```
-
----
-
 ## Account States Reference
 
 | State | Meaning | Next action |
@@ -227,9 +225,38 @@ aws lambda invoke --function-name AccountRecycler \
 
 ---
 
-## Uninstall
+## What This Installs
+
+One CloudFormation stack (`AccountPoolFactory-Infrastructure`) in the domain account:
+
+| Resource | Purpose |
+|----------|---------|
+| ProvisionAccount Lambda | Creates AWS accounts via cross-account role in Org Admin. Reads pool config (OU, email, StackSets) from org SSM at runtime. |
+| PoolManager Lambda | Monitors pool size per pool, triggers replenishment, handles assignment/reclaim via DataZone events |
+| SetupOrchestrator Lambda | Configures new accounts (VPC, IAM, blueprints, EventBridge) |
+| DeprovisionAccount Lambda | Cleans accounts for REUSE strategy. Uses per-account `deployedStackSets` to protect infrastructure. |
+| AccountProvider Lambda | Handles DataZone account pool requests. Routes by project profile → pool via SSM mapping. |
+| AccountReconciler Lambda | Hourly health check — scans all pool OUs, validates per-account stack lists, triggers recycler |
+| AccountRecycler Lambda | Fixes FAILED/ORPHANED/CLEANING/ASSIGNED(force) accounts |
+| DynamoDB table | Tracks account states. Has `PoolIndex` GSI (poolName + state) for efficient per-pool queries. |
+| EventBridge central bus | Receives events from project accounts |
+| SNS topic | Alerts for failures and pool depletion |
+| SSM parameters | Per-pool config under `/AccountPoolFactory/Pools/{name}/` |
+
+---
+
+## Additional Info
+
+### Update Lambda code only (no CF stack change)
+
+If you've only changed Lambda source code and don't need to update the CF stack:
 
 ```bash
-eval $(isengardcli credentials amirbo+3@amazon.com)
-./scripts/02-domain-account/cleanup/cleanup.sh
+./scripts/02-domain-account/deploy/01-deploy.sh --lambdas-only
+```
+
+### Seed a specific pool only
+
+```bash
+./scripts/02-domain-account/deploy/04-seed-pool.sh default
 ```

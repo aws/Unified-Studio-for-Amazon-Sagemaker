@@ -1,0 +1,75 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Enable IAM-compatible DataZone blueprints for project account
+
+Parameters:
+  DomainId:
+    Description: DataZone Domain ID
+    Type: String
+  
+  ManageAccessRoleArn:
+    Type: String
+    Description: IAM role ARN to manage access to environments
+  
+  ProvisioningRoleArn:
+    Description: IAM role ARN to provision environments
+    Type: String
+
+Resources:
+  # IAM Domain compatible blueprints only
+  ToolingLite:
+    Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EnvironmentBlueprintIdentifier: "ToolingLite"
+      ManageAccessRoleArn: !Ref ManageAccessRoleArn
+      ProvisioningRoleArn: !Ref ProvisioningRoleArn
+      RegionalParameters:
+        - Region: !Ref 'AWS::Region'
+          Parameters: {}
+      EnabledRegions:
+        - !Ref 'AWS::Region'
+
+  S3Bucket:
+    Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: ToolingLite
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EnvironmentBlueprintIdentifier: "S3Bucket"
+      ManageAccessRoleArn: !Ref ManageAccessRoleArn
+      ProvisioningRoleArn: !Ref ProvisioningRoleArn
+      RegionalParameters:
+        - Region: !Ref 'AWS::Region'
+          Parameters: {}
+      EnabledRegions:
+        - !Ref 'AWS::Region'
+
+  S3TableCatalog:
+    Type: AWS::DataZone::EnvironmentBlueprintConfiguration
+    DependsOn: S3Bucket
+    Properties:
+      DomainIdentifier: !Ref DomainId
+      EnvironmentBlueprintIdentifier: "S3TableCatalog"
+      ManageAccessRoleArn: !Ref ManageAccessRoleArn
+      ProvisioningRoleArn: !Ref ProvisioningRoleArn
+      RegionalParameters:
+        - Region: !Ref 'AWS::Region'
+          Parameters: {}
+      EnabledRegions:
+        - !Ref 'AWS::Region'
+
+Outputs:
+  ToolingLiteBlueprintId:
+    Description: ToolingLite Blueprint ID
+    Value: !GetAtt ToolingLite.EnvironmentBlueprintId
+  
+  S3BucketBlueprintId:
+    Description: S3Bucket Blueprint ID
+    Value: !GetAtt S3Bucket.EnvironmentBlueprintId
+  
+  S3TableCatalogBlueprintId:
+    Description: S3TableCatalog Blueprint ID
+    Value: !GetAtt S3TableCatalog.EnvironmentBlueprintId
+  
+  BlueprintCount:
+    Description: Number of blueprints enabled
+    Value: 3

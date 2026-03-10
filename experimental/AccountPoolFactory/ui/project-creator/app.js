@@ -85,6 +85,13 @@ let ownerSearchTimer;
 let ownerSelected = false;
 
 ownerSearch.addEventListener('input', () => {
+  // If user types after a selection, clear the selection
+  if (ownerSelected) {
+    ownerIdInput.value = '';
+    ownerTypeInput.value = '';
+    ownerSelected = false;
+    checkFormValid();
+  }
   clearTimeout(ownerSearchTimer);
   const q = ownerSearch.value.trim();
   if (!q) { hideDropdown(); return; }
@@ -134,18 +141,12 @@ function renderDropdown(owners) {
 function selectOwner(el) {
   ownerIdInput.value = el.dataset.id;
   ownerTypeInput.value = el.dataset.type;
-  ownerSearch.value = '';
+  // Show selected name directly in the input field
+  ownerSearch.value = el.dataset.name;
   ownerSearch.setAttribute('aria-expanded', 'false');
   ownerDropdown.hidden = true;
   ownerSelected = true;
-
-  const typeLabel = el.dataset.type === 'GROUP' ? 'Group' : 'User';
-  ownerChip.innerHTML = `
-    <span class="owner-badge ${el.dataset.type.toLowerCase()}">${typeLabel}</span>
-    <span>${el.dataset.name}</span>
-    <button type="button" class="chip-remove" aria-label="Remove owner">×</button>`;
-  ownerChip.hidden = false;
-  ownerChip.querySelector('.chip-remove').addEventListener('click', clearOwner);
+  ownerChip.hidden = true;
   checkFormValid();
 }
 
@@ -190,7 +191,9 @@ form.addEventListener('submit', async e => {
     region: regionSel.value,
     ownerId: ownerIdInput.value,
     ownerType: ownerTypeInput.value,
+    ownerName: ownerSearch.value.trim(),
     profileId: profileSel.value,
+    profileName: profilesData.find(p => p.id === profileSel.value)?.name || '',
   };
   showProgress();
   await runCreation(payload);
@@ -208,26 +211,32 @@ function showProgress() {
 }
 
 async function runCreation(payload) {
-  let projectId, portalUrl;
+  let projectId, portalUrl, resolvedAccountId;
   try {
-    // Step 1: create (server resolves account internally)
+    // Step 1+2: create project (server resolves account + creates project)
     setStep(stepAccount, 'active');
     stepAccountDetail.textContent = 'Selecting an available account from the pool…';
     const res = await api('/projects', { method: 'POST', body: payload });
     if (res.error) throw new Error(res.error);
     projectId = res.projectId;
     portalUrl = res.portalUrl;
+    resolvedAccountId = res.resolvedAccountId;
+
     setStep(stepAccount, 'done');
-    stepAccountDetail.textContent = `Account assigned: ${res.resolvedAccountId || 'pending'}`;
+    stepAccountDetail.textContent = `Account assigned: ${resolvedAccountId || '—'}`;
 
-    // Step 2: project created
-    setStep(stepProject, 'active');
-    stepProjectDetail.textContent = `Project ID: ${projectId}`;
-    await sleep(800);
+    // Step 2: project created — show portal link immediately
     setStep(stepProject, 'done');
+    stepProjectDetail.textContent = `Project ID: ${projectId}`;
 
-    // Step 3: poll environments
+    // Show portal link right away — user can navigate while environments deploy
+    openSmusBtn.href = `${portalUrl}/projects/${projectId}`;
+    openSmusBtn.textContent = 'Open in SageMaker Unified Studio →';
+    successActions.hidden = false;
+
+    // Step 3: poll environments (non-blocking — user can already navigate)
     setStep(stepEnvs, 'active');
+    stepEnvsDetail.textContent = 'Deploying environments in background…';
     await pollStatus(projectId, portalUrl);
   } catch (err) {
     showError(err.message || 'An unexpected error occurred.');
@@ -235,30 +244,31 @@ async function runCreation(payload) {
 }
 
 async function pollStatus(projectId, portalUrl) {
-  const maxAttempts = 40;
+  const maxAttempts = 80;  // 80 × 15s = 20 min
   for (let i = 0; i < maxAttempts; i++) {
-    await sleep(3000);
+    await sleep(15000);
     try {
       const status = await api(`/projects/${projectId}/status`);
       renderEnvList(status.environments || []);
       envList.hidden = false;
 
-      if (status.overallDeploymentStatus === 'COMPLETED') {
+      const overall = status.overallDeploymentStatus || '';
+      if (overall === 'SUCCESSFUL' || overall === 'SUCCEEDED' || overall === 'COMPLETED') {
         setStep(stepEnvs, 'done');
         stepEnvsDetail.textContent = 'All environments active.';
         showSuccess(projectId, portalUrl);
         return;
       }
-      if (status.overallDeploymentStatus === 'FAILED_DEPLOYMENT' ||
-          status.overallDeploymentStatus === 'FAILED_VALIDATION') {
-        throw new Error(`Deployment failed: ${status.overallDeploymentStatus}`);
+      if (overall === 'FAILED_DEPLOYMENT' || overall === 'FAILED_VALIDATION') {
+        throw new Error(`Deployment failed: ${overall}`);
       }
     } catch (err) {
       if (err.message.startsWith('Deployment failed')) throw err;
-      // transient fetch error — keep polling
     }
   }
-  throw new Error('Timed out waiting for environments to deploy.');
+  // Timeout — but project is already created, just show a note
+  setStep(stepEnvs, 'error');
+  stepEnvsDetail.textContent = 'Environments still deploying — check SMUS portal for status.';
 }
 
 function renderEnvList(envs) {
@@ -273,6 +283,7 @@ function showSuccess(projectId, portalUrl) {
   progressTitle.textContent = 'Project ready';
   progressSubtitle.textContent = `Project ${projectId} is live.`;
   openSmusBtn.href = `${portalUrl}/projects/${projectId}`;
+  openSmusBtn.textContent = 'Open in SageMaker Unified Studio →';
   successActions.hidden = false;
 }
 
@@ -299,6 +310,18 @@ function setStep(el, state) {
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── Credential health check ───────────────────────────────────────────────────
+const credBanner = document.getElementById('cred-banner');
+function checkCredentials() {
+  if (CONFIG.MOCK) return;
+  fetch(CONFIG.API_URL + '/health')
+    .then(r => r.json())
+    .then(h => { credBanner.hidden = h.ok; })
+    .catch(() => {});
+}
+setTimeout(checkCredentials, 2000);
+setInterval(checkCredentials, 60000);
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 loadProfiles();

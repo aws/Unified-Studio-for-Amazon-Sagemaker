@@ -1,0 +1,61 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'EventBridge rules to forward CloudFormation events to central event bus v1'
+
+Parameters:
+  CentralEventBusArn:
+    Type: String
+    Description: ARN of the central event bus in the domain account
+
+Resources:
+  EventBridgeForwarderRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: EventBridgeForwarderRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: PutEventsPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: events:PutEvents
+                Resource: !Ref CentralEventBusArn
+      Tags:
+        - Key: ManagedBy
+          Value: AccountPoolFactory
+
+  DataZoneStackEventsForwarder:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: DataZone-Stack-Events-Forwarder
+      Description: Forward DataZone CloudFormation stack events to central event bus
+      EventPattern:
+        source:
+          - aws.cloudformation
+        detail-type:
+          - CloudFormation Stack Status Change
+        detail:
+          stack-name:
+            - prefix: DataZone-
+      State: ENABLED
+      Targets:
+        - Arn: !Ref CentralEventBusArn
+          RoleArn: !GetAtt EventBridgeForwarderRole.Arn
+          Id: CentralEventBus
+
+Outputs:
+  TemplateVersion:
+    Description: Template version - bump to force SetupOrchestrator to update all deployed stacks
+    Value: "1"
+
+  RuleArn:
+    Description: ARN of the EventBridge rule
+    Value: !GetAtt DataZoneStackEventsForwarder.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-RuleArn'

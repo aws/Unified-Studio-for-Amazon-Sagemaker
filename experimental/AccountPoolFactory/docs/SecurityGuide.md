@@ -1,12 +1,16 @@
 # Account Pool Factory - Security Guide
 
+[← Back to README](../README.md) | [Org Admin Guide](OrgAdminGuide.md) | [Domain Admin Guide](DomainAdminGuide.md) | [Architecture](Architecture.md) | [Testing Guide](TestingGuide.md)
+
+---
+
 ## Security Architecture
 
 The Account Pool Factory implements three security controls:
 
 1. **Separation of Duties**: Organizations API access isolated in Org Admin account
 2. **Confused Deputy Protection**: ExternalId required for cross-account role assumptions
-3. **Least Privilege**: Each Lambda has minimum permissions for its function
+3. **Simplified IAM**: Single shared execution role for all domain account Lambdas
 
 ## Confused Deputy Protection
 
@@ -69,65 +73,44 @@ Trust policy in project accounts requires matching ExternalId:
 
 ### Organization Admin Account
 
-**ProvisionAccount Lambda Role**
+**AccountCreationRole** (`SMUS-AccountPoolFactory-AccountCreation`)
 
-Why: Only Lambda with Organizations API access. Isolated to prevent Setup Orchestrator from creating accounts.
+Assumed cross-account by the domain account's `LambdaExecutionRole`. Protected by ExternalId.
 
 Key permissions:
-- `organizations:CreateAccount` - Create new AWS accounts
-- `organizations:MoveAccount` - Move accounts to target OU
-- `sts:AssumeRole` - Assume OrganizationAccountAccessRole in new accounts
-- `cloudformation:CreateStackInstances` - Deploy StackSets to new accounts
+- `organizations:CreateAccount`, `MoveAccount`, `CloseAccount` — account lifecycle
+- `organizations:TagResource`, `ListTagsForResource`, `ListAccountsForParent` — tag-based identification
+- `cloudformation:CreateStackInstances`, `UpdateStackInstances` — deploy StackSets to project accounts
+- `ssm:GetParameter` — read pool config from org admin SSM
 
-Invocation control:
-```json
-{
-  "Principal": {
-    "AWS": "arn:aws:iam::DOMAIN_ACCOUNT:role/SMUS-AccountPoolFactory-PoolManager-Role"
-  },
-  "Action": "lambda:InvokeFunction"
-}
-```
-
-Why no ExternalId: Lambda runs in same account as Organizations API, no cross-account risk.
+Trust policy: single principal — `LambdaExecutionRole` ARN from the domain account, scoped with ExternalId.
 
 ### Domain Account
 
-**Pool Manager Lambda Role**
+**LambdaExecutionRole** (`SMUS-AccountPoolFactory-LambdaExecution-Role`)
 
-Why: Orchestrates pool operations, delegates account creation to ProvisionAccount.
-
-Key permissions:
-- `lambda:InvokeFunction` - Invoke ProvisionAccount and SetupOrchestrator
-- `dynamodb:Query|PutItem|UpdateItem|DeleteItem` - Manage account state
-- `sts:AssumeRole` - Assume OrganizationAccountAccessRole for stack verification only
-
-Why no Organizations API: Delegates to ProvisionAccount Lambda for separation of duties.
-
-**Setup Orchestrator Lambda Role**
-
-Why: Configures project accounts with DataZone resources.
+Single shared execution role for all AccountPoolFactory Lambdas (PoolManager, SetupOrchestrator, ProvisionAccount, DeprovisionAccount, AccountReconciler, AccountRecycler, AccountProvider).
 
 Key permissions:
-- `sts:AssumeRole` - Assume SMUS-AccountPoolFactory-DomainAccess with ExternalId
-- `dynamodb:Query|PutItem|UpdateItem` - Track setup progress
+- `dynamodb:Query|PutItem|UpdateItem|DeleteItem|GetItem` — account state table
+- `lambda:InvokeFunction` — invoke sibling Lambdas within the domain account
+- `sts:AssumeRole` on `AccountCreationRole` (org admin), `DomainAccess` (project accounts), `OrganizationAccountAccessRole` (new accounts)
+- `ssm:GetParameter*` — read pool and orchestrator config
+- `ram:*` — domain sharing
+- `datazone:*` — domain operations
+- `sns:Publish`, `cloudwatch:PutMetricData` — observability
 
-Why ExternalId required: All project account operations go through SMUS-AccountPoolFactory-DomainAccess role.
+Why one role: all Lambdas run in the same account and trust boundary. Separate roles per Lambda provide no meaningful security isolation — a compromised Lambda can invoke any other Lambda in the account regardless of its execution role.
 
-**Account Provider Lambda Role**
+**AccountResolutionRole** (`SMUS-AccountPoolFactory-AccountResolution-Role`)
 
-Why: Returns available accounts to SMUS API.
-
-Key permissions:
-- `dynamodb:Query` - Read-only access to account state
-
-Why most restrictive: No cross-account access, no write operations.
+Separate role trusted by `datazone.amazonaws.com` only. Allows DataZone to invoke the AccountProvider Lambda. Not used by any of our own Lambdas.
 
 ### Project Account
 
 **SMUS-AccountPoolFactory-DomainAccess Role**
 
-Created by: ProvisionAccount Lambda via StackSet during provisioning.
+Created by ProvisionAccount Lambda via StackSet during provisioning.
 
 Trust policy with ExternalId:
 ```json
@@ -145,14 +128,14 @@ Trust policy with ExternalId:
 ```
 
 Key permissions:
-- `cloudformation:CreateStack|DescribeStacks|DeleteStack` - Deploy DataZone stacks
-- `datazone:*` - Configure DataZone domain access
-- `ec2:*` - Create VPC for DataZone environments
-- `s3:CreateBucket` - Create blueprint artifact bucket
-- `ram:CreateResourceShare` - Share domain with project account
-- `iam:CreateRole|PassRole` - Create DataZone service roles
+- `cloudformation:CreateStack|DescribeStacks|DeleteStack` — deploy DataZone stacks
+- `datazone:*` — configure DataZone domain access
+- `ec2:*` — create VPC for DataZone environments
+- `s3:CreateBucket` — create blueprint artifact bucket
+- `ram:CreateResourceShare` — share domain with project account
+- `iam:CreateRole|PassRole` — create DataZone service roles
 
-Why ExternalId: Prevents confused deputy - Setup Orchestrator must know secret ExternalId to assume role.
+Why ExternalId: prevents confused deputy — SetupOrchestrator must supply the correct DataZone Domain ID to assume this role.
 
 ## Related Documentation
 
@@ -171,44 +154,14 @@ Multi-pool isolation: each Reconciler instance only processes accounts with a ma
 
 ## Updated IAM Roles
 
-### AccountCreationRole Trust Update (Org Admin Account)
+### AccountCreationRole Trust (Org Admin Account)
 
-The existing `SMUS-AccountPoolFactory-AccountCreation` role trust policy was updated to allow the AccountReconciler Lambda role as an additional trusted principal (alongside the existing Pool Manager role). No new role was created in the Org Admin account.
+Single trust statement — `LambdaExecutionRole` from the domain account with ExternalId. All domain account Lambdas share this role, so all cross-account org operations flow through one trusted principal.
 
-Additional permissions added:
-- `organizations:ListTagsForResource` — read tags on org accounts
-- `organizations:TagResource` — backfill tags on legacy accounts
-- `organizations:ListAccountsForParent` — OU-scoped account listing
-
-### ProvisionAccountRole Update (Org Admin Account)
-
-Additional permissions added:
-- `organizations:TagResource` — tag newly created accounts
-- `organizations:ListTagsForResource` — verify tags
-
-### AccountReconcilerRole (Domain Account)
-
-New role: `SMUS-AccountPoolFactory-AccountReconciler-Role`
-
-Permissions:
-- DynamoDB: Query, PutItem, UpdateItem, GetItem on AccountState table + indexes
-- STS: AssumeRole on `SMUS-AccountPoolFactory-AccountCreation` (Org Admin) and `SMUS-AccountPoolFactory-DomainAccess` (project accounts)
-- SSM: GetParameter on `/AccountPoolFactory/PoolManager/*`
-- CloudWatch: PutMetricData
-- SNS: Publish to AlertTopic
-- Lambda: InvokeFunction on AccountRecycler and PoolManager
-
-### AccountRecyclerRole (Domain Account)
-
-New role: `SMUS-AccountPoolFactory-AccountRecycler-Role`
-
-Permissions:
-- DynamoDB: Query, PutItem, UpdateItem, GetItem on AccountState table + indexes
-- Lambda: InvokeFunction on DeprovisionAccount, SetupOrchestrator, ProvisionAccount (cross-account)
-- STS: AssumeRole on `SMUS-AccountPoolFactory-DomainAccess` (project accounts)
-- SSM: GetParameter on `/AccountPoolFactory/PoolManager/*`
-- CloudWatch: PutMetricData
-- SNS: Publish to AlertTopic
+Permissions include:
+- `organizations:ListTagsForResource`, `TagResource`, `ListAccountsForParent` — tag-based account identification
+- `organizations:CreateAccount`, `MoveAccount`, `CloseAccount` — account lifecycle
+- CloudFormation StackSet create/update/delete — scoped to `s3://{org-bucket}/stacksets/*` templates only
 
 ## Org-Wide RAM Share
 

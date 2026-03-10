@@ -1,5 +1,9 @@
 # Account Pool Factory - Architecture
 
+[← Back to README](../README.md) | [Org Admin Guide](OrgAdminGuide.md) | [Domain Admin Guide](DomainAdminGuide.md) | [Security Guide](SecurityGuide.md) | [Testing Guide](TestingGuide.md) | [Project Structure](ProjectStructure.md)
+
+---
+
 ## The Problem We're Solving
 
 When a user creates a new project in **Amazon SageMaker Unified Studio**, that project requires a dedicated AWS account for security isolation. Each project gets its own account to ensure complete separation of resources, data, and permissions between different teams and workloads.
@@ -550,6 +554,14 @@ This means policy grants are automatically applied when SetupOrchestrator deploy
 
 
 
+---
+
+## Navigation
+
+[← Back to README](../README.md) | [Org Admin Guide](OrgAdminGuide.md) | [Domain Admin Guide](DomainAdminGuide.md) | [Security Guide](SecurityGuide.md) | [Testing Guide](TestingGuide.md)
+
+---
+
 ## Known Limitations
 
 ### ON_CREATE Not Supported with Account Pools
@@ -567,3 +579,98 @@ CloudFormation StackSets only allow one operation at a time per StackSet. When t
 ### Lambda Timeout for Large Pools
 
 The AccountRecycler has a 900s Lambda timeout. With 200+ accounts to process, it self-triggers near the timeout to continue in the next invocation. Each wave processes ~10 accounts concurrently (~5 min per wave for setup).
+
+---
+
+## Project Structure
+
+```
+AccountPoolFactory/
+├── org-config.yaml / domain-config.yaml     # Config files (copy from .template)
+│
+├── src/                                     # Lambda source code
+│   ├── account-provider/lambda_function_prod.py   # DataZone custom pool handler
+│   ├── pool-manager/lambda_function.py            # Pool monitoring + replenishment
+│   ├── setup-orchestrator/lambda_function.py      # Account setup (VPC, IAM, blueprints)
+│   ├── deprovision-account/lambda_function.py     # Account cleanup (REUSE strategy)
+│   ├── provision-account/lambda_function.py       # Account creation + StackSet deployment
+│   ├── account-reconciler/lambda_function.py      # Hourly drift detection
+│   └── account-recycler/lambda_function.py        # Self-healing fixer
+│
+├── templates/cloudformation/
+│   ├── 01-org-mgmt-account/deploy/
+│   │   └── SMUS-AccountPoolFactory-OrgAdmin.yaml  # IAM roles + S3 bucket CF stack
+│   ├── 02-domain-account/deploy/
+│   │   └── 01-infrastructure.yaml                 # DynamoDB, Lambdas, EventBridge, SNS, SSM
+│   ├── 03-project-account/deploy/                 # Bundled into SetupOrchestrator Lambda zip
+│   │   ├── 01-stackset-execution-role.yaml
+│   │   ├── 02-vpc-setup.yaml
+│   │   ├── 03-iam-roles.yaml
+│   │   ├── 04-eventbridge-rules.yaml
+│   │   ├── 05-project-role.yaml
+│   │   └── blueprint-enablement-iam.yaml
+│   └── stacksets/
+│       ├── idc/                                   # Uploaded to S3 by org admin deploy script
+│       │   ├── 01-domain-access.yaml
+│       │   ├── 02-vpc-setup.yaml
+│       │   ├── 03-iam-roles.yaml
+│       │   ├── 04-eventbridge-rules.yaml
+│       │   └── 05-project-role.yaml
+│       └── iam/                                   # IAM domain templates (not currently used)
+│           └── 06-blueprint-enablement.yaml
+│
+├── scripts/
+│   ├── 01-org-mgmt-account/deploy/
+│   │   ├── 01-deploy.sh       # Deploy governance stack + upload stackset templates + write SSM
+│   │   └── 02-verify.sh       # Verify CF stack, IAM roles, StackSets, target OU
+│   ├── 02-domain-account/deploy/
+│   │   ├── 01-deploy.sh                    # Deploy infrastructure stack + all Lambdas
+│   │   ├── 02-deploy-project-profile.sh    # Create/update DataZone project profile
+│   │   ├── 03-verify.sh                    # Verify stack, Lambdas, DynamoDB, domain, pool
+│   │   ├── 04-seed-pool.sh                 # Trigger initial pool replenishment
+│   │   └── 05-start-ui.sh                  # Start web UI (mock or live mode)
+│   ├── 01-org-mgmt-account/cleanup/cleanup.sh
+│   ├── 02-domain-account/cleanup/cleanup.sh
+│   └── utils/
+│       ├── resolve-config.sh               # Sourced by all scripts — resolves IDs from config
+│       ├── check-pool-status.sh            # Pool state counts + recent Lambda logs
+│       ├── check-account-state.sh          # Single account: DynamoDB state + CF stacks
+│       ├── invoke-reconciler.sh            # --dry-run, --auto-recycle, --account ID
+│       ├── invoke-recycler.sh              # --all, --account, --force, --update-blueprints
+│       ├── cleanup-failed-accounts.sh      # Remove FAILED accounts from DynamoDB
+│       └── clear-dynamodb-table.sh         # ⚠️ Wipe all pool state
+│
+├── ui/
+│   ├── mock-server.py          # Dev server (mock + live mode, hot reload)
+│   ├── pool-console/           # Pool health, account states, ops
+│   └── project-creator/        # Create projects interactively
+│
+└── docs/
+```
+
+## Lambda Packaging
+
+`SetupOrchestrator` zip bundles both the Python source and all CF templates from `03-project-account/deploy/` flat — the Lambda reads them directly at runtime via `open(template_path)`. The deploy script handles this automatically:
+
+```bash
+zip setup-orchestrator.zip -j src/setup-orchestrator/lambda_function.py
+zip setup-orchestrator.zip -j templates/cloudformation/03-project-account/deploy/*.yaml
+```
+
+## Scripts Reference
+
+| Script | Account | What it does |
+|--------|---------|-------------|
+| `01-org-mgmt-account/deploy/01-deploy.sh` | Org Admin | CF stack + S3 upload + SSM params + StackSet definitions |
+| `01-org-mgmt-account/deploy/02-verify.sh` | Org Admin | Verify CF stack, IAM roles, StackSets, OU |
+| `02-domain-account/deploy/01-deploy.sh [--lambdas-only]` | Domain | Infrastructure CF stack + all 7 Lambdas |
+| `02-domain-account/deploy/02-deploy-project-profile.sh` | Domain | Create/update DataZone project profile with account pool |
+| `02-domain-account/deploy/03-verify.sh` | Domain | Verify stack, Lambdas, DynamoDB, domain, pool, profile |
+| `02-domain-account/deploy/04-seed-pool.sh [pool-name]` | Domain | Trigger initial replenishment |
+| `02-domain-account/deploy/05-start-ui.sh [--live]` | Domain | Start web UI |
+| `utils/check-pool-status.sh` | Domain | Account counts by state + recent logs |
+| `utils/check-account-state.sh <account-id>` | Domain | DynamoDB record + CF stacks for one account |
+| `utils/invoke-reconciler.sh` | Domain | Run reconciler with options |
+| `utils/invoke-recycler.sh` | Domain | Run recycler with options |
+| `utils/cleanup-failed-accounts.sh` | Domain | Remove FAILED accounts to unblock replenishment |
+| `utils/clear-dynamodb-table.sh` | Domain | ⚠️ Wipe all pool state |

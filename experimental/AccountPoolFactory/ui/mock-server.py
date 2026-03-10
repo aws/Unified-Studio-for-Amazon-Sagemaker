@@ -308,6 +308,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             else:
                 self.send_js(
                     f'export const CONFIG = {{ MOCK: true, API_URL: "http://localhost:{PORT}/api",'
+                    f' portalUrl: "https://dzd-4h7jbz76qckoh5.datazone.us-east-2.on.aws",'
                     f' PORTAL_URL: "https://dzd-4h7jbz76qckoh5.datazone.us-east-2.on.aws" }};'
                 )
             return
@@ -356,6 +357,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    import socketserver
+    class ThreadedServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
+        daemon_threads = True
+
     mode_label = "LIVE (real AWS)" if LIVE_MODE else "MOCK (fake data)"
     print(f"Account Pool Factory UI — {mode_label}")
     print("=" * 44)
@@ -365,7 +370,7 @@ if __name__ == "__main__":
     print(f"  Project Creator : http://localhost:{PORT}/project-creator/")
     print(f"  Press Ctrl+C to stop")
     print()
-    server = http.server.HTTPServer(("", PORT), Handler)
+    server = ThreadedServer(("", PORT), Handler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

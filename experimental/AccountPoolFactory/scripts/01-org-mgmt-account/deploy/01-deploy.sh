@@ -16,8 +16,7 @@ source scripts/utils/resolve-config.sh org
 
 STACK_NAME="AccountPoolFactory-OrgAdmin"
 TEMPLATE="templates/cloudformation/01-org-mgmt-account/deploy/SMUS-AccountPoolFactory-OrgAdmin.yaml"
-STACKSET_TEMPLATE_DIR="templates/cloudformation/03-project-account/deploy"
-DOMAIN_ACCESS_STACKSET_TEMPLATE="templates/cloudformation/01-org-mgmt-account/deploy/03-domain-access-stackset.yaml"
+STACKSET_TEMPLATE_DIR="templates/cloudformation/stacksets/idc"
 
 # ── Arguments ────────────────────────────────────────────────────────────────
 
@@ -96,21 +95,12 @@ echo "📤 Step 2: Uploading StackSet templates to S3..."
 
 # Upload common templates (project-account deploy templates)
 # Map filenames to logical names matching the stackset_prefix convention
-upload_template() {
-    local src="$1"
-    local s3_key="$2"
-    aws s3 cp "$src" "s3://${BUCKET_NAME}/${s3_key}" --region "$REGION"  > /dev/null
-    echo "   ✓ $s3_key"
-}
-
-# domain-access.yaml — the DomainAccess StackSet template
-upload_template "$DOMAIN_ACCESS_STACKSET_TEMPLATE" "stacksets/common/domain-access.yaml"
-
-# Map project-account templates to common stackset names
-upload_template "$STACKSET_TEMPLATE_DIR/02-vpc-setup.yaml"          "stacksets/common/vpc.yaml"
-upload_template "$STACKSET_TEMPLATE_DIR/03-iam-roles.yaml"           "stacksets/common/iam-roles.yaml"
-upload_template "$STACKSET_TEMPLATE_DIR/04-eventbridge-rules.yaml"   "stacksets/common/eventbridge.yaml"
-upload_template "$STACKSET_TEMPLATE_DIR/05-blueprint-enablement.yaml" "stacksets/common/blueprints.yaml"
+# Upload all stackset templates from the stacksets/ folder, preserving filenames
+for tmpl in "$STACKSET_TEMPLATE_DIR"/*.yaml; do
+    fname=$(basename "$tmpl")
+    aws s3 cp "$tmpl" "s3://${BUCKET_NAME}/stacksets/common/${fname}" --region "$REGION" > /dev/null
+    echo "   ✓ stacksets/common/${fname}"
+done
 
 echo "✅ Common templates uploaded"
 echo ""
@@ -151,8 +141,9 @@ for entry in raw:
         s3_key = 'stacksets/common/' + tmpl
     s3_url = f'https://s3.{region}.amazonaws.com/{bucket}/{s3_key}'
 
-    # Derive StackSet name: prefix + TitleCase stem
+    # Derive StackSet name: prefix + TitleCase stem (strip leading NN- numeric prefix)
     stem = re.sub(r'\.yaml$', '', tmpl.split('/')[-1])
+    stem = re.sub(r'^\d+-', '', stem)  # strip leading numeric prefix e.g. "01-", "05-"
     # Convert kebab/snake to TitleCase
     title = ''.join(w.capitalize() for w in re.split(r'[-_]', stem))
     stackset_name = f'{prefix}-{title}'
@@ -211,9 +202,12 @@ def get_template_params(s3_key):
         # Fallback: regex scan
         return set(re.findall(r'^  (\w+):\s*$', r.stdout, re.MULTILINE))
 
+central_bus_arn = f'arn:aws:events:{region}:{domain_account_id}:event-bus/AccountPoolFactory-CentralBus'
+
 ALL_PARAMS = {
     'DomainAccountId': domain_account_id,
     'DomainId': domain_id,
+    'CentralEventBusArn': central_bus_arn,
 }
 
 for entry in entries:
@@ -221,10 +215,13 @@ for entry in entries:
     url  = entry['s3Url']
     s3_key = url.split(bucket + '/')[-1]
 
-    # Only pass parameters the template actually declares
+    # Only pass parameters the template actually declares AND that we can resolve at definition time.
+    # Parameters like ManageAccessRoleArn/ProvisioningRoleArn are per-account and passed at
+    # instance creation time by SetupOrchestrator — skip them here.
+    DEFINITION_TIME_PARAMS = {'DomainAccountId', 'DomainId', 'CentralEventBusArn'}
     declared = get_template_params(s3_key)
     params = [f'ParameterKey={k},ParameterValue={v}'
-              for k, v in ALL_PARAMS.items() if k in declared]
+              for k, v in ALL_PARAMS.items() if k in declared and k in DEFINITION_TIME_PARAMS]
 
     base_args = ['--template-url', url, '--capabilities', 'CAPABILITY_NAMED_IAM', '--region', region]
     if params:

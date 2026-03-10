@@ -193,6 +193,13 @@ def list_authorized_accounts(pool_name=None):
                     Limit=100
                 )
                 logger.info(f"  Used PoolIndex GSI for pool={pool_name}")
+                if not response.get('Items'):
+                    logger.warning(
+                        f"⚠️  PoolIndex returned 0 AVAILABLE accounts for pool='{pool_name}'. "
+                        f"This may mean DynamoDB records are missing the 'poolName' attribute. "
+                        f"Falling back to StateIndex (all pools)."
+                    )
+                    pool_name = None  # fall through to StateIndex below
             except Exception as e:
                 logger.warning(f"PoolIndex query failed ({e}), falling back to StateIndex")
                 pool_name = None  # fall through to StateIndex below

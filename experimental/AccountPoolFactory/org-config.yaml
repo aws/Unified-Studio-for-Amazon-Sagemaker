@@ -1,22 +1,49 @@
 # Org Admin Account Configuration
 # Run in account: 495869084367 (amirbo+1)
-# Only the minimum needed — IDs are resolved automatically by scripts.
+# IDs are resolved automatically by scripts.
 
-region: us-east-2
+region: us-east-2   # Region for org admin CF stack, StackSet control plane, S3 template bucket,
+                    # and the target region when deploying StackSet instances into project accounts.
+                    # Must match the domain account's region.
 
+# Prefix used to derive StackSet names from template filenames.
+# StackSet name = {stackset_prefix}-{template-stem-titlecased}
+# e.g. "SMUS-AccountPoolFactory" + "vpc-setup.yaml" → "SMUS-AccountPoolFactory-VpcSetup"
+# Must match the IAM policy prefix — do not change after initial deploy.
 stackset_prefix: "SMUS-AccountPoolFactory"
 
 pools:
   - name: default
     ou_name: "RetailBanking/CustomerAnalytics"
-    # ou_id: ou-n5om-otvkrtx2
+    # ou_id: ou-n5om-otvkrtx2   # uncomment to skip OU name lookup
 
     email_prefix: "amirbo+pool-test"
     email_domain: "amazon.com"
 
     account_tags:
       Pool: "default"
+      ManagedBy: "AccountPoolFactory"   # always added automatically
 
+    # Approved StackSets deployed into each project account, in wave order.
+    # Templates live in templates/cloudformation/03-project-account/deploy/
+    # and will be uploaded to S3 by the org admin deploy script.
+    #
+    # Wave semantics:
+    #   - Templates in the same wave deploy in parallel
+    #   - Waves execute in ascending order (wave 1 before wave 2, etc.)
+    #   - domain-access.yaml MUST be wave 1 (required before any other setup)
     stacksets:
-      - template: domain-access.yaml
-        wave: 1
+      - template: 01-domain-access.yaml        # deploys SMUS-AccountPoolFactory-DomainAccess role
+        wave: 1                               # REQUIRED first — all other stacks depend on this role
+
+      - template: 02-vpc-setup.yaml           # VPC + 3 private subnets + S3 bucket
+        wave: 2
+      - template: 03-iam-roles.yaml           # ManageAccessRole + ProvisioningRole
+        wave: 2
+      - template: 04-eventbridge-rules.yaml   # EventBridge forwarder to domain central bus
+        wave: 2
+      - template: 05-project-role.yaml        # AmazonSageMakerProjectRole (optional)
+        wave: 2
+
+      - template: 06-blueprint-enablement.yaml  # enables DataZone blueprints + policy grants
+        wave: 3                                 # MUST be after IAM roles (wave 2)

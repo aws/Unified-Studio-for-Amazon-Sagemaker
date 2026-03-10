@@ -1,106 +1,47 @@
 # Account Pool Factory for SageMaker Unified Studio
 
-An automated account provisioning and management system for SageMaker Unified Studio (SMUS/DataZone) that maintains a pool of pre-configured AWS accounts ready for instant project assignment.
+Maintains a pool of pre-configured AWS accounts ready for instant project assignment in SageMaker Unified Studio (SMUS/DataZone). When a user creates a project, an account is assigned in < 5 seconds instead of waiting 5-6 minutes for provisioning.
 
-## Overview
+**Key capabilities**: configurable pool size, self-healing reconciliation, IDC domain support, rolling blueprint updates.
 
-When a user creates a project in SageMaker Unified Studio, that project needs a dedicated AWS account. Setting one up takes 5-6 minutes. The Account Pool Factory eliminates that wait by maintaining a pool of pre-configured accounts that are ready before users need them.
+## Getting Started
 
-**Key capabilities**:
-- Pre-configured account pool (configurable size, default 10 accounts)
-- Instant project creation — account assigned in < 5 seconds
-- Self-healing: hourly reconciliation detects drift, recycler fixes it automatically
-- Supports IDC (Identity Center) domains — no IAM role configs needed at project creation
-- Rolling updates: push blueprint/config changes to all pool accounts without downtime
+Deployment involves two roles — domain admin deploys first, then hands off to org admin.
 
-## Quick Start
-
-Two minimal config files — one per account. IDs are resolved automatically from names.
-
-```bash
-cd experimental/AccountPoolFactory
-
-# Org Admin account config (only needs OU name)
-cp org-config.yaml org-config.yaml.bak  # or edit directly
-# Set: region, target_ou_name
-
-# Domain account config (only needs domain name + email settings)
-cp domain-config.yaml domain-config.yaml.bak  # or edit directly
-# Set: region, domain_name, email_prefix, email_domain, default_project_owner
-```
-
-Then follow the [Org Admin Guide](docs/OrgAdminGuide.md) and [Domain Admin Guide](docs/DomainAdminGuide.md).
+1. **Domain admin** — see [DomainAdminGuide.md](docs/DomainAdminGuide.md)
+2. **Org admin** — see [OrgAdminGuide.md](docs/OrgAdminGuide.md)
+3. **Domain admin** completes setup and seeds the pool — back to [DomainAdminGuide.md](docs/DomainAdminGuide.md)
 
 ## Documentation
 
 | Doc | What it covers |
 |-----|---------------|
-| [OrgAdminGuide.md](docs/OrgAdminGuide.md) | Org Admin: governance stack, IAM roles, StackSets |
-| [DomainAdminGuide.md](docs/DomainAdminGuide.md) | Domain Admin: deployment, pool config, monitoring, operations |
-| [TestingGuide.md](docs/TestingGuide.md) | End-to-end testing, lifecycle test, troubleshooting |
+| [OrgAdminGuide.md](docs/OrgAdminGuide.md) | Governance stack, IAM roles, StackSets |
+| [DomainAdminGuide.md](docs/DomainAdminGuide.md) | Deployment, pool config, monitoring, operations, UI |
 | [Architecture.md](docs/Architecture.md) | How the system works, component details |
 | [SecurityGuide.md](docs/SecurityGuide.md) | IAM roles, ExternalId, policy grants |
-| [ProjectStructure.md](docs/ProjectStructure.md) | Directory layout, scripts reference |
-| [scripts/README.md](scripts/README.md) | All scripts with usage and deploy order |
+| [TestingGuide.md](docs/TestingGuide.md) | End-to-end testing, troubleshooting |
 
 ## Architecture (3 accounts)
 
 ```
-Org Admin Account (495869084367)
+Org Admin Account
   └── ProvisionAccount Lambda — creates accounts, deploys StackSets
 
-Domain Account (994753223772)
-  ├── AccountProvider Lambda  — returns available accounts to DataZone
-  ├── PoolManager Lambda      — monitors pool, triggers replenishment
+Domain Account
+  ├── AccountProvider Lambda   — returns available accounts to DataZone
+  ├── PoolManager Lambda       — monitors pool, triggers replenishment
   ├── SetupOrchestrator Lambda — configures project accounts (VPC, IAM, blueprints)
   ├── AccountReconciler Lambda — hourly: detects drift, marks FAILED
-  ├── AccountRecycler Lambda  — fixes FAILED accounts, self-triggers until done
-  └── DynamoDB                — account state tracking
+  ├── AccountRecycler Lambda   — fixes FAILED accounts, self-triggers until done
+  └── DynamoDB                 — account state tracking
 
 Project Accounts (pool)
-  └── Pre-configured: VPC, IAM roles, 17 blueprints + policy grants, EventBridge
-```
-
-## Self-Healing Loop
-
-```
-EventBridge (hourly)
-  → AccountReconciler (detect-only: validates all AVAILABLE accounts)
-    → marks unhealthy accounts FAILED with reason (NEEDS_STACKSET / NEEDS_SETUP)
-  → AccountRecycler (fixes FAILED accounts in parallel)
-    → self-triggers near 900s timeout until all accounts are healthy
-```
-
-## Project Structure
-
-```
-AccountPoolFactory/
-├── config.yaml                          # Your environment config
-├── src/
-│   ├── account-provider/                # DataZone custom pool handler
-│   ├── pool-manager/                    # Pool monitoring + replenishment
-│   ├── setup-orchestrator/              # Account setup (VPC, IAM, blueprints)
-│   ├── deprovision-account/             # Account cleanup (REUSE strategy)
-│   ├── provision-account/               # Account creation (Org Admin)
-│   ├── account-reconciler/              # Drift detection
-│   └── account-recycler/               # Self-healing fixer
-├── templates/cloudformation/
-│   ├── 01-org-mgmt-account/deploy/      # Org Admin infra
-│   ├── 02-domain-account/deploy/        # Domain infra + Lambda config
-│   └── 03-project-account/deploy/       # Per-account stacks (VPC, IAM, blueprints)
-├── scripts/
-│   ├── 01-org-mgmt-account/deploy/      # Org Admin deploy scripts
-│   ├── 02-domain-account/deploy/        # Domain deploy scripts
-│   └── utils/                           # invoke-reconciler, invoke-recycler, check-pool-status, etc.
-└── tests/
-    ├── .test-create-from-pool-IDC.py    # End-to-end test (IDC domain)
-    └── setup/                           # Setup scripts
+  └── Pre-configured: VPC, IAM roles, blueprints, EventBridge
 ```
 
 ## Requirements
 
 - AWS Organizations enabled
-- SageMaker Unified Studio / DataZone domain (IDC or IAM mode)
-- Python 3.12+
-- AWS CLI
-- isengardcli (for credential switching between accounts)
+- SageMaker Unified Studio / DataZone domain (IDC mode)
+- Python 3.12+, AWS CLI, isengardcli

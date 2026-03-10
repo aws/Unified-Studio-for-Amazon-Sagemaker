@@ -181,18 +181,10 @@ Resources:
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
-          # ProvisionAccount Lambda — full access (create accounts, deploy StackSets)
+          # Shared LambdaExecutionRole — all domain account Lambdas use this role
           - Effect: Allow
             Principal:
               AWS: !Ref ProvisionAccountRoleArn
-            Action: sts:AssumeRole
-            Condition:
-              StringEquals:
-                'sts:ExternalId': !Sub 'AccountPoolFactory-${DomainAccountId}'
-          # LambdaExecutionRole — read-only org access for Reconciler
-          - Effect: Allow
-            Principal:
-              AWS: !Sub 'arn:aws:iam::${DomainAccountId}:role/SMUS-AccountPoolFactory-LambdaExecution-Role'
             Action: sts:AssumeRole
             Condition:
               StringEquals:
