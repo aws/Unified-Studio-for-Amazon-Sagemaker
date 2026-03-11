@@ -237,13 +237,13 @@ async function runCreation(payload) {
     // Step 3: poll environments (non-blocking — user can already navigate)
     setStep(stepEnvs, 'active');
     stepEnvsDetail.textContent = 'Deploying environments in background…';
-    await pollStatus(projectId, portalUrl);
+    await pollStatus(projectId, portalUrl, resolvedAccountId);
   } catch (err) {
     showError(err.message || 'An unexpected error occurred.');
   }
 }
 
-async function pollStatus(projectId, portalUrl) {
+async function pollStatus(projectId, portalUrl, accountId) {
   const maxAttempts = 80;  // 80 × 15s = 20 min
   for (let i = 0; i < maxAttempts; i++) {
     await sleep(15000);
@@ -256,7 +256,7 @@ async function pollStatus(projectId, portalUrl) {
       if (overall === 'SUCCESSFUL' || overall === 'SUCCEEDED' || overall === 'COMPLETED') {
         setStep(stepEnvs, 'done');
         stepEnvsDetail.textContent = 'All environments active.';
-        showSuccess(projectId, portalUrl);
+        showSuccess(projectId, portalUrl, accountId);
         return;
       }
       if (overall === 'FAILED_DEPLOYMENT' || overall === 'FAILED_VALIDATION') {
@@ -279,11 +279,25 @@ function renderEnvList(envs) {
     </div>`).join('');
 }
 
-function showSuccess(projectId, portalUrl) {
+function showSuccess(projectId, portalUrl, accountId) {
   progressTitle.textContent = 'Project ready';
   progressSubtitle.textContent = `Project ${projectId} is live.`;
   openSmusBtn.href = `${portalUrl}/projects/${projectId}`;
   openSmusBtn.textContent = 'Open in SageMaker Unified Studio →';
+
+  // Show assigned account number prominently
+  let badge = document.getElementById('account-badge');
+  if (!badge) {
+    badge = document.createElement('div');
+    badge.id = 'account-badge';
+    badge.className = 'account-badge';
+    successActions.insertBefore(badge, successActions.firstChild);
+  }
+  badge.innerHTML = `
+    <span class="account-badge-label">AWS Account Assigned</span>
+    <span class="account-badge-id">${accountId || '—'}</span>
+  `;
+
   successActions.hidden = false;
 }
 

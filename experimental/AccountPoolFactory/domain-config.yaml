@@ -3,6 +3,12 @@
 # Only the minimum needed — IDs are resolved automatically by scripts.
 
 region: us-east-2
+domain_account_id: "994753223772"
+domain_id: "dzd-4h7jbz76qckoh5"
+
+# Org Admin account ID — needed to construct the AccountCreation role ARN.
+# This is the AWS Organizations management account.
+org_admin_account_id: "495869084367"
 
 domain_name: "domain-03-06-2026-164120"
 # domain_id: dzd-4h7jbz76qckoh5

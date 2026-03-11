@@ -401,19 +401,10 @@ table { font-size: 0.875rem; }
 .panel-resize-handle:hover { background: var(--aws-orange); opacity: 0.4; }
 .detail-panel { position: relative; }
 
-/* ── StackSet table ── */
-.ss-table { font-size: 0.8rem; margin-top: 0.5rem; width: 100%; }
-.ss-table th { font-weight: 600; color: var(--pico-muted-color); padding: 0.2rem 0.4rem; }
-.ss-table td { padding: 0.25rem 0.4rem; vertical-align: middle; }
+/* ── StackSet list ── */
+.ss-list { font-size: 0.8rem; margin-top: 0.5rem; padding-left: 1.2rem; }
+.ss-list li { padding: 0.15rem 0; }
 .ss-name { font-size: 0.75rem; word-break: break-all; }
-.ss-badge {
-  font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.4rem;
-  border-radius: 3px; text-transform: uppercase; white-space: nowrap;
-}
-.ss-ok      { background: #d5f5e3; color: #1d8348; }
-.ss-warn    { background: #fef9e7; color: #d68910; }
-.ss-missing { background: #fdedec; color: #c0392b; }
-.ss-unknown { background: #f2f3f4; color: #7f8c8d; }
 
 /* ── Column filters ── */
 thead .col-filter {

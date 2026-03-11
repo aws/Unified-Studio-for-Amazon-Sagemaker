@@ -60,6 +60,7 @@ def lambda_handler(event, context):
     account_id = event.get('accountId')
     request_id = event.get('requestId', f"deprovision-{int(time.time())}")
     domain_id = event.get('domainId', DOMAIN_ID)
+    stacks_to_delete = event.get('stacksToDelete')  # optional explicit list
     
     if not account_id:
         return {
@@ -76,7 +77,7 @@ def lambda_handler(event, context):
         update_account_state(account_id, 'CLEANING', cleanupStartDate=datetime.now(timezone.utc).isoformat())
         
         # Perform cleanup
-        cleanup_result = cleanup_account(account_id, domain_id)
+        cleanup_result = cleanup_account(account_id, domain_id, stacks_to_delete=stacks_to_delete)
         
         if cleanup_result['success']:
             # Leave state as CLEANING — caller (recycler) decides next state.
@@ -143,8 +144,13 @@ def lambda_handler(event, context):
         }
 
 
-def cleanup_account(account_id: str, domain_id: str) -> Dict[str, Any]:
-    """Clean project account by deleting non-approved stacks"""
+def cleanup_account(account_id: str, domain_id: str, stacks_to_delete: list = None) -> Dict[str, Any]:
+    """Clean project account by deleting non-approved stacks.
+
+    If stacks_to_delete is provided, only those specific stack names are deleted
+    (used by cleanupStacks action to precisely remove direct CF stacks).
+    Otherwise all non-approved stacks are discovered and deleted.
+    """
     
     start_time = time.time()
     
@@ -166,12 +172,21 @@ def cleanup_account(account_id: str, domain_id: str) -> Dict[str, Any]:
         approved_stacks = []
         project_stacks = []
 
-        for stack in all_stacks:
-            if is_approved_stack(stack, deployed_stacksets):
-                approved_stacks.append(stack)
-            else:
-                project_stacks.append(stack)
-        
+        if stacks_to_delete is not None:
+            # Explicit list — only delete named stacks, treat everything else as approved
+            stack_name_set = set(stacks_to_delete)
+            for stack in all_stacks:
+                if stack['StackName'] in stack_name_set:
+                    project_stacks.append(stack)
+                else:
+                    approved_stacks.append(stack)
+            print(f"   Explicit stacksToDelete: targeting {len(project_stacks)} of {len(stack_name_set)} requested")
+        else:
+            for stack in all_stacks:
+                if is_approved_stack(stack, deployed_stacksets):
+                    approved_stacks.append(stack)
+                else:
+                    project_stacks.append(stack)
         print(f"   Approved stacks: {len(approved_stacks)}")
         print(f"   Project stacks to delete: {len(project_stacks)}")
         

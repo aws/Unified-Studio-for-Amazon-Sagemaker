@@ -6,6 +6,10 @@
 
 region: us-east-2
 
+# Org Admin account ID — needed to construct the AccountCreation role ARN.
+# This is the AWS Organizations management account.
+org_admin_account_id: "your-org-admin-account-id"
+
 # DataZone / SageMaker Unified Studio domain name.
 # The deploy script resolves this to a domain ID automatically.
 domain_name: "your-domain-name"

@@ -174,6 +174,35 @@ def lambda_handler(event, context):
             'results': results
         }
 
+    elif event.get('action') == 'cleanupStacks':
+        # Strip direct CF stacks from AVAILABLE accounts so reconciliation can
+        # re-setup them via the new StackSet-driven flow.
+        target_ids = event.get('accountIds') or (get_available_accounts() if event.get('all') else [])
+        print(f"cleanupStacks: targeting {len(target_ids)} AVAILABLE accounts")
+        offset = 0
+        while offset < len(target_ids):
+            remaining_ms = context.get_remaining_time_in_millis()
+            if remaining_ms < 120_000:
+                unprocessed = target_ids[offset:]
+                if unprocessed:
+                    print(f"Timeout approaching, {len(unprocessed)} accounts remain — self-triggering...")
+                    _self_trigger({'action': 'cleanupStacks', 'accountIds': unprocessed})
+                break
+            wave = target_ids[offset:offset + max_concurrent]
+            wave_results = cleanup_stacks_batch(wave, max_concurrent)
+            results.extend(wave_results)
+            offset += max_concurrent
+
+        succeeded = sum(1 for r in results if r['result'] == 'CLEANED')
+        failed = sum(1 for r in results if r['result'] == 'FAILED')
+        skipped = sum(1 for r in results if r['result'] == 'SKIPPED')
+        return {
+            'status': 'SUCCESS',
+            'summary': {'totalProcessed': len(results), 'succeeded': succeeded,
+                        'failed': failed, 'skipped': skipped},
+            'results': results
+        }
+
     elif account_id:
         result = recycle_account(account_id, max_retries, force=force)
         results.append(result)
@@ -315,6 +344,98 @@ def get_available_accounts():
     return account_ids
 
 
+# Direct CF stack names created by the old SetupOrchestrator (pre-StackSet migration)
+_DIRECT_CF_STACKS = [
+    'DataZone-Blueprints-{account_id}',  # delete first — depends on IAM outputs
+    'DataZone-VPC-{account_id}',
+    'DataZone-IAM-{account_id}',
+    'DataZone-EventBridge-{account_id}',
+    'DataZone-ProjectRole-{account_id}',
+]
+
+
+def cleanup_stacks_batch(account_ids, max_concurrent):
+    """Delete direct CF stacks from AVAILABLE accounts in parallel."""
+    results = []
+    with ThreadPoolExecutor(max_workers=max_concurrent) as executor:
+        futures = {executor.submit(_cleanup_stacks_one, aid): aid for aid in account_ids}
+        for future in as_completed(futures):
+            aid = futures[future]
+            try:
+                results.append(future.result())
+            except Exception as e:
+                print(f"cleanupStacks error for {aid}: {e}")
+                results.append({'accountId': aid, 'result': 'FAILED', 'error': str(e)})
+    return results
+
+
+def _cleanup_stacks_one(account_id):
+    """Delete the 5 direct CF stacks from one AVAILABLE account, then reset DynamoDB."""
+    item = get_latest_record(account_id)
+    if not item:
+        return {'accountId': account_id, 'result': 'SKIPPED', 'error': 'No DynamoDB record'}
+
+    state = item.get('state', {}).get('S', '')
+    if state != 'AVAILABLE':
+        return {'accountId': account_id, 'result': 'SKIPPED',
+                'error': f'State is {state}, only AVAILABLE accounts are cleaned'}
+
+    stacks_to_delete = [s.format(account_id=account_id) for s in _DIRECT_CF_STACKS]
+
+    print(f"  [{account_id}] Invoking DeprovisionAccount with stacksToDelete={stacks_to_delete}")
+    try:
+        result = invoke_lambda_sync(
+            DEPROVISION_FUNCTION,
+            {
+                'accountId': account_id,
+                'requestId': f'cleanup-{int(time.time())}',
+                'domainId': DOMAIN_ID,
+                'stacksToDelete': stacks_to_delete,
+            }
+        )
+        if result.get('status') not in ('SUCCESS', 'COMPLETED'):
+            raise Exception(f"DeprovisionAccount returned: {result.get('status')} — {result.get('message','')}")
+    except Exception as e:
+        print(f"  [{account_id}] DeprovisionAccount failed: {e}")
+        return {'accountId': account_id, 'result': 'FAILED', 'error': str(e)}
+
+    # Reset DynamoDB record — state stays AVAILABLE, setup fields cleared
+    _reset_dynamodb_record(account_id, item)
+    print(f"  [{account_id}] Stacks deleted and DynamoDB reset")
+    return {'accountId': account_id, 'result': 'CLEANED'}
+
+
+def _reset_dynamodb_record(account_id, item):
+    """Clear setup-related fields from DynamoDB, preserving identity fields.
+
+    Fields removed: completedSteps, resources, deployedStackSets, setupCompleteDate,
+    setupDuration, errorMessage, failedStep, reconciliationNote, retryCount.
+    State stays AVAILABLE — reconciler will detect missing stacks → NEEDS_SETUP.
+    """
+    fields_to_remove = [
+        'completedSteps', 'resources', 'deployedStackSets',
+        'setupCompleteDate', 'setupDuration', 'errorMessage',
+        'failedStep', 'reconciliationNote', 'cleanupStartDate',
+        'cleanupCompletedDate', 'recycledDate',
+    ]
+    remove_expr = 'REMOVE ' + ', '.join(fields_to_remove)
+    try:
+        dynamodb.update_item(
+            TableName=DYNAMODB_TABLE_NAME,
+            Key={
+                'accountId': item['accountId'],
+                'timestamp': item['timestamp'],
+            },
+            UpdateExpression=remove_expr + ' SET retryCount = :zero, lastReconciled = :now',
+            ExpressionAttributeValues={
+                ':zero': {'N': '0'},
+                ':now': {'S': datetime.now(timezone.utc).isoformat()},
+            }
+        )
+    except Exception as e:
+        print(f"  [{account_id}] Warning: DynamoDB reset failed: {e}")
+
+
 def update_blueprints_batch(account_ids, max_concurrent):
     """Invoke SetupOrchestrator in updateBlueprints mode for a batch of accounts"""
     results = []
@@ -430,6 +551,18 @@ def recycle_account(account_id, max_retries, force=False):
         return handle_failed(account_id, item, max_retries, retry_count, force)
     elif current_state == 'ORPHANED':
         return handle_orphaned(account_id, item, max_retries)
+    elif current_state == 'PROVISIONED':
+        # PROVISIONED → SETTING_UP → AVAILABLE (no deprovision needed)
+        print(f"  [{account_id}] Setting up PROVISIONED account")
+        update_state_simple(account_id, item, 'SETTING_UP', 'Promoting PROVISIONED to AVAILABLE')
+        try:
+            run_setup(account_id)
+            return {'accountId': account_id, 'previousState': 'PROVISIONED',
+                    'result': 'SETUP_TRIGGERED', 'newState': 'SETTING_UP'}
+        except Exception as e:
+            mark_failed(account_id, item, str(e), 'setup')
+            return {'accountId': account_id, 'previousState': 'PROVISIONED',
+                    'result': 'FAILED', 'error': str(e)}
     else:
         return {'accountId': account_id, 'previousState': current_state,
                 'result': 'SKIPPED', 'error': f'Cannot recycle from state {current_state}'}

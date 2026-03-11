@@ -249,18 +249,14 @@ PORTAL_URL=$(echo "$DOMAIN_INFO" | python3 -c \
 
 export DOMAIN_ID DOMAIN_NAME ROOT_DOMAIN_UNIT_ID PORTAL_URL
 
-# Org admin account — from AccountPoolFactory-OrgAdmin stack output
-ACCOUNT_CREATION_ROLE_ARN=$(aws cloudformation describe-stacks \
-    --stack-name AccountPoolFactory-OrgAdmin \
-    --region "$REGION" \
-    --query 'Stacks[0].Outputs[?OutputKey==`AccountCreationRoleArn`].OutputValue' \
-    --output text 2>/dev/null || echo "")
+# Org admin account — read from domain-config.yaml, construct role ARN directly
+ORG_ADMIN_ACCOUNT_ID=$(_yaml_get "$CONFIG_FILE" "org_admin_account_id" "")
 
-if [ -n "$ACCOUNT_CREATION_ROLE_ARN" ] && [ "$ACCOUNT_CREATION_ROLE_ARN" != "None" ]; then
-    ORG_ADMIN_ACCOUNT_ID=$(echo "$ACCOUNT_CREATION_ROLE_ARN" | sed 's|arn:aws:iam::\([0-9]*\):.*|\1|')
+if [ -n "$ORG_ADMIN_ACCOUNT_ID" ] && [ "$ORG_ADMIN_ACCOUNT_ID" != "your-org-admin-account-id" ]; then
+    ACCOUNT_CREATION_ROLE_ARN="arn:aws:iam::${ORG_ADMIN_ACCOUNT_ID}:role/SMUS-AccountPoolFactory-AccountCreation"
     EXTERNAL_ID="AccountPoolFactory-${DOMAIN_ACCOUNT_ID}"
 else
-    echo "⚠️  AccountPoolFactory-OrgAdmin stack not found — deploy org admin first"
+    echo "⚠️  org_admin_account_id not set in domain-config.yaml — set it to the Org Admin account ID"
     ACCOUNT_CREATION_ROLE_ARN=""
     ORG_ADMIN_ACCOUNT_ID=""
     EXTERNAL_ID=""

@@ -235,7 +235,7 @@ def handle(method, path, body, config):
                 except Exception as e:
                     print(f"  ⚠️ Could not add owner: {e}")
 
-            portal_url = config.get("portalUrl", "")
+            portal_url = config.get("portalUrl", "").replace("datazone.", "sagemaker.")
             return 200, {
                 "projectId": project_id,
                 "resolvedAccountId": account_id,
@@ -358,60 +358,7 @@ def handle(method, path, body, config):
                 try: deployed = json.loads(deployed)
                 except: deployed = [deployed]
 
-            stacksets = []
-            try:
-                # Get org admin role ARN from CF stack outputs
-                org_role_arn = None
-                try:
-                    cf_local = boto3.client("cloudformation", region_name=region)
-                    cf_resp = cf_local.describe_stacks(StackName="AccountPoolFactory-OrgAdmin")
-                    for out in cf_resp["Stacks"][0].get("Outputs", []):
-                        if out["OutputKey"] == "AccountCreationRoleArn":
-                            org_role_arn = out["OutputValue"]
-                            break
-                except Exception:
-                    pass
-
-                if org_role_arn:
-                    sts_client = boto3.client("sts", region_name=region)
-                    assumed = sts_client.assume_role(
-                        RoleArn=org_role_arn,
-                        RoleSessionName="UI-StackSetCheck",
-                        ExternalId=f"AccountPoolFactory-{config.get('accountId','')}"
-                    )
-                    creds = assumed["Credentials"]
-                    cf_org = boto3.client(
-                        "cloudformation", region_name=region,
-                        aws_access_key_id=creds["AccessKeyId"],
-                        aws_secret_access_key=creds["SecretAccessKey"],
-                        aws_session_token=creds["SessionToken"]
-                    )
-                    for ss_name in deployed:
-                        try:
-                            inst = cf_org.describe_stack_instance(
-                                StackSetName=ss_name,
-                                StackInstanceAccount=account_id,
-                                StackInstanceRegion=region
-                            )
-                            si = inst["StackInstance"]
-                            stacksets.append({
-                                "name": ss_name,
-                                "status": si.get("Status", "UNKNOWN"),
-                                "statusReason": si.get("StatusReason", ""),
-                                "stackId": si.get("StackId", ""),
-                            })
-                        except Exception as e:
-                            stacksets.append({
-                                "name": ss_name,
-                                "status": "NOT_FOUND",
-                                "statusReason": str(e),
-                                "stackId": "",
-                            })
-                else:
-                    stacksets = [{"name": s, "status": "UNKNOWN", "statusReason": "Org role not found", "stackId": ""} for s in deployed]
-            except Exception as e:
-                stacksets = [{"name": s, "status": "ERROR", "statusReason": str(e), "stackId": ""} for s in deployed]
-
+            stacksets = [{"name": s} for s in deployed]
             return 200, {"accountId": account_id, "stacksets": stacksets}
 
         # Plain account detail

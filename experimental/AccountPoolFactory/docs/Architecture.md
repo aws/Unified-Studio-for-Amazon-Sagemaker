@@ -274,6 +274,8 @@ This section describes each account type, the resources deployed in it, and how 
 - DynamoDB table: `AccountPoolFactory-AccountState`
 - EventBridge central bus: `AccountPoolFactory-CentralBus`
 - SNS topic: `AccountPoolFactory-Alerts`
+- SQS queue: `AccountPoolFactory-SetupQueue` (controls SetupOrchestrator parallelism)
+- SQS DLQ: `AccountPoolFactory-SetupQueue-DLQ` (captures failed setup jobs after 3 attempts)
 - SSM parameters: `/AccountPoolFactory/*` (configuration)
 - Four Lambda functions:
   - Account Provider Lambda
@@ -311,7 +313,7 @@ This section describes each account type, the resources deployed in it, and how 
 4. Blocks replenishment if failed accounts exist
 5. Invokes ProvisionAccount Lambda (cross-account) to create new accounts
 6. Creates DynamoDB records for new accounts (state: SETTING_UP)
-7. Invokes Setup Orchestrator Lambda (async) to configure accounts
+7. Enqueues setup jobs to `AccountPoolFactory-SetupQueue` — SetupOrchestrator picks them up at controlled concurrency
 8. Handles account deletion and reclamation:
    - DELETE strategy: Removes account from pool (account still exists in Organizations)
    - REUSE strategy: Invokes DeprovisionAccount Lambda to clean and recycle account
@@ -319,7 +321,8 @@ This section describes each account type, the resources deployed in it, and how 
 **Why it exists**: This is the orchestrator for pool-level operations. It monitors pool health, triggers replenishment, and manages the account lifecycle including account recycling.
 
 **IAM Permissions**:
-- Lambda: InvokeFunction (ProvisionAccount in Org Admin, Setup Orchestrator and DeprovisionAccount in Domain)
+- Lambda: InvokeFunction (ProvisionAccount in Org Admin, DeprovisionAccount in Domain)
+- SQS: SendMessage (AccountPoolFactory-SetupQueue)
 - DynamoDB: Query, PutItem, UpdateItem, DeleteItem
 - SNS: Publish
 - CloudWatch: PutMetricData
@@ -333,12 +336,17 @@ This section describes each account type, the resources deployed in it, and how 
 
 **Lambda: Setup Orchestrator**
 
-**Trigger**: Async invocation from Pool Manager Lambda or AccountRecycler
+**Trigger**: SQS queue `AccountPoolFactory-SetupQueue` (event source mapping, `BatchSize=1`, `MaxConcurrency=10`)
+
+**Parallelism control**: The SQS event source mapping `MaxConcurrency` setting is the single knob controlling how many SetupOrchestrator instances run simultaneously. Default is 10 (processes 200 accounts in ~2.5 hours). Adjustable via SSM parameter `/AccountPoolFactory/PoolManager/SetupQueueMaxConcurrency` without redeployment.
+
+**Why SQS instead of direct invoke**: Previously the Recycler invoked SetupOrchestrator synchronously, holding a thread open for 6-8 minutes per account. With 10 concurrent threads this caused Lambda throttling (`TooManyRequestsException`) which incorrectly incremented retry counters and permanently stuck accounts. SQS decouples the enqueue from execution — Recycler/PoolManager enqueue instantly, SQS delivers at the configured rate.
 
 **What it does**:
-1. Validates account exists in DynamoDB
-2. Checks for idempotency (skips if already AVAILABLE)
-3. Executes 2-wave configuration workflow:
+1. Unwraps SQS record (or accepts direct invocation for backward compatibility)
+2. Validates account exists in DynamoDB
+3. Checks for idempotency (skips if already AVAILABLE)
+4. Executes 2-wave configuration workflow:
    - Wave 1: Foundation + Domain Access (parallel, ~2.5 min)
      - VPC deployment with 3 private subnets
      - IAM roles (ManageAccessRole, ProvisioningRole)
@@ -349,9 +357,9 @@ This section describes each account type, the resources deployed in it, and how 
    - Wave 2: Blueprint Enablement (~3 min)
      - Enable 17 DataZone blueprints with VPC/S3 regional parameters
      - Deploy 17 `AWS::DataZone::PolicyGrant` resources (CREATE_ENVIRONMENT_FROM_BLUEPRINT)
-4. Supports `mode: updateBlueprints` — updates only the Blueprints stack (VPC/S3 params + grants) without deprovisioning
-5. Updates DynamoDB with progress after each wave
-6. Marks account as AVAILABLE when complete
+5. Supports `mode: updateBlueprints` — updates only the Blueprints stack without deprovisioning
+6. Updates DynamoDB with progress after each wave
+7. Marks account as AVAILABLE when complete
 
 **Why it exists**: This Lambda handles the complex multi-step configuration workflow. By using wave-based parallel execution and eliminating false dependencies, it reduces setup time from 10-12 minutes to 5.5 minutes.
 
@@ -510,6 +518,8 @@ The Account Pool Factory includes two additional Lambda functions for self-heali
 
 **IAM Role**: `SMUS-AccountPoolFactory-AccountRecycler-Role`
 
+**Throttle resilience**: Transient `TooManyRequestsException` errors on Lambda invocations do not increment the retry counter. The account's retry count is reset and the next reconciler cycle retries cleanly.
+
 ### Self-Healing Loop
 
 ```
@@ -521,12 +531,15 @@ EventBridge (rate: 1 hour)
         ├─ Marks unhealthy → FAILED (with reason)
         └─ autoRecycle=true → invokes AccountRecycler
                 │
-                └─► AccountRecycler (batch, 10 concurrent)
+                └─► AccountRecycler
                       ├─ Batch StackSet fix for NEEDS_STACKSET accounts
-                      ├─ SetupOrchestrator for NEEDS_SETUP accounts
-                      ├─ Full deprovision+setup for CLEANING/ORPHANED
-                      ├─ Self-triggers near 900s if work remains
-                      └─ All accounts → AVAILABLE
+                      ├─ Enqueues NEEDS_SETUP / CLEANING / ORPHANED accounts → SQS
+                      └─ Returns immediately (no thread blocking)
+                                │
+                                └─► SQS AccountPoolFactory-SetupQueue
+                                      │  (MaxConcurrency=10, one message per account)
+                                      └─► SetupOrchestrator × N (parallel, controlled)
+                                            └─► All accounts → AVAILABLE
 ```
 
 ## Domain Access: Org-Wide RAM Share

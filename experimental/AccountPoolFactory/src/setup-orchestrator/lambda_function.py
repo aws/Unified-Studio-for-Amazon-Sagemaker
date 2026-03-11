@@ -204,22 +204,195 @@ def get_account_state(account_id: str) -> Optional[Dict]:
 # update_trust_policy() function removed - duplicate, already defined below
 
 
-def get_account_state(account_id: str) -> Optional[Dict]:
-    """Get current account state from DynamoDB"""
-    try:
-        response = dynamodb.query(
-            TableName=DYNAMODB_TABLE_NAME,
-            KeyConditionExpression='accountId = :accountId',
-            ExpressionAttributeValues={':accountId': {'S': account_id}},
-            ScanIndexForward=False,
-            Limit=1
+# get_account_state() second definition removed - duplicate
+
+
+# deploy_stackset_instance() function removed
+
+
+# ============================================================
+# StackSet-driven deployment helpers (T6 migration)
+# ============================================================
+
+ORG_ADMIN_ACCOUNT_ID = os.environ.get('ORG_ADMIN_ACCOUNT_ID', '')
+EXTERNAL_ID = os.environ.get('EXTERNAL_ID', f'AccountPoolFactory-{DOMAIN_ACCOUNT_ID}')
+
+
+def _get_org_cf_client():
+    """Assume AccountCreationRole in org-admin, return CF client scoped there."""
+    role_arn = f"arn:aws:iam::{ORG_ADMIN_ACCOUNT_ID}:role/SMUS-AccountPoolFactory-AccountCreation"
+    creds = sts.assume_role(
+        RoleArn=role_arn,
+        RoleSessionName='SetupOrchestrator-StackSet',
+        ExternalId=EXTERNAL_ID,
+        DurationSeconds=900
+    )['Credentials']
+    return boto3.client(
+        'cloudformation', region_name=REGION,
+        aws_access_key_id=creds['AccessKeyId'],
+        aws_secret_access_key=creds['SecretAccessKey'],
+        aws_session_token=creds['SessionToken']
+    )
+
+
+def _add_stackset_instance(org_cf, stackset_name: str, account_id: str, params: list,
+                           max_retries: int = 30, base_delay: float = 30.0) -> str:
+    """Add a StackSet instance for account_id. Returns operation ID.
+    
+    Retries on OperationInProgressException with flat delay + jitter since
+    a StackSet can only have one operation at a time. StackSet operations
+    typically complete in 30-60s.
+    If a failed instance exists, deletes it first then re-adds.
+    """
+    kwargs = dict(
+        StackSetName=stackset_name,
+        Accounts=[account_id],
+        Regions=[REGION],
+        OperationPreferences={
+            'FailureToleranceCount': 0,
+            'MaxConcurrentCount': 1,
+        }
+    )
+    if params:
+        kwargs['ParameterOverrides'] = params
+
+    import random
+    for attempt in range(max_retries):
+        try:
+            resp = org_cf.create_stack_instances(**kwargs)
+            return resp['OperationId']
+        except org_cf.exceptions.OperationInProgressException:
+            if attempt == max_retries - 1:
+                raise
+            delay = base_delay + random.uniform(0, 15)
+            print(f"  ⏳ StackSet {stackset_name} busy, retry {attempt+1}/{max_retries} in {delay:.0f}s")
+            time.sleep(delay)
+        except Exception as e:
+            err_str = str(e)
+            if 'StackInstanceExists' in err_str:
+                # Check if instance is in a failed/outdated state — delete and retry
+                try:
+                    inst = org_cf.describe_stack_instance(
+                        StackSetName=stackset_name, StackInstanceAccount=account_id,
+                        StackInstanceRegion=REGION
+                    )['StackInstance']
+                    inst_status = inst.get('Status', '')
+                    stack_status = inst.get('StackInstanceStatus', {}).get('DetailedStatus', '')
+                    if inst_status in ('OUTDATED',) or stack_status in ('FAILED', 'CANCELLED'):
+                        print(f"  🔄 Deleting {inst_status}/{stack_status} instance for {account_id} in {stackset_name}")
+                        del_resp = org_cf.delete_stack_instances(
+                            StackSetName=stackset_name, Accounts=[account_id],
+                            Regions=[REGION], RetainStacks=False,
+                            OperationPreferences={'FailureToleranceCount': 0, 'MaxConcurrentCount': 1}
+                        )
+                        _wait_stackset_operation(org_cf, stackset_name, del_resp['OperationId'], timeout=300)
+                        continue  # retry the create
+                    else:
+                        print(f"  ℹ️ StackSet instance already exists ({inst_status}) for {account_id} in {stackset_name}")
+                        return 'ALREADY_EXISTS'
+                except Exception as inner_e:
+                    if 'OperationInProgressException' in str(inner_e):
+                        delay = base_delay + random.uniform(0, 10)
+                        print(f"  ⏳ StackSet {stackset_name} busy during cleanup, waiting {delay:.0f}s")
+                        time.sleep(delay)
+                        continue
+                    print(f"  ⚠️ Could not inspect/delete instance: {inner_e}")
+                    return 'ALREADY_EXISTS'
+            raise
+
+
+def _wait_stackset_operation(org_cf, stackset_name: str, operation_id: str, timeout: int = 600):
+    """Poll until StackSet operation SUCCEEDED or raise on failure."""
+    start = time.time()
+    while time.time() - start < timeout:
+        resp = org_cf.describe_stack_set_operation(
+            StackSetName=stackset_name, OperationId=operation_id
         )
-        return response.get('Items', [None])[0]
-    except:
-        return None
+        status = resp['StackSetOperation']['Status']
+        if status == 'SUCCEEDED':
+            return
+        if status in ('FAILED', 'CANCELLED', 'STOPPED'):
+            raise Exception(f"StackSet operation {operation_id} {status} for {stackset_name}")
+        time.sleep(15)
+    raise Exception(f"StackSet operation timed out after {timeout}s for {stackset_name}")
 
 
-# deploy_stackset_instance() function removed - now handled by ProvisionAccount Lambda in Org Admin account
+def _read_stack_outputs(account_id: str, stack_name: str) -> dict:
+    """Assume DomainAccess role into account, read CF stack outputs."""
+    config = get_config()
+    domain_id = config.get('DomainId', DOMAIN_ID)
+    role_arn = f'arn:aws:iam::{account_id}:role/SMUS-AccountPoolFactory-DomainAccess'
+    creds = sts.assume_role(
+        RoleArn=role_arn,
+        RoleSessionName='SetupOrchestrator-ReadOutputs',
+        ExternalId=domain_id,
+        DurationSeconds=900
+    )['Credentials']
+    cf_client = boto3.client(
+        'cloudformation', region_name=REGION,
+        aws_access_key_id=creds['AccessKeyId'],
+        aws_secret_access_key=creds['SecretAccessKey'],
+        aws_session_token=creds['SessionToken']
+    )
+    # StackSet instance stack name: StackSet-{StackSetName}-{uuid}
+    # Find by listing stacks with the prefix
+    stacks = cf_client.list_stacks(
+        StackStatusFilter=['CREATE_COMPLETE', 'UPDATE_COMPLETE', 'UPDATE_ROLLBACK_COMPLETE']
+    )['StackSummaries']
+    prefix = f'StackSet-{stack_name}-'
+    match = next((s for s in stacks if s['StackName'].startswith(prefix)), None)
+    if not match:
+        raise Exception(f"No healthy StackSet stack found with prefix {prefix} in {account_id}")
+    detail = cf_client.describe_stacks(StackName=match['StackName'])['Stacks'][0]
+    return {o['OutputKey']: o['OutputValue'] for o in detail.get('Outputs', [])}
+
+
+# Old direct CF stack names that conflict with StackSet deployment
+_OLD_DIRECT_STACKS = [
+    'DataZone-Blueprints-{account_id}',
+    'DataZone-EventBridge-{account_id}',
+    'DataZone-ProjectRole-{account_id}',
+    'DataZone-IAM-{account_id}',
+    'DataZone-VPC-{account_id}',
+]
+
+
+def _cleanup_old_stacks(account_id: str, config: Dict[str, Any]):
+    """Delete old direct CF stacks from account before StackSet deployment.
+    
+    These stacks were created by the pre-StackSet SetupOrchestrator and contain
+    resources (IAM roles, VPCs, etc.) that conflict with StackSet instance creation.
+    Skips stacks that don't exist or are already deleted.
+    """
+    try:
+        cf_client = get_cross_account_client('cloudformation', account_id, config)
+    except Exception as e:
+        print(f"⚠️ Cannot access account {account_id} for old stack cleanup: {e}")
+        return
+
+    for stack_template in _OLD_DIRECT_STACKS:
+        stack_name = stack_template.format(account_id=account_id)
+        try:
+            resp = cf_client.describe_stacks(StackName=stack_name)
+            status = resp['Stacks'][0]['StackStatus']
+            if status in ('DELETE_COMPLETE', 'DELETE_IN_PROGRESS'):
+                continue
+            print(f"  🗑️ Deleting old stack {stack_name} (status: {status})")
+            cf_client.delete_stack(StackName=stack_name)
+        except cf_client.exceptions.ClientError as e:
+            if 'does not exist' in str(e):
+                continue
+            print(f"  ⚠️ Error checking {stack_name}: {e}")
+
+    # Wait for all deletions to complete
+    for stack_template in _OLD_DIRECT_STACKS:
+        stack_name = stack_template.format(account_id=account_id)
+        try:
+            wait_for_stack_delete(cf_client, stack_name, timeout=300)
+        except Exception:
+            pass  # Stack didn't exist or already deleted
+
+    print(f"✅ Old stack cleanup complete for {account_id}")
 
 
 def execute_setup_workflow(account_id: str, config: Dict[str, Any], resume_from: Optional[str] = None) -> Dict[str, Any]:
@@ -234,6 +407,9 @@ def execute_setup_workflow(account_id: str, config: Dict[str, Any], resume_from:
     resources = {}
     
     try:
+        # Wave 0.5: Clean up old direct CF stacks that conflict with StackSet deployment
+        _cleanup_old_stacks(account_id, config)
+        
         # Wave 1: Foundation + Domain Access (all parallel)
         print("🌊 Wave 1: Foundation + Domain Access (parallel)")
         print("   Deploying: VPC, IAM roles, Project role, EventBridge, S3 bucket, RAM share + domain visibility")
@@ -261,7 +437,12 @@ def execute_setup_workflow(account_id: str, config: Dict[str, Any], resume_from:
             'eventbridge': eb_result,
             's3': s3_result,
             'ram_and_domain': ram_result
-        })
+        }, deployed_stacksets=[
+            'SMUS-AccountPoolFactory-VpcSetup',
+            'SMUS-AccountPoolFactory-IamRoles',
+            'SMUS-AccountPoolFactory-ProjectRole',
+            'SMUS-AccountPoolFactory-EventbridgeRules',
+        ])
         
         print(f"✅ Wave 1 completed - All foundation resources deployed and domain verified")
         
@@ -271,7 +452,8 @@ def execute_setup_workflow(account_id: str, config: Dict[str, Any], resume_from:
         
         bp_result = enable_blueprints(account_id, config, iam_result, vpc_result, s3_result)
         resources.update(bp_result)
-        update_progress(account_id, 'wave2_blueprints', bp_result)
+        update_progress(account_id, 'wave2_blueprints', bp_result,
+                        deployed_stacksets=['SMUS-AccountPoolFactory-BlueprintEnablement'])
         
         print(f"✅ Wave 2 completed - Blueprints enabled")
         
@@ -428,269 +610,92 @@ def _update_stack(cf_client, stack_name: str, template_path: str, parameters: li
 
 
 def deploy_vpc(account_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
-    """Deploy VPC CloudFormation stack"""
-    print(f"🌐 Deploying VPC for account {account_id}")
-
-    stack_name = f"DataZone-VPC-{account_id}"
-    template_path = '02-vpc-setup.yaml'
-
-    try:
-        cf_client = get_cross_account_client('cloudformation', account_id)
-
-        # Check if stack already exists (handles bad states too)
-        status, outputs = check_existing_stack(cf_client, stack_name)
-        if status == 'healthy':
-            if _needs_template_update(outputs, "1"):
-                print(f"   VPC stack outdated — updating...")
-                _update_stack(cf_client, stack_name, template_path, [], timeout=600)
-                response = cf_client.describe_stacks(StackName=stack_name)
-                outputs = response['Stacks'][0].get('Outputs', [])
-            else:
-                print(f"✅ VPC stack up to date, reading outputs")
-            result = {
-                'vpcId': get_output_value(outputs, 'VpcId'),
-                'subnetIds': [
-                    get_output_value(outputs, 'PrivateSubnet1Id'),
-                    get_output_value(outputs, 'PrivateSubnet2Id'),
-                    get_output_value(outputs, 'PrivateSubnet3Id')
-                ]
-            }
-            print(f"✅ VPC: {result['vpcId']}")
-            return result
-
-        with open(template_path, 'r') as f:
-            template_body = f.read()
-
-        cf_client.create_stack(
-            StackName=stack_name,
-            TemplateBody=template_body,
-            Capabilities=['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM'],
-            OnFailure='ROLLBACK',
-            TimeoutInMinutes=30,
-            Tags=[
-                {'Key': 'ManagedBy', 'Value': 'AccountPoolFactory'},
-                {'Key': 'AccountId', 'Value': account_id}
-            ]
-        )
-
-        wait_for_stack_complete(cf_client, stack_name)
-
-        response = cf_client.describe_stacks(StackName=stack_name)
-        outputs = response['Stacks'][0].get('Outputs', [])
-
-        result = {
-            'vpcId': get_output_value(outputs, 'VpcId'),
-            'subnetIds': [
-                get_output_value(outputs, 'PrivateSubnet1Id'),
-                get_output_value(outputs, 'PrivateSubnet2Id'),
-                get_output_value(outputs, 'PrivateSubnet3Id')
-            ]
-        }
-
-        print(f"✅ VPC deployed: {result['vpcId']}")
-        return result
-
-    except Exception as e:
-        print(f"❌ VPC deployment failed: {e}")
-        raise
+    """Deploy VPC via StackSet instance, read outputs from target account."""
+    print(f"🌐 Deploying VPC for account {account_id} via StackSet")
+    stackset_name = 'SMUS-AccountPoolFactory-VpcSetup'
+    org_cf = _get_org_cf_client()
+    op_id = _add_stackset_instance(org_cf, stackset_name, account_id, [])
+    if op_id != 'ALREADY_EXISTS':
+        _wait_stackset_operation(org_cf, stackset_name, op_id)
+    outputs = _read_stack_outputs(account_id, stackset_name)
+    result = {
+        'vpcId': outputs.get('VpcId', ''),
+        'subnetIds': [
+            outputs.get('PrivateSubnet1Id', ''),
+            outputs.get('PrivateSubnet2Id', ''),
+            outputs.get('PrivateSubnet3Id', ''),
+        ]
+    }
+    print(f"✅ VPC deployed via StackSet: {result['vpcId']}")
+    return result
 
 
 def deploy_iam_roles(account_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
-    """Deploy IAM roles CloudFormation stack"""
-    print(f"👤 Deploying IAM roles for account {account_id}")
-
-    stack_name = f"DataZone-IAM-{account_id}"
-    template_path = '03-iam-roles.yaml'
-
-    try:
-        cf_client = get_cross_account_client('cloudformation', account_id)
-
-        # Check if stack already exists (handles bad states too)
-        status, outputs = check_existing_stack(cf_client, stack_name)
-        if status == 'healthy':
-            if _needs_template_update(outputs, "1"):
-                print(f"   IAM stack outdated — updating...")
-                _update_stack(cf_client, stack_name, template_path, [
-                    {'ParameterKey': 'DomainAccountId', 'ParameterValue': config['DomainAccountId']},
-                    {'ParameterKey': 'DomainId', 'ParameterValue': config['DomainId']}
-                ])
-                response = cf_client.describe_stacks(StackName=stack_name)
-                outputs = response['Stacks'][0].get('Outputs', [])
-            else:
-                print(f"✅ IAM stack up to date, reading outputs")
-            result = {
-                'manageAccessRoleArn': get_output_value(outputs, 'ManageAccessRoleArn'),
-                'provisioningRoleArn': get_output_value(outputs, 'ProvisioningRoleArn')
-            }
-            return result
-
-        with open(template_path, 'r') as f:
-            template_body = f.read()
-
-        cf_client.create_stack(
-            StackName=stack_name,
-            TemplateBody=template_body,
-            Parameters=[
-                {'ParameterKey': 'DomainAccountId', 'ParameterValue': config['DomainAccountId']},
-                {'ParameterKey': 'DomainId', 'ParameterValue': config['DomainId']}
-            ],
-            Capabilities=['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM'],
-            OnFailure='ROLLBACK',
-            TimeoutInMinutes=30,
-            Tags=[
-                {'Key': 'ManagedBy', 'Value': 'AccountPoolFactory'},
-                {'Key': 'AccountId', 'Value': account_id}
-            ]
-        )
-
-        wait_for_stack_complete(cf_client, stack_name)
-
-        response = cf_client.describe_stacks(StackName=stack_name)
-        outputs = response['Stacks'][0].get('Outputs', [])
-
-        result = {
-            'manageAccessRoleArn': get_output_value(outputs, 'ManageAccessRoleArn'),
-            'provisioningRoleArn': get_output_value(outputs, 'ProvisioningRoleArn')
-        }
-
-        print(f"✅ IAM roles deployed")
-        return result
-
-    except Exception as e:
-        print(f"❌ IAM roles deployment failed: {e}")
-        raise
+    """Deploy IAM roles via StackSet instance, read outputs from target account."""
+    print(f"👤 Deploying IAM roles for account {account_id} via StackSet")
+    stackset_name = 'SMUS-AccountPoolFactory-IamRoles'
+    params = [
+        {'ParameterKey': 'DomainAccountId', 'ParameterValue': config['DomainAccountId']},
+        {'ParameterKey': 'DomainId',        'ParameterValue': config['DomainId']},
+    ]
+    org_cf = _get_org_cf_client()
+    op_id = _add_stackset_instance(org_cf, stackset_name, account_id, params)
+    if op_id != 'ALREADY_EXISTS':
+        _wait_stackset_operation(org_cf, stackset_name, op_id)
+    outputs = _read_stack_outputs(account_id, stackset_name)
+    result = {
+        'manageAccessRoleArn':  outputs.get('ManageAccessRoleArn', ''),
+        'provisioningRoleArn':  outputs.get('ProvisioningRoleArn', ''),
+    }
+    print(f"✅ IAM roles deployed via StackSet")
+    return result
 
 
 def deploy_eventbridge_rules(account_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
-    """Deploy EventBridge rules CloudFormation stack"""
-    print(f"📡 Deploying EventBridge rules for account {account_id}")
-
-    stack_name = f"DataZone-EventBridge-{account_id}"
-    template_path = '04-eventbridge-rules.yaml'
-
-    try:
-        cf_client = get_cross_account_client('cloudformation', account_id)
-
-        # Check if stack already exists (handles bad states too)
-        status, outputs = check_existing_stack(cf_client, stack_name)
-        if status == 'healthy':
-            central_bus_arn = f"arn:aws:events:{config['Region']}:{config['DomainAccountId']}:event-bus/AccountPoolFactory-CentralBus"
-            if _needs_template_update(outputs, "1"):
-                print(f"   EventBridge stack outdated — updating...")
-                _update_stack(cf_client, stack_name, template_path, [
-                    {'ParameterKey': 'CentralEventBusArn', 'ParameterValue': central_bus_arn}
-                ])
-            else:
-                print(f"✅ EventBridge stack up to date, skipping")
-            return {'eventBridgeRulesDeployed': True}
-
-        with open(template_path, 'r') as f:
-            template_body = f.read()
-
-        central_bus_arn = f"arn:aws:events:{config['Region']}:{config['DomainAccountId']}:event-bus/AccountPoolFactory-CentralBus"
-
-        cf_client.create_stack(
-            StackName=stack_name,
-            TemplateBody=template_body,
-            Parameters=[
-                {'ParameterKey': 'CentralEventBusArn', 'ParameterValue': central_bus_arn}
-            ],
-            Capabilities=['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM'],
-            OnFailure='ROLLBACK',
-            TimeoutInMinutes=30,
-            Tags=[
-                {'Key': 'ManagedBy', 'Value': 'AccountPoolFactory'},
-                {'Key': 'AccountId', 'Value': account_id}
-            ]
-        )
-
-        wait_for_stack_complete(cf_client, stack_name)
-
-        print(f"✅ EventBridge rules deployed")
-        return {'eventBridgeRulesDeployed': True}
-
-    except Exception as e:
-        print(f"❌ EventBridge rules deployment failed: {e}")
-        raise
+    """Deploy EventBridge rules via StackSet instance."""
+    print(f"📡 Deploying EventBridge rules for account {account_id} via StackSet")
+    stackset_name = 'SMUS-AccountPoolFactory-EventbridgeRules'
+    central_bus_arn = (
+        f"arn:aws:events:{config['Region']}:{config['DomainAccountId']}"
+        f":event-bus/AccountPoolFactory-CentralBus"
+    )
+    params = [{'ParameterKey': 'CentralEventBusArn', 'ParameterValue': central_bus_arn}]
+    org_cf = _get_org_cf_client()
+    op_id = _add_stackset_instance(org_cf, stackset_name, account_id, params)
+    if op_id != 'ALREADY_EXISTS':
+        _wait_stackset_operation(org_cf, stackset_name, op_id)
+    print(f"✅ EventBridge rules deployed via StackSet")
+    return {'eventBridgeRulesDeployed': True}
 
 
 def deploy_project_role(account_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
-    """Deploy project execution role for ToolingLite blueprint (optional, controlled by config)"""
+    """Deploy project execution role via StackSet instance."""
     enabled = config.get('ProjectRoleEnabled', 'true').lower()
     if enabled != 'true':
-        print(f"⏭️ Project role deployment disabled (ProjectRoleEnabled={enabled})")
+        print(f"⏭️ Project role disabled")
         return {}
-
-    role_name = config.get('ProjectRoleName', 'AmazonSageMakerProjectRole')
-    policy_arn = config.get('ProjectRoleManagedPolicyArn', 'arn:aws:iam::aws:policy/SageMakerStudioAdminIAMPermissiveExecutionPolicy')
-
-    print(f"👤 Deploying project execution role '{role_name}' for account {account_id}")
-
-    stack_name = f"DataZone-ProjectRole-{account_id}"
-    template_path = '05-project-role.yaml'
-
-    try:
-        cf_client = get_cross_account_client('cloudformation', account_id)
-
-        # Check if stack already exists (handles bad states too)
-        status, outputs = check_existing_stack(cf_client, stack_name)
-        if status == 'healthy':
-            if _needs_template_update(outputs, "1"):
-                print(f"   ProjectRole stack outdated — updating...")
-                _update_stack(cf_client, stack_name, template_path, [
-                    {'ParameterKey': 'RoleName', 'ParameterValue': role_name},
-                    {'ParameterKey': 'ManagedPolicyArn', 'ParameterValue': policy_arn}
-                ])
-                response = cf_client.describe_stacks(StackName=stack_name)
-                outputs = response['Stacks'][0].get('Outputs', [])
-            else:
-                print(f"✅ ProjectRole stack up to date, reading outputs")
-            return {
-                'projectRoleArn': get_output_value(outputs, 'ProjectRoleArn')
-            }
-
-        with open(template_path, 'r') as f:
-            template_body = f.read()
-
-        cf_client.create_stack(
-            StackName=stack_name,
-            TemplateBody=template_body,
-            Parameters=[
-                {'ParameterKey': 'RoleName', 'ParameterValue': role_name},
-                {'ParameterKey': 'ManagedPolicyArn', 'ParameterValue': policy_arn}
-            ],
-            Capabilities=['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM'],
-            OnFailure='ROLLBACK',
-            TimeoutInMinutes=30,
-            Tags=[
-                {'Key': 'ManagedBy', 'Value': 'AccountPoolFactory'},
-                {'Key': 'AccountId', 'Value': account_id}
-            ]
-        )
-
-        wait_for_stack_complete(cf_client, stack_name)
-
-        response = cf_client.describe_stacks(StackName=stack_name)
-        outputs = response['Stacks'][0].get('Outputs', [])
-
-        result = {
-            'projectRoleArn': get_output_value(outputs, 'ProjectRoleArn')
-        }
-
-        print(f"✅ Project role deployed: {result.get('projectRoleArn')}")
-        return result
-
-    except Exception as e:
-        print(f"❌ Project role deployment failed: {e}")
-        raise
-
+    role_name  = config.get('ProjectRoleName', 'AmazonSageMakerProjectRole')
+    policy_arn = config.get('ProjectRoleManagedPolicyArn',
+                            'arn:aws:iam::aws:policy/SageMakerStudioAdminIAMPermissiveExecutionPolicy')
+    print(f"👤 Deploying project role for account {account_id} via StackSet")
+    stackset_name = 'SMUS-AccountPoolFactory-ProjectRole'
+    params = [
+        {'ParameterKey': 'RoleName',         'ParameterValue': role_name},
+        {'ParameterKey': 'ManagedPolicyArn', 'ParameterValue': policy_arn},
+    ]
+    org_cf = _get_org_cf_client()
+    op_id = _add_stackset_instance(org_cf, stackset_name, account_id, params)
+    if op_id != 'ALREADY_EXISTS':
+        _wait_stackset_operation(org_cf, stackset_name, op_id)
+    outputs = _read_stack_outputs(account_id, stackset_name)
+    print(f"✅ Project role deployed via StackSet")
+    return {'projectRoleArn': outputs.get('ProjectRoleArn', '')}
 
 def create_s3_bucket(account_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
     """Create S3 bucket for blueprint artifacts"""
     print(f"🪣 Creating S3 bucket for account {account_id}")
 
     bucket_name = f"datazone-blueprints-{account_id}-{config['Region']}"
-
     try:
         s3_client = get_cross_account_client('s3', account_id)
 
@@ -993,116 +998,63 @@ def wait_for_ram_principal_associated(share_arn: str, expected_principal: str, t
     )
 
 
-def enable_blueprints(account_id: str, config: Dict[str, Any], iam_result: Dict[str, Any], vpc_result: Dict[str, Any] = None, s3_result: Dict[str, Any] = None) -> Dict[str, Any]:
-    """Enable DataZone blueprints in project account"""
-    print(f"📋 Enabling blueprints for account {account_id}")
+def enable_blueprints(account_id: str, config: Dict[str, Any], iam_result: Dict[str, Any],
+                      vpc_result: Dict[str, Any] = None, s3_result: Dict[str, Any] = None) -> Dict[str, Any]:
+    """Enable DataZone blueprints via StackSet instance.
     
-    stack_name = f"DataZone-Blueprints-{account_id}"
-    template_path = 'blueprint-enablement-iam.yaml'
+    Retries the full add+wait cycle up to 3 times because blueprint types may
+    take time to become available after old stack deletion.
+    """
+    print(f"📋 Enabling blueprints for account {account_id} via StackSet")
 
-    # Build regional params from VPC and S3 results
-    vpc_id = (vpc_result or {}).get('vpcId', '')
-    subnet_ids_list = (vpc_result or {}).get('subnetIds', [])
-    subnet_ids = ','.join(s for s in subnet_ids_list if s)
-    bucket_name = (s3_result or {}).get('bucketName', '')
-    s3_location = f"s3://{bucket_name}" if bucket_name else ''
+    stackset_name = 'SMUS-AccountPoolFactory-BlueprintEnablement'
 
-    print(f"   VpcId:     {vpc_id or '(not provided)'}")
-    print(f"   SubnetIds: {subnet_ids or '(not provided)'}")
-    print(f"   S3:        {s3_location or '(not provided)'}")
+    vpc_id         = (vpc_result or {}).get('vpcId', '')
+    subnet_ids     = ','.join(s for s in (vpc_result or {}).get('subnetIds', []) if s)
+    bucket_name    = (s3_result or {}).get('bucketName', '')
+    s3_location    = f"s3://{bucket_name}" if bucket_name else ''
+
+    params = [
+        {'ParameterKey': 'DomainId',             'ParameterValue': config['DomainId']},
+        {'ParameterKey': 'ManageAccessRoleArn',  'ParameterValue': iam_result.get('manageAccessRoleArn', '')},
+        {'ParameterKey': 'ProvisioningRoleArn',  'ParameterValue': iam_result.get('provisioningRoleArn', '')},
+        {'ParameterKey': 'VpcId',                'ParameterValue': vpc_id},
+        {'ParameterKey': 'SubnetIds',            'ParameterValue': subnet_ids},
+        {'ParameterKey': 'S3BucketName',         'ParameterValue': s3_location},
+        {'ParameterKey': 'DomainUnitId',         'ParameterValue': config.get('RootDomainUnitId', ROOT_DOMAIN_UNIT_ID)},
+    ]
+
+    org_cf = _get_org_cf_client()
     
-    try:
-        cf_client = get_cross_account_client('cloudformation', account_id)
-
-        # Check if stack already exists (handles bad states too — same as other deploy_* functions)
-        status, outputs = check_existing_stack(cf_client, stack_name)
-        if status == 'healthy':
-            needs_update = _needs_template_update(outputs, "2")
-
-            if vpc_id and subnet_ids and s3_location and needs_update:
-                print(f"   Blueprints stack outdated — updating to add PolicyGrants...")
-            elif vpc_id and subnet_ids and s3_location:
-                print(f"   Blueprints stack up to date, skipping")
-            else:
-                print(f"✅ Blueprints stack already exists, skipping (no VPC/S3 params available)")
-
-            if vpc_id and subnet_ids and s3_location and needs_update:
-                with open(template_path, 'r') as f:
-                    template_body = f.read()
+    max_attempts = 3
+    for attempt in range(max_attempts):
+        op_id = _add_stackset_instance(org_cf, stackset_name, account_id, params)
+        if op_id == 'ALREADY_EXISTS':
+            break
+        try:
+            _wait_stackset_operation(org_cf, stackset_name, op_id, timeout=3600)
+            break  # success
+        except Exception as e:
+            if attempt < max_attempts - 1 and 'FAILED' in str(e):
+                print(f"  ⚠️ BlueprintEnablement attempt {attempt+1} failed, retrying in 60s...")
+                # Delete the failed instance so we can retry
                 try:
-                    cf_client.update_stack(
-                        StackName=stack_name,
-                        TemplateBody=template_body,
-                        Parameters=[
-                            {'ParameterKey': 'DomainId', 'ParameterValue': config['DomainId']},
-                            {'ParameterKey': 'ManageAccessRoleArn', 'ParameterValue': iam_result['manageAccessRoleArn']},
-                            {'ParameterKey': 'ProvisioningRoleArn', 'ParameterValue': iam_result['provisioningRoleArn']},
-                            {'ParameterKey': 'VpcId', 'ParameterValue': vpc_id},
-                            {'ParameterKey': 'SubnetIds', 'ParameterValue': subnet_ids},
-                            {'ParameterKey': 'S3BucketName', 'ParameterValue': s3_location},
-                            {'ParameterKey': 'DomainUnitId', 'ParameterValue': config.get('RootDomainUnitId', ROOT_DOMAIN_UNIT_ID)}
-                        ],
-                        Capabilities=['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM', 'CAPABILITY_AUTO_EXPAND'],
+                    del_resp = org_cf.delete_stack_instances(
+                        StackSetName=stackset_name, Accounts=[account_id],
+                        Regions=[REGION], RetainStacks=False,
+                        OperationPreferences={'FailureToleranceCount': 0, 'MaxConcurrentCount': 1}
                     )
-                    wait_for_stack_complete(cf_client, stack_name, timeout=3600)
-                    print(f"✅ Blueprints stack updated")
-                except cf_client.exceptions.ClientError as e:
-                    if 'No updates are to be performed' in str(e):
-                        print(f"✅ Blueprints stack already up to date")
-                    else:
-                        raise
+                    _wait_stackset_operation(org_cf, stackset_name, del_resp['OperationId'], timeout=300)
+                except Exception:
+                    pass
+                time.sleep(60)
+            else:
+                raise
 
-            response = cf_client.describe_stacks(StackName=stack_name)
-            outputs = response['Stacks'][0].get('Outputs', [])
-            blueprint_ids = [o['OutputValue'] for o in outputs if o['OutputKey'].endswith('BlueprintId')]
-            print(f"✅ {len(blueprint_ids)} blueprints enabled")
-            return {'blueprintIds': blueprint_ids}
-
-        with open(template_path, 'r') as f:
-            template_body = f.read()
-        
-        print(f"   📍 Deploying blueprint stack in project account {account_id}")
-        
-        parameters = [
-            {'ParameterKey': 'DomainId', 'ParameterValue': config['DomainId']},
-            {'ParameterKey': 'ManageAccessRoleArn', 'ParameterValue': iam_result['manageAccessRoleArn']},
-            {'ParameterKey': 'ProvisioningRoleArn', 'ParameterValue': iam_result['provisioningRoleArn']},
-            {'ParameterKey': 'VpcId', 'ParameterValue': vpc_id},
-            {'ParameterKey': 'SubnetIds', 'ParameterValue': subnet_ids},
-            {'ParameterKey': 'S3BucketName', 'ParameterValue': s3_location},
-            {'ParameterKey': 'DomainUnitId', 'ParameterValue': config.get('RootDomainUnitId', ROOT_DOMAIN_UNIT_ID)}
-        ]
-
-        cf_client.create_stack(
-            StackName=stack_name,
-            TemplateBody=template_body,
-            Parameters=parameters,
-            Capabilities=['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM', 'CAPABILITY_AUTO_EXPAND'],
-            OnFailure='ROLLBACK',
-            TimeoutInMinutes=60,
-            Tags=[
-                {'Key': 'ManagedBy', 'Value': 'AccountPoolFactory'},
-                {'Key': 'AccountId', 'Value': account_id}
-            ]
-        )
-        
-        wait_for_stack_complete(cf_client, stack_name, timeout=3600)
-        
-        # Get blueprint IDs from outputs
-        response = cf_client.describe_stacks(StackName=stack_name)
-        outputs = response['Stacks'][0].get('Outputs', [])
-        
-        blueprint_ids = []
-        for output in outputs:
-            if output['OutputKey'].endswith('BlueprintId'):
-                blueprint_ids.append(output['OutputValue'])
-        
-        print(f"✅ Enabled {len(blueprint_ids)} blueprints")
-        return {'blueprintIds': blueprint_ids}
-        
-    except Exception as e:
-        print(f"❌ Blueprint enablement failed: {e}")
-        raise
+    outputs = _read_stack_outputs(account_id, stackset_name)
+    blueprint_ids = [v for k, v in outputs.items() if k.endswith('BlueprintId')]
+    print(f"✅ {len(blueprint_ids)} blueprints enabled via StackSet")
+    return {'blueprintIds': str(blueprint_ids)}
 
 
 def verify_domain_visibility(account_id: str, config: Dict[str, Any], ram_result: Dict[str, Any]) -> Dict[str, Any]:
@@ -1621,8 +1573,10 @@ def get_output_value(outputs: List[Dict], key: str) -> str:
     return ''
 
 
-def update_progress(account_id: str, step: str, result: Dict[str, Any]):
-    """Update account progress in DynamoDB"""
+def update_progress(account_id: str, step: str, result: Dict[str, Any], deployed_stacksets: list = None):
+    """Update account progress in DynamoDB.
+    deployed_stacksets: list of StackSet names deployed in this wave — appended to deployedStackSets.
+    """
     try:
         response = dynamodb.query(
             TableName=DYNAMODB_TABLE_NAME,
@@ -1631,29 +1585,49 @@ def update_progress(account_id: str, step: str, result: Dict[str, Any]):
             ScanIndexForward=False,
             Limit=1
         )
-        
+
         if not response.get('Items'):
             return
-        
+
         item = response['Items'][0]
-        
+
+        # Flatten result dict — skip list/dict values, convert to strings
+        flat_resources = {}
+        for k, v in result.items():
+            if isinstance(v, (str, int, float, bool)):
+                flat_resources[k] = {'S': str(v)}
+            elif isinstance(v, list):
+                flat_resources[k] = {'S': str(v)}
+
+        update_expr = ('SET currentStep = :step, '
+                       'completedSteps = list_append(if_not_exists(completedSteps, :empty), :step_list), '
+                       'resources = :resources')
+        attr_values = {
+            ':step':      {'S': step},
+            ':step_list': {'L': [{'S': step}]},
+            ':empty':     {'L': []},
+            ':resources': {'M': flat_resources},
+        }
+
+        if deployed_stacksets:
+            # Read existing deployedStackSets and merge (deduplicate)
+            existing = [e.get('S', '') for e in item.get('deployedStackSets', {}).get('L', [])]
+            merged = list(dict.fromkeys(existing + deployed_stacksets))  # preserves order, deduplicates
+            update_expr += ', deployedStackSets = :ss_list'
+            attr_values[':ss_list'] = {'L': [{'S': s} for s in merged]}
+
         dynamodb.update_item(
             TableName=DYNAMODB_TABLE_NAME,
             Key={
                 'accountId': {'S': account_id},
-                'timestamp': item['timestamp']
+                'timestamp': item['timestamp'],
             },
-            UpdateExpression='SET currentStep = :step, completedSteps = list_append(if_not_exists(completedSteps, :empty), :step_list), resources = :resources',
-            ExpressionAttributeValues={
-                ':step': {'S': step},
-                ':step_list': {'L': [{'S': step}]},
-                ':empty': {'L': []},
-                ':resources': {'M': {k: {'S': str(v)} for k, v in result.items()}}
-            }
+            UpdateExpression=update_expr,
+            ExpressionAttributeValues=attr_values,
         )
-        
-        print(f"  📝 Progress updated: {step}")
-        
+
+        print(f"  📝 Progress updated: {step}" + (f" stacksets={deployed_stacksets}" if deployed_stacksets else ""))
+
     except Exception as e:
         print(f"⚠️ Error updating progress: {e}")
 

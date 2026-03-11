@@ -255,3 +255,31 @@
 .success-msg svg { stroke: var(--success); }
 .success-actions a[role=button] { width: 100%; max-width: 360px; }
 .success-actions .secondary { width: 100%; max-width: 360px; }
+
+/* ── Account badge (shown on project success) ── */
+.account-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  background: #eaf3fb;
+  border: 1.5px solid #aacde8;
+  border-radius: 8px;
+  padding: 0.75rem 2rem;
+  width: 100%;
+  max-width: 360px;
+}
+.account-badge-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #1a5276;
+}
+.account-badge-id {
+  font-size: 1.4rem;
+  font-weight: 700;
+  font-family: monospace;
+  color: #1a5276;
+  letter-spacing: 0.05em;
+}

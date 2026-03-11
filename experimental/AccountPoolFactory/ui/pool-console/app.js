@@ -206,7 +206,7 @@ function renderAccountsTable(accounts) {
   accountsEmpty.hidden = true;
   accountsTbody.innerHTML = accounts.map(a => {
     const smusLink = (a.state === 'ASSIGNED' && a.projectId && CONFIG.portalUrl)
-      ? `<a href="${CONFIG.portalUrl}/projects/${a.projectId}" target="_blank" class="smus-link" title="Open in SMUS">↗</a>`
+      ? `<a href="${CONFIG.portalUrl.replace('datazone.', 'sagemaker.')}/projects/${a.projectId}" target="_blank" class="smus-link" title="Open in SMUS">↗</a>`
       : '';
     return `
     <tr class="account-row" data-id="${a.accountId}" tabindex="0">
@@ -263,21 +263,10 @@ function renderPanel(acc, stacksets = []) {
 
   const ssHtml = stacksets.length ? `
     <div class="stacksets-section">
-      <strong>StackSet Instances</strong>
-      <table class="ss-table">
-        <thead><tr><th>StackSet</th><th>Status</th></tr></thead>
-        <tbody>${stacksets.map(s => {
-          const cls = s.status === 'CURRENT' ? 'ss-ok'
-                    : s.status === 'OUTDATED' ? 'ss-warn'
-                    : s.status === 'NOT_FOUND' ? 'ss-missing'
-                    : 'ss-unknown';
-          const tip = s.statusReason ? ` title="${s.statusReason.replace(/"/g,"'")}"` : '';
-          return `<tr>
-            <td><code class="ss-name">${s.name}</code></td>
-            <td><span class="ss-badge ${cls}"${tip}>${s.status}</span></td>
-          </tr>`;
-        }).join('')}</tbody>
-      </table>
+      <strong>Deployed StackSets</strong>
+      <ul class="ss-list">${stacksets.map(s =>
+        `<li><code class="ss-name">${s.name}</code></li>`
+      ).join('')}</ul>
     </div>` : '';
 
   panelBody.innerHTML = `

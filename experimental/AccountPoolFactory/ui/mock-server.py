@@ -123,6 +123,7 @@ def get_live_config():
     domain_id = ""
     portal_url = ""
     identity_store_id = ""
+    org_admin_account_id = ""
 
     # Read domain-config.yaml
     config_path = os.path.join(UI_DIR, "..", "domain-config.yaml")
@@ -133,6 +134,7 @@ def get_live_config():
                 cfg = yaml.safe_load(f)
             region = cfg.get("region", region)
             domain_id = cfg.get("domain_id", "")
+            org_admin_account_id = cfg.get("org_admin_account_id", "")
             if not domain_id:
                 domain_name = cfg.get("domain_name", "")
                 if domain_name:
@@ -176,6 +178,7 @@ def get_live_config():
         "portalUrl": portal_url,
         "dynamoTable": "AccountPoolFactory-AccountState",
         "accountId": account_id,
+        "orgAdminAccountId": org_admin_account_id,
         "identityStoreId": identity_store_id,
         "accessKeyId": os.environ.get("AWS_ACCESS_KEY_ID", ""),
         "secretAccessKey": os.environ.get("AWS_SECRET_ACCESS_KEY", ""),
@@ -308,8 +311,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             else:
                 self.send_js(
                     f'export const CONFIG = {{ MOCK: true, API_URL: "http://localhost:{PORT}/api",'
-                    f' portalUrl: "https://dzd-4h7jbz76qckoh5.datazone.us-east-2.on.aws",'
-                    f' PORTAL_URL: "https://dzd-4h7jbz76qckoh5.datazone.us-east-2.on.aws" }};'
+                    f' portalUrl: "https://dzd-4h7jbz76qckoh5.sagemaker.us-east-2.on.aws",'
+                    f' PORTAL_URL: "https://dzd-4h7jbz76qckoh5.sagemaker.us-east-2.on.aws" }};'
                 )
             return
 

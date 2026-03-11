@@ -475,8 +475,9 @@ def validate_domain_access_role(account_id):
 def validate_setup_stacks(account_id, creds, item=None):
     """Check all expected setup stacks exist and are healthy.
 
-    Prefers per-account deployedStackSets from DynamoDB record (item).
-    Falls back to global ExpectedStackPatterns SSM if not available.
+    Uses per-account deployedStackSets from DynamoDB as the source of truth.
+    If deployedStackSets is absent or empty, returns (False, ['NEEDS_SETUP: no deployedStackSets'], [])
+    so the recycler queues the account for SetupOrchestrator.
     Returns (ok, missing_list, unhealthy_list).
     """
     try:
@@ -488,60 +489,32 @@ def validate_setup_stacks(account_id, creds, item=None):
             aws_session_token=creds['SessionToken']
         )
 
-        # Build list of stack names to check
-        stack_names = []
-
-        # Prefer per-account deployedStackSets (StackSet-deployed stacks)
+        # Use deployedStackSets as the authoritative list
+        deployed = []
         if item:
-            deployed = item.get('deployedStackSets', {}).get('L', [])
-            if deployed:
-                # These are StackSet names — the actual CF stack in the account
-                # is named StackSet-{StackSetName}-{uuid}, so we check by prefix
-                for entry in deployed:
-                    ss_name = entry.get('S', '')
-                    if ss_name:
-                        stack_names.append(('stackset_prefix', ss_name))
+            deployed = [e.get('S', '') for e in item.get('deployedStackSets', {}).get('L', []) if e.get('S')]
 
-        # Also check SetupOrchestrator-deployed stacks via global patterns
-        for pattern in get_expected_setup_stacks():
-            stack_names.append(('pattern', pattern.format(account_id=account_id)))
-
-        if not stack_names:
-            return True, [], []  # Nothing to validate
+        if not deployed:
+            # No deployedStackSets — account needs setup via new StackSet flow
+            return False, ['NEEDS_SETUP: no deployedStackSets record'], []
 
         missing = []
         unhealthy = []
         healthy_statuses = {'CREATE_COMPLETE', 'UPDATE_COMPLETE', 'UPDATE_ROLLBACK_COMPLETE'}
 
-        for check_type, name in stack_names:
-            if check_type == 'stackset_prefix':
-                # Find stacks with this StackSet name prefix
-                try:
-                    resp = cf_client.list_stacks(
-                        StackStatusFilter=list(healthy_statuses) + ['CREATE_IN_PROGRESS']
-                    )
-                    prefix = f'StackSet-{name}-'
-                    found = [s for s in resp.get('StackSummaries', [])
-                             if s['StackName'].startswith(prefix)]
-                    if not found:
-                        missing.append(f'StackSet:{name}')
-                    elif not any(s['StackStatus'] in healthy_statuses for s in found):
-                        unhealthy.append(f'StackSet:{name}={found[0]["StackStatus"]}')
-                except Exception as e:
-                    missing.append(f'StackSet:{name} (error: {e})')
-            else:
-                try:
-                    resp = retry_with_backoff(
-                        lambda sn=name: cf_client.describe_stacks(StackName=sn)
-                    )
-                    status = resp['Stacks'][0]['StackStatus']
-                    if status not in healthy_statuses:
-                        unhealthy.append(f'{name}={status}')
-                except ClientError as e:
-                    if 'does not exist' in str(e):
-                        missing.append(name)
-                    else:
-                        missing.append(f'{name} (error: {e})')
+        # List all stacks once (cheaper than per-stack describe)
+        resp = cf_client.list_stacks(
+            StackStatusFilter=list(healthy_statuses) + ['CREATE_IN_PROGRESS', 'CREATE_FAILED']
+        )
+        all_stacks = resp.get('StackSummaries', [])
+
+        for ss_name in deployed:
+            prefix = f'StackSet-{ss_name}-'
+            found = [s for s in all_stacks if s['StackName'].startswith(prefix)]
+            if not found:
+                missing.append(f'StackSet:{ss_name}')
+            elif not any(s['StackStatus'] in healthy_statuses for s in found):
+                unhealthy.append(f'StackSet:{ss_name}={found[0]["StackStatus"]}')
 
         return (not missing and not unhealthy), missing, unhealthy
 
@@ -651,6 +624,14 @@ def reconcile_with_dynamodb(pool_accounts, org_accounts, dry_run, org_client=Non
                 summary['details'].append({
                     'accountId': acct_id, 'action': 'UNCHANGED',
                     'note': f'Already in {current_state} state'
+                })
+
+            elif current_state == 'PROVISIONED':
+                # PROVISIONED = account exists but not set up yet. Normal state.
+                summary['unchanged'] += 1
+                summary['details'].append({
+                    'accountId': acct_id, 'action': 'UNCHANGED',
+                    'note': 'PROVISIONED — awaiting setup when pool needs capacity'
                 })
 
             else:
@@ -886,11 +867,17 @@ def trigger_recycler(account_ids):
 
 
 def check_and_replenish(config):
-    """Check AVAILABLE count and trigger replenishment if needed"""
+    """Check AVAILABLE count and trigger setup of PROVISIONED accounts if needed.
+    
+    If AVAILABLE < target_size and PROVISIONED accounts exist, triggers the
+    recycler to set them up. Only falls back to PoolManager (new account creation)
+    if there are no PROVISIONED accounts to promote.
+    """
     if not POOL_MANAGER_FUNCTION_NAME:
         print("Warning: POOL_MANAGER_FUNCTION_NAME not set, skipping")
         return False
     try:
+        # Count AVAILABLE
         response = dynamodb.query(
             TableName=DYNAMODB_TABLE_NAME,
             IndexName='StateIndex',
@@ -902,16 +889,37 @@ def check_and_replenish(config):
         available_count = response.get('Count', 0)
         min_pool_size = int(config.get('MinimumPoolSize', '5'))
 
-        if available_count < min_pool_size:
-            print(f"AVAILABLE ({available_count}) < MinimumPoolSize ({min_pool_size}), triggering replenishment")
+        if available_count >= min_pool_size:
+            print(f"AVAILABLE ({available_count}) >= MinimumPoolSize ({min_pool_size}), no replenishment needed")
+            return False
+
+        deficit = min_pool_size - available_count
+        print(f"AVAILABLE ({available_count}) < MinimumPoolSize ({min_pool_size}), need {deficit} more")
+
+        # Check for PROVISIONED accounts to promote
+        prov_resp = dynamodb.query(
+            TableName=DYNAMODB_TABLE_NAME,
+            IndexName='StateIndex',
+            KeyConditionExpression='#state = :state',
+            ExpressionAttributeNames={'#state': 'state'},
+            ExpressionAttributeValues={':state': {'S': 'PROVISIONED'}},
+            Limit=deficit
+        )
+        provisioned = prov_resp.get('Items', [])
+
+        if provisioned:
+            prov_ids = [item['accountId']['S'] for item in provisioned]
+            print(f"Triggering setup for {len(prov_ids)} PROVISIONED accounts: {prov_ids}")
+            trigger_recycler(prov_ids)
+            return True
+        else:
+            print(f"No PROVISIONED accounts available, triggering PoolManager for new accounts")
             lambda_client.invoke(
                 FunctionName=POOL_MANAGER_FUNCTION_NAME,
                 InvocationType='Event',
                 Payload=json.dumps({'action': 'force_replenishment'})
             )
             return True
-        print(f"AVAILABLE ({available_count}) >= MinimumPoolSize ({min_pool_size}), no replenishment needed")
-        return False
     except Exception as e:
         print(f"Error checking pool size: {e}")
         return False

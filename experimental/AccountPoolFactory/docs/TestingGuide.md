@@ -10,7 +10,7 @@ End-to-end testing guide. Covers fresh-account setup, deployment, pool seeding, 
 
 ## Starting from Scratch
 
-If you don't yet have an AWS Organization structure or a DataZone domain, set those up first.
+If you don't yet have an AWS Organization structure or a SMUS domain, set those up first.
 
 ### Create Organization Structure
 
@@ -26,19 +26,11 @@ Creates CloudFormation stack `AccountPoolFactory-Organization-Test` with OUs:
 - `RetailBanking/RiskAnalytics`
 - `CommercialBanking`
 
-### Create DataZone Domain
+### Create SMUS Domain
 
 Skip if your domain already exists.
 
-Via AWS Console (recommended): navigate to DataZone, create a domain, wait ~5-10 minutes, copy the domain ID (`dzd-xxxxxxxxxxxxx`).
-
-Via CLI:
-```bash
-eval $(isengardcli credentials amirbo+3@amazon.com)
-aws datazone create-domain --name "my-domain" --region us-east-2
-```
-
-Update `domain-config.yaml` with the domain name, then proceed to deployment.
+Navigate to the SageMaker Unified Studio console, create a domain, wait ~5-10 minutes, then copy the domain ID (`dzd-xxxxxxxxxxxxx`) and set it as `domain_name` in `domain-config.yaml`.
 
 ---
 
@@ -73,7 +65,7 @@ python3 tests/integration/test-e2e-pool-lifecycle.py
 4. Deployment completes successfully
 5. Data sources and environments deleted
 6. Project deleted
-7. Account transitions to CLEANING (reclaim triggered via DataZone event)
+7. Account transitions to CLEANING (reclaim triggered via SMUS event)
 8. DeprovisionAccount runs, SetupOrchestrator re-provisions account
 9. Account returns to AVAILABLE
 
@@ -91,14 +83,8 @@ python3 tests/integration/test-e2e-pool-lifecycle.py
 
 ```bash
 eval $(isengardcli credentials amirbo+3@amazon.com)
-
-aws lambda invoke \
-  --function-name AccountReconciler \
-  --payload '{"source":"manual","dryRun":false,"autoRecycle":true,"autoReplenish":true}' \
-  --cli-binary-format raw-in-base64-out \
-  --region us-east-2 /tmp/reconciler.json
-
-cat /tmp/reconciler.json | python3 -m json.tool
+./scripts/utils/verify-pool-health.sh           # full self-healing
+./scripts/utils/verify-pool-health.sh --dry-run # preview only
 ```
 
 ---

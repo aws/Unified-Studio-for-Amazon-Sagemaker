@@ -4,8 +4,8 @@ set -e
 # Start the Account Pool Factory web UI.
 #
 # Two modes:
-#   ./scripts/02-domain-account/deploy/05-start-ui.sh          # mock mode (no AWS calls)
-#   ./scripts/02-domain-account/deploy/05-start-ui.sh --live   # live mode (real AWS)
+#   ./scripts/02-domain-account/deploy/05-start-ui.sh          # live mode (real AWS, default)
+#   ./scripts/02-domain-account/deploy/05-start-ui.sh --mock   # mock mode (no AWS calls)
 #
 # Live mode requires valid AWS credentials for the domain account:
 #   eval $(isengardcli credentials amirbo+3@amazon.com)
@@ -16,18 +16,18 @@ UI_DIR="$PROJECT_ROOT/ui"
 
 MODE="${1:-}"
 
-if [ "$MODE" = "--live" ]; then
+if [ "$MODE" = "--mock" ]; then
+    echo "🧪 Starting UI in MOCK mode (fake data)..."
+    echo "   Pool Console    : http://localhost:8080/pool-console/"
+    echo "   Project Creator : http://localhost:8080/project-creator/"
+    echo ""
+    echo "   To use real AWS data: $0"
+    echo ""
+    python3 "$UI_DIR/mock-server.py"
+else
     echo "🌐 Starting UI in LIVE mode (real AWS)..."
     echo "   Pool Console    : http://localhost:8080/pool-console/"
     echo "   Project Creator : http://localhost:8080/project-creator/"
     echo ""
     python3 "$UI_DIR/mock-server.py" --live
-else
-    echo "🧪 Starting UI in MOCK mode (fake data)..."
-    echo "   Pool Console    : http://localhost:8080/pool-console/"
-    echo "   Project Creator : http://localhost:8080/project-creator/"
-    echo ""
-    echo "   To use real AWS data: $0 --live"
-    echo ""
-    python3 "$UI_DIR/mock-server.py"
 fi
