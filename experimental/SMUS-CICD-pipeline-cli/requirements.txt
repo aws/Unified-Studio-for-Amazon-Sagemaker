@@ -1,4 +1,0 @@
-typer[all]
-PyYAML
-boto3
-jsonschema

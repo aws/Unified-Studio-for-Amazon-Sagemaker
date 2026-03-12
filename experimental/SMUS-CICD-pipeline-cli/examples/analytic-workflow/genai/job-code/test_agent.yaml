@@ -1,7 +1,0 @@
-test_agent:
-  role: >
-    General purpose agent
-  goal: >
-    Use tools to execute user instructions
-  instructions: >
-    Use tools to execute user instructions
