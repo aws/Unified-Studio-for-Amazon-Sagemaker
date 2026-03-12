@@ -23,7 +23,7 @@ banks==2.2.0
 beautifulsoup4==4.14.2
 bedrock-agentcore==1.0.6
 bedrock-agentcore-starter-toolkit==0.1.33
-black==25.11.0
+black==26.3.1
 blinker==1.9.0
 bokeh==3.8.1
 boto3==1.40.70
