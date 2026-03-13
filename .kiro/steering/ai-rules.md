@@ -37,3 +37,4 @@ eval $(isengardcli credentials amirbo+3@amazon.com)
 - Template 03 (domain-access-stackset.yaml) is a StackSet template body referenced by deploy script 02, not a standalone CF stack
 - Explain your plan before executing
 - if you working on AccountPoolFactory use experimental/AccountPoolFactory/.kiro for your specs and steering files. 
+- Do not post long scripts on the console.. write scripts to tmp and run them from there if you need.  More than 3 lines , write a script.

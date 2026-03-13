@@ -392,6 +392,25 @@ def _cleanup_old_stacks(account_id: str, config: Dict[str, Any]):
         except Exception:
             pass  # Stack didn't exist or already deleted
 
+    # Reset LakeFormation data lake settings — old blueprint stacks may have set
+    # DataZoneManageAccessRole/DataZoneProvisioningRole as LF admins, which
+    # interferes with DataZone environment creation.
+    try:
+        lf_client = get_cross_account_client('lakeformation', account_id, config)
+        settings = lf_client.get_data_lake_settings()
+        admins = settings.get('DataLakeSettings', {}).get('DataLakeAdmins', [])
+        if admins:
+            print(f"  🔧 Resetting LakeFormation admins (had {len(admins)})")
+            lf_client.put_data_lake_settings(
+                DataLakeSettings={
+                    'DataLakeAdmins': [],
+                    'CreateDatabaseDefaultPermissions': [],
+                    'CreateTableDefaultPermissions': [],
+                }
+            )
+    except Exception as e:
+        print(f"  ⚠️ LakeFormation reset skipped: {e}")
+
     print(f"✅ Old stack cleanup complete for {account_id}")
 
 
@@ -412,12 +431,12 @@ def execute_setup_workflow(account_id: str, config: Dict[str, Any], resume_from:
         
         # Wave 1: Foundation + Domain Access (all parallel)
         print("🌊 Wave 1: Foundation + Domain Access (parallel)")
-        print("   Deploying: VPC, IAM roles, Project role, EventBridge, S3 bucket, RAM share + domain visibility")
+        print("   Deploying: VPC, IAM roles, Custom policy, EventBridge, S3 bucket, RAM share + domain visibility")
         
-        vpc_result, iam_result, project_role_result, eb_result, s3_result, ram_result = execute_wave_parallel([
+        vpc_result, iam_result, custom_policy_result, eb_result, s3_result, ram_result = execute_wave_parallel([
             lambda: deploy_vpc(account_id, config),
             lambda: deploy_iam_roles(account_id, config),
-            lambda: deploy_project_role(account_id, config),
+            lambda: deploy_custom_policy(account_id, config),
             lambda: deploy_eventbridge_rules(account_id, config),
             lambda: create_s3_bucket(account_id, config),
             lambda: create_ram_share_and_verify_domain(account_id, config)
@@ -425,7 +444,7 @@ def execute_setup_workflow(account_id: str, config: Dict[str, Any], resume_from:
         
         resources.update(vpc_result)
         resources.update(iam_result)
-        resources.update(project_role_result)
+        resources.update(custom_policy_result)
         resources.update(eb_result)
         resources.update(s3_result)
         resources.update(ram_result)
@@ -433,14 +452,14 @@ def execute_setup_workflow(account_id: str, config: Dict[str, Any], resume_from:
         update_progress(account_id, 'wave1_foundation', {
             'vpc': vpc_result,
             'iam': iam_result,
-            'project_role': project_role_result,
+            'custom_policy': custom_policy_result,
             'eventbridge': eb_result,
             's3': s3_result,
             'ram_and_domain': ram_result
         }, deployed_stacksets=[
             'SMUS-AccountPoolFactory-VpcSetup',
             'SMUS-AccountPoolFactory-IamRoles',
-            'SMUS-AccountPoolFactory-ProjectRole',
+            'SMUS-AccountPoolFactory-CustomPolicy',
             'SMUS-AccountPoolFactory-EventbridgeRules',
         ])
         
@@ -450,7 +469,7 @@ def execute_setup_workflow(account_id: str, config: Dict[str, Any], resume_from:
         print("🌊 Wave 2: Blueprint Enablement")
         print("   Domain is verified accessible - DataZone APIs will succeed")
         
-        bp_result = enable_blueprints(account_id, config, iam_result, vpc_result, s3_result)
+        bp_result = enable_blueprints(account_id, config, iam_result, vpc_result, s3_result, custom_policy_result)
         resources.update(bp_result)
         update_progress(account_id, 'wave2_blueprints', bp_result,
                         deployed_stacksets=['SMUS-AccountPoolFactory-BlueprintEnablement'])
@@ -668,28 +687,25 @@ def deploy_eventbridge_rules(account_id: str, config: Dict[str, Any]) -> Dict[st
     return {'eventBridgeRulesDeployed': True}
 
 
-def deploy_project_role(account_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
-    """Deploy project execution role via StackSet instance."""
-    enabled = config.get('ProjectRoleEnabled', 'true').lower()
+def deploy_custom_policy(account_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
+    """Deploy customer-managed IAM policy via StackSet instance."""
+    enabled = config.get('ProjectPolicyEnabled', config.get('ProjectRoleEnabled', 'true')).lower()
     if enabled != 'true':
-        print(f"⏭️ Project role disabled")
+        print(f"⏭️ Custom policy disabled")
         return {}
-    role_name  = config.get('ProjectRoleName', 'AmazonSageMakerProjectRole')
-    policy_arn = config.get('ProjectRoleManagedPolicyArn',
-                            'arn:aws:iam::aws:policy/SageMakerStudioAdminIAMPermissiveExecutionPolicy')
-    print(f"👤 Deploying project role for account {account_id} via StackSet")
-    stackset_name = 'SMUS-AccountPoolFactory-ProjectRole'
+    policy_name = config.get('ProjectPolicyName', 'MySageMakerStudioAdminIAMPermissiveExecutionPolicy')
+    print(f"📋 Deploying custom policy for account {account_id} via StackSet")
+    stackset_name = 'SMUS-AccountPoolFactory-CustomPolicy'
     params = [
-        {'ParameterKey': 'RoleName',         'ParameterValue': role_name},
-        {'ParameterKey': 'ManagedPolicyArn', 'ParameterValue': policy_arn},
+        {'ParameterKey': 'PolicyName', 'ParameterValue': policy_name},
     ]
     org_cf = _get_org_cf_client()
     op_id = _add_stackset_instance(org_cf, stackset_name, account_id, params)
     if op_id != 'ALREADY_EXISTS':
         _wait_stackset_operation(org_cf, stackset_name, op_id)
     outputs = _read_stack_outputs(account_id, stackset_name)
-    print(f"✅ Project role deployed via StackSet")
-    return {'projectRoleArn': outputs.get('ProjectRoleArn', '')}
+    print(f"✅ Custom policy deployed via StackSet")
+    return {'customPolicyArn': outputs.get('CustomPolicyArn', '')}
 
 def create_s3_bucket(account_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
     """Create S3 bucket for blueprint artifacts"""
@@ -999,7 +1015,8 @@ def wait_for_ram_principal_associated(share_arn: str, expected_principal: str, t
 
 
 def enable_blueprints(account_id: str, config: Dict[str, Any], iam_result: Dict[str, Any],
-                      vpc_result: Dict[str, Any] = None, s3_result: Dict[str, Any] = None) -> Dict[str, Any]:
+                      vpc_result: Dict[str, Any] = None, s3_result: Dict[str, Any] = None,
+                      custom_policy_result: Dict[str, Any] = None) -> Dict[str, Any]:
     """Enable DataZone blueprints via StackSet instance.
     
     Retries the full add+wait cycle up to 3 times because blueprint types may
@@ -1013,6 +1030,7 @@ def enable_blueprints(account_id: str, config: Dict[str, Any], iam_result: Dict[
     subnet_ids     = ','.join(s for s in (vpc_result or {}).get('subnetIds', []) if s)
     bucket_name    = (s3_result or {}).get('bucketName', '')
     s3_location    = f"s3://{bucket_name}" if bucket_name else ''
+    customer_policy_arns = (custom_policy_result or {}).get('customPolicyArn', '')
 
     params = [
         {'ParameterKey': 'DomainId',             'ParameterValue': config['DomainId']},
@@ -1022,6 +1040,7 @@ def enable_blueprints(account_id: str, config: Dict[str, Any], iam_result: Dict[
         {'ParameterKey': 'SubnetIds',            'ParameterValue': subnet_ids},
         {'ParameterKey': 'S3BucketName',         'ParameterValue': s3_location},
         {'ParameterKey': 'DomainUnitId',         'ParameterValue': config.get('RootDomainUnitId', ROOT_DOMAIN_UNIT_ID)},
+        {'ParameterKey': 'CustomerPolicyArns',   'ParameterValue': customer_policy_arns},
     ]
 
     org_cf = _get_org_cf_client()

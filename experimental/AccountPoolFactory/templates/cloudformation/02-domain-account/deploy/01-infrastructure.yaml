@@ -35,21 +35,16 @@ Parameters:
     Default: 3
     Description: Maximum concurrent setups
 
-  ProjectRoleEnabled:
+  ProjectPolicyEnabled:
     Type: String
     Default: 'true'
     AllowedValues: ['true', 'false']
-    Description: Whether to create a project execution role in pool accounts
+    Description: Whether to create a customer-managed policy in pool accounts
 
-  ProjectRoleName:
+  ProjectPolicyName:
     Type: String
-    Default: AmazonSageMakerProjectRole
-    Description: Name of the project execution role
-
-  ProjectRoleManagedPolicyArn:
-    Type: String
-    Default: arn:aws:iam::aws:policy/SageMakerStudioAdminIAMPermissiveExecutionPolicy
-    Description: Managed policy ARN for the project execution role
+    Default: MySageMakerStudioAdminIAMPermissiveExecutionPolicy
+    Description: Name of the customer-managed policy for project user roles
 
 Resources:
   # ============================================================
@@ -655,29 +650,21 @@ Resources:
       Value: !Ref AlertTopic
       Description: SNS topic ARN for alerts
 
-  ProjectRoleEnabledParameter:
+  ProjectPolicyEnabledParameter:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: /AccountPoolFactory/SetupOrchestrator/ProjectRoleEnabled
+      Name: /AccountPoolFactory/SetupOrchestrator/ProjectPolicyEnabled
       Type: String
-      Value: !Ref ProjectRoleEnabled
-      Description: Whether to create project execution role in pool accounts
+      Value: !Ref ProjectPolicyEnabled
+      Description: Whether to create customer-managed policy in pool accounts
 
-  ProjectRoleNameParameter:
+  ProjectPolicyNameParameter:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: /AccountPoolFactory/SetupOrchestrator/ProjectRoleName
+      Name: /AccountPoolFactory/SetupOrchestrator/ProjectPolicyName
       Type: String
-      Value: !Ref ProjectRoleName
-      Description: Name of the project execution role
-
-  ProjectRoleManagedPolicyArnParameter:
-    Type: AWS::SSM::Parameter
-    Properties:
-      Name: /AccountPoolFactory/SetupOrchestrator/ProjectRoleManagedPolicyArn
-      Type: String
-      Value: !Ref ProjectRoleManagedPolicyArn
-      Description: Managed policy ARN for the project execution role
+      Value: !Ref ProjectPolicyName
+      Description: Name of the customer-managed policy for project user roles
 
   # Reconciler/Recycler
   MaxRecycleRetriesParameter:

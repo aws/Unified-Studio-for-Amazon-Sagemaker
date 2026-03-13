@@ -13,10 +13,9 @@ org_admin_account_id: "495869084367"
 domain_name: "domain-03-06-2026-164120"
 # domain_id: dzd-4h7jbz76qckoh5
 
-project_role:
+project_policy:
   enabled: true
-  role_name: AmazonSageMakerProjectRole
-  managed_policy_arn: arn:aws:iam::aws:policy/SageMakerStudioAdminIAMPermissiveExecutionPolicy
+  policy_name: MySageMakerStudioAdminIAMPermissiveExecutionPolicy
 
 pools:
   - name: default

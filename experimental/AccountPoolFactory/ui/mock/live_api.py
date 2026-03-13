@@ -125,7 +125,7 @@ def handle(method, path, body, config):
                     email = next((e["Value"] for e in u.get("Emails", []) if e.get("Primary")), "")
                     if q in username or q in display or q in given or q in family or q in email.lower():
                         name = u.get("DisplayName") or f"{u.get('Name',{}).get('GivenName','')} {u.get('Name',{}).get('FamilyName','')}".strip() or username
-                        owners.append({"id": u["UserId"], "name": name, "email": email, "type": "USER"})
+                        owners.append({"id": u["UserId"], "name": name, "email": email, "type": "USER", "username": u.get("UserName", "")})
 
             # Fetch all groups and filter client-side
             paginator = idc.get_paginator("list_groups")

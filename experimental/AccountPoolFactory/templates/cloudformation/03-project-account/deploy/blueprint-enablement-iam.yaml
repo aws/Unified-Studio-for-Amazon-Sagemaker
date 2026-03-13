@@ -44,6 +44,8 @@ Resources:
             VpcId: !Ref VpcId
             Subnets: !Ref SubnetIds
             S3Location: !Ref S3BucketName
+      GlobalParameters:
+        projectRolePolicyArns: !Sub 'arn:aws:iam::${AWS::AccountId}:policy/MySageMakerStudioAdminIAMPermissiveExecutionPolicy'
       EnabledRegions:
         - !Ref 'AWS::Region'
 
@@ -629,10 +631,119 @@ Resources:
               DomainUnit: !Ref DomainUnitId
               IncludeChildDomainUnits: true
 
+  # ── TEMPORARY WORKAROUND ──────────────────────────────────────────────
+  # The AWS::DataZone::EnvironmentBlueprintConfiguration CF resource does not
+  # propagate GlobalParameters (projectRolePolicyArns) to DataZone.
+  # This custom resource calls the DataZone API directly to set it.
+  # Remove once the CF resource supports GlobalParameters properly.
+  # ──────────────────────────────────────────────────────────────────────
+
+  SetProjectRolePolicyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AccountPoolFactory-SetPolicyRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DataZoneBlueprintConfig
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - datazone:GetEnvironmentBlueprintConfiguration
+                  - datazone:PutEnvironmentBlueprintConfiguration
+                Resource: '*'
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource:
+                  - !Sub 'arn:aws:iam::${AWS::AccountId}:role/DataZone*'
+
+  SetProjectRolePolicyFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.12
+      Handler: index.handler
+      Timeout: 60
+      Role: !GetAtt SetProjectRolePolicyRole.Arn
+      Code:
+        ZipFile: |
+          import boto3, json, urllib3, traceback
+          from botocore.auth import SigV4Auth
+          from botocore.awsrequest import AWSRequest
+          http = urllib3.PoolManager()
+          def send(event, context, status, data={}, reason=''):
+              body = json.dumps({
+                  'Status': status,
+                  'Reason': reason or 'See CloudWatch',
+                  'PhysicalResourceId': event.get('PhysicalResourceId', context.log_stream_name),
+                  'StackId': event['StackId'],
+                  'RequestId': event['RequestId'],
+                  'LogicalResourceId': event['LogicalResourceId'],
+                  'Data': data
+              })
+              http.request('PUT', event['ResponseURL'], body=body,
+                  headers={'Content-Type': ''})
+          def handler(event, context):
+              try:
+                  if event['RequestType'] == 'Delete':
+                      send(event, context, 'SUCCESS')
+                      return
+                  props = event['ResourceProperties']
+                  region = props['Region']
+                  domain_id = props['DomainId']
+                  bp_id = props['BlueprintId']
+                  policy_arns = props['PolicyArns']
+                  dz = boto3.client('datazone', region_name=region)
+                  cfg = dz.get_environment_blueprint_configuration(
+                      domainIdentifier=domain_id,
+                      environmentBlueprintIdentifier=bp_id)
+                  gp = cfg.get('globalParameters', {})
+                  gp['projectRolePolicyArns'] = policy_arns
+                  rp = cfg.get('regionalParameters', {})
+                  url = f'{dz.meta.endpoint_url}/v2/domains/{domain_id}/environment-blueprint-configurations/{bp_id}'
+                  payload = json.dumps({
+                      'enabledRegions': cfg['enabledRegions'],
+                      'manageAccessRoleArn': cfg['manageAccessRoleArn'],
+                      'provisioningRoleArn': cfg['provisioningRoleArn'],
+                      'regionalParameters': rp,
+                      'globalParameters': gp
+                  })
+                  session = boto3.Session()
+                  creds = session.get_credentials().get_frozen_credentials()
+                  req = AWSRequest(method='PUT', url=url, data=payload,
+                      headers={'Content-Type': 'application/json'})
+                  SigV4Auth(creds, 'datazone', region).add_auth(req)
+                  resp = http.request('PUT', url, body=payload,
+                      headers=dict(req.headers))
+                  if resp.status >= 400:
+                      raise Exception(f'API {resp.status}: {resp.data.decode()[:500]}')
+                  send(event, context, 'SUCCESS', {'PolicyArns': policy_arns})
+              except Exception as e:
+                  traceback.print_exc()
+                  send(event, context, 'FAILED', reason=str(e))
+
+  SetProjectRolePolicy:
+    Type: Custom::SetProjectRolePolicy
+    DependsOn: Tooling
+    Properties:
+      ServiceToken: !GetAtt SetProjectRolePolicyFunction.Arn
+      DomainId: !Ref DomainId
+      BlueprintId: !GetAtt Tooling.EnvironmentBlueprintId
+      PolicyArns: !Sub 'arn:aws:iam::${AWS::AccountId}:policy/MySageMakerStudioAdminIAMPermissiveExecutionPolicy'
+      Region: !Ref 'AWS::Region'
+
 Outputs:
   TemplateVersion:
     Description: Template version — bump this string whenever the template changes to force SetupOrchestrator to update all deployed stacks
-    Value: "2"
+    Value: "4"
 
   ToolingBlueprintId:
     Description: Tooling Blueprint ID

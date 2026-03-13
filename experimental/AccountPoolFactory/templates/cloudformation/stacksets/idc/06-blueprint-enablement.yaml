@@ -18,6 +18,8 @@ Resources:
       RegionalParameters:
         - Region: !Ref 'AWS::Region'
           Parameters: {}
+      GlobalParameters:
+        projectRolePolicyArns: !Sub 'arn:aws:iam::${AWS::AccountId}:policy/MySageMakerStudioAdminIAMPermissiveExecutionPolicy'
       EnabledRegions:
         - !Ref 'AWS::Region'
 

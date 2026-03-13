@@ -1,0 +1,136 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Customer-managed IAM policy for DataZone project user roles v1'
+
+Parameters:
+  PolicyName:
+    Type: String
+    Default: MySageMakerStudioAdminIAMPermissiveExecutionPolicy
+    Description: Name of the customer-managed policy
+
+Resources:
+  CustomProjectPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Ref PolicyName
+      Description: >-
+        Custom project user policy. Allow-all with deny guardrails for infrastructure
+        protection, IAM escalation prevention, session isolation, and service scoping.
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowAll
+            Effect: Allow
+            Action: '*'
+            Resource: '*'
+
+          - Sid: DenyMutatePoolFactoryResources
+            Effect: Deny
+            Action:
+              - iam:DeleteRole
+              - iam:UpdateRole
+              - iam:DeleteRolePolicy
+              - iam:PutRolePolicy
+              - iam:AttachRolePolicy
+              - iam:DetachRolePolicy
+              - iam:DeletePolicy
+              - iam:CreatePolicyVersion
+              - cloudformation:DeleteStack
+              - cloudformation:UpdateStack
+              - events:DeleteRule
+              - events:RemoveTargets
+              - events:PutRule
+              - ec2:DeleteVpc
+              - ec2:DeleteSubnet
+              - ec2:DeleteSecurityGroup
+              - s3:DeleteBucket
+            Resource: '*'
+            Condition:
+              StringEquals:
+                'aws:ResourceTag/ManagedBy': 'AccountPoolFactory'
+
+          - Sid: DenyIAMEscalation
+            Effect: Deny
+            Action:
+              - iam:CreateRole
+              - iam:CreatePolicy
+              - iam:CreatePolicyVersion
+              - iam:AttachRolePolicy
+              - iam:DetachRolePolicy
+              - iam:PutRolePolicy
+              - iam:DeleteRolePolicy
+              - iam:CreateUser
+              - iam:AttachUserPolicy
+              - iam:PutUserPolicy
+            Resource: '*'
+
+          - Sid: DenyForeignGlueSessions
+            Effect: Deny
+            Action:
+              - glue:CancelStatement
+              - glue:CreateSession
+              - glue:DeleteSession
+              - glue:GetSession
+              - glue:GetStatement
+              - glue:RunStatement
+              - glue:StopSession
+            Resource: 'arn:aws:glue:*:*:session/*'
+            Condition:
+              StringNotEquals:
+                'aws:ResourceTag/AmazonDataZoneSessionOwner': '${aws:SourceIdentity}'
+
+          - Sid: DenyForeignAthenaSessions
+            Effect: Deny
+            Action:
+              - athena:StartSession
+              - athena:GetSession
+              - athena:TerminateSession
+              - athena:GetSessionStatus
+            Resource: 'arn:aws:athena:*:*:workgroup/*/session/*'
+            Condition:
+              StringNotEquals:
+                'aws:ResourceTag/AmazonDataZoneSessionOwner': '${aws:SourceIdentity}'
+
+          - Sid: DenyUnauthorizedServices
+            Effect: Deny
+            NotAction:
+              - cloudwatch:*
+              - glue:*
+              - logs:*
+              - redshift-data:*
+              - redshift-serverless:*
+              - redshift:*
+              - s3:*
+              - s3tables:*
+              - athena:*
+              - bedrock:*
+              - codewhisperer:*
+              - sagemaker-unified-studio-mcp:*
+              - datazone:*
+              - q:*
+              - sagemaker:*
+              - sagemaker-mlflow:*
+              - scheduler:*
+              - sqlworkbench:*
+              - emr-serverless:*
+              - airflow-serverless:*
+              - cloudformation:*
+              - iam:*
+              - sts:*
+              - ssm:*
+              - lakeformation:*
+              - dynamodb:*
+              - secretsmanager:*
+              - resource-groups:*
+              - ecr:*
+              - codeconnections:*
+              - codestar-connections:*
+              - kms:*
+              - ec2:*
+            Resource: '*'
+Outputs:
+  TemplateVersion:
+    Description: Template version
+    Value: "1"
+  CustomPolicyArn:
+    Description: ARN of the customer-managed policy
+    Value: !Ref CustomProjectPolicy

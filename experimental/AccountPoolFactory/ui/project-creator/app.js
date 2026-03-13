@@ -120,7 +120,7 @@ async function fetchOwners(q) {
 function renderDropdown(owners) {
   if (!owners.length) { hideDropdown(); return; }
   ownerDropdown.innerHTML = owners.map(o => `
-    <div role="option" tabindex="0" class="owner-option" data-id="${o.id}" data-type="${o.type}" data-name="${o.name}">
+    <div role="option" tabindex="0" class="owner-option" data-id="${o.id}" data-type="${o.type}" data-name="${o.name}" data-username="${o.username || ''}">
       <span class="owner-badge ${o.type.toLowerCase()}">${o.type === 'GROUP' ? 'Group' : 'User'}</span>
       <span class="owner-name">${o.name}</span>
       ${o.email ? `<span class="owner-email">${o.email}</span>` : ''}
@@ -141,8 +141,8 @@ function renderDropdown(owners) {
 function selectOwner(el) {
   ownerIdInput.value = el.dataset.id;
   ownerTypeInput.value = el.dataset.type;
-  // Show selected name directly in the input field
   ownerSearch.value = el.dataset.name;
+  ownerSearch.dataset.username = el.dataset.username || '';
   ownerSearch.setAttribute('aria-expanded', 'false');
   ownerDropdown.hidden = true;
   ownerSelected = true;
@@ -191,7 +191,7 @@ form.addEventListener('submit', async e => {
     region: regionSel.value,
     ownerId: ownerIdInput.value,
     ownerType: ownerTypeInput.value,
-    ownerName: ownerSearch.value.trim(),
+    ownerName: ownerSearch.dataset.username || ownerSearch.value.trim(),
     profileId: profileSel.value,
     profileName: profilesData.find(p => p.id === profileSel.value)?.name || '',
   };
