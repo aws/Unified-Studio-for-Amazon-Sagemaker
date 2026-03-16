@@ -16,13 +16,23 @@ Account Pool Factory solves this by maintaining a pool of pre-configured account
 
 Key capabilities: configurable pool size per OU, self-healing reconciliation, automatic reclaim/recycle, rolling StackSet updates, IDC domain support.
 
+## Personas
+
+The system is operated by two personas with separate AWS accounts and distinct responsibilities:
+
+**Org Admin** — owns the AWS Organizations management account. Responsible for governance: which StackSet templates are approved for deployment into project accounts, which OUs accounts are created in, and what tags/email conventions are used. The org admin does not know about pools or pool sizing — they define what's allowed, not how many.
+
+**Domain Admin** — owns the SageMaker Unified Studio / DataZone domain account. Responsible for pool operations: how many accounts to keep ready, which subset of org-approved StackSets to deploy per pool, reclaim strategy, project profiles, and day-to-day monitoring. The domain admin picks from the org-approved menu and decides the pool shape.
+
+This separation means the org admin can approve a new StackSet template without touching pool config, and the domain admin can resize a pool or change reclaim strategy without touching governance.
+
 ## Getting Started
 
 Deployment involves two roles — domain admin deploys first, then hands off to org admin.
 
-1. **Domain admin** — see [DomainAdminGuide.md](docs/DomainAdminGuide.md)
-2. **Org admin** — see [OrgAdminGuide.md](docs/OrgAdminGuide.md)
-3. **Domain admin** completes setup and seeds the pool — back to [DomainAdminGuide.md](docs/DomainAdminGuide.md)
+1. **Domain admin** deploys infrastructure + Lambdas — see [DomainAdminGuide.md](docs/DomainAdminGuide.md)
+2. **Org admin** deploys governance stack + StackSets — see [OrgAdminGuide.md](docs/OrgAdminGuide.md)
+3. **Domain admin** completes setup (project profile, seed pool) — back to [DomainAdminGuide.md](docs/DomainAdminGuide.md)
 
 ## Documentation
 
