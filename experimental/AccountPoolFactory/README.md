@@ -1,8 +1,20 @@
 # Account Pool Factory for SageMaker Unified Studio
 
-Maintains a pool of pre-configured AWS accounts ready for instant project assignment in SageMaker Unified Studio (SMUS/DataZone). When a user creates a project, an account is assigned in < 5 seconds instead of waiting 5-6 minutes for provisioning.
+## Why
 
-**Key capabilities**: configurable pool size, self-healing reconciliation, IDC domain support, rolling blueprint updates.
+SageMaker Unified Studio projects often need security isolation — one project should not be able to delete, modify, or even see another project's resources until results are explicitly published to the data catalog.
+
+In IDC domains today, this isolation is achieved through complex IAM policies with resource-tag conditions scoped to each project. For example, the [SageMakerStudioProjectUserRolePolicy](https://docs.aws.amazon.com/aws-managed-policy/latest/reference/SageMakerStudioProjectUserRolePolicy.html) uses `Project` tag conditions on every action. This approach is fragile: it depends on every AWS service supporting tag-based permissions, the policies are hard to audit, and a single misconfigured condition can leak access across projects.
+
+A dedicated AWS account per project provides much stronger isolation. The IAM boundary is the account itself — no tag conditions needed, no cross-project leakage possible, and the policies are simple and auditable.
+
+The challenge: provisioning and configuring a new account (VPC, IAM roles, Lake Formation, EventBridge, blueprints) takes 10-20 minutes. Users can't wait that long when they click "Create Project."
+
+## What
+
+Account Pool Factory solves this by maintaining a pool of pre-configured accounts ready for instant assignment. When a user creates a project, an account is assigned in under 5 seconds. In the background, the pool replenishes itself by provisioning new accounts in parallel. When a project is deleted, the account is reclaimed — either cleaned and returned to the pool, or decommissioned. When new infrastructure is required (e.g. a new StackSet), the pool rolls out updates to all existing accounts automatically.
+
+Key capabilities: configurable pool size per OU, self-healing reconciliation, automatic reclaim/recycle, rolling StackSet updates, IDC domain support.
 
 ## Getting Started
 
