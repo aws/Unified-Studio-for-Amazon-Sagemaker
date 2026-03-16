@@ -224,14 +224,14 @@ def fix_stackset(event: Dict[str, Any], organizations, cloudformation, assumed_s
 
 
 
-def load_pool_config_from_ssm(pool_name: str, org_ssm) -> Dict[str, Any]:
-    """Read pool config from org SSM via the assumed AccountCreation role.
+def load_ou_config_from_ssm(ou_id: str, org_ssm) -> Dict[str, Any]:
+    """Read per-OU config from org SSM via the assumed AccountCreation role.
 
-    Returns dict with: ou_id, email_prefix, email_domain, account_tags (dict),
-    stacksets (list of {template, stacksetName, wave, s3Url})
+    Returns dict with: email_prefix, email_domain, account_tags (dict).
+    OU config is written by the org admin deploy script under /AccountPoolFactory/OUs/{ou-id}/.
     """
-    base = f'/AccountPoolFactory/Pools/{pool_name}'
-    keys = ['OUId', 'EmailPrefix', 'EmailDomain', 'AccountTags', 'StackSets']
+    base = f'/AccountPoolFactory/OUs/{ou_id}'
+    keys = ['EmailPrefix', 'EmailDomain', 'AccountTags']
     result = {}
     for key in keys:
         try:
@@ -242,20 +242,13 @@ def load_pool_config_from_ssm(pool_name: str, org_ssm) -> Dict[str, Any]:
             result[key] = None
 
     config = {
-        'ou_id': result.get('OUId', ''),
         'email_prefix': result.get('EmailPrefix', ''),
         'email_domain': result.get('EmailDomain', ''),
         'account_tags': {},
-        'stacksets': [],
     }
     if result.get('AccountTags'):
         try:
             config['account_tags'] = json.loads(result['AccountTags'])
-        except Exception:
-            pass
-    if result.get('StackSets'):
-        try:
-            config['stacksets'] = json.loads(result['StackSets'])
         except Exception:
             pass
     return config
@@ -336,7 +329,8 @@ def deploy_stacksets_in_waves(account_id: str, stacksets: List[Dict], cloudforma
 def provision_account(event: Dict[str, Any], organizations, cloudformation, assumed_sts) -> Dict[str, Any]:
     """Provision a new account with proper role setup.
 
-    Reads pool config (OU ID, email, account tags, StackSets) from org SSM.
+    Reads OU config (email, tags) from org SSM per-OU params.
+    Gets ouId and stacksets from the event payload (passed by PoolManager from domain SSM).
     Returns accountId, poolName, and deployedStackSets for the pool manager to store.
     """
     account_name = event.get('accountName')
@@ -347,26 +341,29 @@ def provision_account(event: Dict[str, Any], organizations, cloudformation, assu
 
     org_admin_account_id = assumed_sts.get_caller_identity()['Account']
 
-    # Load pool config from org SSM via assumed role
-    print(f'   Loading pool config from org SSM for pool: {pool_name}')
-    org_ssm = boto3.client('ssm', region_name=REGION, **_creds_from_sts(assumed_sts))
-    pool_config = load_pool_config_from_ssm(pool_name, org_ssm)
+    # OU ID and stacksets come from the event (passed by PoolManager from domain SSM)
+    ou_id = event.get('ouId')
+    stacksets = event.get('stacksets', [])
 
-    ou_id = event.get('ouId') or pool_config['ou_id']
     if not ou_id:
-        return {'status': 'ERROR', 'message': f'No OU ID found for pool {pool_name}'}
+        return {'status': 'ERROR', 'message': f'No ouId in event for pool {pool_name}'}
+
+    # Load OU config (email, tags) from org SSM via assumed role
+    print(f'   Loading OU config from org SSM for OU: {ou_id}')
+    org_ssm = boto3.client('ssm', region_name=REGION, **_creds_from_sts(assumed_sts))
+    ou_config = load_ou_config_from_ssm(ou_id, org_ssm)
 
     if not account_email:
         import uuid
         uid = uuid.uuid4().hex[:8]
-        account_email = f"{pool_config['email_prefix']}+{uid}@{pool_config['email_domain']}"
+        account_email = f"{ou_config['email_prefix']}+{uid}@{ou_config['email_domain']}"
 
     if not all([account_name, account_email, domain_id, domain_account_id]):
         return {'status': 'ERROR', 'message': 'Missing required parameters: accountName, domainId, domainAccountId'}
 
     print(f'🚀 Provisioning account: {account_name}')
     print(f'   Email: {account_email}  Pool: {pool_name}  OU: {ou_id}')
-    print(f'   StackSets: {[s["stacksetName"] for s in pool_config["stacksets"]]}')
+    print(f'   StackSets: {[s.get("stacksetName", s.get("template", "?")) for s in stacksets]}')
 
     account_id = None
     try:
@@ -378,7 +375,7 @@ def provision_account(event: Dict[str, Any], organizations, cloudformation, assu
         # Step 2: Apply account tags
         tags = [{'Key': 'ManagedBy', 'Value': 'AccountPoolFactory'},
                 {'Key': 'PoolName', 'Value': pool_name}]
-        for k, v in pool_config['account_tags'].items():
+        for k, v in ou_config['account_tags'].items():
             if k not in ('ManagedBy', 'PoolName'):
                 tags.append({'Key': k, 'Value': str(v)})
         try:
@@ -399,7 +396,7 @@ def provision_account(event: Dict[str, Any], organizations, cloudformation, assu
 
         # Step 5: Deploy pool StackSets in wave order
         print('Step 5: Deploying pool StackSets in wave order...')
-        deployed_stacksets = deploy_stacksets_in_waves(account_id, pool_config['stacksets'], cloudformation)
+        deployed_stacksets = deploy_stacksets_in_waves(account_id, stacksets, cloudformation)
         print(f'   ✅ Deployed {len(deployed_stacksets)} StackSets: {deployed_stacksets}')
 
         # Step 6: Wait for IAM propagation

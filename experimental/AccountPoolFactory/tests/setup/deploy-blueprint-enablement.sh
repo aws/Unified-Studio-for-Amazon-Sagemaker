@@ -79,7 +79,7 @@ echo ""
 echo "Step 2: Deploying Blueprint Enablement..."
 aws cloudformation create-stack \
   --stack-name "$STACK_NAME" \
-  --template-body file://"$PROJECT_ROOT/templates/cloudformation/03-project-account/blueprint-enablement.yaml" \
+  --template-body file://"$PROJECT_ROOT/approved-stacksets/cloudformation/idc/06-blueprint-enablement.yaml" \
   --parameters \
     "ParameterKey=DomainId,ParameterValue=$DOMAIN_ID" \
     "ParameterKey=ManageAccessRoleArn,ParameterValue=$MANAGE_ROLE" \

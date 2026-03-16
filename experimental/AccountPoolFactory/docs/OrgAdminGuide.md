@@ -15,7 +15,7 @@ Audience: the person who has access to the AWS Organizations management account.
 - Access to the AWS Organizations management account
 - CloudFormation, IAM, S3, SSM, and StackSet permissions
 - Domain admin has already deployed their infrastructure and given you `ProvisionAccountRoleArn`
-- `org-config.yaml` filled in (copy from `org-config.yaml.template`):
+- `01-org-account/config.yaml` filled in (copy from `01-org-account/config.yaml.template`):
 
 ```yaml
 region: us-east-2
@@ -51,7 +51,7 @@ pools:
 
 ```bash
 # Switch to Org Admin account credentials
-./scripts/01-org-mgmt-account/deploy/01-deploy.sh \
+./01-org-account/scripts/deploy/01-deploy.sh \
   <domain-account-id> \
   <domain-id> \
   <provision-account-role-arn>
@@ -59,7 +59,7 @@ pools:
 
 Example:
 ```bash
-./scripts/01-org-mgmt-account/deploy/01-deploy.sh \
+./01-org-account/scripts/deploy/01-deploy.sh \
   <domain-account-id> \
   <domain-id> \
   arn:aws:iam::<domain-account-id>:role/SMUS-AccountPoolFactory-ProvisionAccount-Role
@@ -73,7 +73,7 @@ The script:
 
 Verify:
 ```bash
-./scripts/01-org-mgmt-account/deploy/02-verify.sh
+./01-org-account/scripts/deploy/02-verify.sh
 ```
 
 ---
@@ -82,7 +82,7 @@ Verify:
 
 ```bash
 # Switch to Org Admin account credentials
-./scripts/01-org-mgmt-account/cleanup/cleanup.sh
+./01-org-account/scripts/cleanup/cleanup.sh
 ```
 
 This deletes StackSet instances from all pool accounts, then deletes the StackSet definitions and the CF stack.
@@ -91,7 +91,7 @@ This deletes StackSet instances from all pool accounts, then deletes the StackSe
 
 ## Adding a New Pool
 
-1. Add a new entry to `pools:` in `org-config.yaml`
+1. Add a new entry to `pools:` in `01-org-account/config.yaml`
 2. Re-run the deploy script — no CF stack changes needed
 3. The deploy script writes new SSM params and creates new StackSet definitions
 
@@ -99,8 +99,8 @@ This deletes StackSet instances from all pool accounts, then deletes the StackSe
 
 ## Adding a New StackSet Template
 
-1. Add the template file to `templates/cloudformation/stacksets/idc/` (IDC domains, active) or `templates/cloudformation/stacksets/iam/` (IAM domains, parked)
-2. Add an entry to the pool's `stacksets:` list in `org-config.yaml`
+1. Add the template file to `approved-stacksets/cloudformation/idc/` (IDC domains, active) or `approved-stacksets/cloudformation/iam/` (IAM domains, parked)
+2. Add an entry to the pool's `stacksets:` list in `01-org-account/config.yaml`
 3. Re-run the deploy script — it uploads all templates from `stacksets/idc/` to S3 and creates/updates StackSet definitions automatically
 
 The `AccountCreationRole` IAM condition (`EnforceS3TemplateSource`) ensures StackSets can only be created/updated using templates from the org S3 bucket. The domain account cannot supply arbitrary template bodies.
@@ -117,13 +117,13 @@ One CloudFormation stack (`AccountPoolFactory-OrgAdmin`) containing:
 | `SMUS-AccountPoolFactory-StackSetAdmin` IAM role | Trusted by the CloudFormation service to deploy StackSet instances into project accounts |
 | `accountpoolfactory-templates-{account-id}` S3 bucket | Stores approved StackSet templates. Versioned. Domain account has no direct access — templates are only reachable via the assumed AccountCreation role. |
 | Per-pool SSM parameters | OU ID, email settings, account tags, StackSet list per pool — read by ProvisionAccount Lambda at runtime |
-| StackSet definitions | One per template in `org-config.yaml` pools[].stacksets — created/updated by the deploy script |
+| StackSet definitions | One per template in `01-org-account/config.yaml` pools[].stacksets — created/updated by the deploy script |
 
 No Lambdas, no application code, no DynamoDB — just IAM, S3, SSM, and StackSet definitions.
 
 ---
 
-## org-config.yaml Reference
+## 01-org-account/config.yaml Reference
 
 The file has three top-level sections:
 
@@ -135,7 +135,7 @@ The file has three top-level sections:
 
 | Field | Purpose |
 |-------|---------|
-| `name` | Logical pool name, referenced by `domain-config.yaml` |
+| `name` | Logical pool name, referenced by `02-domain-account/config.yaml` |
 | `ou_name` | Human-readable OU path (e.g. `RetailBanking/CustomerAnalytics`) — resolved to OU ID automatically |
 | `ou_id` | Optional override to skip the OU name lookup |
 | `email_prefix` / `email_domain` | Root email pattern for new accounts: `{prefix}+{uid}@{domain}` |
@@ -148,7 +148,7 @@ The file has three top-level sections:
 
 ## Approved StackSet Templates
 
-These templates live in `templates/cloudformation/stacksets/idc/` (uploaded to S3 by the org admin deploy script) and are deployed into every project account by the SetupOrchestrator:
+These templates live in `approved-stacksets/cloudformation/idc/` (uploaded to S3 by the org admin deploy script) and are deployed into every project account by the SetupOrchestrator:
 
 | Template | StackSet Name | Wave | What it deploys |
 |----------|--------------|:----:|-----------------|
@@ -158,7 +158,7 @@ These templates live in `templates/cloudformation/stacksets/idc/` (uploaded to S
 | `04-eventbridge-rules.yaml` | `SMUS-AccountPoolFactory-EventbridgeRules` | 2 | EventBridge rule that forwards all `DataZone-*` CloudFormation stack status change events to the domain account's central event bus. This is how PoolManager detects project assignment and deletion. |
 | `05-project-role.yaml` | `SMUS-AccountPoolFactory-ProjectRole` | 2 | `AmazonSageMakerProjectRole` — execution role assumed by SageMaker, DataZone, Glue, Bedrock, and other services when running project workloads. Uses `SageMakerStudioAdminIAMPermissiveExecutionPolicy`. Optional — remove from `stacksets` if not needed. |
 
-IAM-domain-only templates live in `templates/cloudformation/stacksets/iam/` and are not currently used.
+IAM-domain-only templates live in `approved-stacksets/cloudformation/iam/` and are not currently used.
 
 The deploy script reads the `TemplateVersion` output from each deployed stack — bumping that value in a template forces SetupOrchestrator to update already-deployed stacks on the next reconcile cycle.
 

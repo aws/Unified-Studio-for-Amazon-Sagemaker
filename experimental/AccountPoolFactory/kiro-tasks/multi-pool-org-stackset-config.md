@@ -40,14 +40,14 @@ Support multiple account pools (each targeting a different OU), while keeping in
 
 ### Key Principles
 
-1. **Pools are defined in `org-config.yaml`** — each pool maps to an OU and an ordered list of approved StackSets
+1. **Pools are defined in `01-org-account/config.yaml`** — each pool maps to an OU and an ordered list of approved StackSets
 2. **Org admin owns the StackSet templates** — CF templates are uploaded to an S3 bucket in the org admin account during deploy. The domain Lambda cannot supply its own template body.
 3. **Three enforcement layers**:
    - IAM: `AccountCreationRole` scopes StackSet API calls to `SMUS-AccountPoolFactory-*` names only
    - IAM condition: `cloudformation:CreateStackSet` / `UpdateStackSet` require `TemplateURL` to match the org S3 bucket prefix (condition key `cloudformation:TemplateUrl`)
    - S3: bucket is in the org account; domain account has no direct S3 access — templates are only reachable via the assumed role
-4. **Infrastructure deploys once** — adding a new pool = update `org-config.yaml` + re-run deploy script. No CF stack changes needed.
-5. **Domain config simplified** — `domain-config.yaml` references pool names + sizing only. No `setup_stacks` list.
+4. **Infrastructure deploys once** — adding a new pool = update `01-org-account/config.yaml` + re-run deploy script. No CF stack changes needed.
+5. **Domain config simplified** — `02-domain-account/config.yaml` references pool names + sizing only. No `setup_stacks` list.
 
 ### Why S3-backed Templates Close the Security Gap
 
@@ -80,11 +80,11 @@ stacksets/
 
 IAM enforcement per pool: the `AccountCreationRole` policy uses a condition that allows `TemplateURL` matching either `stacksets/common/*` OR `stacksets/pools/{pool-name}/*`. This is enforced via two `StringLike` values in the condition. A pool cannot reference another pool's templates — the IAM condition will deny it.
 
-The `org-config.yaml` `template` field uses a path relative to `stacksets/` — the deploy script resolves whether it lives under `common/` or `pools/{pool-name}/` and stores the full S3 URL in SSM.
+The `01-org-account/config.yaml` `template` field uses a path relative to `stacksets/` — the deploy script resolves whether it lives under `common/` or `pools/{pool-name}/` and stores the full S3 URL in SSM.
 
 ### Config Structure
 
-**`org-config.yaml`** (org admin fills this in):
+**`01-org-account/config.yaml`** (org admin fills this in):
 ```yaml
 region: us-east-2   # Region for the org admin CF stack, StackSet control plane, S3 template bucket,
                     # and the target region when deploying StackSet instances into project accounts.
@@ -151,13 +151,13 @@ StackSet name derivation: `{stackset_prefix}-{template-stem-titlecased}` — e.g
 
 Templates in the same wave deploy in parallel; waves execute in ascending order.
 
-**`domain-config.yaml`** (domain admin fills this in):
+**`02-domain-account/config.yaml`** (domain admin fills this in):
 ```yaml
 region: us-east-2
 domain_name: "your-domain-name"
 
 pools:
-  - name: analytics          # must match a pool name in org-config.yaml
+  - name: analytics          # must match a pool name in 01-org-account/config.yaml
     min_size: 5
     target_size: 10
     reclaim_strategy: DELETE
@@ -265,10 +265,10 @@ The `SMUS-AccountPoolFactory-OrgAdmin.yaml` template takes `ProvisionAccountRole
 
 ### Phase 1: Configuration
 
-- [ ] 1.1 Update `org-config.yaml.template` — replace single `target_ou_name` with `pools` list (name, ou_name, stacksets with order)
-- [ ] 1.2 Update `domain-config.yaml.template` — replace `setup_stacks` + single OU with `pools` list (name, min_size, target_size, reclaim_strategy)
-- [ ] 1.3 Update `org-config.yaml` (live config) to new format with existing pool
-- [ ] 1.4 Update `domain-config.yaml` (live config) to new format with existing pool
+- [ ] 1.1 Update `01-org-account/config.yaml.template` — replace single `target_ou_name` with `pools` list (name, ou_name, stacksets with order)
+- [ ] 1.2 Update `02-domain-account/config.yaml.template` — replace `setup_stacks` + single OU with `pools` list (name, min_size, target_size, reclaim_strategy)
+- [ ] 1.3 Update `01-org-account/config.yaml` (live config) to new format with existing pool
+- [ ] 1.4 Update `02-domain-account/config.yaml` (live config) to new format with existing pool
 - [ ] 1.5 Update `resolve-config.sh` — parse multi-pool structure for both org and domain modes; export per-pool variables
 
 ### Phase 2: Org Admin Deploy Script & Infrastructure
@@ -286,21 +286,21 @@ The `SMUS-AccountPoolFactory-OrgAdmin.yaml` template takes `ProvisionAccountRole
 - [ ] 2.3 Update `AccountCreationRole` IAM policy in `SMUS-AccountPoolFactory-OrgAdmin.yaml`:
   - Add `s3:GetObject` on `arn:aws:s3:::accountpoolfactory-templates-{account-id}/stacksets/*`
   - Add condition on `cloudformation:CreateStackSet` / `UpdateStackSet`: `StringLike: cloudformation:TemplateUrl: https://s3.*.amazonaws.com/accountpoolfactory-templates-{account-id}/stacksets/*`
-- [ ] 2.4 Update `scripts/01-org-mgmt-account/deploy/01-deploy.sh`:
+- [ ] 2.4 Update `01-org-account/scripts/deploy/01-deploy.sh`:
   - Accept `ProvisionAccountRoleArn` as required argument (output from domain deploy)
-  - Upload all templates from `templates/cloudformation/03-project-account/deploy/*.yaml` to `s3://{bucket}/stacksets/common/` and pool-specific templates to `s3://{bucket}/stacksets/pools/{pool-name}/`
+  - Upload all templates from `approved-stacksets/cloudformation/idc/*.yaml` to `s3://{bucket}/stacksets/common/` and pool-specific templates to `s3://{bucket}/stacksets/pools/{pool-name}/`
   - Write `/AccountPoolFactory/TemplateBucketName` to SSM in org account
   - Iterate over pools, resolve each OU name → ID
   - Write per-pool SSM params (OUId, EmailPrefix, EmailDomain, AccountTags JSON, StackSets JSON with `template`+`stacksetName`+`wave` per entry)
   - Create/update StackSet definitions using S3 template URLs — never `--template-body`
-- [ ] 2.5 Update `scripts/01-org-mgmt-account/deploy/02-verify.sh` — verify S3 objects exist, SSM params exist per pool, StackSet definitions exist
+- [ ] 2.5 Update `01-org-account/scripts/deploy/02-verify.sh` — verify S3 objects exist, SSM params exist per pool, StackSet definitions exist
 
 ### Phase 3: Domain Admin Deploy Script
 
-- [ ] 3.1 Update `scripts/02-domain-account/deploy/01-deploy.sh`:
+- [ ] 3.1 Update `02-domain-account/scripts/deploy/01-deploy.sh`:
   - Deploy infrastructure stack first (no longer needs org admin outputs as prerequisite)
   - Print `ProvisionAccountRoleArn` output prominently — this is what the org admin needs
-- [ ] 3.2 Update `templates/cloudformation/02-domain-account/deploy/01-infrastructure.yaml`:
+- [ ] 3.2 Update `02-domain-account/templates/cloudformation/01-infrastructure.yaml`:
   - Remove single `TargetOUId` / `ExpectedStackPatterns` params; infrastructure is pool-agnostic
   - Output `ProvisionAccountRoleArn` (the `SMUS-AccountPoolFactory-ProvisionAccount-Role` ARN) — needed by org admin deploy AND by the UI infrastructure task to scope trust policies on the two new API Lambda roles
 - [ ] 3.3 Update `docs/DomainAdminGuide.md` deploy section — domain deploys first, then hands `ProvisionAccountRoleArn` + `DomainId` + `DomainAccountId` to org admin
@@ -335,7 +335,7 @@ The `SMUS-AccountPoolFactory-OrgAdmin.yaml` template takes `ProvisionAccountRole
 - [ ] 7.1 Update `list_authorized_accounts` — DataZone passes a context that includes the project profile name; map project profile name → pool name (read mapping from SSM `/AccountPoolFactory/Pools/{name}/ProjectProfileName`); query DynamoDB for AVAILABLE accounts filtered by that `poolName`
 - [ ] 7.2 Update `validate_account_authorization` — verify the account's `poolName` matches the pool associated with the requesting project profile
 - [ ] 7.3 If no pool mapping found for a project profile, fall back to returning accounts from any pool (backward-compatible default)
-- [ ] 7.4 Write `/AccountPoolFactory/Pools/{name}/ProjectProfileName` SSM param in domain deploy script (`scripts/02-domain-account/deploy/01-deploy.sh`) — value comes from `domain-config.yaml` `pools[].project_profile_name`; read by both AccountProvider Lambda and the UI's ProjectsApiLambda to filter pool-backed profiles
+- [ ] 7.4 Write `/AccountPoolFactory/Pools/{name}/ProjectProfileName` SSM param in domain deploy script (`02-domain-account/scripts/deploy/01-deploy.sh`) — value comes from `02-domain-account/config.yaml` `pools[].project_profile_name`; read by both AccountProvider Lambda and the UI's ProjectsApiLambda to filter pool-backed profiles
 ### Phase 8: DeprovisionAccount Lambda
 
 - [ ] 8.1 Update stack categorization — read `deployedStackSets` from the account's DynamoDB record; treat those StackSet-deployed stacks as "approved infrastructure" (never delete); delete everything else (DataZone project stacks)
@@ -357,13 +357,13 @@ The `SMUS-AccountPoolFactory-OrgAdmin.yaml` template takes `ProvisionAccountRole
 
 - [ ] 8.1 Rewrite `docs/OrgAdminGuide.md`:
   - New deployment order: domain deploys first, org deploys second
-  - Document `org-config.yaml` new format: pools, per-pool email, stacksets as template paths with waves
+  - Document `01-org-account/config.yaml` new format: pools, per-pool email, stacksets as template paths with waves
   - Document S3 template bucket: common vs pool-specific layout, versioning, rollback procedure
   - Document trust policy change: `AccountCreationRole` now trusts specific Lambda role ARN, not entire account
-  - Remove "How to Add a New Approved StackSet" manual steps — replaced by dropping a template in S3 + updating `org-config.yaml`
+  - Remove "How to Add a New Approved StackSet" manual steps — replaced by dropping a template in S3 + updating `01-org-account/config.yaml`
 - [ ] 8.2 Rewrite `docs/DomainAdminGuide.md`:
   - New deployment order: domain deploys first, outputs `ProvisionAccountRoleArn` for org admin
-  - Update `domain-config.yaml` section: per-pool `default_project_owner`, `project_profile_name`, `reclaim_strategy`
+  - Update `02-domain-account/config.yaml` section: per-pool `default_project_owner`, `project_profile_name`, `reclaim_strategy`
   - Remove `setup_stacks` references
   - Update SSM path examples to per-pool namespace
   - Update pool status monitoring commands to filter by pool name
@@ -372,7 +372,7 @@ The `SMUS-AccountPoolFactory-OrgAdmin.yaml` template takes `ProvisionAccountRole
   - Add multi-pool section with OU-per-pool diagram
   - Update SSM layout section
   - Add S3 template bucket to org admin account resources
-- [ ] 8.4 Update `org-config.yaml.template` and `domain-config.yaml.template` to final format with inline comments explaining each field
+- [ ] 8.4 Update `01-org-account/config.yaml.template` and `02-domain-account/config.yaml.template` to final format with inline comments explaining each field
 
 ### Phase 12: Cleanup & Redeploy
 
@@ -388,12 +388,12 @@ The `SMUS-AccountPoolFactory-OrgAdmin.yaml` template takes `ProvisionAccountRole
 - [ ] 9.2 Delete existing StackSet instances from all pool accounts (org admin account):
   ```bash
   eval $(isengardcli credentials amirbo+1@amazon.com)
-  ./scripts/01-org-mgmt-account/cleanup/cleanup.sh
+  ./01-org-account/scripts/cleanup/cleanup.sh
   ```
 - [ ] 9.3 Delete existing domain infrastructure stack:
   ```bash
   eval $(isengardcli credentials amirbo+3@amazon.com)
-  ./scripts/02-domain-account/cleanup/cleanup.sh
+  ./02-domain-account/scripts/cleanup/cleanup.sh
   ```
 - [ ] 9.4 Delete existing org admin stack:
   ```bash
@@ -404,23 +404,23 @@ The `SMUS-AccountPoolFactory-OrgAdmin.yaml` template takes `ProvisionAccountRole
 - [ ] 9.5 Redeploy domain account first (new order):
   ```bash
   eval $(isengardcli credentials amirbo+3@amazon.com)
-  ./scripts/02-domain-account/deploy/01-deploy.sh
+  ./02-domain-account/scripts/deploy/01-deploy.sh
   # Note the ProvisionAccountRoleArn from stack outputs — needed for org deploy
   ```
 - [ ] 9.6 Redeploy org admin account with `ProvisionAccountRoleArn`:
   ```bash
   eval $(isengardcli credentials amirbo+1@amazon.com)
-  ./scripts/01-org-mgmt-account/deploy/01-deploy.sh <domain-account-id> <domain-id> <provision-account-role-arn>
+  ./01-org-account/scripts/deploy/01-deploy.sh <domain-account-id> <domain-id> <provision-account-role-arn>
   ```
 - [ ] 9.7 Verify org admin deployment:
   ```bash
-  ./scripts/01-org-mgmt-account/deploy/02-verify.sh
+  ./01-org-account/scripts/deploy/02-verify.sh
   ```
 - [ ] 9.8 Deploy project profile:
   ```bash
   eval $(isengardcli credentials amirbo+3@amazon.com)
-  ./scripts/02-domain-account/deploy/02-deploy-project-profile.sh
-  ./scripts/02-domain-account/deploy/03-verify.sh
+  ./02-domain-account/scripts/deploy/02-deploy-project-profile.sh
+  ./02-domain-account/scripts/deploy/03-verify.sh
   ```
 
 ### Phase 13: Testing
@@ -432,7 +432,7 @@ The `SMUS-AccountPoolFactory-OrgAdmin.yaml` template takes `ProvisionAccountRole
     --payload '{"action":"force_replenishment"}' \
     --cli-binary-format raw-in-base64-out --region us-east-2 /tmp/replenish.json
   # Monitor until accounts are AVAILABLE
-  ./scripts/utils/check-pool-status.sh
+  ./02-domain-account/scripts/utils/check-pool-status.sh
   ```
 - [ ] 13.2 Verify accounts landed in the correct OU (org admin account):
   ```bash
@@ -443,7 +443,7 @@ The `SMUS-AccountPoolFactory-OrgAdmin.yaml` template takes `ProvisionAccountRole
   ```bash
   eval $(isengardcli credentials amirbo+3@amazon.com)
   # Check a AVAILABLE account's DynamoDB record for deployedStackSets
-  ./scripts/utils/check-account-state.sh <account-id>
+  ./02-domain-account/scripts/utils/check-account-state.sh <account-id>
   ```
 - [ ] 13.4 Run reconciler and verify it validates correctly against per-account `deployedStackSets`:
   ```bash
@@ -466,9 +466,9 @@ The `SMUS-AccountPoolFactory-OrgAdmin.yaml` template takes `ProvisionAccountRole
 ## Open Questions / Decisions Needed
 
 - **Q1**: Should the `DomainAccess` StackSet always be implicitly first (enforced by code), or should the org admin always list it explicitly? Explicit is more transparent; implicit is safer.
-- **Q2**: When a pool is removed from `org-config.yaml` and the deploy script re-runs, should existing accounts in that pool be left alone or flagged? Suggest: leave alone, reconciler will flag them as ORPHANED.
+- **Q2**: When a pool is removed from `01-org-account/config.yaml` and the deploy script re-runs, should existing accounts in that pool be left alone or flagged? Suggest: leave alone, reconciler will flag them as ORPHANED.
 - **Q3**: The `StateIndex` GSI currently has `state` as partition key. For multi-pool, do we need a `PoolIndex` GSI (`poolName` PK, `state` SK) or is filtering in-memory acceptable for small pools? Suggest: add GSI if pools can have 50+ accounts each.
-- **Q4**: ~~Should `email_prefix` / `email_domain` be per-pool or global?~~ **Resolved**: moved to `org-config.yaml` as global org-level settings. The domain admin has no say in account email ownership — that's an org admin concern.
+- **Q4**: ~~Should `email_prefix` / `email_domain` be per-pool or global?~~ **Resolved**: moved to `01-org-account/config.yaml` as global org-level settings. The domain admin has no say in account email ownership — that's an org admin concern.
 - **Q5**: The `AccountRecycler` currently processes all FAILED/ORPHANED accounts. With multi-pool, should it be pool-aware (process one pool at a time) or continue processing all? Suggest: pool-aware to avoid cross-pool interference.
 
 ---

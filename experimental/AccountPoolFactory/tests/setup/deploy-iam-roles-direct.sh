@@ -24,7 +24,7 @@ export AWS_SESSION_TOKEN=$(echo "$CREDS" | awk '{print $3}')
 # Deploy IAM roles stack
 aws cloudformation create-stack \
   --stack-name "$STACK_NAME" \
-  --template-body file://"$PROJECT_ROOT/templates/cloudformation/03-project-account/iam-roles.yaml" \
+  --template-body file://"$PROJECT_ROOT/approved-stacksets/cloudformation/idc/iam-roles.yaml" \
   --capabilities CAPABILITY_NAMED_IAM \
   --region "$REGION"
 

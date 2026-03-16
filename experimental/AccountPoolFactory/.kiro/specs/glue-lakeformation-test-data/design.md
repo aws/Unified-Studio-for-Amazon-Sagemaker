@@ -331,7 +331,7 @@ def main():
 # The script only needs to run create-test-data.py since:
 #   - StackSet template upload is handled by org admin deploy
 #   - StackSet instance creation is handled by ProvisionAccount Lambda
-#   - The template is added to org-config.yaml stacksets list
+#   - The template is added to 01-org-account/config.yaml stacksets list
 ```
 
 ### E2E Test: Athena Connection Verification (new Step 5b)
@@ -438,14 +438,14 @@ def get_athena_results(athena, query_id):
 
 ### Phase 1: Domain Account Setup
 
-Script: `scripts/02-domain-account/deploy/06-create-test-data.py`
+Script: `02-domain-account/scripts/deploy/06-create-test-data.py`
 
 ```bash
 # Switch to domain account
 eval $(isengardcli credentials amirbo+3@amazon.com)
 
 # Run the test data creation script
-./scripts/02-domain-account/deploy/06-create-test-data.py
+./02-domain-account/scripts/deploy/06-create-test-data.py
 ```
 
 What Phase 1 does (in order):
@@ -496,7 +496,7 @@ SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.join(SCRIPT_DIR, '..', '..')
 
 # --- Config loading (same pattern as test-e2e-pool-lifecycle.py) ---
-_cfg_file = os.path.join(PROJECT_ROOT, 'domain-config.yaml')
+_cfg_file = os.path.join(PROJECT_ROOT, '02-domain-account/config.yaml')
 if not os.path.exists(_cfg_file):
     _cfg_file = os.path.join(PROJECT_ROOT, 'config.yaml')
 with open(_cfg_file) as f:
@@ -750,7 +750,7 @@ SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.join(SCRIPT_DIR, '..', '..')
 
 # --- Config loading ---
-_cfg_file = os.path.join(PROJECT_ROOT, 'domain-config.yaml')
+_cfg_file = os.path.join(PROJECT_ROOT, '02-domain-account/config.yaml')
 if not os.path.exists(_cfg_file):
     _cfg_file = os.path.join(PROJECT_ROOT, 'config.yaml')
 with open(_cfg_file) as f:
@@ -1006,7 +1006,7 @@ Content to add:
 
 - Domain account credentials (`amirbo+3@amazon.com`)
 - Org admin credentials (`amirbo+1@amazon.com`) — for StackSet operations
-- `07-glue-lf-test-data.yaml` added to `org-config.yaml` and org admin deploy (`01-deploy.sh`) has been run
+- `07-glue-lf-test-data.yaml` added to `01-org-account/config.yaml` and org admin deploy (`01-deploy.sh`) has been run
 
 #### Phase 1: Create Test Data
 
@@ -1015,7 +1015,7 @@ Content to add:
 eval $(isengardcli credentials amirbo+3@amazon.com)
 
 # Create Glue databases, tables, S3 sample data, and Lake Formation registration
-./scripts/02-domain-account/deploy/06-create-test-data.py
+./02-domain-account/scripts/deploy/06-create-test-data.py
 ```
 
 What it creates:
@@ -1069,18 +1069,18 @@ What it does:
 #### Full End-to-End Sequence
 
 ```bash
-# 1. Add StackSet template to org-config.yaml (manual edit)
+# 1. Add StackSet template to 01-org-account/config.yaml (manual edit)
 #    stacksets:
 #      - template: 07-glue-lf-test-data.yaml   # TEST ONLY
 #        wave: 2
 
 # 2. Deploy org admin (uploads template, creates StackSet)
 eval $(isengardcli credentials amirbo+1@amazon.com)
-./scripts/01-org-mgmt-account/deploy/01-deploy.sh
+./01-org-account/scripts/deploy/01-deploy.sh
 
 # 3. Phase 1: Create test data in domain account
 eval $(isengardcli credentials amirbo+3@amazon.com)
-./scripts/02-domain-account/deploy/06-create-test-data.py
+./02-domain-account/scripts/deploy/06-create-test-data.py
 
 # 4. Phase 2: Single account test (exit code 0 = passed)
 eval $(isengardcli credentials amirbo+3@amazon.com)
@@ -1096,7 +1096,7 @@ python3 tests/integration/test-lf-fleet-rollout.py --phase assigned
 
 #### How the StackSet sharing works
 
-- Template `07-glue-lf-test-data.yaml` is added to `org-config.yaml` as a wave 2 StackSet
+- Template `07-glue-lf-test-data.yaml` is added to `01-org-account/config.yaml` as a wave 2 StackSet
 - During account provisioning, ProvisionAccount Lambda deploys it alongside VPC/IAM/EventBridge templates
 - The StackSet creates resource links in the project account's Glue catalog pointing to the shared databases in the domain account
 - Lake Formation cross-account grants give the project account `SELECT`/`DESCRIBE` on shared tables
@@ -1113,9 +1113,9 @@ python3 tests/integration/test-lf-fleet-rollout.py --phase assigned
 
 ```
 experimental/AccountPoolFactory/
-├── scripts/02-domain-account/deploy/
+├── 02-domain-account/scripts/deploy/
 │   └── 06-create-test-data.py          # Phase 1: Create Glue DBs, tables, S3 data, LF registration
-├── templates/cloudformation/stacksets/idc/
+├── approved-stacksets/cloudformation/idc/
 │   └── 07-glue-lf-test-data.yaml       # StackSet template for cross-account LF sharing
 ├── tests/integration/
 │   ├── test-e2e-pool-lifecycle.py       # Existing: updated with Step 5b Athena verification
@@ -1123,5 +1123,5 @@ experimental/AccountPoolFactory/
 │   └── test-lf-fleet-rollout.py        # Phase 3: Fleet-wide rollout (new)
 ├── docs/
 │   └── TestingGuide.md                  # Updated: full Phase 1/2/3 runbook
-└── org-config.yaml                      # Add wave 2 stackset entry (with TEST ONLY comment)
+└── 01-org-account/config.yaml                      # Add wave 2 stackset entry (with TEST ONLY comment)
 ```

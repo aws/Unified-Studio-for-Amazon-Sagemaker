@@ -125,8 +125,8 @@ def get_live_config():
     identity_store_id = ""
     org_admin_account_id = ""
 
-    # Read domain-config.yaml
-    config_path = os.path.join(UI_DIR, "..", "domain-config.yaml")
+    # Read 02-domain-account/config.yaml
+    config_path = os.path.join(UI_DIR, "..", "02-domain-account/config.yaml")
     if os.path.exists(config_path):
         try:
             import yaml
@@ -146,7 +146,7 @@ def get_live_config():
                     ], stderr=subprocess.DEVNULL).decode().strip()
                     domain_id = out.split()[0] if out else ""
         except Exception as e:
-            print(f"  ⚠️  domain-config.yaml: {e}")
+            print(f"  ⚠️  02-domain-account/config.yaml: {e}")
 
     # Get portal URL
     if domain_id:
@@ -187,7 +187,7 @@ def get_live_config():
 
     print(f"  ✅ Account:  {account_id}")
     print(f"     Region:  {region}")
-    print(f"     Domain:  {domain_id or '(not found — set domain_id in domain-config.yaml)'}")
+    print(f"     Domain:  {domain_id or '(not found — set domain_id in 02-domain-account/config.yaml)'}")
     print(f"     IDC:     {identity_store_id or '(not found)'}")
     return _live_cfg
 

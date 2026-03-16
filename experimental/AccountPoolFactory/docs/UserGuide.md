@@ -18,8 +18,8 @@ Two minimal config files replace the old `config.yaml`:
 
 | File | Account | What to set |
 |------|---------|-------------|
-| `org-config.yaml` | Org Admin | `region`, `target_ou_name` |
-| `domain-config.yaml` | Domain | `region`, `domain_name`, `email_prefix`, `email_domain`, `default_project_owner` |
+| `01-org-account/config.yaml` | Org Admin | `region`, `target_ou_name` |
+| `02-domain-account/config.yaml` | Domain | `region`, `domain_name`, `email_prefix`, `email_domain`, `default_project_owner` |
 
 IDs (domain ID, OU ID, org ID, role ARNs) are resolved automatically by scripts. Copy from the `.template` files.
 

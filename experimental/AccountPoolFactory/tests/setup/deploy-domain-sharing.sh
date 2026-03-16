@@ -83,7 +83,7 @@ eval $(isengardcli creds amirbo+1 --role Admin)
 # Deploy CloudFormation stack
 echo -e "\n${YELLOW}Deploying CloudFormation stack...${NC}"
 
-TEMPLATE_FILE="$PROJECT_ROOT/templates/cloudformation/02-domain-account/domain-sharing-setup.yaml"
+TEMPLATE_FILE="$PROJECT_ROOT/02-domain-account/templates/cloudformation/01-infrastructure.yaml"
 
 if [ -z "$ACCOUNT_IDS" ]; then
     # Deploy without accounts

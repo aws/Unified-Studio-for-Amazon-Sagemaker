@@ -563,6 +563,17 @@ def recycle_account(account_id, max_retries, force=False):
             mark_failed(account_id, item, str(e), 'setup')
             return {'accountId': account_id, 'previousState': 'PROVISIONED',
                     'result': 'FAILED', 'error': str(e)}
+    elif current_state == 'SETTING_UP':
+        # Already in SETTING_UP (e.g. reconciler detected missing StackSets) — trigger setup
+        print(f"  [{account_id}] Triggering setup for SETTING_UP account")
+        try:
+            run_setup(account_id)
+            return {'accountId': account_id, 'previousState': 'SETTING_UP',
+                    'result': 'SETUP_TRIGGERED', 'newState': 'SETTING_UP'}
+        except Exception as e:
+            mark_failed(account_id, item, str(e), 'setup')
+            return {'accountId': account_id, 'previousState': 'SETTING_UP',
+                    'result': 'FAILED', 'error': str(e)}
     else:
         return {'accountId': account_id, 'previousState': current_state,
                 'result': 'SKIPPED', 'error': f'Cannot recycle from state {current_state}'}

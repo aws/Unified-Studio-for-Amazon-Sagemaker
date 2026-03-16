@@ -77,7 +77,7 @@ Two serverless web UIs hosted on S3 + CloudFront. **No Lambda, no API Gateway, n
 ### Relevant Files
 
 - `tests/setup/create-test-project.sh` — full project creation flow the UI replicates
-- `scripts/utils/check-pool-status.sh` — pool status queries the console replaces
+- `02-domain-account/scripts/utils/check-pool-status.sh` — pool status queries the console replaces
 - `src/pool-manager/lambda_function.py` — `force_replenishment`, `delete_failed_account` actions
 - `src/account-reconciler/lambda_function.py` — `dryRun`, `autoRecycle`, `autoReplenish` actions
 - `src/account-recycler/lambda_function.py` — `recycleAll` action
@@ -296,7 +296,7 @@ Register an OIDC application in IDC pointing at the CloudFront URL as redirect U
 
 ### Phase 6: Deploy Scripts
 
-- [ ] 6.1 Create `scripts/02-domain-account/deploy/04-deploy-ui.sh`:
+- [ ] 6.1 Create `02-domain-account/scripts/deploy/04-deploy-ui.sh`:
   - Generate `ui/config.js` from CF stack outputs (UIRoleArn, IDC config, domain ID, etc.)
   - `aws s3 sync ui/ s3://{bucket}/` (excludes `mock/`)
   - CloudFront invalidation

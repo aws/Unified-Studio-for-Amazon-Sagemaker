@@ -13,7 +13,7 @@ Audience: the person who manages the DataZone / SageMaker Unified Studio domain 
 ## Prerequisites
 
 - DataZone domain already created
-- `domain-config.yaml` filled in (copy from `domain-config.yaml.template`):
+- `02-domain-account/config.yaml` filled in (copy from `02-domain-account/config.yaml.template`):
 
 ```yaml
 region: us-east-2
@@ -40,7 +40,7 @@ pools:
 **Step 1 — Deploy Account Pool Factory infrastructure (domain account):**
 ```bash
 # Switch to Domain account credentials
-./scripts/02-domain-account/deploy/01-deploy.sh
+./02-domain-account/scripts/deploy/01-deploy.sh
 ```
 
 This prints `ProvisionAccountRoleArn` — hand this to the org admin.
@@ -49,22 +49,22 @@ This prints `ProvisionAccountRoleArn` — hand this to the org admin.
 
 **Step 3 — Deploy project profile:**
 ```bash
-./scripts/02-domain-account/deploy/02-deploy-project-profile.sh
+./02-domain-account/scripts/deploy/02-deploy-project-profile.sh
 ```
 
 **Step 4 — Verify:**
 ```bash
-./scripts/02-domain-account/deploy/03-verify.sh
+./02-domain-account/scripts/deploy/03-verify.sh
 ```
 
 **Step 5 — Seed the pool:**
 ```bash
-./scripts/02-domain-account/deploy/04-seed-pool.sh
+./02-domain-account/scripts/deploy/04-seed-pool.sh
 ```
 
 Each account takes ~6-8 minutes. Monitor progress:
 ```bash
-python3 scripts/utils/monitor-pool.py 30
+python3 02-domain-account/scripts/utils/monitor-pool.py 30
 ```
 
 ---
@@ -73,7 +73,7 @@ python3 scripts/utils/monitor-pool.py 30
 
 ```bash
 # Switch to Domain account credentials
-./scripts/02-domain-account/cleanup/cleanup.sh
+./02-domain-account/scripts/cleanup/cleanup.sh
 ```
 
 ---
@@ -87,13 +87,13 @@ Two browser apps for monitoring and operations:
 
 **Mock mode** (no AWS needed, fake data):
 ```bash
-./scripts/02-domain-account/deploy/05-start-ui.sh
+./02-domain-account/scripts/deploy/05-start-ui.sh
 ```
 
 **Live mode** (real AWS, domain account credentials required):
 ```bash
 eval $(isengardcli credentials amirbo+3@amazon.com)
-./scripts/02-domain-account/deploy/05-start-ui.sh --live
+./02-domain-account/scripts/deploy/05-start-ui.sh --live
 ```
 
 Then open:
@@ -110,8 +110,8 @@ The correct way to create a project from the pool (see Architecture.md Step 1 fo
 
 ```bash
 # Domain account credentials required
-python3 scripts/03-project-account/deploy/01-create-test-project.py           # create, keep
-python3 scripts/03-project-account/deploy/01-create-test-project.py --delete  # create + delete
+python3 tests/create-test-project.py           # create, keep
+python3 tests/create-test-project.py --delete  # create + delete
 ```
 
 ---
@@ -120,10 +120,10 @@ python3 scripts/03-project-account/deploy/01-create-test-project.py --delete  # 
 
 ```bash
 # Pool status
-python3 scripts/utils/monitor-pool.py
+python3 02-domain-account/scripts/utils/monitor-pool.py
 
 # Check pool status by state
-./scripts/utils/check-pool-status.sh
+./02-domain-account/scripts/utils/check-pool-status.sh
 
 # CloudWatch logs
 aws logs tail /aws/lambda/PoolManager --follow --region us-east-2
@@ -252,11 +252,11 @@ One CloudFormation stack (`AccountPoolFactory-Infrastructure`) in the domain acc
 If you've only changed Lambda source code and don't need to update the CF stack:
 
 ```bash
-./scripts/02-domain-account/deploy/01-deploy.sh --lambdas-only
+./02-domain-account/scripts/deploy/01-deploy.sh --lambdas-only
 ```
 
 ### Seed a specific pool only
 
 ```bash
-./scripts/02-domain-account/deploy/04-seed-pool.sh default
+./02-domain-account/scripts/deploy/04-seed-pool.sh default
 ```

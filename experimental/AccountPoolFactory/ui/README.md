@@ -42,7 +42,7 @@ ui/
 Run the deploy script (once infrastructure is ready):
 
 ```bash
-./scripts/02-domain-account/deploy/04-deploy-ui.sh
+./02-domain-account/scripts/deploy/04-deploy-ui.sh
 ```
 
 This generates `config.js` from CF outputs and uploads everything to S3.

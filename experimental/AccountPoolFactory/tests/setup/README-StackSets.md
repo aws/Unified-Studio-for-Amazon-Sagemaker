@@ -203,7 +203,7 @@ Must follow this order:
 
 ### Update VPC Template
 ```bash
-# Edit templates/cloudformation/03-project-account/vpc-setup.yaml
+# Edit approved-stacksets/cloudformation/idc/vpc-setup.yaml
 ./deploy-vpc-stackset.sh  # Updates existing StackSet
 ```
 

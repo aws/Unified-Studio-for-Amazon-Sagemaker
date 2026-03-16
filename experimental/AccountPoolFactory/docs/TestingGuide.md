@@ -30,7 +30,7 @@ Creates CloudFormation stack `AccountPoolFactory-Organization-Test` with OUs:
 
 Skip if your domain already exists.
 
-Navigate to the SageMaker Unified Studio console, create a domain, wait ~5-10 minutes, then copy the domain ID (`dzd-xxxxxxxxxxxxx`) and set it as `domain_name` in `domain-config.yaml`.
+Navigate to the SageMaker Unified Studio console, create a domain, wait ~5-10 minutes, then copy the domain ID (`dzd-xxxxxxxxxxxxx`) and set it as `domain_name` in `02-domain-account/config.yaml`.
 
 ---
 
@@ -39,8 +39,8 @@ Navigate to the SageMaker Unified Studio console, create a domain, wait ~5-10 mi
 Fill in config files, then follow the admin guides in order:
 
 ```bash
-cp org-config.yaml.template org-config.yaml       # set region, ou_name, email settings
-cp domain-config.yaml.template domain-config.yaml  # set region, domain_name, email settings
+cp 01-org-account/config.yaml.template 01-org-account/config.yaml       # set region, ou_name, email settings
+cp 02-domain-account/config.yaml.template 02-domain-account/config.yaml  # set region, domain_name, email settings
 ```
 
 1. **Domain admin deploys first** → [DomainAdminGuide.md](DomainAdminGuide.md) Steps 1–4
@@ -87,13 +87,13 @@ Tests cross-account Lake Formation sharing of Glue databases. Three phases: crea
 
 - Domain account credentials (`amirbo+3@amazon.com`)
 - Org admin credentials (`amirbo+1@amazon.com`) for StackSet operations
-- `07-glue-lf-test-data.yaml` added to `org-config.yaml` and org admin deploy run
+- `07-glue-lf-test-data.yaml` added to `01-org-account/config.yaml` and org admin deploy run
 
 ### Phase 1: Create Test Data
 
 ```bash
 eval $(isengardcli credentials amirbo+3@amazon.com)
-./scripts/02-domain-account/deploy/06-create-test-data.py
+./02-domain-account/scripts/deploy/06-create-test-data.py
 ```
 
 Creates S3 bucket with sample CSVs, two Glue databases (`apf_test_customers`, `apf_test_transactions`), Lake Formation registration. Idempotent.
@@ -122,13 +122,13 @@ python3 tests/integration/test-lf-fleet-rollout.py --phase assigned
 ### Full Sequence
 
 ```bash
-# 1. Add template to org-config.yaml, deploy org admin
+# 1. Add template to 01-org-account/config.yaml, deploy org admin
 eval $(isengardcli credentials amirbo+1@amazon.com)
-./scripts/01-org-mgmt-account/deploy/01-deploy.sh
+./01-org-account/scripts/deploy/01-deploy.sh
 
 # 2. Create test data
 eval $(isengardcli credentials amirbo+3@amazon.com)
-./scripts/02-domain-account/deploy/06-create-test-data.py
+./02-domain-account/scripts/deploy/06-create-test-data.py
 
 # 3. Single account test
 python3 tests/integration/test-lf-single-account.py
@@ -145,8 +145,8 @@ python3 tests/integration/test-lf-fleet-rollout.py --phase assigned
 
 ```bash
 eval $(isengardcli credentials amirbo+3@amazon.com)
-./scripts/utils/verify-pool-health.sh           # full self-healing
-./scripts/utils/verify-pool-health.sh --dry-run # preview only
+./02-domain-account/scripts/utils/verify-pool-health.sh           # full self-healing
+./02-domain-account/scripts/utils/verify-pool-health.sh --dry-run # preview only
 ```
 
 ---

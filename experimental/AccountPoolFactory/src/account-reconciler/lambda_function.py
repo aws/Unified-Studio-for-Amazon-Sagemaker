@@ -110,12 +110,9 @@ def load_config():
 
     Reads two SSM paths:
     - /AccountPoolFactory/PoolManager/  — legacy single-pool keys (backward compat)
-    - /AccountPoolFactory/Pools/{name}/ — per-pool config written by both deploy scripts:
-        domain side: MinimumPoolSize, TargetPoolSize, ReclaimStrategy, ProjectProfileName
-        org side:    OUId, EmailPrefix, EmailDomain, AccountTags, StackSets
-
-    The org-side keys are written to the org account SSM and must be read via the
-    AccountCreation cross-account role. Domain-side keys are local to this account.
+    - /AccountPoolFactory/Pools/{name}/ — per-pool config written by domain deploy script:
+        MinimumPoolSize, TargetPoolSize, ReclaimStrategy, ProjectProfileName,
+        OUId, OUName, StackSets (JSON)
     """
     try:
         config = {}
@@ -142,8 +139,10 @@ def load_config():
         config.setdefault('MinimumPoolSize', '5')
         config.setdefault('MaxRecycleRetries', '3')
 
-        # Step 1: Load domain-side per-pool params from local SSM
-        # Written by scripts/02-domain-account/deploy/01-deploy.sh
+        # Step 1: Load per-pool params from local (domain) SSM
+        # Written by 02-domain-account/scripts/deploy/01-deploy.sh
+        # Includes: MinimumPoolSize, TargetPoolSize, ReclaimStrategy, ProjectProfileName,
+        #           OUId, OUName, StackSets (JSON)
         pools = {}
         try:
             resp = ssm.get_parameters_by_path(
@@ -158,39 +157,9 @@ def load_config():
                     pn = parts[3]
                     key = parts[4]
                     pools.setdefault(pn, {})[key] = param['Value']
-            print(f'Loaded domain-side pool params: {list(pools.keys())}')
+            print(f'Loaded pool params from domain SSM: {list(pools.keys())}')
         except Exception as e:
-            print(f'Warning: could not load domain-side pool params: {e}')
-
-        # Step 2: Load org-side per-pool params (OUId, EmailPrefix, etc.) via cross-account role
-        # Written by scripts/01-org-mgmt-account/deploy/01-deploy.sh
-        try:
-            assumed = sts.assume_role(
-                RoleArn=f"arn:aws:iam::{ORG_ADMIN_ACCOUNT_ID}:role/SMUS-AccountPoolFactory-AccountCreation",
-                RoleSessionName='ReconcilerSSM',
-                ExternalId=f'AccountPoolFactory-{DOMAIN_ACCOUNT_ID}'
-            )
-            creds = assumed['Credentials']
-            org_ssm = boto3.client('ssm', region_name=REGION,
-                aws_access_key_id=creds['AccessKeyId'],
-                aws_secret_access_key=creds['SecretAccessKey'],
-                aws_session_token=creds['SessionToken'])
-            resp = org_ssm.get_parameters_by_path(
-                Path='/AccountPoolFactory/Pools/',
-                Recursive=True,
-                WithDecryption=False
-            )
-            for param in resp['Parameters']:
-                parts = param['Name'].split('/')
-                if len(parts) >= 5:
-                    pn = parts[3]
-                    key = parts[4]
-                    # Merge into existing pool entry (domain-side keys take precedence
-                    # for domain params; org-side keys like OUId are additive)
-                    pools.setdefault(pn, {})[key] = param['Value']
-            print(f'Merged org-side pool params: {list(pools.keys())}')
-        except Exception as e:
-            print(f'Warning: could not load org-side pool params from org SSM: {e}')
+            print(f'Warning: could not load pool params: {e}')
 
         config['pools'] = pools
 
@@ -300,7 +269,7 @@ def lambda_handler(event, context):
     print(f"Identified {len(all_pool_accounts)} pool accounts")
 
     # Step 3: Reconcile with DynamoDB (includes parallel validation)
-    summary = reconcile_with_dynamodb(all_pool_accounts, all_org_accounts, dry_run, org_client=org_client)
+    summary = reconcile_with_dynamodb(all_pool_accounts, all_org_accounts, dry_run, org_client=org_client, config=config)
 
     # Step 4: Detect stale DynamoDB records
     stale_count = detect_stale_records(
@@ -529,6 +498,9 @@ def validate_available_account(account_id, item=None):
     1. DomainAccess role is assumable
     2. All expected setup stacks exist and are healthy
 
+    Note: missing StackSets from config are handled separately in the reconciliation
+    loop (AVAILABLE → SETTING_UP) rather than here (which would mark FAILED).
+
     Returns (ok: bool, failure_reason: str)
     Does NOT attempt any fixes — just reports what's wrong.
     """
@@ -555,7 +527,7 @@ def validate_available_account(account_id, item=None):
 # DynamoDB reconciliation (with parallel validation)
 # ============================================================
 
-def reconcile_with_dynamodb(pool_accounts, org_accounts, dry_run, org_client=None):
+def reconcile_with_dynamodb(pool_accounts, org_accounts, dry_run, org_client=None, config=None):
     """Reconcile pool accounts with DynamoDB records.
 
     Accounts that need validation (AVAILABLE state) are checked in parallel
@@ -563,6 +535,26 @@ def reconcile_with_dynamodb(pool_accounts, org_accounts, dry_run, org_client=Non
     org_client is the cross-account Organizations client, used to read PoolName tags
     when creating ORPHANED records for untracked accounts.
     """
+    # Build expected StackSet names from config for drift detection
+    expected_stackset_names = set()
+    if config:
+        pools = config.get('pools', {})
+        for _, pc in pools.items():
+            ss_json = pc.get('StackSets', '[]')
+            try:
+                ss_list = json.loads(ss_json) if isinstance(ss_json, str) else ss_json
+                for entry in ss_list:
+                    name = entry.get('stacksetName', '')
+                    if name:
+                        expected_stackset_names.add(name)
+            except Exception:
+                pass
+    if expected_stackset_names:
+        # DomainAccess is deployed by ProvisionAccount (wave 1) and not tracked
+        # in deployedStackSets — exclude it from the comparison
+        expected_stackset_names.discard('SMUS-AccountPoolFactory-DomainAccess')
+        print(f"Expected StackSets from config: {sorted(expected_stackset_names)}")
+
     summary = {
         'orphanedCreated': 0,
         'unchanged': 0,
@@ -607,6 +599,27 @@ def reconcile_with_dynamodb(pool_accounts, org_accounts, dry_run, org_client=Non
 
             elif current_state == 'ASSIGNED':
                 has_stack = item.get('projectStackName', {}).get('S', '')
+                assigned_project = item.get('projectId', {}).get('S', '')
+
+                # Check if the assigned project still exists — if deleted, trigger reclaim
+                if assigned_project:
+                    try:
+                        dz_client = boto3.client('datazone', region_name=os.environ.get('AWS_REGION', 'us-east-2'))
+                        dz_client.get_project(domainIdentifier=DOMAIN_ID, identifier=assigned_project)
+                    except dz_client.exceptions.ResourceNotFoundException:
+                        # Project deleted but account still ASSIGNED — transition to CLEANING for reclaim
+                        summary['recyclableAccountIds'].append(acct_id)
+                        summary['details'].append({
+                            'accountId': acct_id, 'action': 'RECLAIM_NEEDED',
+                            'note': f'ASSIGNED but project {assigned_project} deleted — transitioning to CLEANING'
+                        })
+                        if not dry_run:
+                            update_state(acct_id, item, 'ASSIGNED', 'CLEANING',
+                                         f'Project {assigned_project} deleted — reclaiming')
+                        continue
+                    except Exception as e:
+                        print(f"  ⚠️ Could not check project {assigned_project} for {acct_id}: {e}")
+
                 if not has_stack:
                     summary['details'].append({
                         'accountId': acct_id, 'action': 'UPDATED_STATE',
@@ -667,6 +680,35 @@ def reconcile_with_dynamodb(pool_accounts, org_accounts, dry_run, org_client=Non
                         'accountId': acct_id, 'action': 'VALIDATION_ERROR',
                         'note': str(e)
                     })
+
+    # Third pass: check healthy AVAILABLE accounts for missing StackSets from config.
+    # Accounts that pass health validation but have fewer StackSets than the config
+    # are transitioned directly to SETTING_UP (not FAILED) so SetupOrchestrator
+    # deploys only the missing StackSets and returns them to AVAILABLE.
+    needs_setup_ids = []
+    if expected_stackset_names and not dry_run:
+        for acct, item in needs_validation:
+            acct_id = acct['accountId']
+            # Only process accounts that passed validation (still AVAILABLE)
+            current = get_latest_record(acct_id)
+            if not current or current.get('state', {}).get('S') != 'AVAILABLE':
+                continue
+            deployed = set(
+                e.get('S', '') for e in current.get('deployedStackSets', {}).get('L', []) if e.get('S'))
+            config_missing = expected_stackset_names - deployed
+            if config_missing:
+                print(f"  [{acct_id}] Missing StackSets from config: {config_missing} — transitioning to SETTING_UP")
+                update_state(acct_id, current, 'AVAILABLE', 'SETTING_UP',
+                             f'NEEDS_SETUP: missing StackSets {sorted(config_missing)}')
+                needs_setup_ids.append(acct_id)
+                summary['details'].append({
+                    'accountId': acct_id, 'action': 'NEEDS_SETUP',
+                    'note': f'Missing StackSets: {sorted(config_missing)}'
+                })
+
+    if needs_setup_ids:
+        print(f"Triggering recycler for {len(needs_setup_ids)} accounts needing StackSet setup")
+        trigger_recycler(needs_setup_ids)
 
     return summary
 

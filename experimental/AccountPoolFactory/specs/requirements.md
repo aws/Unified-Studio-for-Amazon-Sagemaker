@@ -527,14 +527,14 @@ The Setup Orchestrator Lambda must coordinate the following configuration steps 
    - Share the domain ARN with the new account
    - Within same organization, share is automatically accepted (no manual acceptance required)
    - Verify domain is visible in the new account via DataZone API
-   - Reference: `templates/cloudformation/02-domain-account/domain-sharing-setup.yaml`
+   - Reference: `02-domain-account/templates/cloudformation/01-infrastructure.yaml`
    - Note: Organization-level sharing is NOT supported; must create one RAM share per account
 
 2. **VPC Setup (CF3 StackSet - OPTIONAL)**
    - Deploy VPC and networking resources if required by blueprints
    - Create VPC with public and private subnets
    - Configure NAT gateways, route tables, security groups
-   - Reference: `templates/cloudformation/03-project-account/vpc-setup.yaml`
+   - Reference: `approved-stacksets/cloudformation/idc/02-vpc-setup.yaml`
    - Note: Some blueprints can work without VPC
 
 3. **IAM Roles (CF3 StackSet - REQUIRED)**
@@ -544,7 +544,7 @@ The Setup Orchestrator Lambda must coordinate the following configuration steps 
    - Configure trust policies to allow DataZone service to assume roles
    - Create cross-account role for Domain account management
    - Apply account-level tags (configurable)
-   - Reference: `templates/cloudformation/03-project-account/iam-roles.yaml`
+   - Reference: `approved-stacksets/cloudformation/idc/03-iam-roles.yaml`
    - **Without these roles, blueprint enablement will fail**
 
 4. **Blueprint Enablement (CF3 StackSet - REQUIRED)**
@@ -562,7 +562,7 @@ The Setup Orchestrator Lambda must coordinate the following configuration steps 
      - Workflows
      - Amazon Bedrock blueprints (Guardrail, Prompt, Evaluation, KnowledgeBase, ChatAgent, Function, Flow)
      - QuickSight, PartnerApps
-   - Reference: `templates/cloudformation/03-project-account/blueprint-enablement.yaml`
+   - Reference: `approved-stacksets/cloudformation/idc/06-blueprint-enablement.yaml`
    - **Without blueprint enablement, environment creation will fail with 403 authorization error**
 
 4. **Policy Grants Configuration**

@@ -2,7 +2,7 @@
 
 ## Task 1: Create `06-create-test-data.py` (Phase 1 Domain Account Setup)
 
-- [x] 1.1 Create `scripts/02-domain-account/deploy/06-create-test-data.py` with shebang, imports, and configuration constants (REGION, DATABASES, TABLES dicts)
+- [x] 1.1 Create `02-domain-account/scripts/deploy/06-create-test-data.py` with shebang, imports, and configuration constants (REGION, DATABASES, TABLES dicts)
 - [x] 1.2 Implement `setup_lf_admin(lf_client, sts_client)` — adds caller's IAM role as LF data lake admin (additive, preserves existing admins)
 - [x] 1.3 Implement `create_s3_bucket_and_data(s3_client, bucket_name, region)` — creates S3 bucket and uploads sample CSV files (customers.csv, transactions.csv with 3-5 rows each)
 - [x] 1.4 Implement `create_glue_databases(glue_client, databases)` — creates Glue databases, idempotent (skips if exists)
@@ -13,12 +13,12 @@
 
 ## Task 2: Create `07-glue-lf-test-data.yaml` StackSet Template
 
-- [x] 2.1 Create `templates/cloudformation/stacksets/idc/07-glue-lf-test-data.yaml` with Parameters (DomainAccountId, DomainId) and Conditions
+- [x] 2.1 Create `approved-stacksets/cloudformation/idc/07-glue-lf-test-data.yaml` with Parameters (DomainAccountId, DomainId) and Conditions
 - [x] 2.2 Add Custom Resource (Lambda-backed) that grants Lake Formation cross-account permissions from domain account to project account (DESCRIBE on databases, SELECT+DESCRIBE on tables)
 - [x] 2.3 Add Glue::Database resource link resources for `apf_test_customers` and `apf_test_transactions` pointing to domain account shared databases
 - [x] 2.4 Add LakeFormation permission resources granting project account principals read access to the resource links
 
-## Task 3: Update `org-config.yaml` with StackSet 07
+## Task 3: Update `01-org-account/config.yaml` with StackSet 07
 
 - [x] 3.1 Add `07-glue-lf-test-data.yaml` as a wave 2 entry in the `stacksets` list (after `05-project-role.yaml`, before `06-blueprint-enablement.yaml`) with `# TEST ONLY` comment
 

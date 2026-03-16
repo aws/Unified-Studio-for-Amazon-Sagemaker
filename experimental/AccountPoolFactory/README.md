@@ -22,6 +22,30 @@ Deployment involves two roles — domain admin deploys first, then hands off to 
 | [SecurityGuide.md](docs/SecurityGuide.md) | IAM roles, ExternalId, policy grants |
 | [TestingGuide.md](docs/TestingGuide.md) | End-to-end testing, troubleshooting |
 
+## Project Structure
+
+```
+01-org-account/                    # Org admin governance (pool-agnostic)
+  config.yaml                      # Approved stacksets, OU definitions
+  scripts/{deploy,cleanup}/        # Deploy/cleanup scripts
+  templates/cloudformation/        # OrgAdmin CF template
+
+02-domain-account/                 # Domain admin pool management
+  config.yaml                      # Pool definitions (sizing, stacksets, OU mapping)
+  scripts/{deploy,cleanup}/        # Deploy/cleanup scripts
+  scripts/utils/                   # Operational utilities (domain admin)
+  templates/cloudformation/        # Infrastructure CF template
+
+approved-stacksets/                # StackSet templates (org-approved)
+  cloudformation/{idc,iam}/        # CloudFormation stacksets
+  cdk/                             # CDK stacksets (future)
+  terraform/                       # Terraform stacksets (future)
+
+src/                               # Lambda function source code
+docs/                              # Documentation
+tests/                             # Integration and setup tests
+```
+
 ## Architecture (3 accounts)
 
 ```

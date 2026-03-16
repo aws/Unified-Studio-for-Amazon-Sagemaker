@@ -179,7 +179,7 @@ The UI (`ui/pool-console/app.js`) already renders any state dynamically via
 
 **Org Admin IAM** — `AccountCreationRole` policy:
 - Add `organizations:CloseAccount` to the allowed actions
-- This is in `templates/cloudformation/01-org-admin/01-governance.yaml`
+- This is in `01-org-account/templates/cloudformation/SMUS-AccountPoolFactory-OrgAdmin.yaml`
 
 **Domain Account** — new Lambda + EventBridge:
 - Add `AccountDeleter` Lambda resource to `02-domain-account/01-infrastructure.yaml`
@@ -255,7 +255,7 @@ by `state`, so `PENDING_DELETE` queries work automatically.
   - Publish CloudWatch metrics: `AccountClosed`, `AccountDeletionQuotaExceeded`, `DeletionQueueSize`
   - Send SNS notification on quota exceeded
 
-- [ ] 2.2 Create deploy script `scripts/02-domain-account/deploy/05-deploy-account-deleter.sh`
+- [ ] 2.2 Create deploy script `02-domain-account/scripts/deploy/05-deploy-account-deleter.sh`
   - Package and deploy the Lambda
   - Follow the pattern of existing deploy scripts (e.g., `03-deploy-recycler.sh`)
 
@@ -295,10 +295,10 @@ by `state`, so `PENDING_DELETE` queries work automatically.
 
 ### Phase 5: Infrastructure
 
-- [ ] 5.1 Update Org Admin IAM — `templates/cloudformation/01-org-admin/01-governance.yaml`
+- [ ] 5.1 Update Org Admin IAM — `01-org-account/templates/cloudformation/SMUS-AccountPoolFactory-OrgAdmin.yaml`
   - Add `organizations:CloseAccount` to `AccountCreationRole` policy
 
-- [ ] 5.2 Update Domain infra — `templates/cloudformation/02-domain-account/01-infrastructure.yaml`
+- [ ] 5.2 Update Domain infra — `02-domain-account/templates/cloudformation/01-infrastructure.yaml`
   - Add `AccountDeleter` Lambda function resource
   - Add Lambda execution role with: DynamoDB, STS AssumeRole, CloudWatch, SNS, SSM
   - Add EventBridge scheduled rule: `rate(1 day)` targeting AccountDeleter

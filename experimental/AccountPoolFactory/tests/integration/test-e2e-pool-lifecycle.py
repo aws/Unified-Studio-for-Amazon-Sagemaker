@@ -21,8 +21,8 @@ from datetime import datetime, timezone
 SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.join(SCRIPT_DIR, '..', '..')
 
-# Load domain-config.yaml (preferred) or fall back to legacy config.yaml
-_cfg_file = os.path.join(PROJECT_ROOT, 'domain-config.yaml')
+# Load 02-domain-account/config.yaml (preferred) or fall back to legacy config.yaml
+_cfg_file = os.path.join(PROJECT_ROOT, '02-domain-account/config.yaml')
 if not os.path.exists(_cfg_file):
     _cfg_file = os.path.join(PROJECT_ROOT, 'config.yaml')
 with open(_cfg_file) as f:

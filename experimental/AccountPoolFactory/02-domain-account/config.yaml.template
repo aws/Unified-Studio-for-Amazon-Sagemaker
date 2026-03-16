@@ -1,0 +1,36 @@
+# Domain Account Configuration
+# Pool management — domain admin owns pool definitions.
+#
+# Run in the DataZone / SageMaker Unified Studio domain account.
+
+region: us-east-2
+domain_name: "your-domain-name"
+# domain_id: dzd-xxxxxxxxxxxxx   # resolved automatically from domain_name
+
+org_admin_account_id: "your-org-admin-account-id"
+
+project_policy:
+  enabled: true
+  policy_name: MySageMakerStudioAdminIAMPermissiveExecutionPolicy
+
+pools:
+  - name: default
+    ou_name: "YourOU/SubOU"          # must match an OU in org admin config
+    min_size: 2
+    target_size: 5
+    reclaim_strategy: REUSE
+    default_project_owner: "your-sso-username"
+    project_profile_name: "All Capabilities - Account Pool"
+    stacksets:                        # subset of org-approved, with wave ordering
+      - template: 01-domain-access.yaml
+        wave: 1
+      - template: 02-vpc-setup.yaml
+        wave: 2
+      - template: 03-iam-roles.yaml
+        wave: 2
+      - template: 04-eventbridge-rules.yaml
+        wave: 2
+      - template: 05-project-role.yaml
+        wave: 2
+      - template: 06-blueprint-enablement.yaml
+        wave: 3

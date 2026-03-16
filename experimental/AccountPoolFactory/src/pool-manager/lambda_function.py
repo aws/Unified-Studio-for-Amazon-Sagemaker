@@ -336,6 +336,13 @@ def check_pool_size_and_replenish(config: Dict[str, Any], target_pool: str = Non
             pool_create_config['PoolName'] = pool_name
             pool_create_config['EmailPrefix'] = pool_cfg.get('EmailPrefix', config.get('EmailPrefix', 'accountpool'))
             pool_create_config['EmailDomain'] = pool_cfg.get('EmailDomain', config.get('EmailDomain', 'example.com'))
+            pool_create_config['OUId'] = pool_cfg.get('OUId', '')
+            # Load stacksets JSON from domain SSM (per-pool)
+            stacksets_raw = pool_cfg.get('StackSets', '[]')
+            try:
+                pool_create_config['StackSets'] = json.loads(stacksets_raw) if isinstance(stacksets_raw, str) else stacksets_raw
+            except Exception:
+                pool_create_config['StackSets'] = []
 
         create_accounts_parallel(to_create, pool_create_config)
 
@@ -422,6 +429,8 @@ def create_accounts_parallel(count: int, config: Dict[str, Any]):
                 'domainId': os.environ.get('DOMAIN_ID'),
                 'domainAccountId': DOMAIN_ACCOUNT_ID,
                 'poolName': config.get('PoolName', 'default'),
+                'ouId': config.get('OUId', ''),
+                'stacksets': config.get('StackSets', []),
             }
             
             print(f"   Invoking ProvisionAccount with payload: {json.dumps(payload, indent=2)}")

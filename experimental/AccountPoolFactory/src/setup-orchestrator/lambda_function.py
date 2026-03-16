@@ -219,37 +219,30 @@ def get_account_state(account_id: str) -> Optional[Dict]:
 ORG_ADMIN_ACCOUNT_ID = os.environ.get('ORG_ADMIN_ACCOUNT_ID', '')
 EXTERNAL_ID = os.environ.get('EXTERNAL_ID', f'AccountPoolFactory-{DOMAIN_ACCOUNT_ID}')
 
-# Cache for pool StackSets config loaded from org SSM
+# Cache for pool StackSets config loaded from domain SSM
 _pool_stacksets_cache = None
 
 
 def _load_pool_stacksets_config(pool_name='default'):
-    """Load the expected StackSets list from org admin SSM.
+    """Load the expected StackSets list from domain SSM (local account).
 
     Returns list of dicts: [{'stacksetName': '...', 'wave': N, ...}, ...]
     Falls back to empty list if SSM read fails (non-fatal).
+
+    Domain deploy script writes this to /AccountPoolFactory/Pools/{pool}/StackSets.
+    No cross-account call needed — reads from the same account the Lambda runs in.
     """
     global _pool_stacksets_cache
     if _pool_stacksets_cache is not None:
         return _pool_stacksets_cache
     try:
-        role_arn = f"arn:aws:iam::{ORG_ADMIN_ACCOUNT_ID}:role/SMUS-AccountPoolFactory-AccountCreation"
-        creds = sts.assume_role(
-            RoleArn=role_arn,
-            RoleSessionName='SetupOrchestrator-SSM',
-            ExternalId=EXTERNAL_ID,
-            DurationSeconds=900
-        )['Credentials']
-        org_ssm = boto3.client('ssm', region_name=REGION,
-            aws_access_key_id=creds['AccessKeyId'],
-            aws_secret_access_key=creds['SecretAccessKey'],
-            aws_session_token=creds['SessionToken'])
-        resp = org_ssm.get_parameter(Name=f'/AccountPoolFactory/Pools/{pool_name}/StackSets')
+        domain_ssm = boto3.client('ssm', region_name=REGION)
+        resp = domain_ssm.get_parameter(Name=f'/AccountPoolFactory/Pools/{pool_name}/StackSets')
         _pool_stacksets_cache = json.loads(resp['Parameter']['Value'])
-        print(f"📋 Loaded {len(_pool_stacksets_cache)} StackSets from config for pool '{pool_name}'")
+        print(f"📋 Loaded {len(_pool_stacksets_cache)} StackSets from domain SSM for pool '{pool_name}'")
         return _pool_stacksets_cache
     except Exception as e:
-        print(f"⚠️ Could not load StackSets config from org SSM: {e}")
+        print(f"⚠️ Could not load StackSets config from domain SSM: {e}")
         _pool_stacksets_cache = []
         return []
 
@@ -663,7 +656,7 @@ def execute_setup_workflow(account_id: str, config: Dict[str, Any], resume_from:
         print(f"✅ Wave 2 completed - Blueprints enabled")
         
         # Wave 3: Deploy any additional StackSets from config not yet deployed
-        # This catches new StackSets added to org-config.yaml after initial provisioning.
+        # This catches new StackSets added to 01-org-account/config.yaml after initial provisioning.
         already_deployed = set()
         already_deployed.update(['SMUS-AccountPoolFactory-VpcSetup',
                                  'SMUS-AccountPoolFactory-IamRoles',

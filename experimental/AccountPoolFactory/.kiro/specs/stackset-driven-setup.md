@@ -119,7 +119,7 @@ All Lambdas deployed. cleanupStacks re-run: 223/223 accounts cleaned.
   "StackSet operation already in progress" troubleshooting.
 - [ ] T11.3 Update `docs/DomainAdminGuide.md` — replace `DataZone-VPC-*` references
   with `StackSet-SMUS-AccountPoolFactory-*`.
-- [ ] T11.4 Update `scripts/utils/check-account-state.sh` — update CF stack filter.
+- [ ] T11.4 Update `02-domain-account/scripts/utils/check-account-state.sh` — update CF stack filter.
 - [ ] T11.5 Update `README.md` architecture section.
 - [ ] T11.6 Update `docs/SecurityGuide.md`:
   - Section [1] — update `AccountCreationRole` permissions table: remove any direct

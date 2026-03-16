@@ -117,7 +117,7 @@ echo ""
 
 # Upload Blueprint Enablement template to S3
 echo -e "${YELLOW}Uploading Blueprint Enablement template to S3...${NC}"
-TEMPLATES_DIR="$PROJECT_ROOT/templates/cloudformation/03-project-account"
+TEMPLATES_DIR="$PROJECT_ROOT/approved-stacksets/cloudformation/idc"
 TEMPLATE_FILE="blueprint-enablement.yaml"
 
 if [ ! -f "$TEMPLATES_DIR/$TEMPLATE_FILE" ]; then

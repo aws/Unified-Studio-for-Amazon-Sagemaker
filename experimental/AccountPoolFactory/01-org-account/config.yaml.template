@@ -1,0 +1,32 @@
+# Org Admin Account Configuration
+# Governance only — no pool concept. Domain admin owns pool definitions.
+#
+# Run in the AWS Organizations management account.
+# IDs are resolved automatically by scripts.
+
+region: us-east-2
+
+# Prefix used to derive StackSet names from template filenames.
+# StackSet name = {stackset_prefix}-{template-stem-titlecased}
+# e.g. "SMUS-AccountPoolFactory" + "vpc-setup.yaml" → "SMUS-AccountPoolFactory-VpcSetup"
+# Must match the IAM policy prefix — do not change after initial deploy.
+stackset_prefix: "SMUS-AccountPoolFactory"
+
+# Flat list of approved StackSet templates.
+# Org admin controls what's allowed. Domain admin picks a subset per pool.
+# Templates live in approved-stacksets/cloudformation/idc/
+approved_stacksets:
+  - 01-domain-access.yaml
+  - 02-vpc-setup.yaml
+  - 03-iam-roles.yaml
+  - 04-eventbridge-rules.yaml
+  - 05-project-role.yaml
+  - 06-blueprint-enablement.yaml
+
+# Per-OU settings. Domain admin references an OU name in their pool config.
+ous:
+  - name: "YourOU/SubOU"
+    email_prefix: "accountpool"
+    email_domain: "example.com"
+    account_tags:
+      ManagedBy: "AccountPoolFactory"

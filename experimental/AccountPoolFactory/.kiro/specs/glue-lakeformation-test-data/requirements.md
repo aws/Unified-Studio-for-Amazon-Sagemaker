@@ -16,7 +16,7 @@ This feature creates a testing infrastructure that provisions sample Glue databa
 - **IAM_ALLOWED_PRINCIPALS**: A default Glue permission that bypasses Lake Formation access control; must be revoked for LF-only sharing
 - **Single_Account_Test**: The Phase 2 integration test (`test-lf-single-account.py`) that validates the full sharing pipeline on one account
 - **Fleet_Rollout_Script**: The Phase 3 script (`test-lf-fleet-rollout.py`) that deploys StackSet 07 to all pool accounts
-- **Org_Config**: The `org-config.yaml` file that defines approved StackSets and their wave ordering
+- **Org_Config**: The `01-org-account/config.yaml` file that defines approved StackSets and their wave ordering
 
 ## Requirements
 
@@ -57,7 +57,7 @@ This feature creates a testing infrastructure that provisions sample Glue databa
 
 ### Requirement 4: Org Config Integration
 
-**User Story:** As a platform engineer, I want the new StackSet template registered in org-config.yaml, so that it is automatically deployed during account provisioning.
+**User Story:** As a platform engineer, I want the new StackSet template registered in 01-org-account/config.yaml, so that it is automatically deployed during account provisioning.
 
 #### Acceptance Criteria
 

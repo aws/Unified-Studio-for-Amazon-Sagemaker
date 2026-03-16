@@ -31,7 +31,7 @@ echo ""
 
 # Deploy CloudFormation stack
 STACK_NAME="AccountPoolFactory-AccountProvider-Test"
-TEMPLATE_FILE="$PROJECT_ROOT/templates/cloudformation/02-domain-account/account-provider-lambda.yaml"
+TEMPLATE_FILE="$PROJECT_ROOT/02-domain-account/templates/cloudformation/01-infrastructure.yaml"
 
 echo "Deploying CloudFormation stack: $STACK_NAME"
 aws cloudformation deploy \

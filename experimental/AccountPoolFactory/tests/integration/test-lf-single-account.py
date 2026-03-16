@@ -28,8 +28,8 @@ import yaml
 SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.join(SCRIPT_DIR, '..', '..')
 
-# Load domain-config.yaml (preferred) or fall back to legacy config.yaml
-_cfg_file = os.path.join(PROJECT_ROOT, 'domain-config.yaml')
+# Load 02-domain-account/config.yaml (preferred) or fall back to legacy config.yaml
+_cfg_file = os.path.join(PROJECT_ROOT, '02-domain-account/config.yaml')
 if not os.path.exists(_cfg_file):
     _cfg_file = os.path.join(PROJECT_ROOT, 'config.yaml')
 with open(_cfg_file) as f:
@@ -368,7 +368,7 @@ def main():
     if project_id:
         step(6, f"Cleanup: SKIPPED — keeping project {project_id} for debugging")
         print(f"  {INFO} Project {project_id} left intact for further testing")
-        print(f"  {INFO} Delete manually when done: python3 scripts/utils/delete-project.py {project_id}")
+        print(f"  {INFO} Delete manually when done: python3 02-domain-account/scripts/utils/delete-project.py {project_id}")
         returned = True  # Don't fail the test for cleanup
 
     # ── Step 7: SKIPPED (keeping project) ─────────────────────────────────

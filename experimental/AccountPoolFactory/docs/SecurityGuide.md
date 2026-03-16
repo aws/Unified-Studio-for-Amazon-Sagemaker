@@ -282,7 +282,7 @@ Trust policy — multi-service trust scoped to the project account:
 
 `SourceAccount` condition ensures only services running in the project account can assume this role — not services from other accounts.
 
-Permissions: `SageMakerStudioAdminIAMPermissiveExecutionPolicy` (AWS managed, configurable via `domain-config.yaml`).
+Permissions: `SageMakerStudioAdminIAMPermissiveExecutionPolicy` (AWS managed, configurable via `02-domain-account/config.yaml`).
 
 ---
 

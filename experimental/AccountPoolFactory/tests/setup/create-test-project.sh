@@ -94,7 +94,7 @@ PROFILE_ID=$(aws datazone list-project-profiles \
 
 if [ -z "$PROFILE_ID" ] || [ "$PROFILE_ID" = "None" ]; then
     echo "❌ Project profile '$PROFILE_NAME' not found"
-    echo "   Deploy it first: ./scripts/02-domain-account/deploy/02-deploy-project-profile.sh"
+    echo "   Deploy it first: ./02-domain-account/scripts/deploy/02-deploy-project-profile.sh"
     exit 1
 fi
 echo "  Profile ID: $PROFILE_ID"

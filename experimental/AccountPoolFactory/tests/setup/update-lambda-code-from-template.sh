@@ -15,7 +15,7 @@ EOF
 )
 
 FUNCTION_NAME="AccountProvider-${DOMAIN_ID}"
-TEMPLATE_FILE="$PROJECT_ROOT/templates/cloudformation/02-domain-account/account-provider-lambda.yaml"
+TEMPLATE_FILE="$PROJECT_ROOT/02-domain-account/templates/cloudformation/01-infrastructure.yaml"
 TEMP_FILE="/tmp/index.py"
 
 echo "=== Updating Lambda Code ==="

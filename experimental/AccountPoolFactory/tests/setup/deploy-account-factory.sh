@@ -39,7 +39,7 @@ fi
 STACK_NAME="AccountPoolFactory-ControlTower-${ENVIRONMENT_TAG}"
 
 # Template path
-TEMPLATE_PATH="${PROJECT_ROOT}/templates/cloudformation/01-org-admin/account-factory-setup.yaml"
+TEMPLATE_PATH="${PROJECT_ROOT}/01-org-account/templates/cloudformation/SMUS-AccountPoolFactory-OrgAdmin.yaml"
 
 if [ ! -f "${TEMPLATE_PATH}" ]; then
     echo "Error: CloudFormation template not found: ${TEMPLATE_PATH}"

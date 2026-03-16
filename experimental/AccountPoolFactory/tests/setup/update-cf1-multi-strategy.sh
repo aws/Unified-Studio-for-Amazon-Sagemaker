@@ -17,7 +17,7 @@ else
 fi
 
 STACK_NAME="AccountPoolFactory-ControlTower-Test"
-TEMPLATE_FILE="$PROJECT_ROOT/templates/cloudformation/01-org-admin/account-factory-setup.yaml"
+TEMPLATE_FILE="$PROJECT_ROOT/01-org-account/templates/cloudformation/SMUS-AccountPoolFactory-OrgAdmin.yaml"
 
 # Colors
 GREEN='\033[0;32m'
