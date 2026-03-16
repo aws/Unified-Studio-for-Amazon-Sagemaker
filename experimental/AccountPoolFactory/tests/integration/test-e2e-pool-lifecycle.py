@@ -91,6 +91,118 @@ def poll_state(account_id, expected_state, timeout, interval=15):
         time.sleep(interval)
     return False
 
+def run_athena_query(athena, sql, workgroup, timeout=60):
+    """Submit an Athena query and wait for completion."""
+    resp = athena.start_query_execution(
+        QueryString=sql,
+        WorkGroup=workgroup
+    )
+    query_id = resp['QueryExecutionId']
+
+    start = time.time()
+    while time.time() - start < timeout:
+        status = athena.get_query_execution(QueryExecutionId=query_id)
+        state = status['QueryExecution']['Status']['State']
+        if state == 'SUCCEEDED':
+            return query_id
+        if state in ('FAILED', 'CANCELLED'):
+            reason = status['QueryExecution']['Status'].get(
+                'StateChangeReason', ''
+            )
+            raise RuntimeError(f"Athena query {state}: {reason}")
+        time.sleep(2)
+    raise RuntimeError(f"Athena query timed out after {timeout}s")
+
+
+def get_athena_results(athena, query_id):
+    """Fetch result rows (excluding header) from a completed Athena query."""
+    resp = athena.get_query_results(QueryExecutionId=query_id)
+    rows = resp['ResultSet']['Rows']
+    # First row is the header
+    return [
+        [col.get('VarCharValue', '') for col in row['Data']]
+        for row in rows[1:]
+    ]
+
+def verify_athena_connection(dz_client, domain_id, project_id):
+    """Step 5b: Verify shared Glue/LF data is accessible via Athena.
+
+    Gets an Athena connection from DataZone, runs SHOW DATABASES to check
+    that apf_test_customers and apf_test_transactions are visible, then
+    queries apf_test_customers.customers to verify data access.
+    Returns True if all checks pass, False otherwise.
+    """
+    print(f"  Getting Athena connection from DataZone...")
+    try:
+        connections = dz_client.list_connections(
+            domainIdentifier=domain_id,
+            projectIdentifier=project_id,
+            type='ATHENA'
+        )
+    except Exception as e:
+        print(f"  {FAIL} Failed to list connections: {e}")
+        return False
+
+    if not connections.get('items'):
+        print(f"  {FAIL} No Athena connections found in project")
+        return False
+
+    connection_id = connections['items'][0]['connectionId']
+    try:
+        conn = dz_client.get_connection(
+            domainIdentifier=domain_id,
+            identifier=connection_id,
+            withSecret=True
+        )
+    except Exception as e:
+        print(f"  {FAIL} Failed to get connection details: {e}")
+        return False
+
+    athena = boto3.client('athena', region_name=REGION)
+    workgroup = (
+        conn.get('props', {})
+        .get('athenaProperties', {})
+        .get('workgroupName', 'primary')
+    )
+
+    # Verify shared databases are visible
+    print(f"  Running: SHOW DATABASES...")
+    try:
+        qid = run_athena_query(athena, "SHOW DATABASES", workgroup)
+        databases = get_athena_results(athena, qid)
+        db_names = [row[0] for row in databases]
+    except Exception as e:
+        print(f"  {FAIL} SHOW DATABASES failed: {e}")
+        return False
+
+    expected_dbs = ['apf_test_customers', 'apf_test_transactions']
+    for db in expected_dbs:
+        if db not in db_names:
+            print(f"  {FAIL} Database '{db}' not in SHOW DATABASES")
+            return False
+    print(f"  {PASS} Shared databases visible: {expected_dbs}")
+
+    # Query a table to verify data access
+    sql = ("SELECT * FROM apf_test_customers.customers "
+           "LIMIT 5")
+    print(f"  Running: {sql}")
+    try:
+        qid = run_athena_query(athena, sql, workgroup)
+        rows = get_athena_results(athena, qid)
+    except Exception as e:
+        print(f"  {FAIL} SELECT query failed: {e}")
+        return False
+
+    if not rows:
+        print(f"  {FAIL} No rows returned from customers table")
+        return False
+    print(f"  {PASS} Query returned {len(rows)} rows")
+
+    print(f"  {PASS} Athena connection verification PASSED")
+    return True
+
+
+
 
 def main():
     # ── Verify credentials ────────────────────────────────────────────────────
@@ -199,20 +311,37 @@ def main():
     print(f"{PASS} Account {pool_account_id} is ASSIGNED")
     print(f"  assignedDate : {item.get('assignedDate',{}).get('S','')}")
 
-    # ── Step 6: Delete project ────────────────────────────────────────────────
-    step(6, f"Delete project {project_id}")
-
-    # Wait for deployment to complete (or fail) before deleting
-    print(f"  Waiting for deployment to finish before deleting...")
+    # ── Wait for deployment to complete before verification ──────────────────
+    print(f"\n  Waiting for deployment to finish...")
     start = time.time()
     while time.time() - start < 600:
-        proj = dz.get_project(domainIdentifier=DOMAIN_ID, identifier=project_id)
-        deploy_status = proj.get('environmentDeploymentDetails', {}).get('overallDeploymentStatus', '')
+        proj = dz.get_project(
+            domainIdentifier=DOMAIN_ID, identifier=project_id
+        )
+        deploy_status = (
+            proj.get('environmentDeploymentDetails', {})
+            .get('overallDeploymentStatus', '')
+        )
         elapsed = int(time.time() - start)
         print(f"  [{elapsed}s] deploymentStatus={deploy_status}")
-        if deploy_status not in ('PENDING_DEPLOYMENT', 'IN_PROGRESS_DEPLOYMENT', 'IN_PROGRESS'):
+        if deploy_status not in (
+            'PENDING_DEPLOYMENT',
+            'IN_PROGRESS_DEPLOYMENT',
+            'IN_PROGRESS',
+        ):
             break
         time.sleep(20)
+
+    # ── Step 5b: Verify Athena connection to shared test data ─────────────────
+    step("5b", "Verify Athena connection to shared test data")
+    athena_ok = verify_athena_connection(dz, DOMAIN_ID, project_id)
+    if athena_ok:
+        print(f"{PASS} Athena verification passed")
+    else:
+        print(f"{FAIL} Athena verification failed (continuing with cleanup)")
+
+    # ── Step 6: Delete project ────────────────────────────────────────────────
+    step(6, f"Delete project {project_id}")
 
     # Delete data sources first
     print(f"  Deleting data sources...")

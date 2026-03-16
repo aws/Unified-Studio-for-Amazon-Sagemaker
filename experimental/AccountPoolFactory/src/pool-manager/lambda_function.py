@@ -763,6 +763,120 @@ def reclaim_account_reuse(account_id: str, item: Dict) -> Dict[str, Any]:
         return {'statusCode': 500, 'body': str(e)}
 
 
+def _add_datazone_roles_as_lf_admins(account_id: str, config: Dict[str, Any] = None):
+    """TEMPORARY WORKAROUND for Lake Formation resource link visibility.
+
+    Lake Formation resource links (created by StackSet 07-glue-lf-test-data) require
+    local LF grants for visibility. Since we don't know the datazone_usr_role names at
+    StackSet deploy time, we discover them here after DataZone creates the environments.
+
+    The DeprovisionAccount lambda removes these roles from LF admins before deletion.
+
+    TODO: Replace with proper LF tag-based access control or per-role grants.
+    """
+    dz_roles = []
+    try:
+        domain_id = os.environ.get('DOMAIN_ID', '')
+        role_arn = f"arn:aws:iam::{account_id}:role/SMUS-AccountPoolFactory-DomainAccess"
+        assumed = sts.assume_role(
+            RoleArn=role_arn,
+            RoleSessionName='lf-admin-fix',
+            ExternalId=domain_id,
+            DurationSeconds=900)
+        creds = assumed['Credentials']
+        kwargs = dict(aws_access_key_id=creds['AccessKeyId'],
+                      aws_secret_access_key=creds['SecretAccessKey'],
+                      aws_session_token=creds['SessionToken'],
+                      region_name=os.environ.get('AWS_REGION', 'us-east-2'))
+
+        iam_client = boto3.client('iam', **kwargs)
+        lf_client = boto3.client('lakeformation', **kwargs)
+
+        # Discover datazone_usr_role_* roles
+        dz_roles = []
+        paginator = iam_client.get_paginator('list_roles')
+        for page in paginator.paginate(PathPrefix='/'):
+            for role in page['Roles']:
+                if role['RoleName'].startswith('datazone_usr_role_'):
+                    dz_roles.append(role['Arn'])
+
+        if not dz_roles:
+            print(f"  ℹ️  No datazone_usr_role_* found in {account_id}")
+            return
+
+        settings = lf_client.get_data_lake_settings()
+        admins = settings['DataLakeSettings'].get('DataLakeAdmins', [])
+        admin_arns = set(a['DataLakePrincipalIdentifier'] for a in admins)
+
+        added = []
+        for arn in dz_roles:
+            if arn not in admin_arns:
+                admins.append({'DataLakePrincipalIdentifier': arn})
+                added.append(arn)
+
+        if added:
+            settings['DataLakeSettings']['DataLakeAdmins'] = admins
+            lf_client.put_data_lake_settings(DataLakeSettings=settings['DataLakeSettings'])
+            print(f"  ✅ Added {len(added)} datazone_usr_role(s) as LF admins in {account_id}")
+        else:
+            print(f"  ℹ️  All datazone_usr_roles already LF admins in {account_id}")
+
+    except Exception as e:
+        # Non-fatal
+        print(f"  ⚠️  Failed to add datazone roles as LF admins in {account_id}: {e}")
+
+    # Also grant cross-account LF permissions from domain account to the project account
+    # and to each datazone_usr_role for the shared test databases.
+    # TEMPORARY WORKAROUND — TODO: move to a more scalable approach.
+    try:
+        region = os.environ.get('AWS_REGION', 'us-east-2')
+        domain_lf = boto3.client('lakeformation', region_name=region)
+        test_dbs = ['apf_test_customers', 'apf_test_transactions']
+
+        # Grant to account ID (cross-account)
+        for db in test_dbs:
+            try:
+                domain_lf.grant_permissions(
+                    Principal={'DataLakePrincipalIdentifier': account_id},
+                    Resource={'Database': {'Name': db}},
+                    Permissions=['DESCRIBE'],
+                    PermissionsWithGrantOption=['DESCRIBE'])
+            except Exception as e:
+                print(f"    ⚠️  DB grant {db} to {account_id}: {e}")
+            try:
+                domain_lf.grant_permissions(
+                    Principal={'DataLakePrincipalIdentifier': account_id},
+                    Resource={'Table': {'DatabaseName': db, 'TableWildcard': {}}},
+                    Permissions=['SELECT', 'DESCRIBE'],
+                    PermissionsWithGrantOption=['SELECT', 'DESCRIBE'])
+            except Exception as e:
+                print(f"    ⚠️  Table grant {db} to {account_id}: {e}")
+        print(f"  ✅ Cross-account LF grants from domain to {account_id}")
+
+        # Grant to each datazone_usr_role directly
+        if dz_roles:
+            for role_arn in dz_roles:
+                for db in test_dbs:
+                    try:
+                        domain_lf.grant_permissions(
+                            Principal={'DataLakePrincipalIdentifier': role_arn},
+                            Resource={'Database': {'Name': db}},
+                            Permissions=['DESCRIBE'])
+                    except Exception as e:
+                        print(f"    ⚠️  DB grant {db} to role: {e}")
+                    try:
+                        domain_lf.grant_permissions(
+                            Principal={'DataLakePrincipalIdentifier': role_arn},
+                            Resource={'Table': {'DatabaseName': db, 'TableWildcard': {}}},
+                            Permissions=['SELECT', 'DESCRIBE'])
+                    except Exception as e:
+                        print(f"    ⚠️  Table grant {db} to role: {e}")
+            print(f"  ✅ Cross-account LF grants from domain to {len(dz_roles)} role(s)")
+
+    except Exception as e:
+        print(f"  ⚠️  Failed cross-account LF grants for {account_id}: {e}")
+
+
 def handle_datazone_assignment(account_id: str, project_id: str, config: Dict[str, Any]) -> Dict[str, Any]:
     """Handle Environment Deployment Completed — mark account ASSIGNED if not already."""
     print(f"🎯 DataZone environment deployed in account {account_id} for project {project_id}")
@@ -781,9 +895,9 @@ def handle_datazone_assignment(account_id: str, project_id: str, config: Dict[st
         state = item.get('state', {}).get('S')
 
         if state == 'ASSIGNED':
-            # Update projectId if not already set (may have been assigned via AccountProvider.validate)
+            # Always update projectId to match the current project (may differ after recycle)
             existing_project = item.get('projectId', {}).get('S', '')
-            if not existing_project and project_id:
+            if project_id and existing_project != project_id:
                 try:
                     dynamodb.update_item(
                         TableName=DYNAMODB_TABLE_NAME,
@@ -791,11 +905,18 @@ def handle_datazone_assignment(account_id: str, project_id: str, config: Dict[st
                         UpdateExpression='SET projectId = :p',
                         ExpressionAttributeValues={':p': {'S': project_id}}
                     )
-                    print(f"✅ Updated projectId for already-ASSIGNED account {account_id}")
+                    print(f"✅ Updated projectId for account {account_id}: {existing_project or '(empty)'} → {project_id}")
                 except Exception as e:
                     print(f"⚠️ Could not update projectId: {e}")
             else:
-                print(f"✅ Account {account_id} already ASSIGNED")
+                print(f"✅ Account {account_id} already ASSIGNED to project {project_id}")
+
+            # TEMPORARY WORKAROUND: Add datazone_usr_role_* as LF admins.
+            # This runs on every deployment-completed event for ASSIGNED accounts,
+            # catching roles created during environment deployment.
+            # TODO: Replace with proper LF tag-based access control.
+            _add_datazone_roles_as_lf_admins(account_id, config)
+
             return {'statusCode': 200, 'body': 'Already assigned'}
 
         if state != 'AVAILABLE':
@@ -817,6 +938,14 @@ def handle_datazone_assignment(account_id: str, project_id: str, config: Dict[st
         )
         print(f"✅ Account {account_id} marked ASSIGNED for project {project_id}")
         publish_metric('AccountAssigned', 1, [{'Name': 'AccountId', 'Value': account_id}])
+
+        # TEMPORARY WORKAROUND: Add datazone_usr_role_* as LF admins in the project account.
+        # Lake Formation resource links require local LF grants for visibility, but we don't
+        # know the role names at StackSet deploy time. We discover them here after DataZone
+        # creates the environments and roles.
+        # TODO: Replace with proper LF tag-based access control or per-role grants.
+        _add_datazone_roles_as_lf_admins(account_id, config)
+
         check_pool_size_and_replenish(config)
         return {'statusCode': 200, 'body': 'Assigned'}
 

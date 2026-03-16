@@ -44,6 +44,8 @@ pools:
         wave: 2
       - template: 05-project-role.yaml        # AmazonSageMakerProjectRole (optional)
         wave: 2
+      - template: 07-glue-lf-test-data.yaml   # TEST ONLY — sample Glue/LF data for verifying cross-account sharing
+        wave: 2
 
       - template: 06-blueprint-enablement.yaml  # enables DataZone blueprints + policy grants
         wave: 3                                 # MUST be after IAM roles (wave 2)

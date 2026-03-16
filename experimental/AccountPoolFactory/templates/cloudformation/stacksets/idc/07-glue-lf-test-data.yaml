@@ -1,0 +1,111 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: "TEST ONLY — Creates Lake Formation resource links to shared test databases in domain account"
+
+Parameters:
+  DomainAccountId:
+    Description: The domain account ID (e.g., 994753223772)
+    Type: String
+  DomainId:
+    Description: DataZone Domain ID
+    Type: String
+
+Resources:
+  # --- Make StackSet execution role a LF admin ---
+  # Required so CloudFormation can grant LF permissions in this account.
+  LFDataLakeSettings:
+    Type: AWS::LakeFormation::DataLakeSettings
+    Properties:
+      Admins:
+        - DataLakePrincipalIdentifier: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/SMUS-AccountPoolFactory-StackSetExecution'
+        - DataLakePrincipalIdentifier: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/DataZoneManageAccessRole'
+        - DataLakePrincipalIdentifier: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:role/DataZoneProvisioningRole'
+
+  # --- Glue Database Resource Links ---
+  # These create entries in the project account's Glue catalog that point
+  # to the shared databases in the domain account.
+
+  ApfTestCustomersLink:
+    Type: AWS::Glue::Database
+    DependsOn: LFDataLakeSettings
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:
+        Name: apf_test_customers
+        TargetDatabase:
+          CatalogId: !Ref DomainAccountId
+          DatabaseName: apf_test_customers
+
+  ApfTestTransactionsLink:
+    Type: AWS::Glue::Database
+    DependsOn: LFDataLakeSettings
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:
+        Name: apf_test_transactions
+        TargetDatabase:
+          CatalogId: !Ref DomainAccountId
+          DatabaseName: apf_test_transactions
+
+  # --- Lake Formation Permissions ---
+  # Grant the project account root principal read access on the resource links.
+
+  LFPermCustomersDb:
+    Type: AWS::LakeFormation::Permissions
+    DependsOn: ApfTestCustomersLink
+    Properties:
+      DataLakePrincipal:
+        DataLakePrincipalIdentifier: !Ref AWS::AccountId
+      Resource:
+        DatabaseResource:
+          Name: apf_test_customers
+      Permissions:
+        - DESCRIBE
+
+  LFPermTransactionsDb:
+    Type: AWS::LakeFormation::Permissions
+    DependsOn: ApfTestTransactionsLink
+    Properties:
+      DataLakePrincipal:
+        DataLakePrincipalIdentifier: !Ref AWS::AccountId
+      Resource:
+        DatabaseResource:
+          Name: apf_test_transactions
+      Permissions:
+        - DESCRIBE
+
+  LFPermCustomersTables:
+    Type: AWS::LakeFormation::Permissions
+    DependsOn: ApfTestCustomersLink
+    Properties:
+      DataLakePrincipal:
+        DataLakePrincipalIdentifier: !Ref AWS::AccountId
+      Resource:
+        TableResource:
+          DatabaseName: apf_test_customers
+          TableWildcard: {}
+      Permissions:
+        - SELECT
+        - DESCRIBE
+
+  LFPermTransactionsTables:
+    Type: AWS::LakeFormation::Permissions
+    DependsOn: ApfTestTransactionsLink
+    Properties:
+      DataLakePrincipal:
+        DataLakePrincipalIdentifier: !Ref AWS::AccountId
+      Resource:
+        TableResource:
+          DatabaseName: apf_test_transactions
+          TableWildcard: {}
+      Permissions:
+        - SELECT
+        - DESCRIBE
+
+Outputs:
+  CustomersResourceLinkDb:
+    Description: Resource link database name for customers test data
+    Value: apf_test_customers
+
+  TransactionsResourceLinkDb:
+    Description: Resource link database name for transactions test data
+    Value: apf_test_transactions

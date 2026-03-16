@@ -144,6 +144,50 @@ def lambda_handler(event, context):
         }
 
 
+def _remove_datazone_roles_from_lf_admins(account_id: str, domain_id: str):
+    """TEMPORARY WORKAROUND: Remove datazone_usr_role_* from LF admins before cleanup.
+
+    SetupOrchestrator adds these roles as LF admins for resource link visibility.
+    We remove them here to avoid leaving stale LF admin entries after account reclaim.
+    Non-fatal — cleanup continues even if this fails.
+
+    TODO: Remove when proper LF tag-based access control is implemented.
+    """
+    try:
+        role_arn = f"arn:aws:iam::{account_id}:role/SMUS-AccountPoolFactory-DomainAccess"
+        assumed = sts.assume_role(
+            RoleArn=role_arn,
+            RoleSessionName='deprovision-lf-cleanup',
+            ExternalId=domain_id,
+            DurationSeconds=900)
+        creds = assumed['Credentials']
+
+        lf_client = boto3.client('lakeformation',
+            aws_access_key_id=creds['AccessKeyId'],
+            aws_secret_access_key=creds['SecretAccessKey'],
+            aws_session_token=creds['SessionToken'],
+            region_name=os.environ.get('AWS_REGION', 'us-east-2'))
+
+        settings = lf_client.get_data_lake_settings()
+        admins = settings['DataLakeSettings'].get('DataLakeAdmins', [])
+        original_count = len(admins)
+
+        # Filter out datazone_usr_role_* entries
+        cleaned = [a for a in admins
+                    if not a.get('DataLakePrincipalIdentifier', '').split('/')[-1].startswith('datazone_usr_role_')]
+        removed = original_count - len(cleaned)
+
+        if removed > 0:
+            settings['DataLakeSettings']['DataLakeAdmins'] = cleaned
+            lf_client.put_data_lake_settings(DataLakeSettings=settings['DataLakeSettings'])
+            print(f"  ✅ Removed {removed} datazone_usr_role(s) from LF admins in {account_id}")
+        else:
+            print(f"  ℹ️  No datazone_usr_role LF admins to remove in {account_id}")
+
+    except Exception as e:
+        print(f"  ⚠️  Failed to remove datazone roles from LF admins in {account_id}: {e}")
+
+
 def cleanup_account(account_id: str, domain_id: str, stacks_to_delete: list = None) -> Dict[str, Any]:
     """Clean project account by deleting non-approved stacks.
 
@@ -155,6 +199,12 @@ def cleanup_account(account_id: str, domain_id: str, stacks_to_delete: list = No
     start_time = time.time()
     
     try:
+        # TEMPORARY WORKAROUND: Remove datazone_usr_role_* from LF admins before cleanup.
+        # SetupOrchestrator adds these as LF admins for resource link visibility.
+        # We remove them here to avoid leaving stale LF admin entries after account reclaim.
+        # TODO: Remove when proper LF tag-based access control is implemented.
+        _remove_datazone_roles_from_lf_admins(account_id, domain_id)
+
         # Assume role in project account
         print(f"🔐 Assuming role in account {account_id}")
         cf_client = get_cloudformation_client(account_id, domain_id)

@@ -256,14 +256,7 @@ Resources:
               # RAM
               - Effect: Allow
                 Action:
-                  - ram:CreateResourceShare
-                  - ram:DeleteResourceShare
-                  - ram:AssociateResourceShare
-                  - ram:DisassociateResourceShare
-                  - ram:GetResourceShares
-                  - ram:GetResourceShareAssociations
-                  - ram:ListResources
-                  - ram:TagResource
+                  - ram:*
                 Resource: '*'
 
               # DataZone
@@ -275,6 +268,27 @@ Resources:
                   - datazone:GetEnvironment
                   - datazone:GetProject
                 Resource: !Sub 'arn:aws:datazone:${AWS::Region}:${AWS::AccountId}:domain/${DomainId}'
+
+              # Lake Formation — TEMPORARY WORKAROUND for cross-account test data sharing.
+              # PoolManager grants LF permissions to project accounts for shared Glue databases.
+              # TODO: Remove when proper LF tag-based access control is implemented.
+              - Effect: Allow
+                Action:
+                  - lakeformation:GrantPermissions
+                  - lakeformation:RevokePermissions
+                  - lakeformation:BatchGrantPermissions
+                  - lakeformation:BatchRevokePermissions
+                  - lakeformation:GetDataLakeSettings
+                  - lakeformation:PutDataLakeSettings
+                  - lakeformation:ListPermissions
+                Resource: '*'
+
+              # Glue catalog read — needed by LF GrantPermissions to verify databases/tables exist.
+              # TEMPORARY WORKAROUND — part of the LF test data sharing setup.
+              - Effect: Allow
+                Action:
+                  - glue:*
+                Resource: '*'
 
               # SQS — send setup jobs to SetupQueue (Recycler/PoolManager)
               # and receive/delete for SetupOrchestrator event source mapping

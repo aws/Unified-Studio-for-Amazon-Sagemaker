@@ -79,6 +79,68 @@ python3 tests/integration/test-e2e-pool-lifecycle.py
 
 ---
 
+## Test Data Infrastructure (Glue/Lake Formation)
+
+Tests cross-account Lake Formation sharing of Glue databases. Three phases: create test data, single-account validation, fleet-wide rollout.
+
+### Prerequisites
+
+- Domain account credentials (`amirbo+3@amazon.com`)
+- Org admin credentials (`amirbo+1@amazon.com`) for StackSet operations
+- `07-glue-lf-test-data.yaml` added to `org-config.yaml` and org admin deploy run
+
+### Phase 1: Create Test Data
+
+```bash
+eval $(isengardcli credentials amirbo+3@amazon.com)
+./scripts/02-domain-account/deploy/06-create-test-data.py
+```
+
+Creates S3 bucket with sample CSVs, two Glue databases (`apf_test_customers`, `apf_test_transactions`), Lake Formation registration. Idempotent.
+
+### Phase 2: Single Account Test
+
+```bash
+eval $(isengardcli credentials amirbo+3@amazon.com)
+python3 tests/integration/test-lf-single-account.py
+```
+
+Picks one AVAILABLE account, deploys StackSet, creates project, verifies Athena can query shared data, cleans up. Exit 0 = pass.
+
+### Phase 3: Fleet-Wide Rollout
+
+```bash
+# AVAILABLE accounts (domain account)
+eval $(isengardcli credentials amirbo+3@amazon.com)
+python3 tests/integration/test-lf-fleet-rollout.py --phase available
+
+# ASSIGNED accounts (org admin)
+eval $(isengardcli credentials amirbo+1@amazon.com)
+python3 tests/integration/test-lf-fleet-rollout.py --phase assigned
+```
+
+### Full Sequence
+
+```bash
+# 1. Add template to org-config.yaml, deploy org admin
+eval $(isengardcli credentials amirbo+1@amazon.com)
+./scripts/01-org-mgmt-account/deploy/01-deploy.sh
+
+# 2. Create test data
+eval $(isengardcli credentials amirbo+3@amazon.com)
+./scripts/02-domain-account/deploy/06-create-test-data.py
+
+# 3. Single account test
+python3 tests/integration/test-lf-single-account.py
+
+# 4. Fleet rollout (if Phase 2 passed)
+python3 tests/integration/test-lf-fleet-rollout.py --phase available
+eval $(isengardcli credentials amirbo+1@amazon.com)
+python3 tests/integration/test-lf-fleet-rollout.py --phase assigned
+```
+
+---
+
 ## Verify Pool Health
 
 ```bash

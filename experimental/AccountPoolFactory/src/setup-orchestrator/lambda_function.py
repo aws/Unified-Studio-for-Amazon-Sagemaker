@@ -103,6 +103,8 @@ def lambda_handler(event, context):
     """
     global _config_cache
     _config_cache = None  # Clear cache at start
+    global _pool_stacksets_cache
+    _pool_stacksets_cache = None
 
     # Unwrap SQS record if triggered via event source mapping
     if event.get('Records'):
@@ -216,6 +218,89 @@ def get_account_state(account_id: str) -> Optional[Dict]:
 
 ORG_ADMIN_ACCOUNT_ID = os.environ.get('ORG_ADMIN_ACCOUNT_ID', '')
 EXTERNAL_ID = os.environ.get('EXTERNAL_ID', f'AccountPoolFactory-{DOMAIN_ACCOUNT_ID}')
+
+# Cache for pool StackSets config loaded from org SSM
+_pool_stacksets_cache = None
+
+
+def _load_pool_stacksets_config(pool_name='default'):
+    """Load the expected StackSets list from org admin SSM.
+
+    Returns list of dicts: [{'stacksetName': '...', 'wave': N, ...}, ...]
+    Falls back to empty list if SSM read fails (non-fatal).
+    """
+    global _pool_stacksets_cache
+    if _pool_stacksets_cache is not None:
+        return _pool_stacksets_cache
+    try:
+        role_arn = f"arn:aws:iam::{ORG_ADMIN_ACCOUNT_ID}:role/SMUS-AccountPoolFactory-AccountCreation"
+        creds = sts.assume_role(
+            RoleArn=role_arn,
+            RoleSessionName='SetupOrchestrator-SSM',
+            ExternalId=EXTERNAL_ID,
+            DurationSeconds=900
+        )['Credentials']
+        org_ssm = boto3.client('ssm', region_name=REGION,
+            aws_access_key_id=creds['AccessKeyId'],
+            aws_secret_access_key=creds['SecretAccessKey'],
+            aws_session_token=creds['SessionToken'])
+        resp = org_ssm.get_parameter(Name=f'/AccountPoolFactory/Pools/{pool_name}/StackSets')
+        _pool_stacksets_cache = json.loads(resp['Parameter']['Value'])
+        print(f"📋 Loaded {len(_pool_stacksets_cache)} StackSets from config for pool '{pool_name}'")
+        return _pool_stacksets_cache
+    except Exception as e:
+        print(f"⚠️ Could not load StackSets config from org SSM: {e}")
+        _pool_stacksets_cache = []
+        return []
+
+
+def _deploy_missing_stacksets(account_id, already_deployed):
+    """Deploy any StackSets from config that are not yet deployed to this account.
+
+    Compares the SSM config against already_deployed (set of StackSet names).
+    Deploys missing ones in wave order, same-wave in parallel.
+    Returns list of newly deployed StackSet names.
+    """
+    config_stacksets = _load_pool_stacksets_config()
+    if not config_stacksets:
+        return []
+
+    # DomainAccess (wave 1) is handled by ProvisionAccount, skip it
+    missing = [entry for entry in config_stacksets
+               if entry.get('stacksetName') and entry['stacksetName'] not in already_deployed
+               and 'DomainAccess' not in entry['stacksetName']]
+
+    if not missing:
+        print(f"  ✅ All config StackSets already deployed")
+        return []
+
+    print(f"  🔄 Deploying {len(missing)} missing StackSets: {[e['stacksetName'] for e in missing]}")
+
+    # Group by wave
+    waves = {}
+    for entry in missing:
+        wave = int(entry.get('wave', 2))
+        waves.setdefault(wave, []).append(entry)
+
+    org_cf = _get_org_cf_client()
+    newly_deployed = []
+
+    for wave_num in sorted(waves.keys()):
+        entries = waves[wave_num]
+        print(f"  🌊 Wave {wave_num}: {[e['stacksetName'] for e in entries]}")
+        for entry in entries:
+            ss_name = entry['stacksetName']
+            try:
+                op_id = _add_stackset_instance(org_cf, ss_name, account_id, [])
+                if op_id != 'ALREADY_EXISTS':
+                    _wait_stackset_operation(org_cf, ss_name, op_id)
+                newly_deployed.append(ss_name)
+                print(f"  ✅ {ss_name} deployed")
+            except Exception as e:
+                print(f"  ⚠️ Failed to deploy {ss_name}: {e}")
+                # Non-fatal — account will be retried next reconciler cycle
+
+    return newly_deployed
 
 
 def _get_org_cf_client():
@@ -414,6 +499,60 @@ def _cleanup_old_stacks(account_id: str, config: Dict[str, Any]):
     print(f"✅ Old stack cleanup complete for {account_id}")
 
 
+def _add_datazone_roles_as_lf_admins(account_id: str, config: Dict[str, Any]):
+    """TEMPORARY WORKAROUND for Lake Formation resource link visibility.
+
+    Lake Formation resource links (created by StackSet 07-glue-lf-test-data) require
+    local LF grants for visibility. Since we don't know the datazone_usr_role names at
+    StackSet deploy time, we discover them here and add them as LF admins.
+
+    This runs after all StackSets are deployed, so the resource links already exist.
+    The cleanup/deprovision lambda removes these roles from LF admins before deletion.
+
+    TODO: Replace with proper LF tag-based access control or per-role grants.
+    """
+    try:
+        iam_client = get_cross_account_client('iam', account_id, config)
+        lf_client = get_cross_account_client('lakeformation', account_id, config)
+
+        # Discover datazone_usr_role_* roles
+        paginator = iam_client.get_paginator('list_roles')
+        dz_roles = []
+        for page in paginator.paginate(PathPrefix='/'):
+            for role in page['Roles']:
+                if role['RoleName'].startswith('datazone_usr_role_'):
+                    dz_roles.append(role['Arn'])
+
+        if not dz_roles:
+            print(f"  ℹ️  No datazone_usr_role_* roles found in {account_id}, skipping LF admin setup")
+            return
+
+        # Get current LF admins
+        settings = lf_client.get_data_lake_settings()
+        admins = settings['DataLakeSettings'].get('DataLakeAdmins', [])
+        admin_arns = set(a['DataLakePrincipalIdentifier'] for a in admins)
+
+        # Add missing roles
+        added = []
+        for role_arn in dz_roles:
+            if role_arn not in admin_arns:
+                admins.append({'DataLakePrincipalIdentifier': role_arn})
+                added.append(role_arn)
+
+        if added:
+            settings['DataLakeSettings']['DataLakeAdmins'] = admins
+            lf_client.put_data_lake_settings(DataLakeSettings=settings['DataLakeSettings'])
+            print(f"  ✅ Added {len(added)} datazone_usr_role(s) as LF admins in {account_id}")
+            for arn in added:
+                print(f"     {arn}")
+        else:
+            print(f"  ℹ️  All datazone_usr_roles already LF admins in {account_id}")
+
+    except Exception as e:
+        # Non-fatal — don't fail setup if LF admin addition fails
+        print(f"  ⚠️  Failed to add datazone roles as LF admins in {account_id}: {e}")
+
+
 def execute_setup_workflow(account_id: str, config: Dict[str, Any], resume_from: Optional[str] = None) -> Dict[str, Any]:
     """Execute wave-based parallel setup workflow
     
@@ -426,6 +565,53 @@ def execute_setup_workflow(account_id: str, config: Dict[str, Any], resume_from:
     resources = {}
     
     try:
+        # Check if waves 1-2 are already complete — if so, skip to wave 3 (missing StackSets only)
+        item = dynamodb.query(
+            TableName=DYNAMODB_TABLE_NAME,
+            KeyConditionExpression='accountId = :a',
+            ExpressionAttributeValues={':a': {'S': account_id}},
+            ScanIndexForward=False, Limit=1
+        ).get('Items', [None])[0]
+
+        completed_steps = set()
+        if item:
+            completed_steps = set(
+                e.get('S', '') for e in item.get('completedSteps', {}).get('L', []) if e.get('S'))
+
+        waves_12_complete = 'wave1_foundation' in completed_steps and 'wave2_blueprints' in completed_steps
+
+        if waves_12_complete:
+            print("⏭️ Waves 1-2 already complete — skipping to wave 3 (missing StackSets)")
+            already_deployed = set(
+                e.get('S', '') for e in item.get('deployedStackSets', {}).get('L', []) if e.get('S'))
+            already_deployed.update([
+                'SMUS-AccountPoolFactory-VpcSetup',
+                'SMUS-AccountPoolFactory-IamRoles',
+                'SMUS-AccountPoolFactory-CustomPolicy',
+                'SMUS-AccountPoolFactory-EventbridgeRules',
+                'SMUS-AccountPoolFactory-BlueprintEnablement'])
+
+            print("🌊 Wave 3: Deploy missing StackSets from config")
+            newly_deployed = _deploy_missing_stacksets(account_id, already_deployed)
+            if newly_deployed:
+                update_progress(account_id, 'wave3_additional_stacksets', {},
+                                deployed_stacksets=newly_deployed)
+                print(f"✅ Wave 3 completed - {len(newly_deployed)} additional StackSets deployed")
+            else:
+                print(f"✅ Wave 3 completed - no additional StackSets needed")
+
+            duration = int(time.time() - start_time)
+            mark_account_available(account_id, {}, duration)
+            publish_metric('SetupSucceeded', 1, [{'Name': 'AccountId', 'Value': account_id}])
+            print(f"✅ Fast-path setup completed in {duration} seconds")
+            return {
+                'status': 'COMPLETED',
+                'accountId': account_id,
+                'setupDuration': duration,
+                'fastPath': True,
+                'newStackSets': newly_deployed
+            }
+
         # Wave 0.5: Clean up old direct CF stacks that conflict with StackSet deployment
         _cleanup_old_stacks(account_id, config)
         
@@ -476,6 +662,34 @@ def execute_setup_workflow(account_id: str, config: Dict[str, Any], resume_from:
         
         print(f"✅ Wave 2 completed - Blueprints enabled")
         
+        # Wave 3: Deploy any additional StackSets from config not yet deployed
+        # This catches new StackSets added to org-config.yaml after initial provisioning.
+        already_deployed = set()
+        already_deployed.update(['SMUS-AccountPoolFactory-VpcSetup',
+                                 'SMUS-AccountPoolFactory-IamRoles',
+                                 'SMUS-AccountPoolFactory-CustomPolicy',
+                                 'SMUS-AccountPoolFactory-EventbridgeRules',
+                                 'SMUS-AccountPoolFactory-BlueprintEnablement'])
+        # Also include anything already tracked in DynamoDB (from prior runs)
+        item = dynamodb.query(
+            TableName=DYNAMODB_TABLE_NAME,
+            KeyConditionExpression='accountId = :a',
+            ExpressionAttributeValues={':a': {'S': account_id}},
+            ScanIndexForward=False, Limit=1
+        ).get('Items', [None])[0]
+        if item:
+            already_deployed.update(
+                e.get('S', '') for e in item.get('deployedStackSets', {}).get('L', []) if e.get('S'))
+
+        print("🌊 Wave 3: Deploy missing StackSets from config")
+        newly_deployed = _deploy_missing_stacksets(account_id, already_deployed)
+        if newly_deployed:
+            update_progress(account_id, 'wave3_additional_stacksets', {},
+                            deployed_stacksets=newly_deployed)
+            print(f"✅ Wave 3 completed - {len(newly_deployed)} additional StackSets deployed")
+        else:
+            print(f"✅ Wave 3 completed - no additional StackSets needed")
+
         # Mark account as AVAILABLE
         duration = int(time.time() - start_time)
         mark_account_available(account_id, resources, duration)
@@ -1673,7 +1887,7 @@ def mark_account_available(account_id: str, resources: Dict[str, Any], duration:
                 'accountId': {'S': account_id},
                 'timestamp': item['timestamp']
             },
-            UpdateExpression='SET #state = :state, setupCompleteDate = :date, setupDuration = :duration, resources = :resources',
+            UpdateExpression='SET #state = :state, setupCompleteDate = :date, setupDuration = :duration, resources = :resources REMOVE projectId, projectStackName, errorMessage, failedStep, retryCount, reconciliationNote',
             ExpressionAttributeNames={'#state': 'state'},
             ExpressionAttributeValues={
                 ':state': {'S': 'AVAILABLE'},
@@ -1683,7 +1897,7 @@ def mark_account_available(account_id: str, resources: Dict[str, Any], duration:
             }
         )
         
-        print(f"✅ Account {account_id} marked as AVAILABLE")
+        print(f"✅ Account {account_id} marked as AVAILABLE (projectId cleared)")
         
     except Exception as e:
         print(f"❌ Error marking account available: {e}")
