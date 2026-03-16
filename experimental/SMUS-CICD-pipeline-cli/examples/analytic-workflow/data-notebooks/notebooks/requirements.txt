@@ -219,7 +219,7 @@ pyiceberg==0.10.0
 pyjwt==2.10.1
 pymssql==2.3.9
 pymysql==1.1.2
-pyopenssl==25.3.0
+pyopenssl==26.0.0
 pyparsing==3.2.5
 pypdf==6.4.0
 pyroaring==1.0.3
