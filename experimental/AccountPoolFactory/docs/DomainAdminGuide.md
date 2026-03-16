@@ -142,44 +142,69 @@ aws sns subscribe \
 
 ## Day-to-Day Operations
 
-### Trigger manual replenishment
+The system is self-healing. The AccountReconciler runs hourly to detect drift and mark broken accounts as FAILED. The AccountRecycler automatically picks up FAILED accounts and re-provisions them. The PoolManager monitors pool size and triggers replenishment when it drops below the minimum.
+
+You should rarely need to intervene manually. The operations below are for exception cases only.
+
+### Check pool health
+
 ```bash
-aws lambda invoke --function-name PoolManager \
-  --payload '{"action":"force_replenishment"}' \
-  --cli-binary-format raw-in-base64-out --region us-east-2 /tmp/r.json
+# Quick status — account counts by state + recent Lambda activity
+./02-domain-account/scripts/utils/check-pool-status.sh
+
+# Continuous monitoring (refreshes every 30s)
+python3 02-domain-account/scripts/utils/monitor-pool.py 30
+
+# Inspect a specific account
+./02-domain-account/scripts/utils/check-account-state.sh <account-id>
+```
+
+### Force replenishment (pool below target)
+
+Use when: the pool is below target size and the hourly PoolManager hasn't caught up yet (e.g. after a burst of project creations).
+
+```bash
+./02-domain-account/scripts/deploy/04-seed-pool.sh           # all pools
+./02-domain-account/scripts/deploy/04-seed-pool.sh default    # specific pool
 ```
 
 ### Handle failed accounts
-```bash
-# Recycler fixes FAILED/ORPHANED automatically
-aws lambda invoke --function-name AccountRecycler \
-  --payload '{"recycleAll":true}' \
-  --cli-binary-format raw-in-base64-out --region us-east-2 /tmp/r.json
 
-# Force-recycle a specific account (works on AVAILABLE, ASSIGNED, CLEANING, FAILED, ORPHANED)
-aws lambda invoke --function-name AccountRecycler \
-  --payload '{"accountId":"<account-id>","force":true}' \
-  --cli-binary-format raw-in-base64-out --region us-east-2 /tmp/r.json
+Use when: the recycler hasn't auto-fixed a FAILED account after 2-3 cycles (check logs for root cause first).
+
+```bash
+# Recycle all FAILED accounts (recycler normally does this automatically)
+./02-domain-account/scripts/utils/invoke-recycler.sh --all
+
+# Force-recycle a specific account (works on any state)
+./02-domain-account/scripts/utils/invoke-recycler.sh --account <account-id> --force
+
+# Nuclear option: remove FAILED accounts from DynamoDB so replenishment creates fresh ones
+./02-domain-account/scripts/utils/cleanup-failed-accounts.sh
 ```
 
 ### Run reconciler manually
-```bash
-# Dry run
-aws lambda invoke --function-name AccountReconciler \
-  --payload '{"source":"manual","dryRun":true}' \
-  --cli-binary-format raw-in-base64-out --region us-east-2 /tmp/r.json
 
-# Full self-healing
-aws lambda invoke --function-name AccountReconciler \
-  --payload '{"source":"manual","dryRun":false,"autoRecycle":true,"autoReplenish":true}' \
-  --cli-binary-format raw-in-base64-out --region us-east-2 /tmp/r.json
+Use when: you suspect drift (e.g. after a StackSet update) and don't want to wait for the hourly run.
+
+```bash
+# Dry run — shows what would change without modifying anything
+./02-domain-account/scripts/utils/invoke-reconciler.sh --dry-run
+
+# Full self-healing — marks drifted accounts as FAILED and triggers recycler
+./02-domain-account/scripts/utils/invoke-reconciler.sh --auto-recycle
 ```
 
-### Update blueprints fleet-wide
+### Update StackSets fleet-wide
+
+Use when: you've added or modified a StackSet template and need to roll it out to all existing pool accounts.
+
 ```bash
-aws lambda invoke --function-name AccountRecycler \
-  --payload '{"updateBlueprints":true}' \
-  --cli-binary-format raw-in-base64-out --region us-east-2 /tmp/r.json
+# Update blueprints on all AVAILABLE accounts
+./02-domain-account/scripts/utils/invoke-recycler.sh --update-blueprints
+
+# Verify pool health after rollout
+./02-domain-account/scripts/utils/verify-pool-health.sh
 ```
 
 ---
