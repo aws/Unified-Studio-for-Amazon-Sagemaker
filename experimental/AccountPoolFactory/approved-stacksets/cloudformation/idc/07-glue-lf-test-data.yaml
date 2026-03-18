@@ -6,7 +6,7 @@ Parameters:
     Description: The domain account ID (e.g., 994753223772)
     Type: String
   DomainId:
-    Description: DataZone Domain ID
+    Description: DataZone Domain ID (kept for StackSet parameter compatibility)
     Type: String
 
 Resources:
@@ -46,39 +46,43 @@ Resources:
           CatalogId: !Ref DomainAccountId
           DatabaseName: apf_test_transactions
 
-  # --- Lake Formation Permissions ---
-  # Grant the project account root principal read access on the resource links.
+  # --- Lake Formation Permissions for IAMPrincipals ---
+  # Grant all IAM principals in this account DESCRIBE on resource link databases
+  # and SELECT+DESCRIBE on tables. This makes the resource links visible in
+  # Glue get_databases for any IAM role (including DataZone user roles).
+  # Without these grants, get_tables works but get_databases does not show
+  # the resource link databases.
 
-  LFPermCustomersDb:
+  LFPermCustomersDbIAMPrincipals:
     Type: AWS::LakeFormation::Permissions
     DependsOn: ApfTestCustomersLink
     Properties:
       DataLakePrincipal:
-        DataLakePrincipalIdentifier: !Ref AWS::AccountId
+        DataLakePrincipalIdentifier: !Sub '${AWS::AccountId}:IAMPrincipals'
       Resource:
         DatabaseResource:
           Name: apf_test_customers
       Permissions:
         - DESCRIBE
 
-  LFPermTransactionsDb:
+  LFPermTransactionsDbIAMPrincipals:
     Type: AWS::LakeFormation::Permissions
     DependsOn: ApfTestTransactionsLink
     Properties:
       DataLakePrincipal:
-        DataLakePrincipalIdentifier: !Ref AWS::AccountId
+        DataLakePrincipalIdentifier: !Sub '${AWS::AccountId}:IAMPrincipals'
       Resource:
         DatabaseResource:
           Name: apf_test_transactions
       Permissions:
         - DESCRIBE
 
-  LFPermCustomersTables:
+  LFPermCustomersTablesIAMPrincipals:
     Type: AWS::LakeFormation::Permissions
     DependsOn: ApfTestCustomersLink
     Properties:
       DataLakePrincipal:
-        DataLakePrincipalIdentifier: !Ref AWS::AccountId
+        DataLakePrincipalIdentifier: !Sub '${AWS::AccountId}:IAMPrincipals'
       Resource:
         TableResource:
           DatabaseName: apf_test_customers
@@ -87,12 +91,12 @@ Resources:
         - SELECT
         - DESCRIBE
 
-  LFPermTransactionsTables:
+  LFPermTransactionsTablesIAMPrincipals:
     Type: AWS::LakeFormation::Permissions
     DependsOn: ApfTestTransactionsLink
     Properties:
       DataLakePrincipal:
-        DataLakePrincipalIdentifier: !Ref AWS::AccountId
+        DataLakePrincipalIdentifier: !Sub '${AWS::AccountId}:IAMPrincipals'
       Resource:
         TableResource:
           DatabaseName: apf_test_transactions

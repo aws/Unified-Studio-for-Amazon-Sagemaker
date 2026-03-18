@@ -1,0 +1,1612 @@
+# ===========================================================================
+# ISSUE SUMMARY
+# ===========================================================================
+#
+# Problem: Glue resource link databases in a consumer account are not visible
+# via get-databases to a DataZone user role, even though get-tables on those
+# same databases succeeds and returns data.
+#
+# Setup:
+#   - Domain account 994753223772 owns Glue databases (apf_test_customers,
+#     apf_test_transactions) backed by S3 data.
+#   - Project account 261399254793 has Glue resource link databases pointing
+#     to the domain account databases (created via CloudFormation StackSet).
+#   - DataZone user role (datazone_usr_role_5237hturzpp5ih_b2no4uzn8mttt5)
+#     in the project account is the role used by end users via DataZone
+#     connection credentials.
+#
+# What we tried (3 phases):
+#   Phase 1: Cross-account LF grant from domain to project account ID
+#   Phase 2: Grant IAM_ALLOWED_PRINCIPALS on resource link DBs in project account
+#   Phase 3: Cross-account LF grant from domain directly to the DZ user role ARN
+#
+# Result after all 3 phases:
+#   - get-databases (DZ user role): does NOT show apf_test_customers or
+#     apf_test_transactions. Only shows 'default' and DataZone-managed DB.
+#   - get-tables (DZ user role): SUCCEEDS and returns full table metadata
+#     from the source account for both databases.
+#   - list-permissions in project account: always empty (no local LF grants).
+#   - IAM_ALLOWED_PRINCIPALS grant on table wildcard: REJECTED by LF with
+#     "Grant on table wildcard is not allowed" for resource link databases.
+#
+# Expected behavior: If get-tables works, get-databases should also show
+# the resource link databases. The role has cross-account access to the
+# underlying tables but cannot discover the databases.
+#
+# ===========================================================================
+
+=============================================================================
+  Lake Formation Cross-Account Grant Debug Trace
+  Timestamp: 2026-03-17T13:48:02Z
+  Domain Account (source): 994753223772
+  Project Account (target): 261399254793
+  DZ User Role: arn:aws:iam::261399254793:role/datazone_usr_role_5237hturzpp5ih_b2no4uzn8mttt5
+=============================================================================
+
+=============================================================================
+# ---------------------------------------------------------------------------
+# STEP 1: Verify clean starting state
+# Show existing LF permissions in both accounts and what each role can see.
+# ---------------------------------------------------------------------------
+  BASELINE — Clean Starting State
+=============================================================================
+
+# Caller: domain account Admin role (994753223772)
+>>> aws sts get-caller-identity
+{
+  "UserId": "AROA6PG7JTRONANMRDG6B:amirbo-Isengard",
+  "Account": "994753223772",
+  "Arn": "arn:aws:sts::994753223772:assumed-role/Admin/amirbo-Isengard"
+}
+
+# Check cross-account LF grants in the DOMAIN account for project account 261399254793.
+>>> aws lakeformation list-permissions --resource Database:apf_test_customers (filtered to 261399254793)
+{
+  "PrincipalResourcePermissions": [
+    {
+      "Principal": {
+        "DataLakePrincipalIdentifier": "arn:aws:iam::261399254793:role/datazone_usr_role_5237hturzpp5ih_b2no4uzn8mttt5"
+      },
+      "Resource": {
+        "Database": {
+          "CatalogId": "994753223772",
+          "Name": "apf_test_customers"
+        }
+      },
+      "Permissions": [
+        "DESCRIBE"
+      ],
+      "PermissionsWithGrantOption": [],
+      "AdditionalDetails": {
+        "ResourceShare": [
+          "arn:aws:ram:us-east-2:994753223772:resource-share/2e8892d2-6b77-4537-bcd7-7732868301e7"
+        ]
+      },
+      "LastUpdated": "2026-03-17T09:47:25.206000-04:00",
+      "LastUpdatedBy": "arn:aws:iam::994753223772:role/Admin"
+    },
+    {
+      "Principal": {
+        "DataLakePrincipalIdentifier": "261399254793"
+      },
+      "Resource": {
+        "Database": {
+          "CatalogId": "994753223772",
+          "Name": "apf_test_customers"
+        }
+      },
+      "Permissions": [
+        "DESCRIBE"
+      ],
+      "PermissionsWithGrantOption": [
+        "DESCRIBE"
+      ],
+      "AdditionalDetails": {
+        "ResourceShare": [
+          "arn:aws:ram:us-east-2:994753223772:resource-share/2e8892d2-6b77-4537-bcd7-7732868301e7"
+        ]
+      },
+      "LastUpdated": "2026-03-17T09:45:43.574000-04:00",
+      "LastUpdatedBy": "arn:aws:iam::994753223772:role/Admin"
+    }
+  ]
+}
+
+>>> aws lakeformation list-permissions --resource Table:apf_test_customers/* (filtered to 261399254793)
+{
+  "PrincipalResourcePermissions": [
+    {
+      "Principal": {
+        "DataLakePrincipalIdentifier": "arn:aws:iam::261399254793:role/datazone_usr_role_5237hturzpp5ih_b2no4uzn8mttt5"
+      },
+      "Resource": {
+        "Table": {
+          "CatalogId": "994753223772",
+          "DatabaseName": "apf_test_customers",
+          "Name": "ALL_TABLES",
+          "TableWildcard": {}
+        }
+      },
+      "Permissions": [
+        "DESCRIBE"
+      ],
+      "PermissionsWithGrantOption": [],
+      "AdditionalDetails": {
+        "ResourceShare": [
+          "arn:aws:ram:us-east-2:994753223772:resource-share/a61120ee-da46-4e3b-90cc-dd94f6e0187d"
+        ]
+      },
+      "LastUpdated": "2026-03-17T09:48:05.811000-04:00",
+      "LastUpdatedBy": "arn:aws:iam::994753223772:role/Admin"
+    },
+    {
+      "Principal": {
+        "DataLakePrincipalIdentifier": "arn:aws:iam::261399254793:role/datazone_usr_role_5237hturzpp5ih_b2no4uzn8mttt5"
+      },
+      "Resource": {
+        "TableWithColumns": {
+          "CatalogId": "994753223772",
+          "DatabaseName": "apf_test_customers",
+          "Name": "ALL_TABLES",
+          "ColumnWildcard": {}
+        }
+      },
+      "Permissions": [
+        "SELECT"
+      ],
+      "PermissionsWithGrantOption": [],
+      "AdditionalDetails": {
+        "ResourceShare": [
+          "arn:aws:ram:us-east-2:994753223772:resource-share/a61120ee-da46-4e3b-90cc-dd94f6e0187d"
+        ]
+      },
+      "LastUpdated": "2026-03-17T09:48:05.811000-04:00",
+      "LastUpdatedBy": "arn:aws:iam::994753223772:role/Admin"
+    },
+    {
+      "Principal": {
+        "DataLakePrincipalIdentifier": "261399254793"
+      },
+      "Resource": {
+        "Table": {
+          "CatalogId": "994753223772",
+          "DatabaseName": "apf_test_customers",
+          "Name": "ALL_TABLES",
+          "TableWildcard": {}
+        }
+      },
+      "Permissions": [
+        "DESCRIBE"
+      ],
+      "PermissionsWithGrantOption": [
+        "DESCRIBE"
+      ],
+      "AdditionalDetails": {
+        "ResourceShare": [
+          "arn:aws:ram:us-east-2:994753223772:resource-share/a61120ee-da46-4e3b-90cc-dd94f6e0187d"
+        ]
+      },
+      "LastUpdated": "2026-03-17T09:45:45.279000-04:00",
+      "LastUpdatedBy": "arn:aws:iam::994753223772:role/Admin"
+    },
+    {
+      "Principal": {
+        "DataLakePrincipalIdentifier": "261399254793"
+      },
+      "Resource": {
+        "TableWithColumns": {
+          "CatalogId": "994753223772",
+          "DatabaseName": "apf_test_customers",
+          "Name": "ALL_TABLES",
+          "ColumnWildcard": {}
+        }
+      },
+      "Permissions": [
+        "SELECT"
+      ],
+      "PermissionsWithGrantOption": [
+        "SELECT"
+      ],
+      "AdditionalDetails": {
+        "ResourceShare": [
+          "arn:aws:ram:us-east-2:994753223772:resource-share/a61120ee-da46-4e3b-90cc-dd94f6e0187d"
+        ]
+      },
+      "LastUpdated": "2026-03-17T09:45:45.279000-04:00",
+      "LastUpdatedBy": "arn:aws:iam::994753223772:role/Admin"
+    }
+  ]
+}
+
+>>> aws lakeformation list-permissions --resource Database:apf_test_transactions (filtered to 261399254793)
+{
+  "PrincipalResourcePermissions": [
+    {
+      "Principal": {
+        "DataLakePrincipalIdentifier": "arn:aws:iam::261399254793:role/datazone_usr_role_5237hturzpp5ih_b2no4uzn8mttt5"
+      },
+      "Resource": {
+        "Database": {
+          "CatalogId": "994753223772",
+          "Name": "apf_test_transactions"
+        }
+      },
+      "Permissions": [
+        "DESCRIBE"
+      ],
+      "PermissionsWithGrantOption": [],
+      "AdditionalDetails": {
+        "ResourceShare": [
+          "arn:aws:ram:us-east-2:994753223772:resource-share/2e8892d2-6b77-4537-bcd7-7732868301e7"
+        ]
+      },
+      "LastUpdated": "2026-03-17T09:48:06.974000-04:00",
+      "LastUpdatedBy": "arn:aws:iam::994753223772:role/Admin"
+    },
+    {
+      "Principal": {
+        "DataLakePrincipalIdentifier": "261399254793"
+      },
+      "Resource": {
+        "Database": {
+          "CatalogId": "994753223772",
+          "Name": "apf_test_transactions"
+        }
+      },
+      "Permissions": [
+        "DESCRIBE"
+      ],
+      "PermissionsWithGrantOption": [
+        "DESCRIBE"
+      ],
+      "AdditionalDetails": {
+        "ResourceShare": [
+          "arn:aws:ram:us-east-2:994753223772:resource-share/2e8892d2-6b77-4537-bcd7-7732868301e7"
+        ]
+      },
+      "LastUpdated": "2026-03-17T09:45:47.118000-04:00",
+      "LastUpdatedBy": "arn:aws:iam::994753223772:role/Admin"
+    }
+  ]
+}
+
+>>> aws lakeformation list-permissions --resource Table:apf_test_transactions/* (filtered to 261399254793)
+{
+  "PrincipalResourcePermissions": [
+    {
+      "Principal": {
+        "DataLakePrincipalIdentifier": "arn:aws:iam::261399254793:role/datazone_usr_role_5237hturzpp5ih_b2no4uzn8mttt5"
+      },
+      "Resource": {
+        "Table": {
+          "CatalogId": "994753223772",
+          "DatabaseName": "apf_test_transactions",
+          "Name": "ALL_TABLES",
+          "TableWildcard": {}
+        }
+      },
+      "Permissions": [
+        "DESCRIBE"
+      ],
+      "PermissionsWithGrantOption": [],
+      "AdditionalDetails": {
+        "ResourceShare": [
+          "arn:aws:ram:us-east-2:994753223772:resource-share/a61120ee-da46-4e3b-90cc-dd94f6e0187d"
+        ]
+      },
+      "LastUpdated": "2026-03-17T09:48:08.188000-04:00",
+      "LastUpdatedBy": "arn:aws:iam::994753223772:role/Admin"
+    },
+    {
+      "Principal": {
+        "DataLakePrincipalIdentifier": "arn:aws:iam::261399254793:role/datazone_usr_role_5237hturzpp5ih_b2no4uzn8mttt5"
+      },
+      "Resource": {
+        "TableWithColumns": {
+          "CatalogId": "994753223772",
+          "DatabaseName": "apf_test_transactions",
+          "Name": "ALL_TABLES",
+          "ColumnWildcard": {}
+        }
+      },
+      "Permissions": [
+        "SELECT"
+      ],
+      "PermissionsWithGrantOption": [],
+      "AdditionalDetails": {
+        "ResourceShare": [
+          "arn:aws:ram:us-east-2:994753223772:resource-share/a61120ee-da46-4e3b-90cc-dd94f6e0187d"
+        ]
+      },
+      "LastUpdated": "2026-03-17T09:48:08.188000-04:00",
+      "LastUpdatedBy": "arn:aws:iam::994753223772:role/Admin"
+    },
+    {
+      "Principal": {
+        "DataLakePrincipalIdentifier": "261399254793"
+      },
+      "Resource": {
+        "Table": {
+          "CatalogId": "994753223772",
+          "DatabaseName": "apf_test_transactions",
+          "Name": "ALL_TABLES",
+          "TableWildcard": {}
+        }
+      },
+      "Permissions": [
+        "DESCRIBE"
+      ],
+      "PermissionsWithGrantOption": [
+        "DESCRIBE"
+      ],
+      "AdditionalDetails": {
+        "ResourceShare": [
+          "arn:aws:ram:us-east-2:994753223772:resource-share/a61120ee-da46-4e3b-90cc-dd94f6e0187d"
+        ]
+      },
+      "LastUpdated": "2026-03-17T09:45:49.432000-04:00",
+      "LastUpdatedBy": "arn:aws:iam::994753223772:role/Admin"
+    },
+    {
+      "Principal": {
+        "DataLakePrincipalIdentifier": "261399254793"
+      },
+      "Resource": {
+        "TableWithColumns": {
+          "CatalogId": "994753223772",
+          "DatabaseName": "apf_test_transactions",
+          "Name": "ALL_TABLES",
+          "ColumnWildcard": {}
+        }
+      },
+      "Permissions": [
+        "SELECT"
+      ],
+      "PermissionsWithGrantOption": [
+        "SELECT"
+      ],
+      "AdditionalDetails": {
+        "ResourceShare": [
+          "arn:aws:ram:us-east-2:994753223772:resource-share/a61120ee-da46-4e3b-90cc-dd94f6e0187d"
+        ]
+      },
+      "LastUpdated": "2026-03-17T09:45:49.432000-04:00",
+      "LastUpdatedBy": "arn:aws:iam::994753223772:role/Admin"
+    }
+  ]
+}
+
+>>> aws sts get-caller-identity
+{
+  "UserId": "AROATZXE4C4EWAJ2EQZXY:lf-trace",
+# Switch to PROJECT account (261399254793) via DomainAccess role.
+# This role has AdministratorAccess but is NOT a Lake Formation admin.
+  "Account": "261399254793",
+  "Arn": "arn:aws:sts::261399254793:assumed-role/SMUS-AccountPoolFactory-DomainAccess/lf-trace"
+}
+
+# LF admins in project account. Note: datazone_usr_role is NOT listed.
+>>> aws lakeformation get-data-lake-settings
+{
+  "DataLakeSettings": {
+    "DataLakeAdmins": [
+      {
+        "DataLakePrincipalIdentifier": "arn:aws:iam::261399254793:role/SMUS-AccountPoolFactory-StackSetExecution"
+      },
+      {
+        "DataLakePrincipalIdentifier": "arn:aws:iam::261399254793:role/DataZoneProvisioningRole"
+      },
+      {
+        "DataLakePrincipalIdentifier": "arn:aws:iam::261399254793:role/DataZoneManageAccessRole"
+      }
+    ],
+    "ReadOnlyAdmins": [],
+    "CreateDatabaseDefaultPermissions": [
+      {
+        "Principal": {
+          "DataLakePrincipalIdentifier": "IAM_ALLOWED_PRINCIPALS"
+        },
+        "Permissions": [
+          "ALL"
+        ]
+      }
+    ],
+    "CreateTableDefaultPermissions": [
+      {
+        "Principal": {
+          "DataLakePrincipalIdentifier": "IAM_ALLOWED_PRINCIPALS"
+        },
+        "Permissions": [
+          "ALL"
+        ]
+      }
+    ],
+    "Parameters": {
+      "CROSS_ACCOUNT_VERSION": "4",
+      "SET_CONTEXT": "TRUE"
+    },
+    "TrustedResourceOwners": [],
+    "AllowExternalDataFiltering": false,
+    "AllowFullTableExternalDataAccess": true,
+    "ExternalDataFilteringAllowList": [],
+    "AuthorizedSessionTagValueList": []
+  }
+}
+
+# All LF permissions in project account — expected empty.
+>>> aws lakeformation list-permissions
+{
+  "PrincipalResourcePermissions": []
+}
+
+# DomainAccess role sees all Glue databases (admin view).
+# This shows what SHOULD be visible: apf_test_customers and apf_test_transactions
+# are resource links pointing to catalog 994753223772.
+>>> aws glue get-databases (DomainAccess — admin view, shows what SHOULD be there)
+{
+  "DatabaseList": [
+    {
+      "Name": "apf_test_customers",
+      "Description": "",
+      "LocationUri": "",
+      "CreateTableDefaultPermissions": [],
+      "TargetDatabase": {
+        "CatalogId": "994753223772",
+        "DatabaseName": "apf_test_customers"
+      },
+      "CatalogId": "261399254793"
+    },
+    {
+      "Name": "apf_test_transactions",
+      "Description": "",
+      "LocationUri": "",
+      "CreateTableDefaultPermissions": [],
+      "TargetDatabase": {
+        "CatalogId": "994753223772",
+        "DatabaseName": "apf_test_transactions"
+      },
+      "CatalogId": "261399254793"
+    },
+    {
+      "Name": "default",
+      "CreateTime": "2026-03-16T16:59:57-04:00",
+      "CreateTableDefaultPermissions": [
+        {
+          "Principal": {
+            "DataLakePrincipalIdentifier": "IAM_ALLOWED_PRINCIPALS"
+          },
+          "Permissions": [
+            "ALL"
+          ]
+        }
+      ],
+      "CatalogId": "261399254793"
+    }
+  ]
+}
+
+# DomainAccess get-tables fails — it has no cross-account LF grant.
+# This is expected: AdminAccess alone is not enough for cross-account Glue.
+>>> aws glue get-tables --database-name apf_test_customers (DomainAccess — admin view)
+An error occurred (AccessDeniedException) when calling the GetTables operation: User: arn:aws:sts::261399254793:assumed-role/SMUS-AccountPoolFactory-DomainAccess/lf-trace is not authorized to perform: glue:GetTables on resource: arn:aws:glue:us-east-2:994753223772:database/apf_test_customers because no resource-based policy allows the glue:GetTables action
+
+>>> aws glue get-tables --database-name apf_test_transactions (DomainAccess — admin view)
+An error occurred (AccessDeniedException) when calling the GetTables operation: User: arn:aws:sts::261399254793:assumed-role/SMUS-AccountPoolFactory-DomainAccess/lf-trace is not authorized to perform: glue:GetTables on resource: arn:aws:glue:us-east-2:994753223772:database/apf_test_transactions because no resource-based policy allows the glue:GetTables action
+
+>>> aws sts get-caller-identity
+{
+  "UserId": "AROATZXE4C4ESU2LQWGTK:a2b2582b-f770-4ab1-a78e-e72950330dc2@b2no4uzn8mttt5",
+# Switch to the actual DZ user role via DataZone connection credentials.
+# This is the role end users get when they use the Athena connection.
+  "Account": "261399254793",
+  "Arn": "arn:aws:sts::261399254793:assumed-role/datazone_usr_role_5237hturzpp5ih_b2no4uzn8mttt5/a2b2582b-f770-4ab1-a78e-e72950330dc2@b2no4uzn8mttt5"
+}
+
+# *** UNEXPECTED RESULT ***
+# get-databases does NOT show apf_test_customers or apf_test_transactions.
+# Only 'default' and the DataZone-managed DB are visible.
+# The resource link databases are MISSING.
+>>> aws glue get-databases (DZ User Role — actual user view)
+{
+  "DatabaseList": [
+    {
+      "Name": "default",
+      "CreateTime": "2026-03-16T16:59:57-04:00",
+      "CreateTableDefaultPermissions": [
+        {
+          "Principal": {
+            "DataLakePrincipalIdentifier": "IAM_ALLOWED_PRINCIPALS"
+          },
+          "Permissions": [
+            "ALL"
+          ]
+        }
+      ],
+      "CatalogId": "261399254793"
+    },
+    {
+      "Name": "glue_db_5ov4roa50rwug9",
+      "Description": "Created by DataZone for project new-demo-123",
+      "LocationUri": "s3://datazone-blueprints-261399254793-us-east-2/dzd-4h7jbz76qckoh5/5237hturzpp5ih/dev/data/catalogs/",
+      "CreateTime": "2026-03-16T19:15:21-04:00",
+      "CreateTableDefaultPermissions": [],
+      "CatalogId": "261399254793"
+    }
+  ]
+}
+
+# *** PARADOX ***
+# get-tables SUCCEEDS — the DZ user role CAN read tables from the source account.
+# But the databases don't appear in get-databases above.
+>>> aws glue get-tables --database-name apf_test_customers (DZ User Role)
+{
+  "TableList": [
+    {
+      "Name": "customers",
+      "DatabaseName": "apf_test_customers",
+      "CreateTime": "2026-03-14T19:04:01-04:00",
+      "UpdateTime": "2026-03-14T19:04:01-04:00",
+      "Retention": 0,
+      "StorageDescriptor": {
+        "Columns": [
+          {
+            "Name": "customer_id",
+            "Type": "string"
+          },
+          {
+            "Name": "name",
+            "Type": "string"
+          },
+          {
+            "Name": "email",
+            "Type": "string"
+          },
+          {
+            "Name": "city",
+            "Type": "string"
+          },
+          {
+            "Name": "signup_date",
+            "Type": "string"
+          }
+        ],
+        "Location": "s3://apf-test-data-994753223772/customers/",
+        "InputFormat": "org.apache.hadoop.mapred.TextInputFormat",
+        "OutputFormat": "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat",
+        "Compressed": false,
+        "NumberOfBuckets": 0,
+        "SerdeInfo": {
+          "SerializationLibrary": "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe",
+          "Parameters": {
+            "skip.header.line.count": "1",
+            "field.delim": ","
+          }
+        },
+        "SortColumns": [],
+        "StoredAsSubDirectories": false
+      },
+      "CreatedBy": "arn:aws:sts::994753223772:assumed-role/Admin/amirbo-Isengard",
+      "IsRegisteredWithLakeFormation": false,
+      "CatalogId": "994753223772",
+      "VersionId": "0",
+      "IsMultiDialectView": false
+    }
+  ]
+}
+
+>>> aws glue get-tables --database-name apf_test_transactions (DZ User Role)
+{
+  "TableList": [
+    {
+      "Name": "transactions",
+      "DatabaseName": "apf_test_transactions",
+      "CreateTime": "2026-03-14T19:04:02-04:00",
+      "UpdateTime": "2026-03-14T19:04:02-04:00",
+      "Retention": 0,
+      "StorageDescriptor": {
+        "Columns": [
+          {
+            "Name": "transaction_id",
+            "Type": "string"
+          },
+          {
+            "Name": "customer_id",
+            "Type": "string"
+          },
+          {
+            "Name": "amount",
+            "Type": "double"
+          },
+          {
+            "Name": "currency",
+            "Type": "string"
+          },
+          {
+            "Name": "transaction_date",
+            "Type": "string"
+          }
+        ],
+        "Location": "s3://apf-test-data-994753223772/transactions/",
+        "InputFormat": "org.apache.hadoop.mapred.TextInputFormat",
+        "OutputFormat": "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat",
+        "Compressed": false,
+        "NumberOfBuckets": 0,
+        "SerdeInfo": {
+          "SerializationLibrary": "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe",
+          "Parameters": {
+            "skip.header.line.count": "1",
+            "field.delim": ","
+          }
+        },
+        "SortColumns": [],
+        "StoredAsSubDirectories": false
+      },
+      "CreatedBy": "arn:aws:sts::994753223772:assumed-role/Admin/amirbo-Isengard",
+      "IsRegisteredWithLakeFormation": false,
+      "CatalogId": "994753223772",
+      "VersionId": "0",
+      "IsMultiDialectView": false
+    }
+  ]
+}
+
+=============================================================================
+# ---------------------------------------------------------------------------
+# STEP 2: Grant cross-account LF permissions (domain -> project account ID)
+# Grant DESCRIBE on databases and SELECT+DESCRIBE on tables, with grant option.
+# ---------------------------------------------------------------------------
+  PHASE 1: Cross-account grant (domain -> account ID 261399254793)
+=============================================================================
+
+>>> aws sts get-caller-identity
+{
+  "UserId": "AROA6PG7JTRONANMRDG6B:amirbo-Isengard",
+  "Account": "994753223772",
+  "Arn": "arn:aws:sts::994753223772:assumed-role/Admin/amirbo-Isengard"
+}
+
+>>> aws lakeformation grant-permissions — DESCRIBE on DB apf_test_customers to 261399254793
+(no output)
+
+>>> aws lakeformation grant-permissions — SELECT,DESCRIBE on tables apf_test_customers/* to 261399254793
+(no output)
+
+>>> aws lakeformation grant-permissions — DESCRIBE on DB apf_test_transactions to 261399254793
+(no output)
+
+>>> aws lakeformation grant-permissions — SELECT,DESCRIBE on tables apf_test_transactions/* to 261399254793
+(no output)
+
+# Verify grants were created in domain account.
+--- AFTER Phase 1: Verify ---
+
+>>> aws lakeformation list-permissions --resource Database:apf_test_customers (filtered)
+{
+  "PrincipalResourcePermissions": [
+    {
+      "Principal": {
+        "DataLakePrincipalIdentifier": "arn:aws:iam::261399254793:role/datazone_usr_role_5237hturzpp5ih_b2no4uzn8mttt5"
+      },
+      "Resource": {
+        "Database": {
+          "CatalogId": "994753223772",
+          "Name": "apf_test_customers"
+        }
+      },
+      "Permissions": [
+        "DESCRIBE"
+      ],
+      "PermissionsWithGrantOption": [],
+      "AdditionalDetails": {
+        "ResourceShare": [
+          "arn:aws:ram:us-east-2:994753223772:resource-share/2e8892d2-6b77-4537-bcd7-7732868301e7"
+        ]
+      },
+      "LastUpdated": "2026-03-17T09:47:25.206000-04:00",
+      "LastUpdatedBy": "arn:aws:iam::994753223772:role/Admin"
+    },
+    {
+      "Principal": {
+        "DataLakePrincipalIdentifier": "261399254793"
+      },
+      "Resource": {
+        "Database": {
+          "CatalogId": "994753223772",
+          "Name": "apf_test_customers"
+        }
+      },
+      "Permissions": [
+        "DESCRIBE"
+      ],
+      "PermissionsWithGrantOption": [
+        "DESCRIBE"
+      ],
+      "AdditionalDetails": {
+        "ResourceShare": [
+          "arn:aws:ram:us-east-2:994753223772:resource-share/2e8892d2-6b77-4537-bcd7-7732868301e7"
+        ]
+      },
+      "LastUpdated": "2026-03-17T09:45:43.574000-04:00",
+      "LastUpdatedBy": "arn:aws:iam::994753223772:role/Admin"
+    }
+  ]
+}
+
+>>> aws lakeformation list-permissions --resource Table:apf_test_customers/* (filtered)
+{
+  "PrincipalResourcePermissions": [
+    {
+      "Principal": {
+        "DataLakePrincipalIdentifier": "arn:aws:iam::261399254793:role/datazone_usr_role_5237hturzpp5ih_b2no4uzn8mttt5"
+      },
+      "Resource": {
+        "Table": {
+          "CatalogId": "994753223772",
+          "DatabaseName": "apf_test_customers",
+          "Name": "ALL_TABLES",
+          "TableWildcard": {}
+        }
+      },
+      "Permissions": [
+        "DESCRIBE"
+      ],
+      "PermissionsWithGrantOption": [],
+      "AdditionalDetails": {
+        "ResourceShare": [
+          "arn:aws:ram:us-east-2:994753223772:resource-share/a61120ee-da46-4e3b-90cc-dd94f6e0187d"
+        ]
+      },
+      "LastUpdated": "2026-03-17T09:48:05.811000-04:00",
+      "LastUpdatedBy": "arn:aws:iam::994753223772:role/Admin"
+    },
+    {
+      "Principal": {
+        "DataLakePrincipalIdentifier": "arn:aws:iam::261399254793:role/datazone_usr_role_5237hturzpp5ih_b2no4uzn8mttt5"
+      },
+      "Resource": {
+        "TableWithColumns": {
+          "CatalogId": "994753223772",
+          "DatabaseName": "apf_test_customers",
+          "Name": "ALL_TABLES",
+          "ColumnWildcard": {}
+        }
+      },
+      "Permissions": [
+        "SELECT"
+      ],
+      "PermissionsWithGrantOption": [],
+      "AdditionalDetails": {
+        "ResourceShare": [
+          "arn:aws:ram:us-east-2:994753223772:resource-share/a61120ee-da46-4e3b-90cc-dd94f6e0187d"
+        ]
+      },
+      "LastUpdated": "2026-03-17T09:48:05.811000-04:00",
+      "LastUpdatedBy": "arn:aws:iam::994753223772:role/Admin"
+    },
+    {
+      "Principal": {
+        "DataLakePrincipalIdentifier": "261399254793"
+      },
+      "Resource": {
+        "Table": {
+          "CatalogId": "994753223772",
+          "DatabaseName": "apf_test_customers",
+          "Name": "ALL_TABLES",
+          "TableWildcard": {}
+        }
+      },
+      "Permissions": [
+        "DESCRIBE"
+      ],
+      "PermissionsWithGrantOption": [
+        "DESCRIBE"
+      ],
+      "AdditionalDetails": {
+        "ResourceShare": [
+          "arn:aws:ram:us-east-2:994753223772:resource-share/a61120ee-da46-4e3b-90cc-dd94f6e0187d"
+        ]
+      },
+      "LastUpdated": "2026-03-17T09:45:45.279000-04:00",
+      "LastUpdatedBy": "arn:aws:iam::994753223772:role/Admin"
+    },
+    {
+      "Principal": {
+        "DataLakePrincipalIdentifier": "261399254793"
+      },
+      "Resource": {
+        "TableWithColumns": {
+          "CatalogId": "994753223772",
+          "DatabaseName": "apf_test_customers",
+          "Name": "ALL_TABLES",
+          "ColumnWildcard": {}
+        }
+      },
+      "Permissions": [
+        "SELECT"
+      ],
+      "PermissionsWithGrantOption": [
+        "SELECT"
+      ],
+      "AdditionalDetails": {
+        "ResourceShare": [
+          "arn:aws:ram:us-east-2:994753223772:resource-share/a61120ee-da46-4e3b-90cc-dd94f6e0187d"
+        ]
+      },
+      "LastUpdated": "2026-03-17T09:45:45.279000-04:00",
+      "LastUpdatedBy": "arn:aws:iam::994753223772:role/Admin"
+    }
+  ]
+}
+
+>>> aws sts get-caller-identity
+{
+  "UserId": "AROATZXE4C4EWAJ2EQZXY:lf-trace",
+  "Account": "261399254793",
+  "Arn": "arn:aws:sts::261399254793:assumed-role/SMUS-AccountPoolFactory-DomainAccess/lf-trace"
+}
+
+>>> aws lakeformation list-permissions
+{
+  "PrincipalResourcePermissions": []
+}
+
+>>> aws sts get-caller-identity
+{
+  "UserId": "AROATZXE4C4ESU2LQWGTK:a2b2582b-f770-4ab1-a78e-e72950330dc2@b2no4uzn8mttt5",
+  "Account": "261399254793",
+  "Arn": "arn:aws:sts::261399254793:assumed-role/datazone_usr_role_5237hturzpp5ih_b2no4uzn8mttt5/a2b2582b-f770-4ab1-a78e-e72950330dc2@b2no4uzn8mttt5"
+}
+
+# *** UNEXPECTED RESULT ***
+# After granting to account ID: get-databases STILL does not show apf_test_* databases.
+>>> aws glue get-databases (DZ User Role — after Phase 1)
+{
+  "DatabaseList": [
+    {
+      "Name": "default",
+      "CreateTime": "2026-03-16T16:59:57-04:00",
+      "CreateTableDefaultPermissions": [
+        {
+          "Principal": {
+            "DataLakePrincipalIdentifier": "IAM_ALLOWED_PRINCIPALS"
+          },
+          "Permissions": [
+            "ALL"
+          ]
+        }
+      ],
+      "CatalogId": "261399254793"
+    },
+    {
+      "Name": "glue_db_5ov4roa50rwug9",
+      "Description": "Created by DataZone for project new-demo-123",
+      "LocationUri": "s3://datazone-blueprints-261399254793-us-east-2/dzd-4h7jbz76qckoh5/5237hturzpp5ih/dev/data/catalogs/",
+      "CreateTime": "2026-03-16T19:15:21-04:00",
+      "CreateTableDefaultPermissions": [],
+      "CatalogId": "261399254793"
+    }
+  ]
+}
+
+# get-tables still works (tables accessible). Database discovery is the problem.
+>>> aws glue get-tables --database-name apf_test_customers (DZ User Role — after Phase 1)
+{
+  "TableList": [
+    {
+      "Name": "customers",
+      "DatabaseName": "apf_test_customers",
+      "CreateTime": "2026-03-14T19:04:01-04:00",
+      "UpdateTime": "2026-03-14T19:04:01-04:00",
+      "Retention": 0,
+      "StorageDescriptor": {
+        "Columns": [
+          {
+            "Name": "customer_id",
+            "Type": "string"
+          },
+          {
+            "Name": "name",
+            "Type": "string"
+          },
+          {
+            "Name": "email",
+            "Type": "string"
+          },
+          {
+            "Name": "city",
+            "Type": "string"
+          },
+          {
+            "Name": "signup_date",
+            "Type": "string"
+          }
+        ],
+        "Location": "s3://apf-test-data-994753223772/customers/",
+        "InputFormat": "org.apache.hadoop.mapred.TextInputFormat",
+        "OutputFormat": "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat",
+        "Compressed": false,
+        "NumberOfBuckets": 0,
+        "SerdeInfo": {
+          "SerializationLibrary": "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe",
+          "Parameters": {
+            "skip.header.line.count": "1",
+            "field.delim": ","
+          }
+        },
+        "SortColumns": [],
+        "StoredAsSubDirectories": false
+      },
+      "CreatedBy": "arn:aws:sts::994753223772:assumed-role/Admin/amirbo-Isengard",
+      "IsRegisteredWithLakeFormation": false,
+      "CatalogId": "994753223772",
+      "VersionId": "0",
+      "IsMultiDialectView": false
+    }
+  ]
+}
+
+>>> aws glue get-tables --database-name apf_test_transactions (DZ User Role — after Phase 1)
+{
+  "TableList": [
+    {
+      "Name": "transactions",
+      "DatabaseName": "apf_test_transactions",
+      "CreateTime": "2026-03-14T19:04:02-04:00",
+      "UpdateTime": "2026-03-14T19:04:02-04:00",
+      "Retention": 0,
+      "StorageDescriptor": {
+        "Columns": [
+          {
+            "Name": "transaction_id",
+            "Type": "string"
+          },
+          {
+            "Name": "customer_id",
+            "Type": "string"
+          },
+          {
+            "Name": "amount",
+            "Type": "double"
+          },
+          {
+            "Name": "currency",
+            "Type": "string"
+          },
+          {
+            "Name": "transaction_date",
+            "Type": "string"
+          }
+        ],
+        "Location": "s3://apf-test-data-994753223772/transactions/",
+        "InputFormat": "org.apache.hadoop.mapred.TextInputFormat",
+        "OutputFormat": "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat",
+        "Compressed": false,
+        "NumberOfBuckets": 0,
+        "SerdeInfo": {
+          "SerializationLibrary": "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe",
+          "Parameters": {
+            "skip.header.line.count": "1",
+            "field.delim": ","
+          }
+        },
+        "SortColumns": [],
+        "StoredAsSubDirectories": false
+      },
+      "CreatedBy": "arn:aws:sts::994753223772:assumed-role/Admin/amirbo-Isengard",
+      "IsRegisteredWithLakeFormation": false,
+      "CatalogId": "994753223772",
+      "VersionId": "0",
+      "IsMultiDialectView": false
+    }
+  ]
+}
+
+=============================================================================
+# ---------------------------------------------------------------------------
+# STEP 3: Grant IAM_ALLOWED_PRINCIPALS in project account on resource link DBs
+# Temporarily add DomainAccess as LF admin to perform this operation.
+# ---------------------------------------------------------------------------
+  PHASE 2: Grant IAM_ALLOWED_PRINCIPALS in project account
+=============================================================================
+
+>>> aws sts get-caller-identity
+{
+  "UserId": "AROATZXE4C4EWAJ2EQZXY:lf-trace",
+  "Account": "261399254793",
+  "Arn": "arn:aws:sts::261399254793:assumed-role/SMUS-AccountPoolFactory-DomainAccess/lf-trace"
+}
+
+>>> aws lakeformation get-data-lake-settings (before)
+{
+  "DataLakeSettings": {
+    "DataLakeAdmins": [
+      {
+        "DataLakePrincipalIdentifier": "arn:aws:iam::261399254793:role/DataZoneManageAccessRole"
+      },
+      {
+        "DataLakePrincipalIdentifier": "arn:aws:iam::261399254793:role/SMUS-AccountPoolFactory-StackSetExecution"
+      },
+      {
+        "DataLakePrincipalIdentifier": "arn:aws:iam::261399254793:role/DataZoneProvisioningRole"
+      }
+    ],
+    "ReadOnlyAdmins": [],
+    "CreateDatabaseDefaultPermissions": [
+      {
+        "Principal": {
+          "DataLakePrincipalIdentifier": "IAM_ALLOWED_PRINCIPALS"
+        },
+        "Permissions": [
+          "ALL"
+        ]
+      }
+    ],
+    "CreateTableDefaultPermissions": [
+      {
+        "Principal": {
+          "DataLakePrincipalIdentifier": "IAM_ALLOWED_PRINCIPALS"
+        },
+        "Permissions": [
+          "ALL"
+        ]
+      }
+    ],
+    "Parameters": {
+      "CROSS_ACCOUNT_VERSION": "4",
+      "SET_CONTEXT": "TRUE"
+    },
+    "TrustedResourceOwners": [],
+    "AllowExternalDataFiltering": false,
+    "AllowFullTableExternalDataAccess": true,
+    "ExternalDataFilteringAllowList": [],
+    "AuthorizedSessionTagValueList": []
+  }
+}
+
+>>> aws lakeformation put-data-lake-settings — add DomainAccess as LF admin (temporarily)
+(no output)
+
+>>> aws lakeformation grant-permissions — DESCRIBE on DB apf_test_customers to IAM_ALLOWED_PRINCIPALS
+(no output)
+
+>>> aws lakeformation grant-permissions — SELECT,DESCRIBE on tables apf_test_customers/* to IAM_ALLOWED_PRINCIPALS
+# *** LF LIMITATION ***
+# Cannot grant IAM_ALLOWED_PRINCIPALS on table wildcard for resource link databases.
+An error occurred (InvalidInputException) when calling the GrantPermissions operation: Grant on table wildcard is not allowed
+
+>>> aws lakeformation grant-permissions — DESCRIBE on DB apf_test_transactions to IAM_ALLOWED_PRINCIPALS
+(no output)
+
+>>> aws lakeformation grant-permissions — SELECT,DESCRIBE on tables apf_test_transactions/* to IAM_ALLOWED_PRINCIPALS
+An error occurred (InvalidInputException) when calling the GrantPermissions operation: Grant on table wildcard is not allowed
+
+>>> aws lakeformation put-data-lake-settings — remove DomainAccess from LF admins
+(no output)
+
+--- AFTER Phase 2: Verify ---
+
+>>> aws lakeformation list-permissions
+{
+  "PrincipalResourcePermissions": []
+}
+
+>>> aws sts get-caller-identity
+{
+  "UserId": "AROATZXE4C4ESU2LQWGTK:a2b2582b-f770-4ab1-a78e-e72950330dc2@b2no4uzn8mttt5",
+  "Account": "261399254793",
+  "Arn": "arn:aws:sts::261399254793:assumed-role/datazone_usr_role_5237hturzpp5ih_b2no4uzn8mttt5/a2b2582b-f770-4ab1-a78e-e72950330dc2@b2no4uzn8mttt5"
+}
+
+# *** UNEXPECTED RESULT ***
+# After IAM_ALLOWED_PRINCIPALS grant on DBs: get-databases STILL missing apf_test_*.
+>>> aws glue get-databases (DZ User Role — after Phase 2)
+{
+  "DatabaseList": [
+    {
+      "Name": "default",
+      "CreateTime": "2026-03-16T16:59:57-04:00",
+      "CreateTableDefaultPermissions": [
+        {
+          "Principal": {
+            "DataLakePrincipalIdentifier": "IAM_ALLOWED_PRINCIPALS"
+          },
+          "Permissions": [
+            "ALL"
+          ]
+        }
+      ],
+      "CatalogId": "261399254793"
+    },
+    {
+      "Name": "glue_db_5ov4roa50rwug9",
+      "Description": "Created by DataZone for project new-demo-123",
+      "LocationUri": "s3://datazone-blueprints-261399254793-us-east-2/dzd-4h7jbz76qckoh5/5237hturzpp5ih/dev/data/catalogs/",
+      "CreateTime": "2026-03-16T19:15:21-04:00",
+      "CreateTableDefaultPermissions": [],
+      "CatalogId": "261399254793"
+    }
+  ]
+}
+
+>>> aws glue get-tables --database-name apf_test_customers (DZ User Role — after Phase 2)
+{
+  "TableList": [
+    {
+      "Name": "customers",
+      "DatabaseName": "apf_test_customers",
+      "CreateTime": "2026-03-14T19:04:01-04:00",
+      "UpdateTime": "2026-03-14T19:04:01-04:00",
+      "Retention": 0,
+      "StorageDescriptor": {
+        "Columns": [
+          {
+            "Name": "customer_id",
+            "Type": "string"
+          },
+          {
+            "Name": "name",
+            "Type": "string"
+          },
+          {
+            "Name": "email",
+            "Type": "string"
+          },
+          {
+            "Name": "city",
+            "Type": "string"
+          },
+          {
+            "Name": "signup_date",
+            "Type": "string"
+          }
+        ],
+        "Location": "s3://apf-test-data-994753223772/customers/",
+        "InputFormat": "org.apache.hadoop.mapred.TextInputFormat",
+        "OutputFormat": "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat",
+        "Compressed": false,
+        "NumberOfBuckets": 0,
+        "SerdeInfo": {
+          "SerializationLibrary": "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe",
+          "Parameters": {
+            "skip.header.line.count": "1",
+            "field.delim": ","
+          }
+        },
+        "SortColumns": [],
+        "StoredAsSubDirectories": false
+      },
+      "CreatedBy": "arn:aws:sts::994753223772:assumed-role/Admin/amirbo-Isengard",
+      "IsRegisteredWithLakeFormation": false,
+      "CatalogId": "994753223772",
+      "VersionId": "0",
+      "IsMultiDialectView": false
+    }
+  ]
+}
+
+>>> aws glue get-tables --database-name apf_test_transactions (DZ User Role — after Phase 2)
+{
+  "TableList": [
+    {
+      "Name": "transactions",
+      "DatabaseName": "apf_test_transactions",
+      "CreateTime": "2026-03-14T19:04:02-04:00",
+      "UpdateTime": "2026-03-14T19:04:02-04:00",
+      "Retention": 0,
+      "StorageDescriptor": {
+        "Columns": [
+          {
+            "Name": "transaction_id",
+            "Type": "string"
+          },
+          {
+            "Name": "customer_id",
+            "Type": "string"
+          },
+          {
+            "Name": "amount",
+            "Type": "double"
+          },
+          {
+            "Name": "currency",
+            "Type": "string"
+          },
+          {
+            "Name": "transaction_date",
+            "Type": "string"
+          }
+        ],
+        "Location": "s3://apf-test-data-994753223772/transactions/",
+        "InputFormat": "org.apache.hadoop.mapred.TextInputFormat",
+        "OutputFormat": "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat",
+        "Compressed": false,
+        "NumberOfBuckets": 0,
+        "SerdeInfo": {
+          "SerializationLibrary": "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe",
+          "Parameters": {
+            "skip.header.line.count": "1",
+            "field.delim": ","
+          }
+        },
+        "SortColumns": [],
+        "StoredAsSubDirectories": false
+      },
+      "CreatedBy": "arn:aws:sts::994753223772:assumed-role/Admin/amirbo-Isengard",
+      "IsRegisteredWithLakeFormation": false,
+      "CatalogId": "994753223772",
+      "VersionId": "0",
+      "IsMultiDialectView": false
+    }
+  ]
+}
+
+=============================================================================
+# ---------------------------------------------------------------------------
+# STEP 4: Grant cross-account LF directly to the DZ user role ARN
+# This grants from domain account directly to the specific IAM role.
+# ---------------------------------------------------------------------------
+  PHASE 3: Cross-account grant directly to DZ Role ARN
+=============================================================================
+
+>>> aws sts get-caller-identity
+{
+  "UserId": "AROA6PG7JTRONANMRDG6B:amirbo-Isengard",
+  "Account": "994753223772",
+  "Arn": "arn:aws:sts::994753223772:assumed-role/Admin/amirbo-Isengard"
+}
+
+>>> aws lakeformation grant-permissions — DESCRIBE on DB apf_test_customers to arn:aws:iam::261399254793:role/datazone_usr_role_5237hturzpp5ih_b2no4uzn8mttt5
+(no output)
+
+>>> aws lakeformation grant-permissions — SELECT,DESCRIBE on tables apf_test_customers/* to arn:aws:iam::261399254793:role/datazone_usr_role_5237hturzpp5ih_b2no4uzn8mttt5
+(no output)
+
+>>> aws lakeformation grant-permissions — DESCRIBE on DB apf_test_transactions to arn:aws:iam::261399254793:role/datazone_usr_role_5237hturzpp5ih_b2no4uzn8mttt5
+(no output)
+
+>>> aws lakeformation grant-permissions — SELECT,DESCRIBE on tables apf_test_transactions/* to arn:aws:iam::261399254793:role/datazone_usr_role_5237hturzpp5ih_b2no4uzn8mttt5
+(no output)
+
+--- AFTER Phase 3: Verify ---
+
+>>> aws lakeformation list-permissions --resource Database:apf_test_customers (filtered)
+{
+# Project account STILL shows no local LF permissions.
+  "PrincipalResourcePermissions": [
+    {
+      "Principal": {
+        "DataLakePrincipalIdentifier": "arn:aws:iam::261399254793:role/datazone_usr_role_5237hturzpp5ih_b2no4uzn8mttt5"
+      },
+      "Resource": {
+        "Database": {
+          "CatalogId": "994753223772",
+          "Name": "apf_test_customers"
+        }
+      },
+      "Permissions": [
+        "DESCRIBE"
+      ],
+      "PermissionsWithGrantOption": [],
+      "AdditionalDetails": {
+        "ResourceShare": [
+          "arn:aws:ram:us-east-2:994753223772:resource-share/2e8892d2-6b77-4537-bcd7-7732868301e7"
+        ]
+      },
+      "LastUpdated": "2026-03-17T09:51:41.598000-04:00",
+      "LastUpdatedBy": "arn:aws:iam::994753223772:role/Admin"
+    },
+    {
+      "Principal": {
+        "DataLakePrincipalIdentifier": "261399254793"
+      },
+      "Resource": {
+        "Database": {
+          "CatalogId": "994753223772",
+          "Name": "apf_test_customers"
+        }
+      },
+      "Permissions": [
+        "DESCRIBE"
+      ],
+      "PermissionsWithGrantOption": [
+        "DESCRIBE"
+      ],
+      "AdditionalDetails": {
+        "ResourceShare": [
+          "arn:aws:ram:us-east-2:994753223772:resource-share/2e8892d2-6b77-4537-bcd7-7732868301e7"
+        ]
+      },
+      "LastUpdated": "2026-03-17T09:45:43.574000-04:00",
+      "LastUpdatedBy": "arn:aws:iam::994753223772:role/Admin"
+    }
+  ]
+}
+
+>>> aws lakeformation list-permissions --resource Table:apf_test_customers/* (filtered)
+{
+  "PrincipalResourcePermissions": [
+    {
+      "Principal": {
+        "DataLakePrincipalIdentifier": "arn:aws:iam::261399254793:role/datazone_usr_role_5237hturzpp5ih_b2no4uzn8mttt5"
+      },
+      "Resource": {
+        "Table": {
+          "CatalogId": "994753223772",
+          "DatabaseName": "apf_test_customers",
+          "Name": "ALL_TABLES",
+          "TableWildcard": {}
+        }
+      },
+      "Permissions": [
+        "DESCRIBE"
+      ],
+      "PermissionsWithGrantOption": [],
+      "AdditionalDetails": {
+        "ResourceShare": [
+          "arn:aws:ram:us-east-2:994753223772:resource-share/a61120ee-da46-4e3b-90cc-dd94f6e0187d"
+        ]
+      },
+      "LastUpdated": "2026-03-17T09:51:43.151000-04:00",
+      "LastUpdatedBy": "arn:aws:iam::994753223772:role/Admin"
+    },
+    {
+      "Principal": {
+        "DataLakePrincipalIdentifier": "arn:aws:iam::261399254793:role/datazone_usr_role_5237hturzpp5ih_b2no4uzn8mttt5"
+      },
+      "Resource": {
+        "TableWithColumns": {
+          "CatalogId": "994753223772",
+          "DatabaseName": "apf_test_customers",
+          "Name": "ALL_TABLES",
+          "ColumnWildcard": {}
+        }
+      },
+      "Permissions": [
+        "SELECT"
+      ],
+      "PermissionsWithGrantOption": [],
+      "AdditionalDetails": {
+        "ResourceShare": [
+          "arn:aws:ram:us-east-2:994753223772:resource-share/a61120ee-da46-4e3b-90cc-dd94f6e0187d"
+        ]
+      },
+      "LastUpdated": "2026-03-17T09:51:43.151000-04:00",
+      "LastUpdatedBy": "arn:aws:iam::994753223772:role/Admin"
+    },
+    {
+      "Principal": {
+        "DataLakePrincipalIdentifier": "261399254793"
+      },
+      "Resource": {
+        "Table": {
+          "CatalogId": "994753223772",
+          "DatabaseName": "apf_test_customers",
+          "Name": "ALL_TABLES",
+          "TableWildcard": {}
+        }
+      },
+      "Permissions": [
+        "DESCRIBE"
+      ],
+      "PermissionsWithGrantOption": [
+        "DESCRIBE"
+      ],
+      "AdditionalDetails": {
+        "ResourceShare": [
+          "arn:aws:ram:us-east-2:994753223772:resource-share/a61120ee-da46-4e3b-90cc-dd94f6e0187d"
+        ]
+      },
+      "LastUpdated": "2026-03-17T09:45:45.279000-04:00",
+      "LastUpdatedBy": "arn:aws:iam::994753223772:role/Admin"
+    },
+    {
+      "Principal": {
+        "DataLakePrincipalIdentifier": "261399254793"
+      },
+      "Resource": {
+        "TableWithColumns": {
+          "CatalogId": "994753223772",
+          "DatabaseName": "apf_test_customers",
+          "Name": "ALL_TABLES",
+          "ColumnWildcard": {}
+        }
+      },
+      "Permissions": [
+        "SELECT"
+      ],
+      "PermissionsWithGrantOption": [
+        "SELECT"
+      ],
+      "AdditionalDetails": {
+        "ResourceShare": [
+          "arn:aws:ram:us-east-2:994753223772:resource-share/a61120ee-da46-4e3b-90cc-dd94f6e0187d"
+        ]
+      },
+      "LastUpdated": "2026-03-17T09:45:45.279000-04:00",
+      "LastUpdatedBy": "arn:aws:iam::994753223772:role/Admin"
+    }
+  ]
+}
+
+>>> aws sts get-caller-identity
+{
+  "UserId": "AROATZXE4C4EWAJ2EQZXY:lf-trace",
+  "Account": "261399254793",
+  "Arn": "arn:aws:sts::261399254793:assumed-role/SMUS-AccountPoolFactory-DomainAccess/lf-trace"
+}
+
+>>> aws lakeformation list-permissions
+{
+  "PrincipalResourcePermissions": []
+}
+
+>>> aws sts get-caller-identity
+{
+  "UserId": "AROATZXE4C4ESU2LQWGTK:a2b2582b-f770-4ab1-a78e-e72950330dc2@b2no4uzn8mttt5",
+  "Account": "261399254793",
+  "Arn": "arn:aws:sts::261399254793:assumed-role/datazone_usr_role_5237hturzpp5ih_b2no4uzn8mttt5/a2b2582b-f770-4ab1-a78e-e72950330dc2@b2no4uzn8mttt5"
+}
+
+# *** UNEXPECTED RESULT — FINAL ***
+# After ALL three phases of grants, get-databases STILL does not show
+# apf_test_customers or apf_test_transactions.
+>>> aws glue get-databases (DZ User Role — after Phase 3)
+{
+  "DatabaseList": [
+    {
+      "Name": "default",
+      "CreateTime": "2026-03-16T16:59:57-04:00",
+      "CreateTableDefaultPermissions": [
+        {
+          "Principal": {
+            "DataLakePrincipalIdentifier": "IAM_ALLOWED_PRINCIPALS"
+          },
+          "Permissions": [
+            "ALL"
+          ]
+        }
+      ],
+      "CatalogId": "261399254793"
+    },
+    {
+      "Name": "glue_db_5ov4roa50rwug9",
+      "Description": "Created by DataZone for project new-demo-123",
+      "LocationUri": "s3://datazone-blueprints-261399254793-us-east-2/dzd-4h7jbz76qckoh5/5237hturzpp5ih/dev/data/catalogs/",
+      "CreateTime": "2026-03-16T19:15:21-04:00",
+      "CreateTableDefaultPermissions": [],
+      "CatalogId": "261399254793"
+    }
+  ]
+}
+
+# get-tables STILL works — tables are accessible but databases are not discoverable.
+>>> aws glue get-tables --database-name apf_test_customers (DZ User Role — after Phase 3)
+{
+  "TableList": [
+    {
+      "Name": "customers",
+      "DatabaseName": "apf_test_customers",
+      "CreateTime": "2026-03-14T19:04:01-04:00",
+      "UpdateTime": "2026-03-14T19:04:01-04:00",
+      "Retention": 0,
+      "StorageDescriptor": {
+        "Columns": [
+          {
+            "Name": "customer_id",
+            "Type": "string"
+          },
+          {
+            "Name": "name",
+            "Type": "string"
+          },
+          {
+            "Name": "email",
+            "Type": "string"
+          },
+          {
+            "Name": "city",
+            "Type": "string"
+          },
+          {
+            "Name": "signup_date",
+            "Type": "string"
+          }
+        ],
+        "Location": "s3://apf-test-data-994753223772/customers/",
+        "InputFormat": "org.apache.hadoop.mapred.TextInputFormat",
+        "OutputFormat": "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat",
+        "Compressed": false,
+        "NumberOfBuckets": 0,
+        "SerdeInfo": {
+          "SerializationLibrary": "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe",
+          "Parameters": {
+            "skip.header.line.count": "1",
+            "field.delim": ","
+          }
+        },
+        "SortColumns": [],
+        "StoredAsSubDirectories": false
+      },
+      "CreatedBy": "arn:aws:sts::994753223772:assumed-role/Admin/amirbo-Isengard",
+      "IsRegisteredWithLakeFormation": false,
+      "CatalogId": "994753223772",
+      "VersionId": "0",
+      "IsMultiDialectView": false
+    }
+  ]
+}
+
+>>> aws glue get-tables --database-name apf_test_transactions (DZ User Role — after Phase 3)
+{
+  "TableList": [
+    {
+      "Name": "transactions",
+      "DatabaseName": "apf_test_transactions",
+      "CreateTime": "2026-03-14T19:04:02-04:00",
+      "UpdateTime": "2026-03-14T19:04:02-04:00",
+      "Retention": 0,
+      "StorageDescriptor": {
+        "Columns": [
+          {
+            "Name": "transaction_id",
+            "Type": "string"
+          },
+          {
+            "Name": "customer_id",
+            "Type": "string"
+          },
+          {
+            "Name": "amount",
+            "Type": "double"
+          },
+          {
+            "Name": "currency",
+            "Type": "string"
+          },
+          {
+            "Name": "transaction_date",
+            "Type": "string"
+          }
+        ],
+        "Location": "s3://apf-test-data-994753223772/transactions/",
+        "InputFormat": "org.apache.hadoop.mapred.TextInputFormat",
+        "OutputFormat": "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat",
+        "Compressed": false,
+        "NumberOfBuckets": 0,
+        "SerdeInfo": {
+          "SerializationLibrary": "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe",
+          "Parameters": {
+            "skip.header.line.count": "1",
+            "field.delim": ","
+          }
+        },
+        "SortColumns": [],
+        "StoredAsSubDirectories": false
+      },
+      "CreatedBy": "arn:aws:sts::994753223772:assumed-role/Admin/amirbo-Isengard",
+      "IsRegisteredWithLakeFormation": false,
+      "CatalogId": "994753223772",
+      "VersionId": "0",
+      "IsMultiDialectView": false
+    }
+  ]
+}
+
+=============================================================================
+# ===========================================================================
+# CONCLUSION
+# ===========================================================================
+# Despite having:
+#   1. Cross-account LF grants to the project account ID (with grant option)
+#   2. IAM_ALLOWED_PRINCIPALS DESCRIBE on resource link databases
+#   3. Cross-account LF grants directly to the DZ user role ARN
+#   4. RAM resource shares created by LF for each grant
+#
+# The DZ user role:
+#   - CAN call get-tables and see table metadata from the source account
+#   - CANNOT see the resource link databases in get-databases
+#
+# This prevents Athena and other query tools from discovering these databases.
+# ===========================================================================
+  Trace complete: 2026-03-17T13:52:01Z
+=============================================================================

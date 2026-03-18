@@ -1,0 +1,221 @@
+>>> Switching to domain account...
+
+=============================================================================
+  BASELINE: State before any grants
+=============================================================================
+
+>>> [Domain Account] LF ListPermissions for project account:
+  No grants to project account found (clean)
+
+>>> [Project Account] LF ListPermissions + Glue GetDatabases:
+  LF Admins (3):
+    arn:aws:iam::261399254793:role/SMUS-AccountPoolFactory-StackSetExecution
+    arn:aws:iam::261399254793:role/DataZoneManageAccessRole
+    arn:aws:iam::261399254793:role/DataZoneProvisioningRole
+  LF Permissions: none (clean)
+  Glue Databases (3):
+    apf_test_customers -> 994753223772/apf_test_customers
+    apf_test_transactions -> 994753223772/apf_test_transactions
+    default
+
+>>> [Project Account] Visibility test (get_tables on resource links):
+  Testing as: arn:aws:sts::261399254793:assumed-role/SMUS-AccountPoolFactory-DomainAccess/lf-debug-trace
+  (Note: DomainAccess has AdminAccess, so it sees all Glue DBs)
+  The real question is: does the DZ role have LF permissions?
+
+  DZ role is LF admin: False
+  apf_test_customers: DZ role has NO permissions
+  apf_test_transactions: DZ role has NO permissions
+
+  get_tables(apf_test_customers): ACCESS DENIED (no cross-account LF grant)
+  get_tables(apf_test_transactions): ACCESS DENIED (no cross-account LF grant)
+
+=============================================================================
+  PHASE 1: Cross-account grant (domain -> project account ID)
+  Source: domain account 994753223772
+  Target: account ID 261399254793 (with grant option)
+=============================================================================
+
+  Granted DESCRIBE on DB apf_test_customers to 261399254793 (with grant option)
+  Granted SELECT+DESCRIBE on tables in apf_test_customers to 261399254793 (with grant option)
+  Granted DESCRIBE on DB apf_test_transactions to 261399254793 (with grant option)
+  Granted SELECT+DESCRIBE on tables in apf_test_transactions to 261399254793 (with grant option)
+
+--- AFTER Phase 1 ---
+
+>>> [Domain Account] LF ListPermissions:
+  261399254793
+    Database: apf_test_customers
+    Permissions: ['DESCRIBE']
+    GrantOption: ['DESCRIBE']
+  261399254793
+    Table: apf_test_customers
+    Permissions: ['DESCRIBE']
+    GrantOption: ['DESCRIBE']
+  261399254793
+    Table: apf_test_customers
+    Permissions: ['SELECT']
+    GrantOption: ['SELECT']
+  261399254793
+    Database: apf_test_transactions
+    Permissions: ['DESCRIBE']
+    GrantOption: ['DESCRIBE']
+  261399254793
+    Table: apf_test_transactions
+    Permissions: ['DESCRIBE']
+    GrantOption: ['DESCRIBE']
+  261399254793
+    Table: apf_test_transactions
+    Permissions: ['SELECT']
+    GrantOption: ['SELECT']
+
+>>> [Project Account] LF ListPermissions + Glue GetDatabases:
+  LF Admins (3):
+    arn:aws:iam::261399254793:role/DataZoneProvisioningRole
+    arn:aws:iam::261399254793:role/SMUS-AccountPoolFactory-StackSetExecution
+    arn:aws:iam::261399254793:role/DataZoneManageAccessRole
+  LF Permissions: none (clean)
+  Glue Databases (3):
+    apf_test_customers -> 994753223772/apf_test_customers
+    apf_test_transactions -> 994753223772/apf_test_transactions
+    default
+
+>>> [Project Account] Visibility test:
+  Testing as: arn:aws:sts::261399254793:assumed-role/SMUS-AccountPoolFactory-DomainAccess/lf-debug-trace
+  (Note: DomainAccess has AdminAccess, so it sees all Glue DBs)
+  The real question is: does the DZ role have LF permissions?
+
+  DZ role is LF admin: False
+  apf_test_customers: DZ role has NO permissions
+  apf_test_transactions: DZ role has NO permissions
+
+  get_tables(apf_test_customers): ACCESS DENIED (no cross-account LF grant)
+  get_tables(apf_test_transactions): ACCESS DENIED (no cross-account LF grant)
+
+=============================================================================
+  PHASE 2: Local grant in project account to IAM_ALLOWED_PRINCIPALS
+  Using DomainAccess role (temporarily added as LF admin)
+=============================================================================
+
+  Operating as: arn:aws:sts::261399254793:assumed-role/SMUS-AccountPoolFactory-DomainAccess/lf-debug-trace
+  Role ARN: arn:aws:iam::261399254793:role/SMUS-AccountPoolFactory-DomainAccess
+  Step 1: Adding DomainAccess as LF admin (temporarily)...
+    Added arn:aws:iam::261399254793:role/SMUS-AccountPoolFactory-DomainAccess as LF admin
+  Step 2: Granting to IAM_ALLOWED_PRINCIPALS...
+    Granted DESCRIBE on DB apf_test_customers
+    Tables apf_test_customers: An error occurred (InvalidInputException) when calling the GrantPermissions operation: Grant on table wildcard is not allowed
+    Granted DESCRIBE on DB apf_test_transactions
+    Tables apf_test_transactions: An error occurred (InvalidInputException) when calling the GrantPermissions operation: Grant on table wildcard is not allowed
+  Step 3: Removing DomainAccess from LF admins...
+    Removed arn:aws:iam::261399254793:role/SMUS-AccountPoolFactory-DomainAccess from LF admins
+
+--- AFTER Phase 2 ---
+
+>>> [Project Account] LF ListPermissions + Glue GetDatabases:
+  LF Admins (3):
+    arn:aws:iam::261399254793:role/DataZoneManageAccessRole
+    arn:aws:iam::261399254793:role/DataZoneProvisioningRole
+    arn:aws:iam::261399254793:role/SMUS-AccountPoolFactory-StackSetExecution
+  LF Permissions: none (clean)
+  Glue Databases (3):
+    apf_test_customers -> 994753223772/apf_test_customers
+    apf_test_transactions -> 994753223772/apf_test_transactions
+    default
+
+>>> [Project Account] Visibility test:
+  Testing as: arn:aws:sts::261399254793:assumed-role/SMUS-AccountPoolFactory-DomainAccess/lf-debug-trace
+  (Note: DomainAccess has AdminAccess, so it sees all Glue DBs)
+  The real question is: does the DZ role have LF permissions?
+
+  DZ role is LF admin: False
+  apf_test_customers: DZ role has NO permissions
+  apf_test_transactions: DZ role has NO permissions
+
+  get_tables(apf_test_customers): ACCESS DENIED (no cross-account LF grant)
+  get_tables(apf_test_transactions): ACCESS DENIED (no cross-account LF grant)
+
+=============================================================================
+  PHASE 3: Cross-account grant directly to DZ Role ARN
+  From domain account to the specific DZ user role
+=============================================================================
+
+  Granted DESCRIBE on DB apf_test_customers to DZ role (cross-account)
+  Granted SELECT+DESCRIBE on tables in apf_test_customers to DZ role (cross-account)
+  Granted DESCRIBE on DB apf_test_transactions to DZ role (cross-account)
+  Granted SELECT+DESCRIBE on tables in apf_test_transactions to DZ role (cross-account)
+
+--- AFTER Phase 3 ---
+
+>>> [Domain Account] LF ListPermissions:
+  arn:aws:iam::261399254793:role/datazone_usr_role_5237hturzpp5ih_b2no4uzn8mttt5
+    Database: apf_test_customers
+    Permissions: ['DESCRIBE']
+  261399254793
+    Database: apf_test_customers
+    Permissions: ['DESCRIBE']
+    GrantOption: ['DESCRIBE']
+  arn:aws:iam::261399254793:role/datazone_usr_role_5237hturzpp5ih_b2no4uzn8mttt5
+    Table: apf_test_customers
+    Permissions: ['DESCRIBE']
+  arn:aws:iam::261399254793:role/datazone_usr_role_5237hturzpp5ih_b2no4uzn8mttt5
+    Table: apf_test_customers
+    Permissions: ['SELECT']
+  261399254793
+    Table: apf_test_customers
+    Permissions: ['DESCRIBE']
+    GrantOption: ['DESCRIBE']
+  261399254793
+    Table: apf_test_customers
+    Permissions: ['SELECT']
+    GrantOption: ['SELECT']
+  arn:aws:iam::261399254793:role/datazone_usr_role_5237hturzpp5ih_b2no4uzn8mttt5
+    Database: apf_test_transactions
+    Permissions: ['DESCRIBE']
+  261399254793
+    Database: apf_test_transactions
+    Permissions: ['DESCRIBE']
+    GrantOption: ['DESCRIBE']
+  arn:aws:iam::261399254793:role/datazone_usr_role_5237hturzpp5ih_b2no4uzn8mttt5
+    Table: apf_test_transactions
+    Permissions: ['DESCRIBE']
+  arn:aws:iam::261399254793:role/datazone_usr_role_5237hturzpp5ih_b2no4uzn8mttt5
+    Table: apf_test_transactions
+    Permissions: ['SELECT']
+  261399254793
+    Table: apf_test_transactions
+    Permissions: ['DESCRIBE']
+    GrantOption: ['DESCRIBE']
+  261399254793
+    Table: apf_test_transactions
+    Permissions: ['SELECT']
+    GrantOption: ['SELECT']
+
+>>> [Project Account] LF ListPermissions + Glue GetDatabases:
+  LF Admins (3):
+    arn:aws:iam::261399254793:role/DataZoneManageAccessRole
+    arn:aws:iam::261399254793:role/SMUS-AccountPoolFactory-StackSetExecution
+    arn:aws:iam::261399254793:role/DataZoneProvisioningRole
+  LF Permissions: none (clean)
+  Glue Databases (3):
+    apf_test_customers -> 994753223772/apf_test_customers
+    apf_test_transactions -> 994753223772/apf_test_transactions
+    default
+
+>>> [Project Account] Visibility test:
+  Testing as: arn:aws:sts::261399254793:assumed-role/SMUS-AccountPoolFactory-DomainAccess/lf-debug-trace
+  (Note: DomainAccess has AdminAccess, so it sees all Glue DBs)
+  The real question is: does the DZ role have LF permissions?
+
+  DZ role is LF admin: False
+  apf_test_customers: DZ role has NO permissions
+  apf_test_transactions: DZ role has NO permissions
+
+  get_tables(apf_test_customers): ACCESS DENIED (no cross-account LF grant)
+  get_tables(apf_test_transactions): ACCESS DENIED (no cross-account LF grant)
+
+=============================================================================
+  Done.
+  Phase 1: domain -> account ID (cross-account share)
+  Phase 2: project -> IAM_ALLOWED_PRINCIPALS (DB DESCRIBE only)
+  Phase 3: domain -> DZ role ARN (cross-account direct)
+=============================================================================

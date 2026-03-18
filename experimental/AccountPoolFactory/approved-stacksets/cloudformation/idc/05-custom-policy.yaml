@@ -25,24 +25,7 @@ Resources:
 
           - Sid: DenyMutatePoolFactoryResources
             Effect: Deny
-            Action:
-              - iam:DeleteRole
-              - iam:UpdateRole
-              - iam:DeleteRolePolicy
-              - iam:PutRolePolicy
-              - iam:AttachRolePolicy
-              - iam:DetachRolePolicy
-              - iam:DeletePolicy
-              - iam:CreatePolicyVersion
-              - cloudformation:DeleteStack
-              - cloudformation:UpdateStack
-              - events:DeleteRule
-              - events:RemoveTargets
-              - events:PutRule
-              - ec2:DeleteVpc
-              - ec2:DeleteSubnet
-              - ec2:DeleteSecurityGroup
-              - s3:DeleteBucket
+            Action: '*'
             Resource: '*'
             Condition:
               StringEquals:
