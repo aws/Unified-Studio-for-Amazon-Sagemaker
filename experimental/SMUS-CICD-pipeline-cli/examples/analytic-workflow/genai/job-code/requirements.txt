@@ -2,6 +2,6 @@ boto3>=1.28.0
 pyyaml
 termcolor
 retrying
-opensearchpy
+opensearch-py
 rich
 pydantic
