@@ -17,7 +17,7 @@ class MigrationConfig:
         self.datazone_project_s3_path = None
         self.datazone_project_id = ""
         if iam_profile:
-            session = boto3.Session(profile=iam_profile, region_name=region)
+            session = boto3.Session(profile_name=iam_profile, region_name=region)
         else:
             session = boto3.Session(region_name=region)
         datazone_endpoint_url = "https://datazone." + region + ".api.aws" 
