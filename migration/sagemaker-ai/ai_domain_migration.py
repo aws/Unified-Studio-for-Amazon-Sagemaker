@@ -68,11 +68,13 @@ def get_yes_no_input(prompt, default='y'):
 
 
 class SageMakerAIDomainToUnifiedStudioDomainMigrator:
-    def __init__(self, region: str, account_id: str, iam_profile: str, migration_config_file: str):
+    def __init__(self, region: str, account_id: str, iam_profile: str, migration_config_file: str,
+                 preprovisioned_role: bool = False):
         self.iam_profile = iam_profile
         self.region = region
         self.account_id = account_id
         self.migration_config_file = migration_config_file
+        self.preprovisioned_role = preprovisioned_role
 
         if iam_profile:
             session = boto3.Session(profile_name=iam_profile, region_name=region)
@@ -760,7 +762,9 @@ class SageMakerAIDomainToUnifiedStudioDomainMigrator:
             ]
 
             if self.iam_profile:
-                sys.argv.append(['--iam-profile', self.iam_profile])
+                sys.argv.extend(['--iam-profile', self.iam_profile])
+            if self.preprovisioned_role:
+                sys.argv.append('--preprovisioned-role')
             if execute:
                 sys.argv.append('--execute')
 
@@ -968,14 +972,20 @@ if __name__ == "__main__":
         required=True,
         help="The path of the csv template generated after running Pre-Migration script.",
     )
+    parser.add_argument(
+        "--preprovisioned-role",
+        action="store_true",
+        help="Verify administrator-preprovisioned IAM/DataZone role state instead of attaching or creating role policies and profiles.",
+    )
     args = parser.parse_args()
     region = args.region
     account_id = args.account_id
     iam_profile = args.iam_profile
     migration_config_file = args.migration_config_file
+    preprovisioned_role = args.preprovisioned_role
 
     print_separator()
     migrator = SageMakerAIDomainToUnifiedStudioDomainMigrator(region, account_id, iam_profile,
-                                                              migration_config_file)
+                                                              migration_config_file, preprovisioned_role)
     migrator.migrate_guided()
     print_separator()
