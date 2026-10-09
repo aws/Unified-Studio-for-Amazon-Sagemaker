@@ -1,0 +1,3 @@
+# Runtime dependency for the Athena Spark notebook migration tool.
+# Requires Python 3.10 or later (boto3 1.43.8+ does not support older Python).
+boto3>=1.43.8
