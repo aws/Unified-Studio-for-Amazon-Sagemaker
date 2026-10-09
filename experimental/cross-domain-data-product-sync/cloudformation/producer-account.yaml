@@ -2,8 +2,9 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   Cross-Domain Data Product Sync: Producer account companion stack.
   Deploys the three cross-account roles the Marketplace account depends on
-  (Glue/DQ read, SageMaker Catalog read, and EventBridge forwarding) plus the two
-  EventBridge rules that forward Glue and SageMaker Catalog events to the Marketplace bus.
+  (Glue/DQ read, DataZone read, and EventBridge forwarding) plus the four
+  EventBridge rules that forward Glue table, DataZone asset, Glue Data Quality,
+  and Glue job (lineage) events to the Marketplace bus.
 
 Parameters:
   MarketplaceAccountId:
@@ -59,7 +60,39 @@ Resources:
                   - glue:GetDataQualityResult
                 Resource: '*'
 
-  # --- Role assumed by the Marketplace Lambda for SageMaker Catalog reads ---
+  # --- Lake Formation grants so the Marketplace Lambda (via GlueFederationAccessRole)
+  #     can read this account's shared database. Required when the Producer Glue
+  #     catalog is Lake Formation-managed; IAM glue:Get* permissions alone are not
+  #     sufficient. ---
+  LFGrantDescribeOnProducerDatabase:
+    Type: AWS::LakeFormation::PrincipalPermissions
+    Properties:
+      Principal:
+        DataLakePrincipalIdentifier: !GetAtt GlueFederationAccessRole.Arn
+      Resource:
+        Database:
+          CatalogId: !Ref AWS::AccountId
+          Name: !Ref ProducerDatabase
+      Permissions:
+        - DESCRIBE
+      PermissionsWithGrantOption: []
+
+  LFGrantSelectOnProducerTables:
+    Type: AWS::LakeFormation::PrincipalPermissions
+    Properties:
+      Principal:
+        DataLakePrincipalIdentifier: !GetAtt GlueFederationAccessRole.Arn
+      Resource:
+        Table:
+          CatalogId: !Ref AWS::AccountId
+          DatabaseName: !Ref ProducerDatabase
+          TableWildcard: {}
+      Permissions:
+        - SELECT
+        - DESCRIBE
+      PermissionsWithGrantOption: []
+
+  # --- Role assumed by the Marketplace Lambda for DataZone reads ---
   DataZoneReaderRole:
     Type: AWS::IAM::Role
     Properties:
@@ -130,12 +163,12 @@ Resources:
           Arn: !Sub 'arn:${AWS::Partition}:events:${MarketplaceRegion}:${MarketplaceAccountId}:event-bus/default'
           RoleArn: !GetAtt EventForwardingRole.Arn
 
-  # --- Forward SageMaker Catalog asset publish/revision events to the Marketplace bus ---
+  # --- Forward DataZone asset publish/revision events to the Marketplace bus ---
   DataZonePublishForwardingRule:
     Type: AWS::Events::Rule
     Properties:
       Name: datazone-publish-sync-to-marketplace
-      Description: Forwards Producer SageMaker Catalog asset events to the Marketplace bus.
+      Description: Forwards Producer DataZone asset events to the Marketplace bus.
       EventPattern:
         source:
           - aws.datazone
@@ -143,6 +176,41 @@ Resources:
           - Asset Added To Catalog
           - New Asset Version Available
           - Asset Schema Changed
+      Targets:
+        - Id: marketplace-bus
+          Arn: !Sub 'arn:${AWS::Partition}:events:${MarketplaceRegion}:${MarketplaceAccountId}:event-bus/default'
+          RoleArn: !GetAtt EventForwardingRole.Arn
+
+  # --- Forward Glue Data Quality evaluation results to the Marketplace bus ---
+  GlueDataQualityForwardingRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: glue-dq-sync-to-marketplace
+      Description: Forwards Producer Glue Data Quality evaluation results to the Marketplace bus.
+      EventPattern:
+        source:
+          - aws.glue-dataquality
+        detail-type:
+          - Data Quality Evaluation Results Available
+      Targets:
+        - Id: marketplace-bus
+          Arn: !Sub 'arn:${AWS::Partition}:events:${MarketplaceRegion}:${MarketplaceAccountId}:event-bus/default'
+          RoleArn: !GetAtt EventForwardingRole.Arn
+
+  # --- Forward Glue ETL job completions (lineage trigger) to the Marketplace bus ---
+  GlueJobLineageForwardingRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: glue-lineage-sync-to-marketplace
+      Description: Forwards Producer Glue job success events (lineage trigger) to the Marketplace bus.
+      EventPattern:
+        source:
+          - aws.glue
+        detail-type:
+          - Glue Job State Change
+        detail:
+          state:
+            - SUCCEEDED
       Targets:
         - Id: marketplace-bus
           Arn: !Sub 'arn:${AWS::Partition}:events:${MarketplaceRegion}:${MarketplaceAccountId}:event-bus/default'

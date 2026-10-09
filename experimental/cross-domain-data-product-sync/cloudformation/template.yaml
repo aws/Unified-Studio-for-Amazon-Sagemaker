@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   Cross-Domain Data Product Sync for SageMaker Unified Studio (Marketplace account).
-  Deploys the two sync Lambdas, scoped EventBridge rules with dead-letter queues,
+  Deploys the four sync Lambdas, scoped EventBridge rules with dead-letter queues,
   least-privilege IAM, and the Lake Formation credential-vending role used to read
   the Producer account's S3 data.
 
@@ -15,20 +15,20 @@ Parameters:
     Description: Glue database name in the Producer account.
   SourceDomainId:
     Type: String
-    Description: SageMaker Catalog (DataZone) domain ID in the Producer account (dzd-xxxxxxxx).
+    Description: DataZone domain ID in the Producer account (dzd-xxxxxxxx).
   SourceProjectId:
     Type: String
     Default: ''
-    Description: (Optional) SageMaker Catalog (DataZone) project ID in the Producer account.
+    Description: (Optional) DataZone project ID in the Producer account.
   TargetDatabase:
     Type: String
     Description: Glue database in this account (Marketplace project's Lakehouse DB).
   DomainId:
     Type: String
-    Description: SageMaker Catalog (DataZone) domain ID in this account (Marketplace).
+    Description: DataZone domain ID in this account (Marketplace).
   ProjectId:
     Type: String
-    Description: SageMaker Catalog (DataZone) project ID in this account (Marketplace).
+    Description: DataZone project ID in this account (Marketplace).
   ProjectEnvironmentRoleArn:
     Type: String
     Description: ARN of the Marketplace project's environment role.
@@ -37,7 +37,7 @@ Parameters:
     Description: ARN of the Producer cross-account role for Glue/DQ reads (must trust this account).
   SourceDataZoneRoleArn:
     Type: String
-    Description: ARN of the Producer cross-account role for SageMaker Catalog (DataZone) reads (must trust this account).
+    Description: ARN of the Producer cross-account role for DataZone reads (must trust this account).
   S3BucketArn:
     Type: String
     Description: ARN of the Producer's S3 bucket containing the table data.
@@ -52,6 +52,14 @@ Parameters:
     Type: String
     Default: catalog_sync_mirror.zip
     Description: S3 key for the catalog-sync-mirror deployment package.
+  DqResultsSyncS3Key:
+    Type: String
+    Default: dq_results_sync.zip
+    Description: S3 key for the dq-results-sync deployment package.
+  LineageSyncS3Key:
+    Type: String
+    Default: lineage_sync.zip
+    Description: S3 key for the lineage-sync deployment package.
 
 Resources:
 
@@ -67,6 +75,46 @@ Resources:
     Properties:
       QueueName: cross-domain-catalog-sync-mirror-dlq
       MessageRetentionPeriod: 1209600
+
+  DqResultsSyncDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: cross-domain-dq-results-sync-dlq
+      MessageRetentionPeriod: 1209600
+
+  LineageSyncDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: cross-domain-lineage-sync-dlq
+      MessageRetentionPeriod: 1209600
+
+  # --- Allow EventBridge to deliver failed rule-target events to the DLQs ---
+  # Required for the rule-target DeadLetterConfig to work: without this policy
+  # EventBridge cannot write to the queues and dead-lettered events are lost.
+  EventBridgeDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref GlueTableSyncDLQ
+        - !Ref CatalogSyncMirrorDLQ
+        - !Ref DqResultsSyncDLQ
+        - !Ref LineageSyncDLQ
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowEventBridgeToSendToDLQs
+            Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sqs:SendMessage
+            Resource:
+              - !GetAtt GlueTableSyncDLQ.Arn
+              - !GetAtt CatalogSyncMirrorDLQ.Arn
+              - !GetAtt DqResultsSyncDLQ.Arn
+              - !GetAtt LineageSyncDLQ.Arn
+            Condition:
+              ArnLike:
+                aws:SourceArn: !Sub 'arn:${AWS::Partition}:events:${AWS::Region}:${AWS::AccountId}:rule/*'
 
   # --- IAM role for the Lambdas (least privilege) ---
   CatalogSyncLambdaRole:
@@ -144,6 +192,43 @@ Resources:
                 Resource:
                   - !GetAtt GlueTableSyncDLQ.Arn
                   - !GetAtt CatalogSyncMirrorDLQ.Arn
+                  - !GetAtt DqResultsSyncDLQ.Arn
+                  - !GetAtt LineageSyncDLQ.Arn
+
+  # --- Lake Formation grants so the Lambda role can write to the target DB ---
+  # The target Glue catalog is typically Lake Formation-managed, so IAM glue:*
+  # permissions alone are not sufficient; the role also needs LF permissions.
+  LFGrantCreateTableOnTargetDatabase:
+    Type: AWS::LakeFormation::PrincipalPermissions
+    Properties:
+      Principal:
+        DataLakePrincipalIdentifier: !GetAtt CatalogSyncLambdaRole.Arn
+      Resource:
+        Database:
+          CatalogId: !Ref AWS::AccountId
+          Name: !Ref TargetDatabase
+      Permissions:
+        - CREATE_TABLE
+        - DESCRIBE
+      PermissionsWithGrantOption: []
+
+  LFGrantTablePermsOnTargetDatabase:
+    Type: AWS::LakeFormation::PrincipalPermissions
+    Properties:
+      Principal:
+        DataLakePrincipalIdentifier: !GetAtt CatalogSyncLambdaRole.Arn
+      Resource:
+        Table:
+          CatalogId: !Ref AWS::AccountId
+          DatabaseName: !Ref TargetDatabase
+          TableWildcard: {}
+      Permissions:
+        - DESCRIBE
+        - SELECT
+        - ALTER
+      PermissionsWithGrantOption:
+        - DESCRIBE
+        - SELECT
 
   # --- Lambda 1: Glue Table Sync ---
   GlueTableSyncFunction:
@@ -197,6 +282,53 @@ Resources:
           DOMAIN_ID: !Ref DomainId
           PROJECT_ID: !Ref ProjectId
           ACCOUNT_ID: !Ref AWS::AccountId
+
+  # --- Lambda 3: DQ Results Sync (event-driven, native Glue DQ event) ---
+  DqResultsSyncFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: dq-results-sync
+      Runtime: python3.12
+      Handler: dq_results_sync.handler
+      Role: !GetAtt CatalogSyncLambdaRole.Arn
+      Timeout: 120
+      MemorySize: 256
+      ReservedConcurrentExecutions: 5
+      DeadLetterConfig:
+        TargetArn: !GetAtt DqResultsSyncDLQ.Arn
+      Code:
+        S3Bucket: !Ref CodeS3Bucket
+        S3Key: !Ref DqResultsSyncS3Key
+      Environment:
+        Variables:
+          SOURCE_ACCOUNT_ID: !Ref SourceAccountId
+          SOURCE_DATABASE: !Ref SourceDatabase
+          SOURCE_ROLE_ARN: !Ref SourceGlueRoleArn
+          DOMAIN_ID: !Ref DomainId
+          PROJECT_ID: !Ref ProjectId
+          ACCOUNT_ID: !Ref AWS::AccountId
+
+  # --- Lambda 4: Lineage Sync (event-driven, Glue job completion) ---
+  LineageSyncFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: lineage-sync
+      Runtime: python3.12
+      Handler: lineage_sync.handler
+      Role: !GetAtt CatalogSyncLambdaRole.Arn
+      Timeout: 120
+      MemorySize: 256
+      ReservedConcurrentExecutions: 5
+      DeadLetterConfig:
+        TargetArn: !GetAtt LineageSyncDLQ.Arn
+      Code:
+        S3Bucket: !Ref CodeS3Bucket
+        S3Key: !Ref LineageSyncS3Key
+      Environment:
+        Variables:
+          SOURCE_DOMAIN_ID: !Ref SourceDomainId
+          SOURCE_DZ_ROLE_ARN: !Ref SourceDataZoneRoleArn
+          DOMAIN_ID: !Ref DomainId
 
   # --- EventBridge Rule: Glue Table Sync (from Producer via CloudTrail) ---
   GlueSyncFromProducerRule:
@@ -307,6 +439,69 @@ Resources:
       Principal: events.amazonaws.com
       SourceArn: !GetAtt DataSourceRunRule.Arn
 
+  # --- EventBridge Rule: DQ Results Sync (native Glue DQ event from Producer) ---
+  DqSyncFromProducerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: dq-sync-from-producer
+      Description: Triggers DQ sync when the Producer completes a Glue Data Quality evaluation.
+      EventPattern:
+        source:
+          - aws.glue-dataquality
+        detail-type:
+          - Data Quality Evaluation Results Available
+        account:
+          - !Ref SourceAccountId
+      Targets:
+        - Id: dq-results-sync
+          Arn: !GetAtt DqResultsSyncFunction.Arn
+          DeadLetterConfig:
+            Arn: !GetAtt DqResultsSyncDLQ.Arn
+          RetryPolicy:
+            MaximumRetryAttempts: 4
+            MaximumEventAgeInSeconds: 3600
+
+  DqSyncLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref DqResultsSyncFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt DqSyncFromProducerRule.Arn
+
+  # --- EventBridge Rule: Lineage Sync (Glue job completion from Producer) ---
+  LineageSyncFromProducerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: lineage-sync-from-producer
+      Description: Triggers lineage sync when a Producer Glue job completes successfully.
+      EventPattern:
+        source:
+          - aws.glue
+        detail-type:
+          - Glue Job State Change
+        detail:
+          state:
+            - SUCCEEDED
+        account:
+          - !Ref SourceAccountId
+      Targets:
+        - Id: lineage-sync
+          Arn: !GetAtt LineageSyncFunction.Arn
+          DeadLetterConfig:
+            Arn: !GetAtt LineageSyncDLQ.Arn
+          RetryPolicy:
+            MaximumRetryAttempts: 4
+            MaximumEventAgeInSeconds: 3600
+
+  LineageSyncLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref LineageSyncFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt LineageSyncFromProducerRule.Arn
+
   # --- Lake Formation credential-vending role for cross-account S3 reads ---
   MirrorCatalogLFRole:
     Type: AWS::IAM::Role
@@ -370,3 +565,15 @@ Outputs:
   CatalogSyncMirrorDLQUrl:
     Description: URL of the catalog-sync-mirror dead-letter queue.
     Value: !Ref CatalogSyncMirrorDLQ
+  DqResultsSyncFunctionArn:
+    Description: ARN of the DQ Results Sync Lambda (event-driven DQ path).
+    Value: !GetAtt DqResultsSyncFunction.Arn
+  DqResultsSyncDLQUrl:
+    Description: URL of the dq-results-sync dead-letter queue.
+    Value: !Ref DqResultsSyncDLQ
+  LineageSyncFunctionArn:
+    Description: ARN of the Lineage Sync Lambda (event-driven lineage path).
+    Value: !GetAtt LineageSyncFunction.Arn
+  LineageSyncDLQUrl:
+    Description: URL of the lineage-sync dead-letter queue.
+    Value: !Ref LineageSyncDLQ

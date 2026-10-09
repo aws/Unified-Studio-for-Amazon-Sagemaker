@@ -152,7 +152,7 @@ def grant_project_role_access(config, table_name):
     Idempotent: an already-granted permission is treated as success. Any other
     failure is raised so the caller can surface it rather than silently continue.
     """
-    project_role_arn = config["project_role_arn"]
+    project_role_arn = config.get("project_role_arn", "")
     if not project_role_arn:
         logger.warning("PROJECT_ROLE_ARN not set; skipping Lake Formation grant")
         return
