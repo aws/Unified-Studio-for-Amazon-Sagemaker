@@ -1,0 +1,231 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Cross-Domain Data Product Sync: Producer account companion stack.
+  Deploys the three cross-account roles the Marketplace account depends on
+  (Glue/DQ read, DataZone read, and EventBridge forwarding) plus the four
+  EventBridge rules that forward Glue table, DataZone asset, Glue Data Quality,
+  and Glue job (lineage) events to the Marketplace bus.
+
+Parameters:
+  MarketplaceAccountId:
+    Type: String
+    AllowedPattern: '^[0-9]{12}$'
+    Description: AWS Account ID of the Marketplace account.
+  MarketplaceRegion:
+    Type: String
+    Default: us-east-1
+    Description: Region of the Marketplace default event bus.
+  ProducerDatabase:
+    Type: String
+    Description: Glue database in this Producer account to share.
+  ProducerS3BucketArn:
+    Type: String
+    Description: ARN of this account's S3 bucket that stores the table data.
+  MarketplaceLambdaRoleName:
+    Type: String
+    Default: CatalogSyncLambdaRole
+    Description: Name of the Marketplace Lambda role that assumes the read roles here.
+
+Resources:
+
+  # --- Role assumed by the Marketplace Lambda for Glue and DQ reads ---
+  GlueFederationAccessRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: GlueFederationAccessRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${MarketplaceAccountId}:role/${MarketplaceLambdaRoleName}'
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: GlueAndDataQualityRead
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - glue:GetTable
+                  - glue:GetTables
+                  - glue:GetDatabase
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:catalog'
+                  - !Sub 'arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:database/${ProducerDatabase}'
+                  - !Sub 'arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:table/${ProducerDatabase}/*'
+              - Effect: Allow
+                Action:
+                  - glue:ListDataQualityResults
+                  - glue:GetDataQualityResult
+                Resource: '*'
+
+  # --- Lake Formation grants so the Marketplace Lambda (via GlueFederationAccessRole)
+  #     can read this account's shared database. Required when the Producer Glue
+  #     catalog is Lake Formation-managed; IAM glue:Get* permissions alone are not
+  #     sufficient. ---
+  LFGrantDescribeOnProducerDatabase:
+    Type: AWS::LakeFormation::PrincipalPermissions
+    Properties:
+      Principal:
+        DataLakePrincipalIdentifier: !GetAtt GlueFederationAccessRole.Arn
+      Resource:
+        Database:
+          CatalogId: !Ref AWS::AccountId
+          Name: !Ref ProducerDatabase
+      Permissions:
+        - DESCRIBE
+      PermissionsWithGrantOption: []
+
+  LFGrantSelectOnProducerTables:
+    Type: AWS::LakeFormation::PrincipalPermissions
+    Properties:
+      Principal:
+        DataLakePrincipalIdentifier: !GetAtt GlueFederationAccessRole.Arn
+      Resource:
+        Table:
+          CatalogId: !Ref AWS::AccountId
+          DatabaseName: !Ref ProducerDatabase
+          TableWildcard: {}
+      Permissions:
+        - SELECT
+        - DESCRIBE
+      PermissionsWithGrantOption: []
+
+  # --- Role assumed by the Marketplace Lambda for DataZone reads ---
+  DataZoneReaderRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: DataZoneReaderRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${MarketplaceAccountId}:role/${MarketplaceLambdaRoleName}'
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: DataZoneRead
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - datazone:GetAsset
+                  - datazone:Search
+                  - datazone:ListLineageEvents
+                  - datazone:GetLineageEvent
+                Resource: '*'
+
+  # --- Role used by EventBridge to forward events to the Marketplace bus ---
+  EventForwardingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: EventForwardingRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: PutEventsToMarketplace
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: events:PutEvents
+                Resource: !Sub 'arn:${AWS::Partition}:events:${MarketplaceRegion}:${MarketplaceAccountId}:event-bus/default'
+
+  # --- Forward Glue table changes (via CloudTrail) to the Marketplace bus ---
+  GlueTableForwardingRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: glue-table-sync-to-marketplace
+      Description: Forwards Producer Glue CreateTable/UpdateTable events to the Marketplace bus.
+      EventPattern:
+        source:
+          - aws.glue
+        detail-type:
+          - AWS API Call via CloudTrail
+        detail:
+          eventSource:
+            - glue.amazonaws.com
+          eventName:
+            - CreateTable
+            - UpdateTable
+          requestParameters:
+            databaseName:
+              - !Ref ProducerDatabase
+      Targets:
+        - Id: marketplace-bus
+          Arn: !Sub 'arn:${AWS::Partition}:events:${MarketplaceRegion}:${MarketplaceAccountId}:event-bus/default'
+          RoleArn: !GetAtt EventForwardingRole.Arn
+
+  # --- Forward DataZone asset publish/revision events to the Marketplace bus ---
+  DataZonePublishForwardingRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: datazone-publish-sync-to-marketplace
+      Description: Forwards Producer DataZone asset events to the Marketplace bus.
+      EventPattern:
+        source:
+          - aws.datazone
+        detail-type:
+          - Asset Added To Catalog
+          - New Asset Version Available
+          - Asset Schema Changed
+      Targets:
+        - Id: marketplace-bus
+          Arn: !Sub 'arn:${AWS::Partition}:events:${MarketplaceRegion}:${MarketplaceAccountId}:event-bus/default'
+          RoleArn: !GetAtt EventForwardingRole.Arn
+
+  # --- Forward Glue Data Quality evaluation results to the Marketplace bus ---
+  GlueDataQualityForwardingRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: glue-dq-sync-to-marketplace
+      Description: Forwards Producer Glue Data Quality evaluation results to the Marketplace bus.
+      EventPattern:
+        source:
+          - aws.glue-dataquality
+        detail-type:
+          - Data Quality Evaluation Results Available
+      Targets:
+        - Id: marketplace-bus
+          Arn: !Sub 'arn:${AWS::Partition}:events:${MarketplaceRegion}:${MarketplaceAccountId}:event-bus/default'
+          RoleArn: !GetAtt EventForwardingRole.Arn
+
+  # --- Forward Glue ETL job completions (lineage trigger) to the Marketplace bus ---
+  GlueJobLineageForwardingRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: glue-lineage-sync-to-marketplace
+      Description: Forwards Producer Glue job success events (lineage trigger) to the Marketplace bus.
+      EventPattern:
+        source:
+          - aws.glue
+        detail-type:
+          - Glue Job State Change
+        detail:
+          state:
+            - SUCCEEDED
+      Targets:
+        - Id: marketplace-bus
+          Arn: !Sub 'arn:${AWS::Partition}:events:${MarketplaceRegion}:${MarketplaceAccountId}:event-bus/default'
+          RoleArn: !GetAtt EventForwardingRole.Arn
+
+Outputs:
+  GlueFederationAccessRoleArn:
+    Description: Pass as SourceGlueRoleArn to the Marketplace stack.
+    Value: !GetAtt GlueFederationAccessRole.Arn
+  DataZoneReaderRoleArn:
+    Description: Pass as SourceDataZoneRoleArn to the Marketplace stack. Add as a Contributor to the Producer SMUS project.
+    Value: !GetAtt DataZoneReaderRole.Arn
+  EventForwardingRoleArn:
+    Description: Role used by the EventBridge forwarding rules.
+    Value: !GetAtt EventForwardingRole.Arn
+  ProducerS3BucketArn:
+    Description: Echoes the Producer S3 bucket ARN. Add the Marketplace MirrorCatalogLFRole to this bucket's policy.
+    Value: !Ref ProducerS3BucketArn

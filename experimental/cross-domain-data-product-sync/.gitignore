@@ -1,0 +1,16 @@
+# Build artifacts
+build/
+*.zip
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+
+# Local-only diagram sources
+*.drawio
