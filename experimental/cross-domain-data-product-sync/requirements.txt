@@ -1,0 +1,6 @@
+# Runtime dependencies.
+# boto3 and botocore are provided by the AWS Lambda Python runtime, so they are
+# not bundled into the deployment package. Pinning them here documents the
+# minimum versions the code was written against and supports local testing.
+boto3>=1.34.0
+botocore>=1.34.0
