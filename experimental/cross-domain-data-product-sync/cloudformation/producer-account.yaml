@@ -18,6 +18,9 @@ Parameters:
   ProducerDatabase:
     Type: String
     Description: Glue database in this Producer account to share.
+  ProducerDomainId:
+    Type: String
+    Description: SageMaker Catalog domain ID in this Producer account (dzd-xxxxxxxx), used to scope forwarded asset events.
   ProducerS3BucketArn:
     Type: String
     Description: ARN of this account's S3 bucket that stores the table data.
@@ -168,7 +171,7 @@ Resources:
     Type: AWS::Events::Rule
     Properties:
       Name: datazone-publish-sync-to-marketplace
-      Description: Forwards Producer DataZone asset events to the Marketplace bus.
+      Description: Forwards Producer SageMaker Catalog asset events to the Marketplace bus.
       EventPattern:
         source:
           - aws.datazone
@@ -176,6 +179,10 @@ Resources:
           - Asset Added To Catalog
           - New Asset Version Available
           - Asset Schema Changed
+        detail:
+          metadata:
+            domain:
+              - !Ref ProducerDomainId
       Targets:
         - Id: marketplace-bus
           Arn: !Sub 'arn:${AWS::Partition}:events:${MarketplaceRegion}:${MarketplaceAccountId}:event-bus/default'
@@ -192,6 +199,10 @@ Resources:
           - aws.glue-dataquality
         detail-type:
           - Data Quality Evaluation Results Available
+        detail:
+          context:
+            databaseName:
+              - !Ref ProducerDatabase
       Targets:
         - Id: marketplace-bus
           Arn: !Sub 'arn:${AWS::Partition}:events:${MarketplaceRegion}:${MarketplaceAccountId}:event-bus/default'

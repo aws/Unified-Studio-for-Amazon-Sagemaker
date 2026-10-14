@@ -65,6 +65,8 @@ This solution runs in the Marketplace account and reaches into the Producer acco
 | Event forwarding | Producer EventBridge rules send events to the Marketplace default event bus | `events:PutEvents` via a Producer events role trusting `events.amazonaws.com` |
 | S3 zero-copy reads | Marketplace `MirrorCatalogLFRole` reads Producer S3 | Lake Formation credential vending, allowed by the Producer S3 bucket policy |
 
+The forwarding rules keep the boundary tight by filtering on the Producer side: only events for the shared Glue database (table changes, DQ results) and the shared SageMaker Catalog domain (asset publishes) are sent to the Marketplace bus.
+
 Steps 4, 5, and 6 implement this model in the Producer account.
 
 ### Step 1: Build and upload the Lambda packages
@@ -90,6 +92,7 @@ aws cloudformation deploy \
     MarketplaceAccountId=<MARKETPLACE_ACCOUNT_ID> \
     MarketplaceRegion=<MARKETPLACE_REGION> \
     ProducerDatabase=<PRODUCER_GLUE_DB> \
+    ProducerDomainId=<PRODUCER_DOMAIN_ID> \
     ProducerS3BucketArn=arn:aws:s3:::<PRODUCER_S3_BUCKET> \
   --capabilities CAPABILITY_NAMED_IAM
 ```
