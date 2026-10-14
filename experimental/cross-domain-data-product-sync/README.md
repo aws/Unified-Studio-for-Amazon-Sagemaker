@@ -127,11 +127,12 @@ aws cloudformation deploy \
 
 | Step | Action | Why |
 |------|--------|-----|
-| 4a | Register Producer's S3 location in Lake Formation with `MirrorCatalogLFRole` | Enables credential vending for cross-account S3 reads |
+| 4a | Register the Producer's SMUS **project data prefix** in Lake Formation with `MirrorCatalogLFRole` | Enables credential vending for cross-account S3 reads. Register the project data root (e.g. `.../<domainId>/<projectId>/dev`), not just a per-table path — SMUS writes managed table data (plain `CREATE TABLE AS SELECT`) under `.../dev/sys/athena/...`, so a narrow registration makes the mirror's `CreateTable` fail |
 | 4b | Add `CatalogSyncLambdaRole` as **Contributor** to the Marketplace SMUS project | Lambda needs SageMaker Catalog permissions to search/update assets |
 | 4c | Create a **Data Source** in the Marketplace project pointing to the target Glue database | Required for creating managed assets (subscription-eligible) |
 | 4d | Enable LF Application Integration Settings: "Allow external engines to access data in Amazon S3 locations with full table access" | Required only when an external/third-party engine needs full-table (unfiltered) credential vending; not needed for the fine-grained LF path |
 | 4e | If this account's Glue Data Catalog is **SSE-KMS encrypted**, grant `CatalogSyncLambdaRole` `kms:Decrypt`, `kms:GenerateDataKey`, and `kms:DescribeKey` on the catalog CMK | Otherwise `CreateTable`/`UpdateTable` fail with `GlueEncryptionException`. Skip if the catalog is unencrypted |
+| 4f | Grant `CatalogSyncLambdaRole` Lake Formation `DATA_LOCATION_ACCESS` on the registered location from 4a | The mirrored table points at the Producer S3 location; Lake Formation requires the role writing the table to hold data-location access, or `CreateTable` fails with `Insufficient Lake Formation permission(s)` |
 
 > **Lake Formation grants:** The stacks now create the Lake Formation grants the
 > sync roles need (`CatalogSyncLambdaRole` on the target DB, `GlueFederationAccessRole`
@@ -140,11 +141,18 @@ aws cloudformation deploy \
 > Formation data lake administrator** in that account.
 
 ```bash
-# 4a: Register S3 location
+# 4a: Register the SMUS project data prefix (not just a per-table path).
+# <PATH> should be the project data root, e.g. <domainId>/<projectId>/dev
 aws lakeformation register-resource \
   --resource-arn arn:aws:s3:::<PRODUCER_S3_BUCKET>/<PATH> \
   --role-arn arn:aws:iam::<MARKETPLACE_ACCOUNT_ID>:role/MirrorCatalogLFRole \
   --no-use-service-linked-role
+
+# 4f: Grant the Lambda role data-location access on that registered location
+aws lakeformation grant-permissions \
+  --principal DataLakePrincipalIdentifier=arn:aws:iam::<MARKETPLACE_ACCOUNT_ID>:role/CatalogSyncLambdaRole \
+  --resource '{"DataLocation":{"CatalogId":"<MARKETPLACE_ACCOUNT_ID>","ResourceArn":"arn:aws:s3:::<PRODUCER_S3_BUCKET>/<PATH>"}}' \
+  --permissions DATA_LOCATION_ACCESS
 
 # 4e (only if the Glue catalog is SSE-KMS encrypted): grant the Lambda role KMS access
 aws iam put-role-policy \
@@ -191,6 +199,7 @@ The Producer stack (Step 2) creates the roles and forwarding rules. The S3 bucke
 | Producer stack (3 roles + forwarding rules + LF read grants) | Producer account | `cloudformation deploy` (`producer-account.yaml`) |
 | Marketplace stack (4 Lambdas, DLQs, rules, roles + LF write grants) | Marketplace account | `cloudformation deploy` (`template.yaml`) |
 | LF S3 registration | Marketplace account | CLI (`register-resource`) |
+| LF data-location grant for the Lambda role | Marketplace account | CLI (`grant-permissions`) |
 | CatalogSyncLambdaRole as project Contributor | Marketplace SMUS project | UI or API |
 | Data Source creation | Marketplace SMUS project | UI |
 | LF Application Integration Settings (external-engine full-table access only) | Marketplace account | LF Console |
