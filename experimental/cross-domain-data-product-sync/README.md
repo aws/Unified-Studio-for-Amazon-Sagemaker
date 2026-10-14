@@ -140,6 +140,15 @@ aws cloudformation deploy \
 > to deploy, the principal running each `cloudformation deploy` must be a **Lake
 > Formation data lake administrator** in that account.
 
+> **Redeploys and the SMUS Contributor membership (4b):** SMUS tracks project members
+> by an internal profile tied to the IAM role's identity, not its name. If you
+> redeploy the stack or otherwise recreate `CatalogSyncLambdaRole` (or the Producer
+> `DataZoneReaderRole`), the role gets a new identity and a new SMUS profile, and the
+> existing Contributor membership silently goes stale — the Lambda then fails with
+> `AccessDenied` on `GetAsset`/`Search`. After any such recreate, re-add the role as a
+> Contributor using its **current** profile in both the Marketplace and Producer SMUS
+> projects.
+
 ```bash
 # 4a: Register the SMUS project data prefix (not just a per-table path).
 # <PATH> should be the project data root, e.g. <domainId>/<projectId>/dev
