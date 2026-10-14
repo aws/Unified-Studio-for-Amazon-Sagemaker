@@ -60,6 +60,10 @@ Parameters:
     Type: String
     Default: lineage_sync.zip
     Description: S3 key for the lineage-sync deployment package.
+  LineageSyncSchedule:
+    Type: String
+    Default: rate(1 hour)
+    Description: Schedule for the lineage sweep (EventBridge ScheduleExpression). Lineage refreshes once per interval, independent of engine or job volume.
 
 Resources:
 
@@ -326,9 +330,11 @@ Resources:
         S3Key: !Ref LineageSyncS3Key
       Environment:
         Variables:
+          SOURCE_ACCOUNT_ID: !Ref SourceAccountId
           SOURCE_DOMAIN_ID: !Ref SourceDomainId
           SOURCE_DZ_ROLE_ARN: !Ref SourceDataZoneRoleArn
           DOMAIN_ID: !Ref DomainId
+          TARGET_DATABASE: !Ref TargetDatabase
 
   # --- EventBridge Rule: Glue Table Sync (from Producer via CloudTrail) ---
   GlueSyncFromProducerRule:
@@ -469,22 +475,14 @@ Resources:
       Principal: events.amazonaws.com
       SourceArn: !GetAtt DqSyncFromProducerRule.Arn
 
-  # --- EventBridge Rule: Lineage Sync (Glue job completion from Producer) ---
-  LineageSyncFromProducerRule:
+  # --- EventBridge Rule: Lineage Sync (scheduled, engine-agnostic sweep) ---
+  LineageSyncScheduleRule:
     Type: AWS::Events::Rule
     Properties:
-      Name: lineage-sync-from-producer
-      Description: Triggers lineage sync when a Producer Glue job completes successfully.
-      EventPattern:
-        source:
-          - aws.glue
-        detail-type:
-          - Glue Job State Change
-        detail:
-          state:
-            - SUCCEEDED
-        account:
-          - !Ref SourceAccountId
+      Name: lineage-sync-schedule
+      Description: Periodically sweeps Producer lineage for mirrored tables into this domain (engine-agnostic).
+      ScheduleExpression: !Ref LineageSyncSchedule
+      State: ENABLED
       Targets:
         - Id: lineage-sync
           Arn: !GetAtt LineageSyncFunction.Arn
@@ -500,7 +498,7 @@ Resources:
       FunctionName: !Ref LineageSyncFunction
       Action: lambda:InvokeFunction
       Principal: events.amazonaws.com
-      SourceArn: !GetAtt LineageSyncFromProducerRule.Arn
+      SourceArn: !GetAtt LineageSyncScheduleRule.Arn
 
   # --- Lake Formation credential-vending role for cross-account S3 reads ---
   MirrorCatalogLFRole:

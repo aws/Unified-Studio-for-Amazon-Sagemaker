@@ -208,25 +208,6 @@ Resources:
           Arn: !Sub 'arn:${AWS::Partition}:events:${MarketplaceRegion}:${MarketplaceAccountId}:event-bus/default'
           RoleArn: !GetAtt EventForwardingRole.Arn
 
-  # --- Forward Glue ETL job completions (lineage trigger) to the Marketplace bus ---
-  GlueJobLineageForwardingRule:
-    Type: AWS::Events::Rule
-    Properties:
-      Name: glue-lineage-sync-to-marketplace
-      Description: Forwards Producer Glue job success events (lineage trigger) to the Marketplace bus.
-      EventPattern:
-        source:
-          - aws.glue
-        detail-type:
-          - Glue Job State Change
-        detail:
-          state:
-            - SUCCEEDED
-      Targets:
-        - Id: marketplace-bus
-          Arn: !Sub 'arn:${AWS::Partition}:events:${MarketplaceRegion}:${MarketplaceAccountId}:event-bus/default'
-          RoleArn: !GetAtt EventForwardingRole.Arn
-
 Outputs:
   GlueFederationAccessRoleArn:
     Description: Pass as SourceGlueRoleArn to the Marketplace stack.

@@ -24,7 +24,7 @@ Event-driven catalog mirroring with Lambda functions that sync table metadata, b
 - **Native SageMaker Catalog subscription fulfilment**: managed assets with automatic LF grants on approval
 - **Business metadata sync**: name, description, readme, column descriptions from producer domain
 - **DQ results propagation**: real-time via a native Glue DQ event (event-driven), and also pulled from the producer on each asset sync as a backstop
-- **Lineage sync**: OpenLineage COMPLETE events forwarded across domains, triggered by Producer Glue job completions
+- **Lineage sync**: OpenLineage COMPLETE events for mirrored tables forwarded across domains on a schedule (engine-agnostic — Glue, EMR, Athena, and other OpenLineage sources)
 - **Lake Formation fine-grained access control**: column/row level security in the consumer domain
 
 ## Architecture
@@ -38,7 +38,7 @@ Event-driven catalog mirroring with Lambda functions that sync table metadata, b
 | `lambda/glue_table_sync.py` | Mirrors the Glue table schema (including partition keys) and grants Lake Formation permissions to the project role |
 | `lambda/catalog_sync_mirror.py` | Syncs business metadata, DQ results, and lineage; creates and publishes the managed-asset revision |
 | `lambda/dq_results_sync.py` | Event-driven DQ path: on a native Glue DQ completion event from the Producer, posts the result onto the matching managed asset |
-| `lambda/lineage_sync.py` | Event-driven lineage path: on a Producer Glue job completion, forwards COMPLETE OpenLineage events into this domain (domain id remapped) |
+| `lambda/lineage_sync.py` | Scheduled lineage sweep: forwards COMPLETE OpenLineage events for mirrored tables from the Producer domain into this domain (domain id remapped, idempotent). Engine-agnostic |
 | `cloudformation/template.yaml` | Marketplace-account stack: Lambdas, scoped EventBridge rules, dead-letter queues, least-privilege IAM, and the Lake Formation role |
 | `cloudformation/producer-account.yaml` | Producer-account stack: the three cross-account roles and the EventBridge forwarding rules |
 | `tests/` | Unit tests for the Glue table sync and catalog sync mirror Lambdas (mocked boto3) |
@@ -82,7 +82,7 @@ aws s3 cp build/lineage_sync.zip        s3://<CODE_BUCKET>/lineage_sync.zip
 
 ### Step 2: Deploy the Producer-account stack (Account 1)
 
-This creates `GlueFederationAccessRole`, `DataZoneReaderRole`, `EventForwardingRole`, and the four EventBridge forwarding rules (Glue table changes, SageMaker Catalog asset publishes, Glue Data Quality results, and Glue job completions for lineage). It implements the cross-account trust model above.
+This creates `GlueFederationAccessRole`, `DataZoneReaderRole`, `EventForwardingRole`, and the three EventBridge forwarding rules (Glue table changes, SageMaker Catalog asset publishes, and Glue Data Quality results). It implements the cross-account trust model above.
 
 ```bash
 aws cloudformation deploy \
@@ -215,7 +215,7 @@ The Producer stack (Step 2) creates the roles and forwarding rules. The S3 bucke
 - Re-publish in the Producer to auto-sync metadata to the Marketplace.
 - Schema changes are auto-mirrored via the Glue table sync.
 - DQ results sync in real time: a Glue DQ run in the Producer emits a native event that is forwarded and applied to the asset. They are also re-pulled on each asset sync as a backstop.
-- Lineage syncs when a Producer Glue job completes: COMPLETE OpenLineage events are forwarded into the Marketplace domain. Lineage is also forwarded (scoped to an asset) during a metadata sync as a backstop.
+- Lineage is swept on a schedule (default hourly): COMPLETE OpenLineage events for mirrored tables are forwarded into the Marketplace domain, regardless of which engine produced them. Lineage is also forwarded (scoped to an asset) during a metadata sync.
 
 ## Development
 
