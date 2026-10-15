@@ -39,6 +39,7 @@ _REQUIRED_ENV_VARS = (
     "SOURCE_DZ_ROLE_ARN",
     "DOMAIN_ID",
     "TARGET_DATABASE",
+    "ACCOUNT_ID",
 )
 
 _BOTO_CONFIG = Config(retries={"max_attempts": 5, "mode": "standard"})
@@ -63,6 +64,10 @@ def _load_config():
         "source_dz_role_arn": os.environ["SOURCE_DZ_ROLE_ARN"],
         "domain_id": os.environ["DOMAIN_ID"],
         "target_database": os.environ["TARGET_DATABASE"],
+        # Marketplace (this) account + region, used to build the Glue table ARN
+        # that this domain's managed assets use as their sourceIdentifier.
+        "account_id": os.environ.get("ACCOUNT_ID", ""),
+        "region": os.environ.get("AWS_REGION", "us-east-1"),
     }
 
 
@@ -127,6 +132,72 @@ def _client_token_for(ol_event, fallback_id):
     return hashlib.sha256(basis.encode("utf-8")).hexdigest()[:128]
 
 
+def _matched_mirrored_table(dataset, mirrored_tables):
+    """Return the mirrored table name this dataset node refers to, or None.
+
+    Glue/Spark emits a ``symlinks`` facet whose identifier name is
+    ``table/<database>/<table>`` — the authoritative table identity. We also
+    fall back to the dataset ``name`` token. Matching is on the final
+    ``<table>`` segment against the set of mirrored table names.
+    """
+    candidates = []
+    symlinks = (dataset.get("facets", {}) or {}).get("symlinks", {}) or {}
+    for ident in symlinks.get("identifiers", []) or []:
+        candidates.append(ident.get("name", "") or "")  # e.g. table/db/tbl
+    candidates.append(dataset.get("name", "") or "")
+
+    for cand in candidates:
+        # last path/dot segment is the table name
+        last = cand.replace("/", ".").split(".")[-1]
+        if last in mirrored_tables:
+            return last
+    return None
+
+
+def _relink_dataset_to_marketplace(dataset, table, config):
+    """Rewrite a dataset node so DataZone resolves it to THIS domain's asset.
+
+    DataZone links an OpenLineage dataset node to a managed asset only when the
+    node's computed ``sourceIdentifier`` equals the asset's sourceIdentifier,
+    which for a Glue table asset is the Glue table ARN. We therefore set a Glue
+    ``symlinks`` facet pointing at this (Marketplace) account's mirrored table,
+    so the node's sourceIdentifier becomes
+    ``arn:aws:glue:<region>:<account>:table/<target_db>/<table>`` and links to
+    the mirrored asset.
+    """
+    glue_arn_ns = f"arn:aws:glue:{config['region']}:{config['account_id']}"
+    symlink_name = f"table/{config['target_database']}/{table}"
+    facets = dataset.setdefault("facets", {})
+    facets["symlinks"] = {
+        "_producer": "cross-domain-data-product-sync",
+        "_schemaURL": (
+            "https://openlineage.io/spec/facets/1-0-0/"
+            "SymlinksDatasetFacet.json#/$defs/SymlinksDatasetFacet"
+        ),
+        "identifiers": [
+            {"namespace": glue_arn_ns, "name": symlink_name, "type": "TABLE"}
+        ],
+    }
+    return dataset
+
+
+def _relink_event_datasets(ol_event, mirrored_tables, config):
+    """Relink every input/output dataset that references a mirrored table.
+
+    Returns (event, relinked_count). Datasets that do not reference a mirrored
+    table are left untouched (they are upstream/unshared and simply won't link
+    to an asset in this domain).
+    """
+    relinked = 0
+    for section in ("inputs", "outputs"):
+        for dataset in ol_event.get(section, []) or []:
+            table = _matched_mirrored_table(dataset, mirrored_tables)
+            if table:
+                _relink_dataset_to_marketplace(dataset, table, config)
+                relinked += 1
+    return ol_event, relinked
+
+
 def sync_recent_lineage(config, max_results=_DEFAULT_MAX_RESULTS):
     """Forward COMPLETE lineage events for mirrored tables into this domain.
 
@@ -173,19 +244,31 @@ def sync_recent_lineage(config, max_results=_DEFAULT_MAX_RESULTS):
                 if ol_event.get("eventType") != "COMPLETE":
                     continue
 
-                remapped = json.dumps(ol_event).replace(
-                    config["source_domain_id"], config["domain_id"]
+                # Relink the datasets that reference a mirrored table so their
+                # sourceIdentifier resolves to THIS domain's Glue table ARN
+                # (arn:aws:glue:<region>:<account>:table/<target_db>/<table>) —
+                # that exact-match on sourceIdentifier is how DataZone attaches
+                # the lineage node to the managed asset. Datasets are otherwise
+                # identified by raw S3 path and never link to the asset.
+                ol_event, relinked = _relink_event_datasets(
+                    ol_event, mirrored_tables, config
                 )
+                if not relinked:
+                    # No input/output resolves to a mirrored asset in this
+                    # domain; forwarding it would create orphan nodes.
+                    continue
+
+                payload = json.dumps(ol_event).encode("utf-8")
                 local_dz.post_lineage_event(
                     domainIdentifier=config["domain_id"],
-                    event=remapped.encode("utf-8"),
+                    event=payload,
                     clientToken=_client_token_for(ol_event, item["id"]),
                 )
                 synced += 1
             except Exception as exc:  # noqa: BLE001 - lineage is supplementary
                 logger.error(
-                    "Failed to forward lineage event",
-                    extra={"event_id": item.get("id"), "error": str(exc)},
+                    "Failed to forward lineage event %s: %s",
+                    item.get("id"), str(exc),
                 )
 
         next_token = resp.get("nextToken")
