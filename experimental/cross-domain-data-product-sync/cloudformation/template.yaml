@@ -335,6 +335,7 @@ Resources:
           SOURCE_DZ_ROLE_ARN: !Ref SourceDataZoneRoleArn
           DOMAIN_ID: !Ref DomainId
           TARGET_DATABASE: !Ref TargetDatabase
+          ACCOUNT_ID: !Ref AWS::AccountId
 
   # --- EventBridge Rule: Glue Table Sync (from Producer via CloudTrail) ---
   GlueSyncFromProducerRule:
