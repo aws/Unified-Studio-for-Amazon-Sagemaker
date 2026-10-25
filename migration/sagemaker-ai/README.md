@@ -50,6 +50,9 @@ Refer the diagram below to figure if your SageMaker AI domains are ready to be m
                 "datazone:GetEnvironment",
                 "datazone:CreateSubscriptionGrant",
                 "datazone:CreateProjectMembership",
+                "datazone:DeleteProjectMembership",
+                "datazone:CreateUserProfile",
+                "datazone:UpdateUserProfile",
                 "datazone:DeleteSubscriptionGrant",
                 "datazone:GetSubscriptionGrant",
                 "datazone:ListEnvironmentBlueprints",
@@ -61,6 +64,8 @@ Refer the diagram below to figure if your SageMaker AI domains are ready to be m
                 "datazone:ListProjectProfiles",
                 "datazone:AddPolicyGrant",
                 "datazone:SearchUserProfiles",
+                "datazone:SearchGroupProfiles",
+                "datazone:ListProjectMemberships",
                 "datazone:ListDomains"
             ],
             "Resource": [
@@ -259,6 +264,53 @@ python3 ai_domain_migration.py \
 
 The `--iam-profile` parameter is optional. When provided, the script uses credentials from the specified AWS profile. 
 Otherwise, falls back to default AWS credential resolution (environment variables, default profile, or instance role).
+
+### Using an administrator-preprovisioned role
+
+Use this mode when organization policies deny runtime IAM policy changes or
+`datazone:CreateUserProfile`. The migration verifies the administrator-prepared
+state instead of calling `iam:AttachRolePolicy`, `iam:PutRolePolicy`,
+`iam:UpdateAssumeRolePolicy`, `iam:TagRole`, or
+`datazone:CreateUserProfile`.
+
+```bash
+python3 ai_domain_migration.py \
+    --account-id <account_id> \
+    --region <region_name> \
+    --migration-config-file <migration-config.csv> \
+    --iam-profile <profile-name> \
+    --preprovisioned-role
+```
+
+The Unified Studio project must exist before its generated project role and
+project-specific policies are known. The supported workflow is:
+
+1. Run the migration with `--preprovisioned-role`.
+2. The script creates or reuses the project, prints the generated project role
+   ARN, and validates the role before changing environment-role associations.
+3. If validation fails, give the complete validation output to the
+   administrator. The administrator must:
+   - Add the generated project role's trust statements, managed policies,
+     inline policies, and required tags to the SageMaker AI domain execution
+     role.
+   - Ensure customer-managed policies no longer reference the generated
+     project role when they need to reference the preprovisioned role.
+   - Add the preprovisioned role to the Unified Studio provisioning role's
+     `byoInlinePolicy`.
+   - Create and assign the DataZone IAM-role profile for the preprovisioned
+     role.
+4. Change the affected CSV rows from `Failed` back to `Pending` and rerun the
+   same command.
+
+Validation completes before the script disassociates environment roles or
+rewrites subscription grants. The executor still needs read permissions for
+`datazone:SearchGroupProfiles`, `datazone:SearchUserProfiles`, and
+`datazone:ListProjectMemberships`.
+
+For recovery from a run that had already replaced the environment role, invoke
+the underlying `byor.py` command with `--project-role-arn` set to the original
+generated project role ARN. This gives the verifier the correct policy
+baseline.
 
 ## Important Notes on Post-Migration Experience
 

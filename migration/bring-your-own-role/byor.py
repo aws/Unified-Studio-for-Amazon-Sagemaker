@@ -12,6 +12,8 @@ ROLE_ENHANCEMENT = 'enhance-project-role'
 
 # There should only one Role found per Project
 def _find_project_execution_role(args, iam_client, datazone):
+    if getattr(args, 'project_role_arn', None):
+        return iam_client.get_role(RoleName=_get_role_name_from_arn(args.project_role_arn))
     tooling_env_id = datazone.list_environments(
         domainIdentifier=args.domain_id,
         projectIdentifier=args.project_id,
@@ -57,6 +59,162 @@ def _find_emr_instance_role_policies(args, iam_client):
 def _get_role_name_from_arn(role_arn):
     return role_arn.split('/')[-1]
 
+
+def _ensure_list(value):
+    return [value] if not isinstance(value, list) else value
+
+
+def _canonicalize(value):
+    if isinstance(value, dict):
+        return {key: _canonicalize(value[key]) for key in sorted(value)}
+    if isinstance(value, list):
+        canonical_items = [_canonicalize(item) for item in value]
+        return sorted(canonical_items, key=lambda item: json.dumps(item, sort_keys=True))
+    return value
+
+
+def _policy_statements(policy_document):
+    return _ensure_list(policy_document.get('Statement', []))
+
+
+def _missing_policy_statements(required_policy, actual_policy):
+    actual_statements = [_canonicalize(statement) for statement in _policy_statements(actual_policy)]
+    return [
+        statement for statement in _policy_statements(required_policy)
+        if _canonicalize(statement) not in actual_statements
+    ]
+
+
+def _statement_covers_role(required_statement, actual_statement, role_arn):
+    required_without_resource = {
+        key: value for key, value in required_statement.items() if key != 'Resource'
+    }
+    actual_without_resource = {
+        key: value for key, value in actual_statement.items() if key != 'Resource'
+    }
+    if _canonicalize(required_without_resource) != _canonicalize(actual_without_resource):
+        return False
+    return role_arn in _ensure_list(actual_statement.get('Resource', []))
+
+
+def _get_managed_policy_document(iam_client, policy_arn):
+    policy = iam_client.get_policy(PolicyArn=policy_arn)['Policy']
+    return iam_client.get_policy_version(
+        PolicyArn=policy_arn,
+        VersionId=policy['DefaultVersionId']
+    )['PolicyVersion']['Document']
+
+
+def _list_attached_policy_arns(iam_client, role_name):
+    paginator = iam_client.get_paginator('list_attached_role_policies')
+    policy_arns = []
+    for page in paginator.paginate(RoleName=role_name):
+        policy_arns.extend(policy['PolicyArn'] for policy in page['AttachedPolicies'])
+    return policy_arns
+
+
+def _list_inline_policy_names(iam_client, role_name):
+    paginator = iam_client.get_paginator('list_role_policies')
+    policy_names = []
+    for page in paginator.paginate(RoleName=role_name):
+        policy_names.extend(page['PolicyNames'])
+    return policy_names
+
+
+def _format_preprovisioning_errors(errors):
+    formatted_errors = '\n'.join(f"  - {error}" for error in errors)
+    return (
+        "Preprovisioned role validation failed. No environment roles or subscriptions were changed.\n"
+        "Ask an administrator to resolve every item below, then rerun the command:\n"
+        f"{formatted_errors}"
+    )
+
+
+def _search_datazone_profiles(datazone, operation_name, result_key, **kwargs):
+    items = []
+    next_token = None
+    while True:
+        request = dict(kwargs)
+        if next_token:
+            request['nextToken'] = next_token
+        response = getattr(datazone, operation_name)(**request)
+        items.extend(response.get(result_key, []))
+        next_token = response.get('nextToken')
+        if not next_token:
+            return items
+
+
+def _find_datazone_role_profile(datazone, domain_id, role_arn):
+    group_profiles = _search_datazone_profiles(
+        datazone,
+        'search_group_profiles',
+        'items',
+        domainIdentifier=domain_id,
+        groupType='IAM_ROLE_SESSION_GROUP',
+        searchText=role_arn
+    )
+    for profile in group_profiles:
+        if profile.get('rolePrincipalArn') == role_arn:
+            return {
+                'id': profile['id'],
+                'kind': 'group',
+                'status': profile.get('status')
+            }
+
+    user_profiles = _search_datazone_profiles(
+        datazone,
+        'search_user_profiles',
+        'items',
+        domainIdentifier=domain_id,
+        userType='DATAZONE_IAM_USER',
+        searchText=role_arn
+    )
+    for profile in user_profiles:
+        iam_details = profile.get('details', {}).get('iam', {})
+        if iam_details.get('arn') == role_arn:
+            return {
+                'id': profile['id'],
+                'kind': 'user',
+                'status': profile.get('status')
+            }
+    return None
+
+
+def _member_for_profile(profile):
+    if profile['kind'] == 'group':
+        return {'groupIdentifier': profile['id']}
+    return {'userIdentifier': profile['id']}
+
+
+def _project_member_ids(datazone, domain_id, project_id):
+    user_ids = set()
+    group_ids = set()
+    next_token = None
+    while True:
+        request = {
+            'domainIdentifier': domain_id,
+            'projectIdentifier': project_id
+        }
+        if next_token:
+            request['nextToken'] = next_token
+        response = datazone.list_project_memberships(**request)
+        for member in response.get('members', []):
+            details = member.get('memberDetails', {})
+            if details.get('user', {}).get('userId'):
+                user_ids.add(details['user']['userId'])
+            if details.get('group', {}).get('groupId'):
+                group_ids.add(details['group']['groupId'])
+        next_token = response.get('nextToken')
+        if not next_token:
+            return user_ids, group_ids
+
+
+def _profile_is_project_member(profile, user_ids, group_ids):
+    if profile['kind'] == 'group':
+        return profile['id'] in group_ids
+    return profile['id'] in user_ids
+
+
 # Combine trust policy statements and dedup on statement level
 def _combine_trust_policy(trust_policy_1, trust_policy_2):
     combined_trust_policy = trust_policy_1.copy()
@@ -82,7 +240,17 @@ def _statements_equal(statement1, statement2):
     return json.dumps(sorted_statement1, sort_keys=True) == json.dumps(sorted_statement2, sort_keys=True)
 
 
-def _update_trust_policy(role_name, new_trust_policy, iam_client, execute_flag):
+def _update_trust_policy(role_name, new_trust_policy, iam_client, execute_flag, preprovisioned_role=False):
+    if preprovisioned_role:
+        actual_trust_policy = iam_client.get_role(RoleName=role_name)['Role']['AssumeRolePolicyDocument']
+        missing_statements = _missing_policy_statements(new_trust_policy, actual_trust_policy)
+        if missing_statements:
+            raise RuntimeError(
+                f"IAM role {role_name} is missing required trust-policy statements: "
+                f"{json.dumps(missing_statements, sort_keys=True)}"
+            )
+        print(f"Verified preprovisioned trust policy for role: `{role_name}`\n")
+        return
     if execute_flag:
         print(f"Updating trust policy for role: {role_name}")
         iam_client.update_assume_role_policy(
@@ -95,16 +263,19 @@ def _update_trust_policy(role_name, new_trust_policy, iam_client, execute_flag):
         pprint(new_trust_policy)
         print(f"Trust policy update skipped for role: `{role_name}`, set --execute flag to True to do the actual update.\n")
 
-def _replace_role_arn_in_policies(policies_to_update, iam_client, old_role_arn, new_role_arn, execute_flag):
+def _replace_role_arn_in_policies(policies_to_update, iam_client, old_role_arn, new_role_arn, execute_flag,
+                                  preprovisioned_role=False):
     for policy_arn in policies_to_update:
         policy = iam_client.get_policy(PolicyArn=policy_arn)['Policy']
-        policy_document = iam_client.get_policy_version(
-            PolicyArn=policy_arn,
-            VersionId=policy['DefaultVersionId']
-        )['PolicyVersion']['Document']
+        policy_document = _get_managed_policy_document(iam_client, policy_arn)
         # Replace the role ARN if source_role is present in customer managed policy
         policy_str = json.dumps(policy_document)
         if old_role_arn in policy_str:
+            if preprovisioned_role:
+                raise RuntimeError(
+                    f"Managed policy {policy_arn} still references generated project role {old_role_arn}. "
+                    f"Update it to reference {new_role_arn} before migration."
+                )
             update_policy_str = policy_str.replace(old_role_arn, new_role_arn)
             print(f"Updated policy doc for {policy['PolicyName']}: {update_policy_str}\n")
             if execute_flag:
@@ -122,14 +293,30 @@ def _replace_role_arn_in_policies(policies_to_update, iam_client, old_role_arn, 
 #   case 1: Role Replacement
 #   case 2: Role Enhancement
 # so basically just check all source role's managed policies, and update any source role arn string to dest role arn
-def _copy_managed_policies_arn(source_role, dest_role, iam_client, execute_flag):
-    paginator = iam_client.get_paginator('list_attached_role_policies')
-    policies_to_attach = []
-    for page in paginator.paginate(RoleName=source_role['Role']['RoleName']):
-        for policy in page['AttachedPolicies']:
-            policies_to_attach.append(policy['PolicyArn'])
+def _copy_managed_policies_arn(source_role, dest_role, iam_client, execute_flag, preprovisioned_role=False):
+    policies_to_attach = _list_attached_policy_arns(iam_client, source_role['Role']['RoleName'])
     
-    _replace_role_arn_in_policies(policies_to_attach, iam_client, source_role['Role']['Arn'], dest_role['Role']['Arn'], execute_flag)
+    _replace_role_arn_in_policies(
+        policies_to_attach,
+        iam_client,
+        source_role['Role']['Arn'],
+        dest_role['Role']['Arn'],
+        execute_flag,
+        preprovisioned_role
+    )
+
+    if preprovisioned_role:
+        attached_to_destination = set(
+            _list_attached_policy_arns(iam_client, dest_role['Role']['RoleName'])
+        )
+        missing_policies = sorted(set(policies_to_attach) - attached_to_destination)
+        if missing_policies:
+            raise RuntimeError(
+                f"IAM role {dest_role['Role']['RoleName']} is missing managed policies: "
+                f"{', '.join(missing_policies)}"
+            )
+        print(f"Verified managed policies on preprovisioned role: `{dest_role['Role']['RoleName']}`\n")
+        return
 
     if execute_flag:
         for policy_arn in policies_to_attach:
@@ -143,28 +330,46 @@ def _copy_managed_policies_arn(source_role, dest_role, iam_client, execute_flag)
         pprint(policies_to_attach)
         print(f"Managed policies attach skipped for role: `{dest_role['Role']['RoleName']}`, set --execute flag to True to do the actual update.\n")
 
-def _copy_inline_policies_arn(source_role, dest_role, iam_client, execute_flag):
-    paginator = iam_client.get_paginator('list_role_policies')
-    for page in paginator.paginate(RoleName=source_role['Role']['RoleName']):
-        for policy_name in page['PolicyNames']:
-            policy_document = iam_client.get_role_policy(
-                RoleName=source_role['Role']['RoleName'],
+def _copy_inline_policies_arn(source_role, dest_role, iam_client, execute_flag, preprovisioned_role=False):
+    source_role_name = source_role['Role']['RoleName']
+    destination_role_name = dest_role['Role']['RoleName']
+    destination_policy_names = set(_list_inline_policy_names(iam_client, destination_role_name))
+    for policy_name in _list_inline_policy_names(iam_client, source_role_name):
+        policy_document = iam_client.get_role_policy(
+            RoleName=source_role_name,
+            PolicyName=policy_name
+        )['PolicyDocument']
+        if preprovisioned_role:
+            if policy_name not in destination_policy_names:
+                raise RuntimeError(
+                    f"IAM role {destination_role_name} is missing inline policy {policy_name}"
+                )
+            destination_policy_document = iam_client.get_role_policy(
+                RoleName=destination_role_name,
                 PolicyName=policy_name
             )['PolicyDocument']
-            if execute_flag:
-                iam_client.put_role_policy(
-                    RoleName=dest_role['Role']['RoleName'],
-                    PolicyName=policy_name,
-                    PolicyDocument=str(policy_document).replace("'", '"')
+            if _canonicalize(policy_document) != _canonicalize(destination_policy_document):
+                raise RuntimeError(
+                    f"Inline policy {policy_name} on IAM role {destination_role_name} "
+                    "does not match the generated project role policy"
                 )
-            else:
-                print(f"New inline policy `{policy_name}` would be copied to role `{dest_role['Role']['RoleName']}` is:")
-                pprint(policy_document)
-                print(f"Skipping copy new inline policy `{policy_name}` to role `{dest_role['Role']['RoleName']}`, set --execute flag to True to do the actual copy.\n")
+        elif execute_flag:
+            iam_client.put_role_policy(
+                RoleName=destination_role_name,
+                PolicyName=policy_name,
+                PolicyDocument=str(policy_document).replace("'", '"')
+            )
+        else:
+            print(f"New inline policy `{policy_name}` would be copied to role `{destination_role_name}` is:")
+            pprint(policy_document)
+            print(f"Skipping copy new inline policy `{policy_name}` to role `{destination_role_name}`, set --execute flag to True to do the actual copy.\n")
+    if preprovisioned_role:
+        print(f"Verified inline policies on preprovisioned role: `{destination_role_name}`\n")
+        return
     if execute_flag:
-        print(f"Successfully copied inline policies to role: `{dest_role['Role']['RoleName']}`\n")
+        print(f"Successfully copied inline policies to role: `{destination_role_name}`\n")
  
-def _copy_tags(source_role_name, dest_role_name, iam_client, execute_flag):
+def _copy_tags(source_role_name, dest_role_name, iam_client, execute_flag, preprovisioned_role=False):
     paginator = iam_client.get_paginator('list_role_tags')
     tags_to_copy = []
     for page in paginator.paginate(RoleName=source_role_name):
@@ -173,6 +378,21 @@ def _copy_tags(source_role_name, dest_role_name, iam_client, execute_flag):
                 tag['Value'] = dest_role_name
                 print(f"Update IAM Role's tag {tag['Key']} value from {source_role_name} to {dest_role_name}\n")
             tags_to_copy.append(tag)
+    if preprovisioned_role:
+        destination_tags = {}
+        for page in paginator.paginate(RoleName=dest_role_name):
+            destination_tags.update({tag['Key']: tag['Value'] for tag in page['Tags']})
+        missing_tags = [
+            tag for tag in tags_to_copy
+            if destination_tags.get(tag['Key']) != tag['Value']
+        ]
+        if missing_tags:
+            raise RuntimeError(
+                f"IAM role {dest_role_name} is missing required tags: "
+                f"{json.dumps(missing_tags, sort_keys=True)}"
+            )
+        print(f"Verified tags on preprovisioned role: `{dest_role_name}`\n")
+        return
     if tags_to_copy and execute_flag:
         iam_client.tag_role(
             RoleName=dest_role_name,
@@ -550,10 +770,8 @@ def _update_s3_lakeformation_registration(lakeformation, old_role_arn, new_role_
         else:
             print(f"Skipping updating LakeFormation Resource: `{resource['ResourceArn']}` by updating RoleArn to `{new_role_arn}`, set --execute flag to True to do the actual update.\n")
 
-def _ensure_list(value):
-    return [value] if not isinstance(value, list) else value
-
-def _update_smus_provisioning_role(datazone_client, iam_client, domain_id, byor_role_arn, execute_flag):
+def _update_smus_provisioning_role(datazone_client, iam_client, domain_id, byor_role_arn, execute_flag,
+                                   preprovisioned_role=False):
     # Find Provisioning Role of current SMUS Domain
     tooling_blueprint = datazone_client.list_environment_blueprints(
         domainIdentifier=domain_id,
@@ -564,7 +782,7 @@ def _update_smus_provisioning_role(datazone_client, iam_client, domain_id, byor_
         domainIdentifier=domain_id,
         environmentBlueprintIdentifier=tooling_blueprint['id']
     )
-    provisioning_role_name = tooling_blueprint_config['provisioningRoleArn'].split('/')[2]
+    provisioning_role_name = _get_role_name_from_arn(tooling_blueprint_config['provisioningRoleArn'])
     print(f"Updating SageMaker Unified Studio Provisioning Role \"{provisioning_role_name}\" to have necessary permissions to {byor_role_arn}...\n")
     # Get AWS managed policy "SageMakerStudioProjectProvisioningRolePolicy"
     managed_policies = iam_client.list_attached_role_policies(
@@ -588,6 +806,30 @@ def _update_smus_provisioning_role(datazone_client, iam_client, domain_id, byor_
     # Define the policy document, replace resource to "byor_role_arn"
     for statement_to_append in new_policy_statements_to_append:
         statement_to_append['Resource'] = [byor_role_arn]
+    if preprovisioned_role:
+        try:
+            current_inline_policy_doc = iam_client.get_role_policy(
+                RoleName=provisioning_role_name,
+                PolicyName='byoInlinePolicy'
+            )['PolicyDocument']
+        except iam_client.exceptions.NoSuchEntityException:
+            raise RuntimeError(
+                f"Provisioning role {provisioning_role_name} is missing inline policy byoInlinePolicy"
+            )
+        missing_statements = [
+            required for required in new_policy_statements_to_append
+            if not any(
+                _statement_covers_role(required, actual, byor_role_arn)
+                for actual in _policy_statements(current_inline_policy_doc)
+            )
+        ]
+        if missing_statements:
+            raise RuntimeError(
+                f"Provisioning role {provisioning_role_name} does not grant the required access to "
+                f"{byor_role_arn}: {json.dumps(missing_statements, sort_keys=True)}"
+            )
+        print(f"Verified provisioning role access for preprovisioned role {byor_role_arn}\n")
+        return
     try:
         # Get existing inline policy and combine its Resource with "new_policy_statements_to_append"
         current_inline_policy = iam_client.get_role_policy(
@@ -634,77 +876,81 @@ def _update_smus_provisioning_role(datazone_client, iam_client, domain_id, byor_
     if not execute_flag:
         print(f"Skipping update/create inline policy 'byoInlinePolicy' for role {provisioning_role_name}, set --execute flag to True to do the actual update.\n")
 
-def _replace_project_contributor_member(datazone, domain_id, project_id, bring_in_role_arn, project_rol_arn, execute_flag):
+def _replace_project_contributor_member(datazone, domain_id, project_id, bring_in_role_arn, project_role_arn,
+                                        execute_flag, preprovisioned_role=False):
     if execute_flag:
-        try:
-            # Resigter new Role in Domain UserProfile
-            user_id = datazone.create_user_profile(
-                domainIdentifier=domain_id,
-                userIdentifier=bring_in_role_arn,
-                userType='IAM_ROLE'
-            )['id']
-            print(f"Created UserProfile for role {bring_in_role_arn} in Domain {domain_id}...\n")
-        except ClientError as e:
-            if e.response['Error']['Code'] == 'ValidationException':
-                print(f"Role [{bring_in_role_arn}] already has UserProfile created in Domain {domain_id}, skipping...\n")
-                user_id = datazone.search_user_profiles(
+        role_profile = _find_datazone_role_profile(datazone, domain_id, bring_in_role_arn)
+        if preprovisioned_role:
+            if not role_profile:
+                raise RuntimeError(
+                    f"No preprovisioned DataZone IAM role profile was found for {bring_in_role_arn}"
+                )
+            if role_profile.get('status') not in ('ACTIVATED', 'ASSIGNED'):
+                raise RuntimeError(
+                    f"DataZone profile {role_profile['id']} for {bring_in_role_arn} is not active/assigned"
+                )
+            print(f"Using preprovisioned DataZone role profile {role_profile['id']}\n")
+        elif not role_profile:
+            try:
+                response = datazone.create_user_profile(
                     domainIdentifier=domain_id,
-                    searchText=bring_in_role_arn,
-                    userType='DATAZONE_IAM_USER'
-                )['items'][0]['id']
-            else:
-                raise e
-        
+                    userIdentifier=bring_in_role_arn,
+                    userType='IAM_ROLE'
+                )
+            except ClientError as error:
+                if error.response['Error']['Code'] != 'ValidationException':
+                    raise
+                response = {}
+            role_profile = _find_datazone_role_profile(datazone, domain_id, bring_in_role_arn) or {
+                'id': response.get('id'), 'kind': 'user', 'status': response.get('status')
+            }
+            if not role_profile.get('id'):
+                raise RuntimeError(
+                    f"DataZone reported an existing profile for {bring_in_role_arn}, "
+                    "but the profile could not be found"
+                )
+
         try:
-            # Make sure the UserProfile associated with new Role is ACTIVE
-            datazone.update_user_profile(
-                domainIdentifier=domain_id,
-                status='ACTIVATED',
-                type='IAM',
-                userIdentifier=user_id
-            )
-            # Add new Role as project's contributor member
-            datazone.create_project_membership(
-                designation='PROJECT_CONTRIBUTOR',
-                domainIdentifier=domain_id,
-                member={
-                    'userIdentifier': user_id
-                },
-                projectIdentifier=project_id
-            )
-            print(f"Added role [{bring_in_role_arn}] as project's contributor member in Project {project_id}...\n")
-        except ClientError as e:
-            if e.response['Error']['Code'] == 'ValidationException':
-                print(f"Role {bring_in_role_arn} already has project's contributor member in Project {project_id}, skipping...\n")
-        
-        try:
-            # Find old project user role
-            user_id_to_delete = datazone.search_user_profiles(
-                domainIdentifier=domain_id,
-                searchText=project_rol_arn,
-                userType='DATAZONE_IAM_USER'
-            )['items'][0]['id']
-            # Delete old role from Project members list
+            if not preprovisioned_role and role_profile['kind'] == 'user':
+                datazone.update_user_profile(
+                    domainIdentifier=domain_id,
+                    status='ACTIVATED',
+                    type='IAM',
+                    userIdentifier=role_profile['id']
+                )
+            user_ids, group_ids = _project_member_ids(datazone, domain_id, project_id)
+            if not _profile_is_project_member(role_profile, user_ids, group_ids):
+                datazone.create_project_membership(
+                    designation='PROJECT_CONTRIBUTOR',
+                    domainIdentifier=domain_id,
+                    member=_member_for_profile(role_profile),
+                    projectIdentifier=project_id
+                )
+                print(f"Added role [{bring_in_role_arn}] as project contributor in Project {project_id}...\n")
+
+            old_profile = _find_datazone_role_profile(datazone, domain_id, project_role_arn)
+            if not old_profile or old_profile['id'] == role_profile['id']:
+                return
+            user_ids, group_ids = _project_member_ids(datazone, domain_id, project_id)
+            if not _profile_is_project_member(old_profile, user_ids, group_ids):
+                return
             datazone.delete_project_membership(
                 domainIdentifier=domain_id,
                 projectIdentifier=project_id,
-                member={
-                    'userIdentifier': user_id_to_delete
-                },
+                member=_member_for_profile(old_profile),
             )
-            # Deactive the UserProfile associated with old Role
-            # One role should only be use as one project's user role, so this won't impact other projects
-            datazone.update_user_profile(
-                domainIdentifier=domain_id,
-                status='DEACTIVATED',
-                type='IAM',
-                userIdentifier=user_id_to_delete
-            )
-            print(f"Removed old project user role [{project_rol_arn}] from project's members list in Project {project_id}...\n")
+            if old_profile['kind'] == 'user':
+                datazone.update_user_profile(
+                    domainIdentifier=domain_id,
+                    status='DEACTIVATED',
+                    type='IAM',
+                    userIdentifier=old_profile['id']
+                )
+            print(f"Removed old project user role [{project_role_arn}] from project's members list in Project {project_id}...\n")
         except ClientError as e:
             raise e
     else:
-        print(f"Skipping replace role [{bring_in_role_arn}] with old role [{project_rol_arn}] as project's contributor member in Project {project_id}, set --execute flag to True to do the actual update.\n")
+        print(f"Skipping replace role [{bring_in_role_arn}] with old role [{project_role_arn}] as project's contributor member in Project {project_id}, set --execute flag to True to do the actual update.\n")
 
 def _add_common_arguments(parser):
     parser.add_argument('--domain-id',
@@ -741,6 +987,17 @@ def _parse_args():
                         help='WARNING: Setting this flag to True allows the script to stop existing resources. Only use if you explicitly accept compute resources stopping.',
                         action='store_true',
                         default=False)
+    parser_use_own_role.add_argument(
+        '--preprovisioned-role',
+        help='Verify role policies and DataZone profile prepared by an administrator instead of modifying IAM roles or creating the profile.',
+        action='store_true',
+        default=False
+    )
+    parser_use_own_role.add_argument(
+        '--project-role-arn',
+        help='Original generated project role ARN. Use this to resume a partially completed role replacement.',
+        required=False
+    )
     _add_common_arguments(parser_use_own_role)
         
     # Parser for enhance-project-role command
@@ -769,19 +1026,85 @@ def byor_main():
         print(f"Use bring in Role: {args.bring_in_role_arn} as Project Role...\n")
         # Get Project's Auto Generated Execution Role, there should be one role per project
         project_role = _find_project_execution_role(args, iam_client, datazone)
+        if args.preprovisioned_role:
+            print(f"Generated project role used as the preprovisioning baseline: {project_role['Role']['Arn']}\n")
         # Get Execution Role's trust policy
         project_role_trust_policy = project_role['Role']['AssumeRolePolicyDocument']
         byor_role = iam_client.get_role(
             RoleName=_get_role_name_from_arn(args.bring_in_role_arn),
         )
+        if (
+            args.preprovisioned_role
+            and project_role['Role']['Arn'] == byor_role['Role']['Arn']
+            and not args.project_role_arn
+        ):
+            raise RuntimeError(
+                "The project environment already reports the preprovisioned role. "
+                "For a partial-run recovery, rerun byor.py with --project-role-arn set to the "
+                "original generated project role ARN so its required policies can be verified."
+            )
 
         environment_with_role_lists = _get_enviroments_with_role_from_project(datazone, args, project_role['Role']['Arn'])
+        if args.preprovisioned_role:
+            validation_errors = []
+            emr_instance_role_policies = _find_emr_instance_role_policies(args, iam_client)
+            new_trust_policy = _combine_trust_policy(
+                project_role_trust_policy,
+                byor_role['Role']['AssumeRolePolicyDocument']
+            )
+            validations = [
+                lambda: _update_trust_policy(
+                    byor_role['Role']['RoleName'], new_trust_policy, iam_client, False, True
+                ),
+                lambda: _copy_managed_policies_arn(project_role, byor_role, iam_client, False, True),
+                lambda: _copy_inline_policies_arn(project_role, byor_role, iam_client, False, True),
+                lambda: _copy_tags(
+                    project_role['Role']['RoleName'], byor_role['Role']['RoleName'], iam_client, False, True
+                ),
+                lambda: _update_smus_provisioning_role(
+                    datazone, iam_client, args.domain_id, args.bring_in_role_arn, False, True
+                )
+            ]
+            if emr_instance_role_policies:
+                validations.append(
+                    lambda: _replace_role_arn_in_policies(
+                        emr_instance_role_policies,
+                        iam_client,
+                        project_role['Role']['Arn'],
+                        args.bring_in_role_arn,
+                        False,
+                        True
+                    )
+                )
+            for validation in validations:
+                try:
+                    validation()
+                except Exception as error:
+                    validation_errors.append(str(error))
+            role_profile = _find_datazone_role_profile(datazone, args.domain_id, args.bring_in_role_arn)
+            if not role_profile:
+                validation_errors.append(
+                    f"No DataZone IAM role profile exists for {args.bring_in_role_arn}"
+                )
+            elif role_profile.get('status') not in ('ACTIVATED', 'ASSIGNED'):
+                validation_errors.append(
+                    f"DataZone profile {role_profile['id']} is not active/assigned"
+                )
+            if validation_errors:
+                raise RuntimeError(_format_preprovisioning_errors(validation_errors))
+            print("Preprovisioned role validation completed before environment changes.\n")
         # Replace Project Execution Role with BYOR Role
         # Role is attached with environment, and one Project contains multiple environments, so 
         # we need to replace role for each environment within a project
         for environment in environment_with_role_lists:
             print(f"Will replace IAM role {environment.user_role_arn} attached to environment name: {environment.name}, id: {environment.id} with new role {args.bring_in_role_arn}...\n")
-            if args.execute:
+            role_already_associated = environment.user_role_arn == args.bring_in_role_arn
+            if role_already_associated:
+                print(
+                    f"Environment {environment.id} already uses {args.bring_in_role_arn}; "
+                    "skipping role reassociation and permission-copy operations.\n"
+                )
+            elif args.execute:
                 try:
                     print(f"Disassociate role {environment.user_role_arn} from environment {environment.id} in progress... \n")
                     response = datazone.disassociate_environment_role(
@@ -815,31 +1138,40 @@ def byor_main():
             else:
                 print(f"Skipping disassociate and associate role operations, set --execute flag to True to do the actual update. environment {environment.name} still use {environment.user_role_arn} as its role.\n")
             # Copy DataZone Subscriptions
-            if not environment.name == 'RedshiftServerless' and not environment.name == 'Redshift Serverless':
+            if (
+                not role_already_associated
+                and environment.name != 'RedshiftServerless'
+                and environment.name != 'Redshift Serverless'
+            ):
                 _copy_datazone_subscriptions(args.domain_id, environment.id, datazone, byor_role, args.execute)
             # Copy LakeFormation Permissions and Opt-Ins
-            _copy_lakeformation_grants(lakeformation, environment.user_role_arn, args.bring_in_role_arn, args.execute, args.command)
-            _copy_lakeformation_opt_ins(lakeformation, environment.user_role_arn, args.bring_in_role_arn, args.execute)
+            if not role_already_associated:
+                _copy_lakeformation_grants(lakeformation, environment.user_role_arn, args.bring_in_role_arn, args.execute, args.command)
+                _copy_lakeformation_opt_ins(lakeformation, environment.user_role_arn, args.bring_in_role_arn, args.execute)
 
         # Get BYOR Role's trust policy
         byor_role_trust_policy = byor_role['Role']['AssumeRolePolicyDocument']
 
         # Combine trust policy and update BYOR Role's trust policy
         new_trust_policy = _combine_trust_policy(project_role_trust_policy, byor_role_trust_policy)
-        _update_trust_policy(byor_role['Role']['RoleName'], new_trust_policy, iam_client, args.execute)
+        if not args.preprovisioned_role:
+            _update_trust_policy(byor_role['Role']['RoleName'], new_trust_policy, iam_client, args.execute)
 
         # Copy Project Execution Role's managed policies to BYOR Role
-        _copy_managed_policies_arn(project_role, byor_role, iam_client, args.execute)
+        if not args.preprovisioned_role:
+            _copy_managed_policies_arn(project_role, byor_role, iam_client, args.execute)
 
         # Copy Project Execution Role's inline policies to BYOR Role
-        _copy_inline_policies_arn(project_role, byor_role, iam_client, args.execute)
+        if not args.preprovisioned_role:
+            _copy_inline_policies_arn(project_role, byor_role, iam_client, args.execute)
 
         # Copy Project Execution Role's Tags to BYOR Role
-        _copy_tags(project_role['Role']['RoleName'], byor_role['Role']['RoleName'], iam_client, args.execute)
+        if not args.preprovisioned_role:
+            _copy_tags(project_role['Role']['RoleName'], byor_role['Role']['RoleName'], iam_client, args.execute)
         
         # Update associated EMR Instance Role's policies
         emr_instance_role_policies = _find_emr_instance_role_policies(args, iam_client)
-        if emr_instance_role_policies is not None:
+        if emr_instance_role_policies is not None and not args.preprovisioned_role:
             _replace_role_arn_in_policies(emr_instance_role_policies,
                                         iam_client,
                                         project_role['Role']['Arn'],
@@ -858,10 +1190,11 @@ def byor_main():
         # Update LakeFormation Data lake locations resources with the new Role
         _update_s3_lakeformation_registration(lakeformation, project_role['Role']['Arn'], args.bring_in_role_arn, args.execute)
         # Create or update SMUS Provisioning Role's inline policy
-        _update_smus_provisioning_role(datazone, iam_client, args.domain_id, args.bring_in_role_arn, args.execute)
+        if not args.preprovisioned_role:
+            _update_smus_provisioning_role(datazone, iam_client, args.domain_id, args.bring_in_role_arn, args.execute)
         # Add new Role as Proejct contributor member, remove old project user role from project member list
         _replace_project_contributor_member(datazone, args.domain_id,args.project_id, args.bring_in_role_arn,
-                                            project_role['Role']['Arn'], args.execute)
+                                            project_role['Role']['Arn'], args.execute, args.preprovisioned_role)
                 
         if args.execute:
             print(f"Successfully replace Project {args.project_id} user role with your own role: {byor_role['Role']['Arn']}")

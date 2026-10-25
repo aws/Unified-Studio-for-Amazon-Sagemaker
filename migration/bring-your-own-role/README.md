@@ -33,11 +33,13 @@ Please review this section carefully before proceeding to execute the script.
                 "datazone:GetSubscriptionGrant",
                 "datazone:ListEnvironmentBlueprints",
                 "datazone:GetEnvironmentBlueprintConfiguration",
-				"datazone:CreateProjectMembership",
-				"datazone:DeleteProjectMembership",
-				"datazone:CreateUserProfile",
-				"datazone:SearchUserProfiles",
-				"datazone:UpdateUserProfile"
+                "datazone:CreateProjectMembership",
+                "datazone:DeleteProjectMembership",
+                "datazone:CreateUserProfile",
+                "datazone:SearchUserProfiles",
+                "datazone:SearchGroupProfiles",
+                "datazone:UpdateUserProfile",
+                "datazone:ListProjectMemberships"
             ],
             "Resource": [
                 "*"
@@ -153,6 +155,54 @@ python3 byor.py enhance-project-role \
     --region <region-code> \
     --iam-profile <aws-credentials-profile-name>
 ```
+
+#### Use Case 3: Use a role preprovisioned by an administrator
+
+This mode is intended for environments that deny runtime IAM policy mutations
+or `datazone:CreateUserProfile`. It validates the prepared role and DataZone
+profile before changing any environment-role association or subscription
+grant.
+
+```bash
+python3 byor.py use-your-own-role \
+    --domain-id <SageMaker-Unified-Studio-Domain-Id> \
+    --project-id <SageMaker-Unified-Studio-Project-Id> \
+    --bring-in-role-arn <Preprovisioned-IAM-Role-Arn> \
+    --region <region-code> \
+    --iam-profile <aws-credentials-profile-name> \
+    --preprovisioned-role \
+    --execute
+```
+
+The administrator must prepare the role using the project's generated user
+role as the baseline:
+
+- Include all required trust-policy statements.
+- Attach the same managed policies and create equivalent inline policies.
+- Add the required project-role tags.
+- Update the Unified Studio provisioning role's `byoInlinePolicy` to cover the
+  preprovisioned role.
+- Create and assign a DataZone IAM-role profile for the role.
+- Update any project EMR instance-role policies that still reference the
+  generated project role.
+
+If a prior run already associated the preprovisioned role with the
+environment, provide the original generated role explicitly:
+
+```bash
+python3 byor.py use-your-own-role \
+    --domain-id <domain-id> \
+    --project-id <project-id> \
+    --bring-in-role-arn <preprovisioned-role-arn> \
+    --project-role-arn <original-generated-project-role-arn> \
+    --preprovisioned-role \
+    --execute
+```
+
+Preprovisioned mode does not call `iam:AttachRolePolicy`,
+`iam:PutRolePolicy`, `iam:UpdateAssumeRolePolicy`, `iam:TagRole`, or
+`datazone:CreateUserProfile`.
+
 ### Important Notes
 - Both commands will display a preview of proposed changes by default. To apply the changes for `use-your-own-role`, add the `--execute` `--force-update` flag. To apply the changes for `enhance-project-role`, add the `--execute` flag
 - The `--region` parameter is optional and only required when necessary. If not specified, it defaults to AWS region specified in the CLI credentials config
