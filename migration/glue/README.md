@@ -50,14 +50,20 @@ python -m migration.glue.cli --job-name my-etl-job \
   --domain-id dzd-example --project-id project-example --region eu-north-1 --apply
 ```
 
-The tool snapshots the job, copies its script into the project's bucket, updates
-the script location and job settings, then adds migration tags. Original script
+The tool snapshots the job, grants the project execution role `iam:PassRole`
+on the job's execution role, copies its script into the project's bucket,
+updates the script location and job settings, then adds migration tags. The
+grant is restricted to `iam:PassedToService=glue.amazonaws.com`. Original script
 bytes, connection names and the job's IAM role are preserved. The update removes
 the old source-control link and normalizes known Glue boolean enable flags for
 the Studio editor.
 
-The project bucket is resolved through the project's default IAM connection.
-Use `--bucket BUCKET_NAME` to override it, or `--domain-region REGION` when the
+The project execution role and bucket are resolved through the project's default
+IAM connection. Dry runs include the proposed grant under `passRole` without
+writing IAM policies. On apply, each distinct job role gets a dedicated inline
+policy named `SMUSGlueJobPassRole-<hash>` on the project role. Existing matching
+policies are reused; conflicting policies fail without being overwritten.
+Use `--bucket BUCKET_NAME` to override the bucket, or `--domain-region REGION` when the
 domain is in a different Region from the Glue resources. `--region` defaults to
 `us-east-2`; set it explicitly for your resources.
 
@@ -124,9 +130,10 @@ Microsoft SQL Server, Oracle, Google BigQuery, Snowflake and Teradata.
 - These cloning restrictions do not restrict the original connections preserved
   by job migration.
 - Only Python script jobs are supported; this tool does not convert visual ETL jobs.
-- Job migration skips a job whose `AmazonDataZoneProject` tag already matches the
-  target project. Repeated cloning reuses ready clones with matching provenance;
-  conflicting names fail before creation.
+- Job migration skips job updates when `AmazonDataZoneProject` already matches
+  the target project, but still ensures the project's PassRole grant on apply.
+  This also repairs grants for previously migrated jobs. Repeated cloning reuses
+  ready clones with matching provenance; conflicting names fail before creation.
 - Original connection names are stored in indexed
   `AmazonDataZonePreMigrationConnection-*` tags. Glue's 50-user-tag limit leaves
   at most 48 names, fewer when other tags exist. Names must satisfy Glue tag
@@ -169,7 +176,9 @@ concurrent editing first. The original script remains at its source location.
 Snapshots must contain `priorJobTags`, which migration records before writing.
 Rollback rejects snapshots without this tag history before changing the job.
 
-Rollback retains cloned connections, secret tags, copied scripts and snapshots.
+Rollback retains cloned connections, secret tags, copied scripts, snapshots and
+project PassRole policies. A failed migration can also leave its PassRole policy;
+other jobs may share that grant. Inspect consumers before manually removing it.
 If cloning fails partway through, completed clones and clones whose creation
 outcome is uncertain may remain. Error notes identify retained resources and
 failed cleanup. Verify consumers before manually deleting clones or removing
@@ -241,6 +250,16 @@ Only include permissions for the commands you need.
     },
     {
       "Effect": "Allow",
+      "Action": "iam:GetRole",
+      "Resource": "arn:aws:iam::<ACCOUNT_ID>:role/<JOB_ROLE_NAME>"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["iam:GetRolePolicy", "iam:PutRolePolicy"],
+      "Resource": "arn:aws:iam::<ACCOUNT_ID>:role/<PROJECT_ROLE_NAME>"
+    },
+    {
+      "Effect": "Allow",
       "Action": [
         "datazone:ListEnvironments", "datazone:GetEnvironment",
         "datazone:ListConnections", "datazone:GetConnection",
@@ -273,10 +292,22 @@ Only include permissions for the commands you need.
 
 Connection cloning alone needs no S3 access or job-update permissions, and needs
 `glue:GetJob` only when using `--job-name`. Job migration uses no Secrets Manager
-APIs; its connection/trigger reads are for best-effort snapshots. With `--bucket`,
-job migration needs no DataZone calls. Rollback needs S3 read access to the
-snapshot plus Glue update/tag permissions. Tag policies must allow restoration
-of the prior tag values.
+APIs; its connection/trigger reads are for best-effort snapshots. Job migration
+always needs `datazone:ListConnections` and `datazone:GetConnection` to resolve the
+project role, including with `--bucket` and on already-migrated jobs.
+`datazone:GetEnvironment` is only needed for bucket resolution.
+Rollback needs S3 read access to the snapshot plus Glue update/tag permissions.
+Tag policies must allow restoration of the prior tag values.
+
+The new caller permissions are `iam:GetRolePolicy` to check the project's grant,
+`iam:PutRolePolicy` to create it on apply, and `iam:GetRole` when Glue supplies a
+bare job role name. Include role paths in `<JOB_ROLE_NAME>` and
+`<PROJECT_ROLE_NAME>` where applicable. Scope policy-write access to the intended
+project roles: `iam:PutRolePolicy` permits changing those roles' inline policies.
+Dry runs need the reads but not `iam:PutRolePolicy`. Connection cloning and
+rollback do not need these additional IAM permissions. The grant does not bypass
+permissions boundaries or organization policies, and creation fails if the
+project role's inline-policy size quota is exhausted.
 
 These DataZone actions require `Resource: "*"`; they do not support domain ARN
 scoping. The examples restrict the requested Region, and project membership
