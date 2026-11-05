@@ -4,6 +4,7 @@ This repository contains utilities for Amazon SageMaker Unified Studio. It is st
 - Cloudformation
     - [Templates](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/tree/main/cloudformation) to setup and Create a new Amazon SageMaker Unified domain and project
 - Migration 
+    - Migrate [AWS Glue jobs and connections](migration/glue/README.md) to a SageMaker Unified Studio project, with role-based job discovery.
     - Migrate [Amazon Athena](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/tree/main/migration/athena) and [Amazon EMR](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/tree/main/migration/emr) resources to SageMaker Unified Studio project. 
     - [Bring your own AWS Identity and Access Management (IAM) role](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/tree/main/migration/bring-your-own-role) in SageMaker Unified Studio project.
     - [Bring your own Glue Data Catalog assets](https://github.com/aws/Unified-Studio-for-Amazon-Sagemaker/tree/main/migration/bring-your-own-gdc-assets) in SageMaker Unified Studio project.
