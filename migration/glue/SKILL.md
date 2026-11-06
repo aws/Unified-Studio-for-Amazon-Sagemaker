@@ -14,7 +14,11 @@ For every job in the requested migration, connection cloning is required before 
 
 Both per-job commands take `--job-name`, `--domain-id`, `--project-id`, `--region`, `--apply`. `--region` is the project resource region. If the domain is elsewhere, add `--domain-region` to both per-job commands; discovery only supports a single region. Add `--profile` if supplied. Dry run: omit `--apply` from every command, preview both job and connection steps for all selected/matched jobs, report previews, stop. Failures: report output and incomplete jobs and stop further migration commands. Still offer cutover for earlier jobs with successfully cloned connections; never report a failed job complete or offer its cutover.
 
-CLIs own migration. No implementation reads, extra checks/tests/backups/readbacks or ad-hoc scripts/fixes.
+CLIs and the rollback helper own migration and rollback. No implementation reads, extra checks/tests/backups/readbacks or ad-hoc scripts/fixes.
+
+For requested migration rollback, use `migration.glue.rollback.rollback_from_snapshot(session, snapshot)` with the snapshot from before the first change, following the [README recovery example](README.md#recovery). Preview first; use `apply=True` when rollback is authorized. Never reimplement restoration with manual AWS calls. Report that rollback overwrites later job edits and retains cloned connections, secret tags, copied scripts, snapshots and project PassRole policies. Recovery from a failed connection cutover uses its live backups as described below, not the pre-migration snapshot.
+
+After rollback completes, explicitly tell the user: **“Rollback did not remove the `iam:PassRole` permission on the Glue job execution role from the SMUS project execution role.”** Explain that other jobs may share the grant and consumers must be checked before manually removing it.
 
 Cloning automatically tags untagged and foreign-project secrets `for-use-with-all-datazone-projects=true`, preserving existing project ownership. Proceed without a separate sharing confirmation or `--shared-secret` flag. Report the CLI's tag changes as part of the result.
 

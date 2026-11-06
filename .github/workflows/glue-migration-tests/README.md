@@ -72,6 +72,9 @@ permissions and conditional secret access as described in
 [the tool README](../../../migration/glue/README.md#iam-permissions).
 The live secret-sharing tests also require Studio project-role permissions.
 Keep these test permissions scoped to the dedicated fixture account.
+Job migration also writes the fixture project's PassRole policy using the
+runner's `iam:GetRolePolicy`/`iam:PutRolePolicy` permissions. That shared grant is
+retained across test runs, as it is during production rollback.
 
 Repository files do not apply IAM policies or change branch protection. Apply
 trust changes through an authorized account administrator.

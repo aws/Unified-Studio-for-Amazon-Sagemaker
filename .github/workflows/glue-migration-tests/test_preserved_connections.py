@@ -5,6 +5,7 @@ import json
 
 import boto3
 import pytest
+from botocore.exceptions import ClientError
 
 from migration.glue import migrate, rollback
 
@@ -30,9 +31,22 @@ class Session:
         self.job = copy.deepcopy(JOB if job is None else job)
         self.tags = tags or {}
         self.writes = []
+        self.policies = {}
 
-    def client(self, _service):
+    def client(self, _service, **_kw):
         return self
+
+    def list_connections(self, **_kw):
+        return {"items": [{"name": "project.iam", "connectionId": "iam1"}]}
+
+    def get_role_policy(self, RoleName, PolicyName):
+        if (RoleName, PolicyName) not in self.policies:
+            raise ClientError({"Error": {"Code": "NoSuchEntity"}}, "GetRolePolicy")
+        return {"PolicyDocument": self.policies[RoleName, PolicyName]}
+
+    def put_role_policy(self, RoleName, PolicyName, PolicyDocument):
+        self.writes.append(("policy", {"RoleName": RoleName, "PolicyName": PolicyName}))
+        self.policies[RoleName, PolicyName] = json.loads(PolicyDocument)
 
     def get_caller_identity(self):
         return {"Account": "111122223333"}
@@ -47,6 +61,8 @@ class Session:
         return {"Triggers": []}
 
     def get_connection(self, **_kw):
+        if "domainIdentifier" in _kw:
+            return {"environmentUserRole": "arn:aws:iam::111122223333:role/project/exec"}
         raise PermissionError("no access to original connections")
 
     def get_object(self, **_kw):
@@ -80,8 +96,8 @@ def test_migration_preserves_dependencies_and_tags_original_names_last():
     session = Session()
     result = run(session, apply=True)
     assert result["applied"]
-    assert [op for op, _ in session.writes] == ["put", "copy", "update", "tag"]
-    update = session.writes[2][1]["JobUpdate"]
+    assert [op for op, _ in session.writes] == ["put", "policy", "copy", "update", "tag"]
+    update = session.writes[3][1]["JobUpdate"]
     for field in ("Connections", "Role", "NonOverridableArguments"):
         assert update[field] == JOB[field]
     assert update["DefaultArguments"]["--CONNECTION_NAME"] == "legacy-db"
@@ -113,14 +129,14 @@ def test_dry_run_reports_tags_without_writing():
     {"AmazonDataZoneProject": "p1", "AmazonDataZoneDomain": "another-domain"},
     {"AmazonDataZoneProject": "p1", "AmazonDataZoneMigratedJob": "false"},
 ])
-def test_project_owned_job_is_skipped_without_writes(apply, tags):
+def test_project_owned_job_only_repairs_passrole(apply, tags):
     job = copy.deepcopy(JOB)
     session = Session(job=job, tags=tags)
     result = run(session, apply=apply)
     assert result["alreadyMigrated"]
     assert result["skipped"]
-    assert not result["applied"]
-    assert session.writes == []
+    assert result["applied"] == apply
+    assert [op for op, _ in session.writes] == (["policy"] if apply else [])
 
 
 def test_project_owned_job_skips_without_resolving_bucket():
@@ -128,7 +144,7 @@ def test_project_owned_job_skips_without_resolving_bucket():
     result = migrate.migrate_job(
         session, job_name="job", domain_id="dzd-1", project_id="p1", apply=True)
     assert result["skipped"]
-    assert session.writes == []
+    assert [op for op, _ in session.writes] == ["policy"]
 
 
 def test_migration_rejects_force_option():
@@ -215,7 +231,7 @@ def test_exact_tag_capacity_counts_overwrites_and_excludes_system_tags(
     session = Session(tags=tags)
     result = run(session, apply=True)
     assert result["applied"]
-    assert [op for op, _ in session.writes] == ["put", "copy", "update", "tag"]
+    assert [op for op, _ in session.writes] == ["put", "policy", "copy", "update", "tag"]
     added = session.writes[-1][1]["TagsToAdd"]
     assert added["AmazonDataZoneProject"] == "p1"
     assert added["AmazonDataZoneMigratedJob"] == "true"

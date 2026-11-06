@@ -1,9 +1,9 @@
-"""Orchestrate one script job's migration: snapshot -> copy -> repoint -> tag LAST."""
+"""Orchestrate a job's migration: snapshot -> PassRole -> copy -> repoint -> tag."""
 from __future__ import annotations
 
 import uuid
 
-from . import datazone_resolve, jobmove, snapshot
+from . import datazone_resolve, jobmove, passrole, snapshot
 
 
 def migrate_job(session, *, job_name: str, domain_id: str, project_id: str,
@@ -19,8 +19,8 @@ def migrate_job(session, *, job_name: str, domain_id: str, project_id: str,
     apply=False (default) is a dry run: it builds and returns the JobUpdate that
     WOULD be sent, mutating nothing.
 
-    Jobs whose AmazonDataZoneProject tag matches the target project are skipped
-    in both dry-run and apply, before resolving the bucket or planning updates.
+    Jobs whose AmazonDataZoneProject tag matches the target project skip job
+    updates, but still plan/apply the project's PassRole grant.
     """
     glue = session.client("glue")
     job = glue.get_job(JobName=job_name)["Job"]
@@ -43,17 +43,24 @@ def migrate_job(session, *, job_name: str, domain_id: str, project_id: str,
         "applied": False,
     }
 
+    datazone = session_datazone(session, domain_region or region)
+    iam = session.client("iam")
+    grant = passrole.plan(iam, datazone, domain_id, project_id, job["Role"])
+    result["passRole"] = grant
+
     if already:
         result["skipped"] = True
         result["skipReason"] = (
             "Job already belongs to this project (matching AmazonDataZoneProject tag)."
         )
+        if apply:
+            passrole.apply(iam, grant)
+            result["applied"] = grant["needsUpdate"]
         return result
 
     s3 = session.client("s3")
     bucket_source = "override"
     if not bucket:
-        datazone = session_datazone(session, domain_region or region)
         bucket = datazone_resolve.resolve_project_bucket(datazone, domain_id, project_id)
         bucket_source = "resolved"
     job_update = jobmove.build_job_update(job, bucket, domain_id, project_id)
@@ -79,6 +86,9 @@ def migrate_job(session, *, job_name: str, domain_id: str, project_id: str,
     result["snapshotKey"] = snapshot.write_snapshot(
         s3, bucket, domain_id, project_id, job_name, migration_id, snap
     )
+
+    # Grant before updating the job; a denied IAM write leaves the job untouched.
+    passrole.apply(iam, grant)
 
     # 2. Copy script (copy, NOT move -- original stays for rollback).
     result["destKey"] = jobmove.copy_script(
