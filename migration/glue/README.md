@@ -17,6 +17,12 @@ attachment cutover after successful cloning.
 - The [IAM permissions below](#iam-permissions). Connection creation also requires
   membership in the target project: IAM permissions and project membership are
   separate requirements.
+- Before applying job migration, review the permissions and resource scope of
+  each Glue job execution role and confirm they are appropriate for the target
+  project. Migration adds `iam:PassRole` on that role to the SageMaker Unified
+  Studio (SMUS) project execution role so the project can update the Glue job.
+  The grant allows the project role to pass the job role to Glue; check that the
+  job role does not grant access beyond what the project should be able to use.
 
 The tool uses **the caller's configured credentials**. It does not automatically
 assume the project's execution role. Use `--profile` to select a configured profile.
