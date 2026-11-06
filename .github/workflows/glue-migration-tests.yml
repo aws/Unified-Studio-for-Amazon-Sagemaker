@@ -1,0 +1,122 @@
+name: Glue migration tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    paths:
+      - "migration/glue/**"
+      - ".github/workflows/glue-migration-tests/**"
+      - ".github/workflows/glue-migration-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: Glue migration unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      AWS_EC2_METADATA_DISABLED: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: python -m pip install -r migration/glue/requirements.txt pytest hypothesis
+      - name: Run unit tests
+        run: >-
+          python -m pytest -c .github/workflows/glue-migration-tests/pytest.ini
+          .github/workflows/glue-migration-tests -m "not e2e" -v --tb=short
+          --junitxml=reports/glue-unit.xml
+      - name: Upload unit test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: glue-migration-unit-results
+          path: reports/glue-unit.xml
+          if-no-files-found: ignore
+
+  e2e:
+    name: Glue migration live E2E
+    needs: unit
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: glue-migration-e2e-${{ vars.GS_SMUS_E2E_ACCOUNT_ID }}-${{ vars.GS_SMUS_E2E_REGION }}
+      cancel-in-progress: false
+    env:
+      AWS_DEFAULT_REGION: ${{ vars.GS_SMUS_E2E_REGION }}
+      GS_SMUS_E2E_ACCOUNT_ID: ${{ vars.GS_SMUS_E2E_ACCOUNT_ID }}
+      GS_SMUS_E2E_SETUP_ROLE_ARN: ${{ vars.GS_SMUS_E2E_SETUP_ROLE_ARN }}
+      GS_SMUS_E2E_RUNNER_ROLE_ARN: ${{ vars.GS_SMUS_E2E_RUNNER_ROLE_ARN }}
+      GS_SMUS_E2E_REGION: ${{ vars.GS_SMUS_E2E_REGION }}
+      GS_SMUS_E2E_DOMAIN_REGION: ${{ vars.GS_SMUS_E2E_DOMAIN_REGION }}
+      GS_SMUS_E2E_DOMAIN_ID: ${{ vars.GS_SMUS_E2E_DOMAIN_ID }}
+      GS_SMUS_E2E_PROJECT_ID: ${{ vars.GS_SMUS_E2E_PROJECT_ID }}
+      GS_SMUS_E2E_PROJECT2_ID: ${{ vars.GS_SMUS_E2E_PROJECT2_ID }}
+      GS_SMUS_E2E_RUNNER_PROFILE: migration-e2e-runner
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check repository variables
+        run: |
+          python - <<'PY'
+          import os
+          required = ("ACCOUNT_ID", "SETUP_ROLE_ARN", "RUNNER_ROLE_ARN", "REGION",
+                      "DOMAIN_REGION", "DOMAIN_ID", "PROJECT_ID", "PROJECT2_ID")
+          missing = [f"GS_SMUS_E2E_{key}" for key in required
+                     if not os.environ.get(f"GS_SMUS_E2E_{key}")]
+          if missing:
+              raise SystemExit("Missing repository variables: " + ", ".join(missing))
+          PY
+      - name: Install dependencies
+        run: python -m pip install -r migration/glue/requirements.txt pytest hypothesis
+      - name: Configure test setup credentials
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.GS_SMUS_E2E_SETUP_ROLE_ARN }}
+          role-session-name: glue-migration-e2e-${{ github.run_id }}
+          aws-region: ${{ vars.GS_SMUS_E2E_REGION }}
+          role-duration-seconds: 7200
+          allowed-account-ids: ${{ vars.GS_SMUS_E2E_ACCOUNT_ID }}
+      - name: Configure migration runner
+        env:
+          AWS_CONFIG_FILE: ${{ runner.temp }}/glue-migration-e2e-aws-config
+        run: |
+          aws configure set profile.migration-e2e-runner.role_arn "$GS_SMUS_E2E_RUNNER_ROLE_ARN"
+          aws configure set profile.migration-e2e-runner.credential_source Environment
+          aws configure set profile.migration-e2e-runner.region "$GS_SMUS_E2E_REGION"
+          echo "AWS_CONFIG_FILE=$AWS_CONFIG_FILE" >> "$GITHUB_ENV"
+      - name: Load existing fixture and run E2E tests
+        run: |
+          fixture_env="$(python .github/workflows/glue-migration-tests/e2e/provision_mysql.py env)"
+          eval "$fixture_env"
+          python - <<'PY'
+          import os
+          import runpy
+          required = runpy.run_path(".github/workflows/glue-migration-tests/e2e/conftest.py")["_REQUIRED"]
+          missing = [f"GS_SMUS_E2E_{key}" for key in required
+                     if not os.environ.get(f"GS_SMUS_E2E_{key}")]
+          if missing:
+              raise SystemExit("Missing E2E settings: " + ", ".join(missing))
+          PY
+          python -m pytest -c .github/workflows/glue-migration-tests/pytest.ini \
+            .github/workflows/glue-migration-tests/e2e -m e2e -v --tb=short \
+            --junitxml=reports/glue-e2e.xml
+      - name: Upload E2E test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: glue-migration-e2e-results
+          path: reports/glue-e2e.xml
+          if-no-files-found: ignore
