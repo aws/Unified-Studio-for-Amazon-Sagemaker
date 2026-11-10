@@ -33,7 +33,11 @@ def test_cli_contacts_domain_region_while_resources_stay_in_us_east_1(
         elif operation.name == "ListConnections":
             payload = {"items": [{"connectionId": "iam1", "name": "project.iam"}]}
         elif operation.name == "GetConnection" and urlparse(request_dict["url"]).netloc.startswith("datazone."):
-            payload = {"connectionId": "iam1", "environmentId": "environment"}
+            payload = {"connectionId": "iam1", "environmentId": "environment",
+                       "environmentUserRole": "arn:aws:iam::123456789012:role/project"}
+        elif operation.name == "GetRolePolicy":
+            return type("Response", (), {"status_code": 404})(), {
+                "Error": {"Code": "NoSuchEntity", "Message": "No grant yet"}}
         elif operation.name == "ListEnvironments":
             payload = {"items": [{"id": "environment"}]}
         elif operation.name == "GetEnvironment":
@@ -66,6 +70,9 @@ def test_cli_contacts_domain_region_while_resources_stay_in_us_east_1(
                 if op != "GetCallerIdentity"] == [
             ("GetJob", "glue.us-east-1.amazonaws.com", "us-east-1"),
             ("GetTags", "glue.us-east-1.amazonaws.com", "us-east-1"),
+            *[(op, "datazone.us-east-2.api.aws", "us-east-2")
+              for op in ["ListConnections", "GetConnection"]],
+            ("GetRolePolicy", "iam.amazonaws.com", "aws-global"),
             *[(op, "datazone.us-east-2.api.aws", "us-east-2") for op in domain_operations],
         ]
     else:

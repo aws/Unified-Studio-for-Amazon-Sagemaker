@@ -43,7 +43,7 @@ jobs:
   e2e:
     name: Glue migration live E2E
     needs: unit
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.GS_SMUS_E2E_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     permissions:

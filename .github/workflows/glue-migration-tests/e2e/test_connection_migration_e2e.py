@@ -250,7 +250,8 @@ def test_project_owned_job_is_skipped_without_original_asset(
             "--domain-region", cfg["domain_region"] or cfg["region"]]
     for apply in ([], ["--apply"]):
         result = _cli_result(runner, "migration.glue.cli", [*args, *apply])
-        assert result["skipped"] and result["alreadyMigrated"] and not result["applied"]
+        assert result["skipped"] and result["alreadyMigrated"]
+        assert result["applied"] == bool(apply and result["passRole"]["needsUpdate"])
         assert result["bucketSource"] == "not-resolved" and result["jobUpdate"] == {}
         assert glue.get_job(JobName=source_job)["Job"] == original
         assert glue.get_tags(ResourceArn=arn)["Tags"] == tags
