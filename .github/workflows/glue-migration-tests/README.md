@@ -21,7 +21,7 @@ configure that repository setting.
 Live tests run after unit tests on `main` pushes affecting Glue files, or manual
 dispatch on `main`. Pull requests receive no AWS credentials. Other branches
 cannot run the live job. To approve another branch, update both the workflow's
-trigger/condition and the setup role's trust policy.
+trigger/condition and both roles' trust policies.
 
 Configure these GitHub repository variables before enabling live runs:
 
@@ -29,12 +29,13 @@ Configure these GitHub repository variables before enabling live runs:
 |---|---|
 | `GS_SMUS_E2E_ACCOUNT_ID` | AWS account containing the existing fixture |
 | `GS_SMUS_E2E_SETUP_ROLE_ARN` | Setup/cleanup role assumed through GitHub OIDC |
-| `GS_SMUS_E2E_RUNNER_ROLE_ARN` | Migration caller role assumed by the setup role |
+| `GS_SMUS_E2E_RUNNER_ROLE_ARN` | Migration caller role assumed through GitHub OIDC |
 | `GS_SMUS_E2E_REGION` | Glue and fixture Region |
 | `GS_SMUS_E2E_DOMAIN_REGION` | DataZone domain Region |
 | `GS_SMUS_E2E_DOMAIN_ID` | Existing test domain ID |
 | `GS_SMUS_E2E_PROJECT_ID` | First test project ID |
 | `GS_SMUS_E2E_PROJECT2_ID` | Second test project ID; required to run all eight cases |
+| `GS_SMUS_E2E_ENABLED` | Set to `true` after configuring the fixture and role trust; otherwise live tests are disabled |
 
 Use a dedicated test account and set these variables to your fixture's Region,
 roles, domain and projects. Each repository needs its own variable configuration
@@ -46,23 +47,30 @@ reporting success with skipped tests.
 
 ### Role trust and permissions
 
-Configure a GitHub OIDC provider in the test account. Restrict the setup role's
+Configure a GitHub OIDC provider in the test account. Restrict both roles'
 trust policy to your repository's `main` branch, replacing the placeholders:
 
 ```text
 repo:<OWNER>/<REPOSITORY>:ref:refs/heads/main
 ```
 
+For repositories using immutable OIDC subjects, use
+`repo:<OWNER>@<OWNER_ID>/<REPOSITORY>@<REPOSITORY_ID>:ref:refs/heads/main`.
+Check the repository's subject configuration with
+`gh api repos/<OWNER>/<REPOSITORY>/actions/oidc/customization/sub`;
+when `use_default` is true, append `:ref:refs/heads/main` to its
+`sub_claim_prefix` if returned.
+
 Keep the OIDC audience restricted to `sts.amazonaws.com` and use the account's
 `token.actions.githubusercontent.com` provider. Do not allow pull-request subjects
 or wildcard branches. If your repository customizes its OIDC subject, use its
 configured subject format while retaining the repository and branch restrictions.
 
-The setup role needs a two-hour maximum session duration and permission to assume
-the runner role. The runner trust permits the setup role. Both roles must have
-project-owner memberships in **both** fixture projects. Migration commands
-use a refreshable runner profile with `credential_source = Environment`; setup,
-assertions and cleanup use the setup identity.
+Both roles need a two-hour maximum session duration and must have project-owner
+memberships in **both** fixture projects. The workflow assumes each role directly
+through OIDC. Migration commands use the `migration-e2e-runner` credential profile;
+setup, assertions and cleanup use the setup identity from environment credentials.
+The two-hour credentials cover the live job's 90-minute timeout.
 
 Grant the setup role scoped fixture permissions: it reads the fixture
 RDS master secret and network configuration, creates and cleans up temporary

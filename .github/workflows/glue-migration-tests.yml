@@ -81,6 +81,16 @@ jobs:
           PY
       - name: Install dependencies
         run: python -m pip install -r migration/glue/requirements.txt pytest hypothesis
+      - name: Configure migration runner credentials
+        uses: aws-actions/configure-aws-credentials@v6.3.0
+        with:
+          role-to-assume: ${{ vars.GS_SMUS_E2E_RUNNER_ROLE_ARN }}
+          role-session-name: glue-migration-runner-${{ github.run_id }}
+          aws-region: ${{ vars.GS_SMUS_E2E_REGION }}
+          role-duration-seconds: 7200
+          allowed-account-ids: ${{ vars.GS_SMUS_E2E_ACCOUNT_ID }}
+          aws-profile: migration-e2e-runner
+          output-env-credentials: false
       - name: Configure test setup credentials
         uses: aws-actions/configure-aws-credentials@v6.3.0
         with:
@@ -89,14 +99,6 @@ jobs:
           aws-region: ${{ vars.GS_SMUS_E2E_REGION }}
           role-duration-seconds: 7200
           allowed-account-ids: ${{ vars.GS_SMUS_E2E_ACCOUNT_ID }}
-      - name: Configure migration runner
-        env:
-          AWS_CONFIG_FILE: ${{ runner.temp }}/glue-migration-e2e-aws-config
-        run: |
-          aws configure set profile.migration-e2e-runner.role_arn "$GS_SMUS_E2E_RUNNER_ROLE_ARN"
-          aws configure set profile.migration-e2e-runner.credential_source Environment
-          aws configure set profile.migration-e2e-runner.region "$GS_SMUS_E2E_REGION"
-          echo "AWS_CONFIG_FILE=$AWS_CONFIG_FILE" >> "$GITHUB_ENV"
       - name: Load existing fixture and run E2E tests
         run: |
           fixture_env="$(python .github/workflows/glue-migration-tests/e2e/provision_mysql.py env)"
